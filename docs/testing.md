@@ -2294,3 +2294,5 @@ Third batch: run `python -m pytest -q tests/test_real_photo_feedback.py tests/te
 The real-photo dataset CI fixture explicitly installs PyYAML. Shared RunPod base-weight setting names live in a side-effect-free module so freezing and payload validation do not create a transport dependency cycle; retain `scripts/smoke_model_dependency_contract.py` in the required backend checks.
 
 `tests/test_real_photo_provenance.py` verifies unleased-camera session grouping, original byte hashes and context cleanup while the ordinary upload API remains free of PLC capabilities. The upload source guard follows the additive metadata argument into the inspected implementation; the leased camera contract is unchanged.
+
+Definition-change tests cover one new initialization, revoked old tokens, and no reference-image rereads during unchanged status polling. Training submission also rechecks frozen class/reference content before enqueue.

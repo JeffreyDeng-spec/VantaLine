@@ -75,26 +75,42 @@ class FeedbackService:
             raise HTTPException(403, '仅任务所属账户可操作实拍回流')
         return user, task
 
-    def classes(self, task, user):
+    def class_metadata(self, task, user):
         config = self.ports.config(user)
         ids = task.get('selected_accessory_ids') or task.get('accessory_ids') or []
         items = {i['id']:i for i in config.get('accessories', []) if i.get('id')}
         result = []
         for cid in ids:
             item = items.get(cid)
-            if not item:
-                raise HTTPException(409, '任务配件定义缺失')
+            if not item:raise HTTPException(409, '任务配件定义缺失')
             paths = self.ports.references(item)
-            if not paths:
-                raise HTTPException(409, '任务配件参考图缺失')
-            source = str(paths[0]); data = self.ports.read(source)
-            _, meta = canonical(data)
+            if not paths:raise HTTPException(409, '任务配件参考图缺失')
             result.append({'class_id':cid, 'name':str(item.get('name') or cid),
                            'definition':str(item.get('ai_profile') or item.get('description') or item.get('name') or cid)[:8000],
-                           'reference_path':source,'reference_sha256':meta['source_sha256']})
-        if not result or len(result) > 50:
-            raise HTTPException(409, '需要1至50个有效任务类别')
+                           'reference_path':str(paths[0])})
+        if not result or len(result)>50:raise HTTPException(409, '需要1至50个有效任务类别')
         return result
+
+    def classes(self, task, user):
+        result=self.class_metadata(task,user)
+        for item in result:
+            _,meta=canonical(self.ports.read(item['reference_path']))
+            item['reference_sha256']=meta['source_sha256']
+        return result
+
+    def sync_definitions(self,repo,state,task,user):
+        if not state or not state['enabled']:return state
+        try:
+            current=self.class_metadata(task,user)
+            previous=[{k:v for k,v in item.items() if k!='reference_sha256'} for item in state['classes']]
+            if current!=previous:
+                # Full image hashes are read only on a definition/reference identity change.
+                return repo.enable(user['id'],state['task_id'],self.classes(task,user),state['profiles'],True,state.get('business_context'))
+        except (HTTPException,ValueError,OSError):
+            repo.enable(user['id'],state['task_id'],state['classes'],state['profiles'],False)
+            repo.mutate(user['id'],state['task_id'],lambda s,c:s.update(pause_reason='当前任务类别或参考图不完整；修复后重新启用实拍回流'))
+            return repo.get(user['id'],state['task_id'])
+        return state
 
     def enable(self, identifier, request):
         user, task = self.task(identifier, True)
@@ -123,11 +139,12 @@ class FeedbackService:
         return self.status(identifier)
 
     def status(self, identifier):
-        user, _ = self.task(identifier)
+        user, task = self.task(identifier)
         if user['id'] not in accounts():
             return {'available':False,'strategy':STRATEGY}
         with self.repo() as repo:
             state = repo.get(user['id'], identifier)
+            state = self.sync_definitions(repo,state,task,user)
             jobs = repo.jobs(user['id'], identifier) if state else []
             stats = repo.statistics(user['id'], identifier) if state else {}
         if state is None:
@@ -225,7 +242,9 @@ class FeedbackService:
             # Once explicitly selected, do not fall back into legacy synthetic feedback, even paused.
             if not state['enabled']:
                 return True
-            self.task(task_id)
+            _,task=self.task(task_id)
+            state=self.sync_definitions(repo,state,task,user)
+            if not state['enabled']:return True
             source = record.get('source_image') or {}
             if not (source_group.get() or record.get('source_group') or source.get('source_group')):
                 return True  # no ordinary/camera/video ingestion evidence; never harvest pretraining renders.

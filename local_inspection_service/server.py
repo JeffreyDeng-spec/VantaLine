@@ -9892,6 +9892,9 @@ def _submit_real_photo_training(job,dataset):
     owner={'id':job['owner_user_id'],'username':job['owner_user_id'],'role':'user'}
     token=_request_user.set(owner)
     try:
+        _,current_task=_real_photo_feedback.task(job['task_id'])
+        if _real_photo_feedback.classes(current_task,owner)!=job['inputs']['classes']:
+            raise ValueError('frozen task category/reference version changed')
         config=scope_config_for_user(load_config(),owner)
         selected=selected_accessories(config,dataset['selected_accessory_ids'])
         if {s['id'] for s in selected}!=set(dataset['selected_accessory_ids']):

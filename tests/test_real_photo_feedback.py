@@ -171,3 +171,21 @@ def test_api_owner_isolation_failed_multi_capture_and_private_original(database,
     assert client.get('/api/ai/tasks/task/real-photo').status_code==403
     monkeypatch.delenv('VANTALINE_REAL_PHOTO_ACCOUNTS')
     assert service.capture({},result,'three',None) is False
+
+
+def test_definition_sync_revokes_old_jobs_once_without_polling_image_reads(database,monkeypatch):
+    from types import SimpleNamespace
+    from local_inspection_service.training.real_photo_api import FeedbackPorts,FeedbackService,EnableRequest
+    owner={'id':'a'};task={'id':'task','owner_user_id':'a','accessory_ids':['a']}
+    config={'accessories':[{'id':'a','name':'part','description':'old definition'}]};reads=[]
+    def read(path):reads.append(path);return image()
+    profiles=SimpleNamespace(snapshot=lambda:{'bbox_annotation':{'id':'fixed','version':1}},resolve=lambda *a:{'configured':True,'provider':'doubao','model':MODEL})
+    service=FeedbackService(FeedbackPorts(repository=lambda:database().repository,user=lambda:owner,tasks=lambda:[task],authorize=lambda *a,**kw:None,config=lambda u:config,references=lambda i:['ref'],read=read,profiles=lambda:profiles,legacy_state=lambda t:{}))
+    monkeypatch.setenv('VANTALINE_REAL_PHOTO_ACCOUNTS','a')
+    service.enable('task',EnableRequest(enabled=True));repo=database();old,token=repo.claim({'a'},{'initialize'},'gpt-6-astra','fixture')
+    before=len(reads);service.status('task');service.status('task');assert len(reads)==before
+    config['accessories'][0]['description']='new definition'
+    service.status('task');assert not repo.pulse(old['id'],token)
+    assert repo.get('a','task')['classes'][0]['definition']=='new definition'
+    before=len(reads);service.status('task');assert len(reads)==before
+    assert len([j for j in repo.jobs('a','task') if j['kind']=='initialize' and j['status']=='queued'])==1
