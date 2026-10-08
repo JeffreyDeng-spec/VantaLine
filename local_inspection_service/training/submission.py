@@ -125,7 +125,8 @@ class TrainingSubmission:
                             unsupported_by_real_data=dataset['unsupported_by_real_data'],
                             split_class_instance_counts=dataset['split_class_instance_counts'],
                             dataset_snapshot=dataset['snapshot_fingerprint'],
-                            real_photo_training_configuration=dataset['training_configuration'])
+                            real_photo_training_configuration=dataset['training_configuration'],
+                            required_accessory_counts=dataset['required_accessory_counts'])
         self.records.save(task)
         thread = self.threads.create(target=self.threads.target(), args=(job_id,), name=f"training-task-{job_id}", daemon=True)
         self.threads.records()[job_id] = thread

@@ -2296,3 +2296,5 @@ The real-photo dataset CI fixture explicitly installs PyYAML. Shared RunPod base
 `tests/test_real_photo_provenance.py` verifies unleased-camera session grouping, original byte hashes and context cleanup while the ordinary upload API remains free of PLC capabilities. The upload source guard follows the additive metadata argument into the inspected implementation; the leased camera contract is unchanged.
 
 Definition-change tests cover one new initialization, revoked old tokens, and no reference-image rereads during unchanged status polling. Training submission also rechecks frozen class/reference content before enqueue.
+
+Dispatch fixtures assert task quantity rules (including zero requirements) remain frozen through dataset publication. Frontend validation covers explicit completed-candidate inclusion; actual model switching/continued feedback is part of pilot commissioning, not established by a typecheck.

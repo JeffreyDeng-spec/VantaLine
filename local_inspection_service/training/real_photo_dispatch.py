@@ -16,6 +16,7 @@ class DispatchPorts:
     submit: Callable
     training: Callable
     configuration: Callable | None = None
+    metadata: Callable | None = None
 
 
 class Dispatcher:
@@ -62,6 +63,7 @@ class Dispatcher:
             dataset_gate(state,20)
             if self.ports.configuration:
                 job['inputs']['training_configuration']=self.ports.configuration()
+            if self.ports.metadata:job['inputs']['training_metadata']=self.ports.metadata(job)
             dataset=build(job,self.ports.files(),self.ports.output(job['owner_user_id']))
             if not self.operation(lambda r:r.pulse(job['id'],token)):raise ValueError('dataset dispatch cancelled')
             training_id=dataset['training_job_id']
@@ -81,6 +83,7 @@ class Dispatcher:
                     current['deadline']=time.time()+7*24*3600
                     current['training_id']=training_id
                     current['training_configuration']=dataset.get('training_configuration')
+                    current['training_metadata']=dataset.get('training_metadata')
                     repo.save_job(c,current)
                 return repo.mutate(job['owner_user_id'],job['task_id'],reserve)
             self.operation(reservation)

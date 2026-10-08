@@ -25,8 +25,9 @@ def test_single_training_submission_and_restart_reconciliation(database,tmp_path
     repo.mutate('a','task',seed)
     tasks={};calls=[]
     def submit(job,dataset):
+        assert dataset['required_accessory_counts']=={'a':2,'missing':0}
         calls.append(dataset['training_job_id']);tasks[calls[-1]]={'status':'running'}
-    ports=DispatchPorts(repository=lambda:database().repository,files=lambda:BusinessFiles(runtime_provider=lambda:None),output=lambda owner:tmp_path/'datasets',submit=submit,training=lambda identifier:tasks.get(identifier))
+    ports=DispatchPorts(repository=lambda:database().repository,files=lambda:BusinessFiles(runtime_provider=lambda:None),output=lambda owner:tmp_path/'datasets',submit=submit,training=lambda identifier:tasks.get(identifier),metadata=lambda j:{'feedback_task_id':'task','required_accessory_counts':{'a':2,'missing':0}})
     first=Dispatcher(ports);first.tick()
     assert len(calls)==1
     restarted=Dispatcher(ports);restarted.tick();assert len(calls)==1

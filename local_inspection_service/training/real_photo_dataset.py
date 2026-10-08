@@ -54,6 +54,8 @@ def build(job, files, output):
            'positive_image_count':sum(bool(s['annotation']['objects']) for s in samples),
            'negative_image_count':sum(not s['annotation']['objects'] for s in samples),
            'training_configuration':inputs.get('training_configuration',{}),
+           'training_metadata':inputs.get('training_metadata',{}),
+           'required_accessory_counts':inputs.get('training_metadata',{}).get('required_accessory_counts',{cid:1 for cid in ids}),
            'augmentation_policy':'existing_yolo_train_only'}
     files.write_text(manifest,encode(value),encoding='utf-8')
     return value

@@ -9888,14 +9888,26 @@ def _disable_legacy_feedback_for_real_photo(task_id):
 from .training.real_photo_dispatch import Dispatcher, DispatchPorts
 from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
 
+def _real_photo_training_metadata(job):
+    owner=find_user(load_auth_store(),job['owner_user_id'])
+    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
+    token=_request_user.set(owner)
+    try:
+        _,task=_real_photo_feedback.task(job['task_id'])
+        if _real_photo_feedback.classes(task,owner)!=job['inputs']['classes']:
+            raise ValueError('frozen task category/reference version changed')
+        counts=task.get('required_accessory_counts') or {}
+        return {'feedback_task_id':job['task_id'],'required_accessory_counts':{
+            c['class_id']:max(0,int(counts.get(c['class_id'],1))) for c in job['inputs']['classes']}}
+    finally:_request_user.reset(token)
+
 def _submit_real_photo_training(job,dataset):
     owner=find_user(load_auth_store(),job['owner_user_id'])
     if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
     token=_request_user.set(owner)
     try:
-        _,current_task=_real_photo_feedback.task(job['task_id'])
-        if _real_photo_feedback.classes(current_task,owner)!=job['inputs']['classes']:
-            raise ValueError('frozen task category/reference version changed')
+        if _real_photo_training_metadata(job)!=dataset['training_metadata']:
+            raise ValueError('frozen task rule snapshot changed')
         config=scope_config_for_user(load_config(),owner)
         selected=selected_accessories(config,dataset['selected_accessory_ids'])
         if {s['id'] for s in selected}!=set(dataset['selected_accessory_ids']):
@@ -9910,7 +9922,7 @@ def _submit_real_photo_training(job,dataset):
 _real_photo_dispatcher=Dispatcher(DispatchPorts(repository=_real_photo_repository,files=lambda:_business_files,
     output=lambda owner:output_write_dir_for_owner('real_photo_datasets',owner),submit=_submit_real_photo_training,training=lambda identifier:load_training_task(identifier),
     configuration=lambda:freeze_real_photo_training_configuration(
-        training_executor_mode(),detect_base_model,yolo_inference_device,os.environ)))
+        training_executor_mode(),detect_base_model,yolo_inference_device,os.environ),metadata=_real_photo_training_metadata))
 from .training.real_photo_masks import MaskDispatcher
 _real_photo_mask_dispatcher=MaskDispatcher(_real_photo_dispatcher.ports,lambda:resolve_model_profiles(),lambda settings:image_generation_provider_from_settings(settings))
 _real_photo_dispatch_stop=threading.Event()
