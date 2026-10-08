@@ -160,6 +160,13 @@ def test_api_owner_isolation_failed_multi_capture_and_private_original(database,
     assert status['candidate_count']==1 and status['pending_annotation_count']==1
     identifier=status['samples'][0]['sample_id'];sample=client.get(f'/api/ai/tasks/task/real-photo/samples/{identifier}/image')
     assert sample.status_code==200 and sample.headers['cache-control']=='private, no-store'
+    repo=database();init,token=repo.claim({'a'},{'initialize'},'model','cli')
+    repo.finish(init['id'],token,{},lambda s,j,c:s.update(initialization={'fixture':True}))
+    failed,token=repo.claim({'a'},{'annotate'},'model','cli')
+    repo.finish(failed['id'],token,{'error_type':'precall_failure'},lambda *a:None,success=False)
+    assert client.post(f'/api/ai/tasks/task/real-photo/samples/{identifier}/relabel').status_code==200
+    retry=next(j for j in repo.jobs('a','task') if j['status']=='queued')
+    assert retry['inputs']['version']==2 and retry['inputs']['explicit'] is True and retry['id']!=failed['id']
     owner.update(id='b',role='admin')
     assert client.get('/api/ai/tasks/task/real-photo').status_code==403
     monkeypatch.delenv('VANTALINE_REAL_PHOTO_ACCOUNTS')

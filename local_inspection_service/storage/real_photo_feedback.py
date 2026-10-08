@@ -181,11 +181,19 @@ class RealPhotoRepository:
                     job.update(status='interrupted', token_hash='', error='uncertain attempt; explicit new attempt required')
                     self.save_job(c, job)
                     state = self.read_state(c, job['owner_user_id'], job['task_id'])
+                    if job['kind'] in {'initialize','review','assess'}:
+                        state['pause_reason']='Agent会话中断或超时；请核查并明确重新启动'
+                        self.save_state(c,state)
                     self.event(c, state, job['id'], {'kind':'interrupted'})
                 else:
                     return None
-            c.execute(f'''SELECT raw_json FROM {self.table("jobs")} WHERE kind=ANY(%s)
-                AND status='queued' AND owner_user_id=ANY(%s) ORDER BY created_at LIMIT 1''', (list(kinds), list(owners)))
+            c.execute(f'''SELECT j.raw_json FROM {self.table("jobs")} j JOIN {self.table("states")} s
+                ON s.owner_user_id=j.owner_user_id AND s.task_id=j.task_id
+                WHERE j.kind=ANY(%s) AND j.status='queued' AND j.owner_user_id=ANY(%s)
+                AND s.raw_json->>'enabled'='true' AND j.raw_json->>'epoch'=s.raw_json->>'epoch'
+                AND (j.kind='initialize' OR j.kind='mask' OR j.raw_json->'inputs'->>'explicit'='true'
+                     OR (s.raw_json->'initialization' IS NOT NULL AND COALESCE(s.raw_json->>'pause_reason','')=''))
+                ORDER BY CASE WHEN j.kind='initialize' THEN 0 ELSE 1 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
             rows = self.rows(c)
             if not rows:
                 return None
@@ -227,6 +235,8 @@ class RealPhotoRepository:
                 job['status'] = 'completed'
             else:
                 job['status'] = 'failed'
+                if job['kind'] in {'initialize','review','assess'}:
+                    state['pause_reason']='Agent任务未完整成功；需处理原因并明确重新启动，不自动重放付费会话'
             self.event(c, state, identifier, {'kind': job['status'], 'result': result})
             self.save_job(c, job); self.save_state(c, state)
             return job

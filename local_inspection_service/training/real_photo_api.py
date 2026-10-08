@@ -170,7 +170,7 @@ class FeedbackService:
             sample['annotation_version']=version
             if sample.get('annotation'):sample.setdefault('annotation_history',[]).append(sample.pop('annotation'))
             repo.enqueue(c,state,'annotate',f'annotation:{sample_id}:{version}',
-                         {'sample':sample,'classes':state['classes'],'profiles':state['profiles'],'version':version})
+                         {'sample':sample,'classes':state['classes'],'profiles':state['profiles'],'version':version,'explicit':True})
         with self.repo() as repo:repo.mutate(user['id'],identifier,update)
         return self.status(identifier)
 
@@ -178,12 +178,15 @@ class FeedbackService:
         user,_=self.task(identifier,True)
         def update(state,c):
             if not state['enabled']:raise HTTPException(409,'请先启用回流')
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running','cancel_requested')",(user['id'],identifier))
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('running','cancel_requested')",(user['id'],identifier))
             if repo.rows(c):raise HTTPException(409,'请先等待所有当前任务结算')
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind IN ('initialize','review','assess') AND status='queued'",(user['id'],identifier))
+            for job in repo.rows(c):
+                job['status']='cancelled';repo.save_job(c,job)
             state.pop('round',None);state.pop('pause_reason',None)
-            state['epoch']=uuid.uuid4().hex
             if not state.get('initialization'):
-                repo.enqueue(c,state,'initialize','initialize:'+state['epoch'],{'classes':state['classes'],'history_count':len(state['samples'])})
+                repo.enqueue(c,state,'initialize','initialize:'+state['epoch']+':explicit:'+uuid.uuid4().hex,
+                             {'classes':state['classes'],'history_count':len(state['samples']),'business_context':state.get('business_context',{})})
             else:state['review_trigger']=len(state['samples'])
         with self.repo() as repo:repo.mutate(user['id'],identifier,update)
         return self.status(identifier)
