@@ -373,11 +373,13 @@ jobs:
           python scripts/smoke_protected_config_ownership.py
           python scripts/smoke_local_model_config.py
           python scripts/smoke_model_tool_dispatch.py
+          python scripts/smoke_model_tools_composition.py
           python scripts/smoke_accessory_text_preparation.py
           python scripts/smoke_pose_collection_prompts.py
           python scripts/smoke_image_worker_diagnostics.py
           python scripts/smoke_pose_collection_jobs.py
           python scripts/smoke_accessory_reference_media.py
+          python scripts/smoke_accessory_image_composition.py
           python scripts/smoke_image_job_queue.py
           python scripts/smoke_training_asset_preparation.py
           python scripts/smoke_image_provider_configuration.py
@@ -407,6 +409,9 @@ jobs:
           python scripts/smoke_auto_optimization_training_scheduling.py
           python scripts/smoke_auto_optimization_label_processing.py
           python scripts/smoke_auto_optimization_shadow_evaluation.py
+          python scripts/smoke_auto_optimization_core_composition.py
+          python scripts/smoke_auto_optimization_execution_composition.py
+          python scripts/smoke_auto_optimization_workflow_composition.py
           python scripts/smoke_auto_optimization_requests.py
           python scripts/smoke_auto_optimization_sprite_publication.py
           python scripts/smoke_plc_event_projection.py
@@ -474,7 +479,11 @@ jobs:
           python scripts/smoke_text_media_runtime_port.py
           python scripts/smoke_text_revisions.py --root
           python scripts/smoke_text_standards.py
+          python scripts/smoke_text_standard_composition.py
           python scripts/smoke_text_comparison_api.py --root
+          python scripts/smoke_text_comparison_composition.py
+          python scripts/smoke_text_storage_composition.py
+          python scripts/smoke_incoming_composition.py
           python scripts/smoke_incoming_text_store.py --root --postgres
           python scripts/smoke_incoming_text_analysis.py --root
           python scripts/smoke_incoming_text_workflows.py
@@ -561,6 +570,7 @@ jobs:
           python scripts/smoke_presence_inspection.py
           python scripts/smoke_detection_analysis.py
           python scripts/smoke_ai_detection_analysis.py
+          python scripts/smoke_detection_workflows_composition.py
           python scripts/smoke_detection_annotation.py
           python scripts/smoke_presence_results.py
           python scripts/smoke_detection_failures.py
@@ -576,9 +586,12 @@ jobs:
           python scripts/smoke_yolo_warmup.py
           python scripts/smoke_yolo_warmup_drain.py
           python scripts/smoke_model_warmup_api.py
+          python scripts/smoke_model_catalog_composition.py
           python scripts/smoke_trained_model_catalog.py --postgres
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres
+          python scripts/smoke_training_state_workflows_composition.py
+          python scripts/smoke_training_task_workflows_composition.py
           python scripts/smoke_training_executor_client.py
           python scripts/smoke_training_state_services.py
           python scripts/smoke_training_runner.py

@@ -1,5 +1,5 @@
 {
-  "version": 237,
+  "version": 250,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -530,6 +530,22 @@
     "agent/file_ports.py",
     "text_inspection/file_ports.py",
     "storage/artifacts/composition.py",
-    "config/stream.py"
+    "config/stream.py",
+    "text_inspection/storage_composition.py",
+    "text_inspection/incoming_duplicates.py",
+    "text_inspection/incoming_composition.py",
+    "training/catalog_composition.py",
+    "accessories/image_composition.py",
+    "model_providers/tool_composition.py",
+    "detection/workflow_composition.py",
+    "text_inspection/standard_composition.py",
+    "text_inspection/comparison_composition.py",
+    "training/core_composition.py",
+    "training/execution_composition.py",
+    "training/workflow_composition.py",
+    "training/state_composition.py",
+    "training/account_state_composition.py",
+    "training/native_execution_composition.py",
+    "training/task_composition.py"
   ]
 }

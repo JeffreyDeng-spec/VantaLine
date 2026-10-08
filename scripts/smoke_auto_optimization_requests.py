@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_optimization_test_ports import assert_capability_owner
 from local_inspection_service.schemas.training import AutoOptimizeSettingsRequest,AutoOptimizeSampleApproveRequest
 BASELINE=os.environ.get('VANTALINE_AUTO_REQUESTS_BASELINE_SOURCE')
 NAMES=('get_ai_task_auto_optimize_status','update_ai_task_auto_optimize_status','delete_ai_task_auto_optimize_sample','retry_ai_task_auto_optimize_sample','approve_ai_task_auto_optimize_sample')
@@ -130,7 +131,7 @@ class RequestsContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_requests
         for group in (service.access,service.state,service.actions):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            for f in fields(group): assert_capability_owner(self, group, f.name, server)
         for name,args in zip(NAMES,(('t',),('t',object()),('t','s'),('t','s'),('t','s',None))):
             mock=Mock(return_value=object())
             with patch.object(server,'_auto_optimization_requests',SimpleNamespace(**{name:mock})):self.assertIs(getattr(server,name)(*args),mock.return_value)

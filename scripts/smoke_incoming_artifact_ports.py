@@ -129,21 +129,35 @@ class IncomingArtifactPortsTests(unittest.TestCase):
     def test_actual_composition_uses_one_matching_files_images_graph(self):
         root = Path(__file__).resolve().parents[1]
         tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        names = {'_incoming_catalog', '_incoming_reviews', '_incoming_execution', '_incoming_retention'}
+        assignments = {n.targets[0].id: n.value for n in tree.body
+            if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
+        call = assignments['_incoming_workflows']
+        self.assertEqual(ast.dump(call.func), ast.dump(ast.parse('IncomingWorkflows', mode='eval').body))
+        keywords = {k.arg: k.value for k in call.keywords}
+        for name, expression in [('storage', '_text_storage'), ('files', '_business_files'), ('images', '_incoming_image_files')]:
+            self.assertEqual(ast.dump(keywords[name]), ast.dump(ast.parse(expression, mode='eval').body))
+        self.assertEqual(ast.dump(assignments['_incoming_image_files']),
+                         ast.dump(ast.parse('ImageFiles(lambda: cv2, files=_business_files)', mode='eval').body))
+        for name in ('catalog', 'reviews', 'execution', 'retention'):
+            self.assertEqual(ast.dump(assignments['_incoming_' + name]),
+                             ast.dump(ast.parse('_incoming_workflows.' + name, mode='eval').body))
+        builder = ast.parse((root / 'local_inspection_service/text_inspection/incoming_composition.py').read_text(encoding='utf-8'))
         found = set()
-        for node in tree.body:
-            if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name): continue
-            name = node.targets[0].id
-            if name in names:
-                kwargs = {k.arg: k.value for k in node.value.keywords}
-                self.assertEqual(ast.dump(kwargs['files']), ast.dump(ast.parse('_business_files', mode='eval').body))
-                if name in {'_incoming_catalog', '_incoming_execution'}:
-                    self.assertEqual(ast.dump(kwargs['images']), ast.dump(ast.parse('_incoming_image_files', mode='eval').body))
-                found.add(name)
-            elif name == '_incoming_image_files':
-                self.assertEqual(ast.dump(node.value), ast.dump(ast.parse('ImageFiles(lambda: cv2, files=_business_files)', mode='eval').body))
-                found.add(name)
-        self.assertEqual(found, names | {'_incoming_image_files'})
+        for node in ast.walk(builder):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name): continue
+            if node.func.id in {'IncomingCatalog', 'IncomingReviews', 'IncomingExecution', 'IncomingRetention'}:
+                kwargs = {k.arg: k.value for k in node.keywords}
+                self.assertEqual(ast.dump(kwargs['files']), ast.dump(ast.parse('files', mode='eval').body))
+                if node.func.id in {'IncomingCatalog', 'IncomingExecution'}:
+                    self.assertEqual(ast.dump(kwargs['images']), ast.dump(ast.parse('images', mode='eval').body))
+                found.add(node.func.id)
+            elif node.func.id == 'IncomingWrites':
+                kwargs = {k.arg: k.value for k in node.keywords}
+                self.assertEqual(ast.dump(kwargs['guard']), ast.dump(ast.parse('lambda: storage.lock', mode='eval').body))
+                found.add(node.func.id)
+        self.assertEqual(found, {'IncomingCatalog', 'IncomingReviews', 'IncomingExecution', 'IncomingRetention', 'IncomingWrites'})
+        self.assertEqual(sum(isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'IncomingWorkflows'
+                             for n in ast.walk(tree)), 1)
         for name in ('catalog', 'reviews', 'execution', 'retention'):
             source = (root / f'local_inspection_service/text_inspection/incoming_{name}.py').read_text(encoding='utf-8')
             self.assertNotIn('BusinessFiles', source); self.assertNotIn('ImageFiles', source)

@@ -1,6 +1,7 @@
 """Model tool projection and transport contracts without external inference."""
 from contextlib import nullcontext
 import ast
+import json
 from dataclasses import fields
 import os
 from pathlib import Path
@@ -96,12 +97,16 @@ class ToolContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'new assembly only')
     def test_root_composition_and_all_getters_independent(self):
-        s,a,ea=self.fixture();t,b,eb=self.fixture();tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        nodes=[n for n in tree.body if (isinstance(n,ast.ImportFrom) and n.module in ('model_providers.tool_dispatch','model_providers.tool_dispatch_ports')) or (isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='_model_tool_dispatch' for x in n.targets)) or (isinstance(n,ast.FunctionDef) and n.name in NAMES)]
-        self.assertEqual(len(nodes),6);ns=dict(a,Any=Any,__package__='local_inspection_service');exec(compile(ast.Module(body=nodes,type_ignores=[]),'<assembly>','exec'),ns);assembled=ns['_model_tool_dispatch']
-        for group in (assembled.errors,assembled.execution,assembled.transport):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),ns[f.name])
-        ns['call_ai_mcp_tool']('known',{'a':1});t.call_ai_mcp_tool('known',{'b':2});s.call_ai_mcp_tool('known',{'a':3});self.assertEqual(ea,[{'a':1},{'a':3}]);self.assertEqual(eb,[{'b':2}])
+        s,a,ea=self.fixture();t,b,eb=self.fixture()
+        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        assignments={x.targets[0].id:x.value for x in tree.body if isinstance(x,ast.Assign) and len(x.targets)==1 and isinstance(x.targets[0],ast.Name)}
+        for name,expression in {'_model_tool_dispatch':'_model_tools.dispatch','_presence_inspection':'_model_tools.presence','_ai_mcp_client':'_model_tools.client','AI_MCP_TOOL_HANDLERS':'_model_tools.handlers'}.items():
+            self.assertEqual(ast.dump(assignments[name]),ast.dump(ast.parse(expression,mode='eval').body))
+        constructor=assignments['_model_tools'];self.assertIsInstance(constructor,ast.Call);self.assertEqual(constructor.func.id,'ModelTools')
+        expected=json.loads((ROOT/'tests/backend_contract/model_tools_composition_ports.json').read_text())
+        self.assertEqual({x.arg:ast.dump(x.value) for x in constructor.keywords},{k:ast.dump(ast.parse(v,mode='eval').body) for k,v in expected['root_argument_expressions'].items()})
+        s.call_ai_mcp_tool('known',{'a':1});t.call_ai_mcp_tool('known',{'b':2});s.call_ai_mcp_tool('known',{'a':3})
+        self.assertEqual(ea,[{'a':1},{'a':3}]);self.assertEqual(eb,[{'b':2}])
 
 
 if __name__=='__main__':unittest.main()

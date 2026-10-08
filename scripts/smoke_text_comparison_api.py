@@ -523,16 +523,24 @@ class SubmissionContracts(unittest.TestCase):
     def test_root_prepared_submission_captures_callbacks_per_call(self):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(Path(self.temp.name)/'runtime'),VANTALINE_DATA_STORE='json',VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         (Path(os.environ['LOCAL_INSPECTION_ROOT'])/'local_inspection_service/static').mkdir(parents=True)
-        from local_inspection_service import server, standard_preparation_compare
+        from local_inspection_service import server
+        from local_inspection_service.text_inspection import comparison_composition
         captures=[]
         names=['_text_v2_load','_text_v2_save','_text_v2_owned','_text_v2_update_attempt','_text_v2_public','_text_v2_media_path','_text_v2_write','sha256_bytes','ai_detection_settings','record_model_call','clear_thread_runtime_repository_selection']
         first={name:Mock(name='first-'+name) for name in names};second={name:Mock(name='second-'+name) for name in names}
         first_jobs=object();second_jobs=object();env_a={'key':'A'};env_b={'key':'B'}
         environment_a=Mock();environment_a.getenv=lambda key,default:env_a.get(key,default)
         environment_b=Mock();environment_b.getenv=lambda key,default:env_b.get(key,default)
-        with patch.object(standard_preparation_compare,'submit',side_effect=lambda *args, **kwargs:captures.append(args) or self.assertIs(kwargs['execution'],server._prepared_comparison_runtime) or {'captured':True}):
+        with patch.object(comparison_composition,'submit',side_effect=lambda *args, **kwargs:captures.append(args) or self.assertIs(kwargs['execution'],server._prepared_comparison_runtime) or {'captured':True}):
             for callbacks,flag,jobs,environment in [(first,True,first_jobs,environment_a),(second,False,second_jobs,environment_b)]:
-                with patch.multiple(server,**callbacks,TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=flag,standard_preparation_jobs=jobs,os=environment):
+                methods={name:callbacks[legacy] for name,legacy in [
+                    ('load','_text_v2_load'),('save','_text_v2_save'),('owned','_text_v2_owned'),
+                    ('update_attempt','_text_v2_update_attempt'),('media_path','_text_v2_media_path'),
+                    ('write','_text_v2_write')]}
+                external={name:callbacks[name] for name in ['_text_v2_public','sha256_bytes',
+                    'ai_detection_settings','record_model_call','clear_thread_runtime_repository_selection']}
+                with patch.multiple(server._text_standards,**methods,preparation=jobs), \
+                        patch.multiple(server,**external,TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=flag,os=environment):
                     server._submit_prepared_text_comparison('owner','name',{}, {}, {},b'upload','request',None)
         a,b=captures;self.assertIs(a[0].load,first['_text_v2_load']);self.assertIs(b[0].load,second['_text_v2_load'])
         for captured,callbacks,jobs,flag in [(a,first,first_jobs,True),(b,second,second_jobs,False)]:

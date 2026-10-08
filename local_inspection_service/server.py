@@ -727,11 +727,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
 
 
 def legacy_model_specs() -> list[dict[str, Any]]:
-    specs = []
-    for spec in MODEL_REGISTRY.values():
-        variant = spec.get("variant") or ("yolo_ocr" if spec.get("uses_ocr") else "yolo")
-        specs.append({**spec, "is_legacy": not bool(spec.get("is_ai_detection") or spec.get("is_label_sheet_match")), "variant": variant})
-    return specs
+    return _model_catalog.legacy_model_specs()
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model_path": str(MODEL_PATH),
@@ -1134,14 +1130,33 @@ from .training.task_models import TrainingTaskModels, training_task_model_varian
 from .pipeline.training_sync import PipelineTrainingSync, PipelineTrainingRecords, PipelineTrainingModels
 from .detection.training_candidate_sync import TrainingCandidateSync, CandidateTrainingRecords
 
-_training_user_state = TrainingUserState(
-    defaults=lambda: DEFAULT_CONFIG["training"], legacy_owner=lambda: LEGACY_OWNER_ID,
-    access=TrainingStateAccess(owner=lambda record: record_owner_id(record),
-        visible=lambda record, user, target=None: record_visible_to_user(record, user, target),
-        admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
-    storage=TrainingStateStorage(find=lambda job_id: find_training_task(job_id), load=lambda: load_config(), save=lambda config: save_config(config)),
-    sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task),
-)
+from .runtime.training_tasks import TrainingTaskRuntime
+from .training.account_state_composition import TrainingAccountState, TrainingConfiguration
+from .training.native_execution_composition import TrainingExecution
+from .training.task_composition import (TrainingTaskWorkflows, TrainingMutationAccess, TrainingLaunchConfiguration,
+    TrainingLaunchAccess, TrainingStatusRead, TrainingDatasetAccess, TrainingPreviewInputs, TrainingTransferAccess)
+from .training.state_composition import TrainingStateWorkflows, TrainingRecordAccess
+from .training.record_store import TrainingRows
+from .training.task_lifecycle import TrainingTaskWrites
+from .training.task_views import TrainingViewAccess
+from .training.runner import TrainingRunnerPaths, TrainingDatasetExecution, TrainingLocalExecution
+from .training.submission import TrainingSubmissionPolicy, TrainingSubmissionIdentity
+from .training.jobs_query import JobsReadAccess
+from .training.status_projection import StatusAccess, StatusPreview
+from .training.runpod_transfer import TransferPaths
+
+_training_account_state = TrainingAccountState(runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope),
+storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)),
+rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
+writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
+require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
+view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)),
+defaults=lambda: DEFAULT_CONFIG['training'],
+legacy_owner=lambda: LEGACY_OWNER_ID,
+access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
+configuration=TrainingConfiguration(load=lambda: load_config(), save=lambda config: save_config(config)),
+sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))
+_training_user_state = _training_account_state.users
 _training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
 _pipeline_training_sync = PipelineTrainingSync(
     guard=lambda: _pipeline_tasks_lock,
@@ -1159,17 +1174,17 @@ _training_candidate_sync = TrainingCandidateSync(
 
 
 def default_training_state() -> dict[str, Any]:
-    return _training_user_state.default_training_state()
+    return _training_account_state.default_training_state()
 
 
 
 
 def normalize_training_owner_key(owner_user_id: Any) -> str:
-    return _training_user_state.normalize_training_owner_key(owner_user_id)
+    return _training_account_state.normalize_training_owner_key(owner_user_id)
 
 
 def training_state_store(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return _training_user_state.training_state_store(config)
+    return _training_account_state.training_state_store(config)
 
 
 def sanitize_training_state_for_user(
@@ -1178,7 +1193,7 @@ def sanitize_training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_user_state.sanitize_training_state_for_user(training, user, selected_ids, target_user_id)
+    return _training_account_state.sanitize_training_state_for_user(training, user, selected_ids, target_user_id)
 
 
 def training_state_for_user(
@@ -1187,15 +1202,15 @@ def training_state_for_user(
     selected_ids: set[str],
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_user_state.training_state_for_user(config, user, selected_ids, target_user_id)
+    return _training_account_state.training_state_for_user(config, user, selected_ids, target_user_id)
 
 
 def set_training_state_for_user(config: dict[str, Any], user: dict[str, Any], training_state: dict[str, Any]) -> None:
-    return _training_user_state.set_training_state_for_user(config, user, training_state)
+    return _training_account_state.set_training_state_for_user(config, user, training_state)
 
 
 def sync_training_state_from_task(job_id: str) -> None:
-    return _training_user_state.sync_training_state_from_task(job_id)
+    return _training_account_state.sync_training_state_from_task(job_id)
 
 
 
@@ -1337,19 +1352,33 @@ from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 
 app.mount("/outputs", ArtifactStaticFiles(directory=OUTPUT_DIR, runtime_provider=lambda: _business_files.runtime_provider()), name="outputs")
 
-from .detection.model_selection import ModelSelection
-from .detection.local_models import LocalModels
 
-_model_selection = ModelSelection(
-    specialized=lambda config: list_ai_detection_specialized_model_specs(config),
-    trained=lambda *args: list_trained_model_specs(*args), registry=lambda: MODEL_REGISTRY,
-    default_id=lambda: DEFAULT_MODEL_ID, removed=lambda feature: removed_phase1_feature(feature),
-)
-_local_models = LocalModels(
-    select=lambda model_id, config: selected_model_spec(model_id, config), factory=lambda: YOLO,
-    legacy_specs=lambda: legacy_model_specs(), trained_specs=lambda *args: list_trained_model_specs(*args),
+from .training.catalog_composition import ModelCatalog, ModelRunFiles, ModelPipeline, ModelRegistry
+from .training.task_lookup import LookupCache, LookupRows
+from .training.model_catalog import TrainingAccessories, TrainingAccess
+
+_model_catalog = ModelCatalog(
+    repository=lambda: runtime_postgres_repository_or_none(), file_loader=lambda: load_training_task,
+    cache=LookupCache(get=lambda key: store_read_cache_get(key), put=lambda key, value: store_read_cache_put(key, value)),
+    rows=LookupRows(decode=lambda rows: row_raw_json_list(rows), identifier=lambda path: file_stem_identifier(path),
+        matches=lambda task, requested, row: training_task_matches_identifier(task, requested, row)),
+    config=lambda: load_config(),
+    runs=ModelRunFiles(roots=lambda: training_run_roots(), task_path=lambda: training_task_path,
+        read=lambda path: load_json_file_mtime_cached(path), output=lambda: OUTPUT_DIR, resolve=lambda: resolve_service_path),
+    accessories=TrainingAccessories(uid=lambda item: accessory_uid(item), serialize=lambda item: serialize_accessory(item),
+        uses_ocr=lambda: accessory_uses_ocr, profiles=lambda: build_ocr_accessory_profiles),
+    pipeline=ModelPipeline(tasks=lambda: load_pipeline_tasks(), name=lambda task: task_record_name(task),
+        method=lambda: normalize_pipeline_detection_method),
+    access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
+        audit=lambda: record_audit_fields),
+    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config),
+    registry=ModelRegistry(specialized=lambda config: list_ai_detection_specialized_model_specs(config),
+        registry=lambda: MODEL_REGISTRY, default_id=lambda: DEFAULT_MODEL_ID,
+        removed=lambda feature: removed_phase1_feature(feature), factory=lambda: YOLO),
     files=_business_files,
 )
+_model_selection = _model_catalog.selection
+_local_models = _model_catalog.local
 # Compatibility objects for existing maintenance scripts; state belongs to LocalModels.
 _models = _local_models.models
 _model_paths = _local_models.paths
@@ -1377,17 +1406,122 @@ _yolo_warmup_runtime = YoloWarmup(WarmupOperations(
 ), scope=_runtime_repositories.thread_scope)
 _yolo_warmup_lock = _yolo_warmup_runtime.lock
 _yolo_warmup_state = _yolo_warmup_runtime.state
-_incoming_text_store_lock = threading.RLock()
+from .text_inspection.storage_composition import TextStorage, TextStoragePaths, TextStorageJSON
+from .text_inspection.incoming_store import IncomingPaths, IncomingRows
+
+_text_storage = TextStorage(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    paths=TextStoragePaths(
+        records=lambda: TEXT_INSPECTION_JSON_DIR,
+        incoming=IncomingPaths(references=lambda: INCOMING_TEXT_REFERENCES_PATH,
+                               inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH,
+                               audit=lambda: INCOMING_TEXT_AUDIT_PATH),
+    ),
+    rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
+                      inspection=lambda record: incoming_text_inspection_row(record),
+                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
+    json_io=TextStorageJSON(reader=lambda: _incoming_text_json_list,
+                           writer=lambda: _save_incoming_text_json_list),
+    tables=lambda: TEXT_INSPECTION_TABLES,
+)
+_incoming_text_store_lock = _text_storage.lock
 from .accessories.cutout_runtime import RembgSessionRuntime as _RembgSessionRuntime
 _rembg_runtime = _RembgSessionRuntime()
 from .runtime.image_worker import ImageWorkerRuntime
-_image_worker_runtime = ImageWorkerRuntime(
-    target=lambda: image_worker_loop, threads=lambda: threading.Thread,
-    scope=_runtime_repositories.thread_scope,
+from .accessories.image_composition import (
+    ImageJobs as _ImageJobs, CandidateFiles as _ImageCandidateFiles,
+    QueueStorage as _ImageQueueStorage, QueueMetadata as _ImageQueueMetadata,
+    QueueLimits as _ImageQueueLimits, DiagnosticMedia as _ImageDiagnosticMedia,
+    ExecutionFiles as _ImageExecutionFiles, ExecutionEvidence as _ImageExecutionEvidence,
+    ExecutionProviders as _ImageExecutionProviders,
 )
-_candidate_store_lock = threading.RLock()
+from .accessories.image_job_metadata import ProvenanceDependencies as _ImageProvenanceDependencies
+from .accessories.image_worker_diagnostic_ports import ImageDiagnosticPolicy as _ImageDiagnosticPolicy
+_image_jobs = _ImageJobs(
+    provenance=_ImageProvenanceDependencies(
+        hash_file=lambda path: file_sha256(path),
+        policy_version=lambda: ANCHOR_POLICY_VERSION,
+        guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
+        max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
+    ),
+    resolver=lambda: resolve_model_profiles(),
+    files=_business_files,
+    threads=lambda: threading.Thread,
+    scope=_runtime_repositories.thread_scope,
+    candidates=_ImageCandidateFiles(
+        runtime_repository=lambda: runtime_postgres_repository_or_none(),
+        directory=lambda: ACCESSORY_CANDIDATES_DIR,
+        safe_id=lambda value: safe_record_id(value),
+        created_at=lambda record, path: record_created_at(record, path),
+        updated_at=lambda record, path: record_updated_at(record, path),
+    ),
+    storage=_ImageQueueStorage(
+        CONFIG_PATH=lambda: CONFIG_PATH,
+        load_config=lambda: load_config,
+        save_config=lambda: save_config,
+        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
+        _business_files=lambda: _business_files,
+        HTTPException=lambda: HTTPException,
+    ),
+    metadata=_ImageQueueMetadata(
+        accessory_uid=lambda: accessory_uid,
+        file_stem_identifier=lambda: file_stem_identifier,
+        accessory_material_type=lambda: accessory_material_type,
+        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
+        public_output_url=lambda: public_output_url,
+        resolve_service_path=lambda: resolve_service_path,
+        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
+    ),
+    limits=_ImageQueueLimits(
+        IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
+        MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
+    ),
+    diagnostic_media=_ImageDiagnosticMedia(
+        _business_files=lambda: _business_files,
+        resolve_service_path=lambda: resolve_service_path,
+        safe_name=lambda: safe_name,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+    ),
+    diagnostic_policy=_ImageDiagnosticPolicy(
+        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+        IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES,
+        IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS,
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+    ),
+    execution_files=_ImageExecutionFiles(
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
+        ROOT=lambda: ROOT,
+        safe_name=lambda: safe_name,
+        resolve_service_path=lambda: resolve_service_path,
+        public_output_url=lambda: public_output_url,
+    ),
+    evidence=_ImageExecutionEvidence(
+        image_job_prompt=lambda: image_job_prompt,
+        bounded_text=lambda: bounded_text,
+    ),
+    providers=_ImageExecutionProviders(
+        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
+        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
+        CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS,
+        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
+        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
+        cursor_image2_settings=lambda: cursor_image2_settings,
+        cursor_image2_payload=lambda: cursor_image2_payload,
+        cursor_auth_headers=lambda: cursor_auth_headers,
+        extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes,
+        windows_worker_base_url=lambda: windows_worker_base_url,
+        windows_worker_headers=lambda: windows_worker_headers,
+        windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
+        windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
+        masked_url_for_status=lambda: masked_url_for_status,
+    ),
+)
+_image_worker_runtime = _image_jobs.worker
+_candidate_store_lock = _image_jobs.lock
 from .runtime.training_tasks import TrainingTaskRuntime, TrainingThreadLifecycle
-_training_task_runtime = TrainingTaskRuntime(scope=_runtime_repositories.thread_scope)
+_training_task_runtime = _training_account_state.records.runtime
 _training_task_lock = _training_task_runtime.lock
 _image_worker_processes = _image_worker_runtime.processes
 _training_task_threads = _training_task_runtime.threads
@@ -3265,15 +3399,7 @@ from .accessories.image_job_metadata import (
     deterministic_task_id as _image_metadata_task_id,
     ensure_image_job_task_id as _image_metadata_ensure_id,
 )
-_image_job_metadata = ImageJobMetadata(
-    ProvenanceDependencies(
-        hash_file=lambda path: file_sha256(path),
-        policy_version=lambda: ANCHOR_POLICY_VERSION,
-        guide_images=lambda: POSE_TARGET_GUIDE_IMAGES,
-        max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS,
-    ),
-    lambda: resolve_model_profiles(), files=_business_files
-)
+_image_job_metadata = _image_jobs.metadata
 
 
 def candidate_image_jobs(candidate: dict[str, Any]) -> list[dict[str, Any]]:
@@ -3954,7 +4080,16 @@ from .analytics.analysis_projection import ProjectionDependencies, AnalysisProje
 from .analytics.analysis_publication import PublicationDependencies, AnalysisPublisher
 from .analytics.analysis_composition import AnalysisServices, AnalysisStorage
 
-_analysis = AnalysisServices(
+from .detection.workflow_composition import (
+    DetectionWorkflows, AnalysisAssembly, AnalysisPublication, CaptureAdmission,
+    InspectionEvidence, DetectionPolicy,
+)
+from .detection.analysis_ports import (
+    AnalysisInput, AnalysisInference, AnalysisOutput, AiProfiles, AiInspectionTools,
+)
+
+_detection_workflows = DetectionWorkflows(
+    analysis=AnalysisAssembly(
     normalization=AnalysisNormalization(
     default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
     clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
@@ -3993,18 +4128,70 @@ _analysis = AnalysisServices(
     default_task_label=AI_DETECTION_LABEL, output_directory=lambda: OUTPUT_DIR,
     resolve_path=lambda path: resolve_service_path(path), path_is_under=lambda path, root: path_is_under(path, root),
 ),
-    publication=PublicationDependencies(
-    current_user=lambda: _request_user.get(), owner_fields=lambda: current_owner_fields(),
-    owner_id=lambda record: record_owner_id(record), owner_username=lambda record: record_owner_username(record),
-    default_task_id=AI_DETECTION_MODEL_ID, default_task_label=AI_DETECTION_LABEL,
+    publication=AnalysisPublication(
+    current_user=lambda: _request_user.get(),
+    owner_fields=lambda: current_owner_fields(),
+    owner_id=lambda record: record_owner_id(record),
+    owner_username=lambda record: record_owner_username(record),
+    default_task_id=AI_DETECTION_MODEL_ID,
+    default_task_label=AI_DETECTION_LABEL,
     clean_task_name=lambda value, fallback: clean_ai_detection_task_name(value, fallback),
     string_list=lambda value, **kwargs: string_list(value, **kwargs),
-    resolve_path=lambda path: resolve_service_path(path), safe_name=lambda value: safe_name(value),
-    output_url=lambda path: public_output_url_for_existing(path),
-    capture=lambda record, result, request_id, path: record_auto_optimize_capture(record, result, request_id, path),
+    resolve_path=lambda path: resolve_service_path(path),
+    safe_name=lambda value: safe_name(value),
+    output_url=lambda path: public_output_url_for_existing(path)
 ),
     cache_scope=lambda: read_path_cache_scope(), batch_limit=DATA_ANALYSIS_BATCH_LIMIT,
+),
+    capture=CaptureAdmission(
+    _auto_optimize_lock=lambda: _auto_optimize_lock,
+    load_auto_optimize_state=lambda: load_auto_optimize_state,
+    save_auto_optimize_state=lambda: save_auto_optimize_state,
+    sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
+    auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
+    auto_optimize_capture_enabled=lambda: auto_optimize_capture_enabled,
+    resolve_service_path=lambda: resolve_service_path,
+    bounded_text=lambda: bounded_text,
+    current_owner_fields=lambda: current_owner_fields,
+    start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
+    start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker
+),
+    profiles=AiProfiles(
+        lambda config, spec: ai_required_accessories(config, spec), lambda item: accessory_uid(item),
+        lambda profile, item: normalize_accessory_ai_profile(profile, item),
+        lambda item: accessory_reference_image_contexts(item),
+        lambda item, count, profile: required_accessory_profile_payload(item, count, profile), lambda config: save_config(config),
+    ),
+    tools=AiInspectionTools(
+        lambda: call_ai_mcp_tool, lambda: ai_detection_settings,
+        lambda: external_ai_mcp_enabled(), lambda image, request_id: write_mcp_inspection_image(image, request_id),
+        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_REFERENCE_IMAGE_MAX_SIDE, lambda: AI_REFERENCE_IMAGE_QUALITY,
+    ),
+    evidence=InspectionEvidence(
+    original=lambda image, request_id: write_ai_original_output(image, request_id),
+    failure=lambda request_id, spec, required, url, *, reason: ai_detection_failure_result(request_id, spec, required, url, reason=reason),
+    model=lambda spec, settings: ai_model_payload(spec, settings)
+),
+    inputs=AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
+                  lambda model_id, config: selected_model_spec(model_id, config),
+                  lambda: sanitize_ai_detection_task_id, lambda task_id: load_auto_optimize_state(task_id)),
+    policy=DetectionPolicy(
+    lambda feature: removed_phase1_feature(feature),
+    lambda: bounded_text
+),
+    inference=AnalysisInference(
+        lambda: model, lambda: yolo_inference_device(), lambda result, spec: parse_detections(result, spec),
+        lambda image, detections, config, spec: attach_ocr_results(image, detections, config, spec),
+        lambda detections, config, spec: apply_rule(detections, config, spec),
+        lambda image, detections, rule: draw_detections(image, detections, rule),
+    ),
+    output=AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
+                   lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+    runtime_provider=lambda: _business_files.runtime_provider(),
+    resolver=resolve_model_profiles,
 )
+_analysis = _detection_workflows.analysis
 _analysis_normalizer = _analysis.normalizer
 _analysis_repository = _analysis.repository
 _analysis_records = _analysis.records
@@ -4045,22 +4232,55 @@ upsert_data_analysis_image_processing_record = _analysis_publisher.upsert_data_a
 
 
 from .training.auto_optimization_state_store import AutoOptimizationStateStore
-from .training.auto_optimization_state_ports import AutoOptimizationStateStorage, AutoOptimizationStatePolicy, AutoOptimizationStateCache
+from .training.auto_optimization_state_ports import AutoOptimizationStateStorage, AutoOptimizationStatePolicy
 
-_auto_optimization_state_store = AutoOptimizationStateStore(
-    storage=AutoOptimizationStateStorage(
+from .training.core_composition import (AutoOptimizationCore, StateStorage, StatePolicy, AutoOptimizationStateCache, ReadinessLookups, StatusLookups, StatusProjection, ShadowPolicy, ShadowImages, Retirement)
+
+from .training.execution_composition import (
+    AutoOptimizationExecution,
+    ExternalAutoOptimizationAdvisorPorts,
+    ExternalAutoOptimizationTaskInitializationPorts,
+    ExternalAutoOptimizationMaskPromptPorts,
+    ExternalAutoOptimizationMaskVisualPorts,
+    ExternalAutoOptimizationMaskVerificationPorts,
+    ExternalSpritePublication,
+    ExternalLabelGenerationArtifacts,
+    ExternalLabelGenerationPolicy,
+    ExternalLabelGenerationModels,
+    ExternalProcessingState,
+    ExternalProcessingArtifacts,
+    ExternalProcessingExecution,
+    ExternalSchedulingPolicy,
+    ExternalSchedulingSubmission,
+    ExternalSchedulingState,
+    ExternalSpriteFiles,
+    ExternalSpriteGeometry,
+    ExternalSyntheticGeometry,
+    ExternalSyntheticPublication,
+    ExternalSyntheticBatchConfiguration,
+    ExternalSyntheticBatchPublication,
+    ExternalDatasetConfiguration,
+    ExternalDatasetSources,
+    ExternalDatasetPublication,
+    ExternalDatasetLayout,
+    ExternalRequestAccess,
+    ExternalRequestActions,
+)
+
+from .training.workflow_composition import AutoOptimizationWorkflows, AutoOptimizationStatusLookups, AutoOptimizationStatusProjection
+
+_auto_optimization_workflows = AutoOptimizationWorkflows(
+    storage=StateStorage(
         AUTO_OPTIMIZE_DIR=lambda: AUTO_OPTIMIZE_DIR,
         AI_DETECTION_MODEL_ID=lambda: AI_DETECTION_MODEL_ID,
         _business_files=lambda: _business_files,
         runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        auto_optimize_task_path=lambda: auto_optimize_task_path,
     ),
-    policy=AutoOptimizationStatePolicy(
+    state_policy=StatePolicy(
         sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
         safe_record_id=lambda: safe_record_id,
         row_raw_json_list=lambda: row_raw_json_list,
         auto_optimize_state_row=lambda: auto_optimize_state_row,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
         resolve_model_profiles=lambda: resolve_model_profiles,
     ),
     cache=AutoOptimizationStateCache(
@@ -4069,7 +4289,245 @@ _auto_optimization_state_store = AutoOptimizationStateStore(
         store_read_cache_put=lambda: store_read_cache_put,
         store_read_cache_invalidate=lambda: store_read_cache_invalidate,
     ),
+    readiness=ReadinessLookups(
+        find_training_task=lambda: find_training_task,
+        load_config=lambda: load_config,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
+        load_pipeline_tasks=lambda: load_pipeline_tasks,
+        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
+        pipeline_task_model_status=lambda: pipeline_task_model_status,
+        pipeline_task_model_id=lambda: pipeline_task_model_id,
+    ),
+    status_state=AutoOptimizationStatusLookups(
+        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
+        find_training_task=lambda: find_training_task,
+        record_visible_to_user=lambda: record_visible_to_user,
+        current_auth_user=lambda: current_auth_user,
+    ),
+    status_policy=AutoOptimizationStatusProjection(
+        background_set_payload=lambda: background_set_payload,
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+        public_path_sanitized=lambda: public_path_sanitized,
+        normalize_expected_production_count=lambda: normalize_expected_production_count,
+    ),
+    shadow_state=ShadowPolicy(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    observation=ShadowImages(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    retirement=Retirement(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        delete_training_task_record=lambda: delete_training_task_record,
+        training_run_roots=lambda: training_run_roots,
+        _business_files=lambda: _business_files,
+    ),
+    accessory_lookup=lambda config: accessory_lookup_by_id(config),
+    material_type=lambda item: accessory_material_type(item),
+    bounded_text=lambda: bounded_text,
+    settings=_auto_optimization_settings,
+    runtime=_auto_optimization_runtime,
+    detection=lambda: _detection_workflows,
+    shadow_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
+    shadow_resolver=resolve_model_profiles,
+    negative_samples_default=AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
+    model_resolver=resolve_model_profiles,
+    label_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
+    scheduling_runtime=TrainingThreadLifecycle(
+        scope=_runtime_repositories.thread_scope,
+    ),
+    external_AutoOptimizationAdvisorPorts=ExternalAutoOptimizationAdvisorPorts(
+        ai_detection_settings=lambda: ai_detection_settings,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        accessory_material_type=lambda: accessory_material_type,
+        bounded_text=lambda: bounded_text,
+        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+    ),
+    external_AutoOptimizationTaskInitializationPorts=ExternalAutoOptimizationTaskInitializationPorts(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
+    ),
+    external_AutoOptimizationMaskPromptPorts=ExternalAutoOptimizationMaskPromptPorts(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION=lambda: AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
+        bounded_text=lambda: bounded_text,
+        string_list=lambda: string_list,
+        accessory_material_type=lambda: accessory_material_type,
+        load_config=lambda: load_config,
+        scope_config_for_user=lambda: scope_config_for_user,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+        build_mask_target_profile=lambda: build_mask_target_profile,
+    ),
+    external_AutoOptimizationMaskVisualPorts=ExternalAutoOptimizationMaskVisualPorts(
+        DOCUMENT_LIKE_TEXT_HINTS=lambda: DOCUMENT_LIKE_TEXT_HINTS,
+        bounded_text=lambda: bounded_text,
+        _image_files=lambda: _image_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+    ),
+    external_AutoOptimizationMaskVerificationPorts=ExternalAutoOptimizationMaskVerificationPorts(
+        ai_detection_settings=lambda: ai_detection_settings,
+        bounded_text=lambda: bounded_text,
+        string_list=lambda: string_list,
+        image_bgr_data_url=lambda: image_bgr_data_url,
+        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
+        MASK_VERIFIER_SYSTEM_PROMPT=lambda: MASK_VERIFIER_SYSTEM_PROMPT,
+        AiProviderError=lambda: AiProviderError,
+    ),
+    external_SpritePublication=ExternalSpritePublication(
+        safe_record_id=lambda: safe_record_id,
+        _image_files=lambda: _image_files,
+        write_clean_sprite=lambda: write_clean_sprite,
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+    external_LabelGenerationArtifacts=ExternalLabelGenerationArtifacts(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+        public_output_url_for_existing=lambda: public_output_url_for_existing,
+        safe_record_id=lambda: safe_record_id,
+    ),
+    external_LabelGenerationPolicy=ExternalLabelGenerationPolicy(
+        photo_highlight_input_data_url=lambda: photo_highlight_input_data_url,
+        AUTO_OPTIMIZE_MASK_PALETTE=lambda: AUTO_OPTIMIZE_MASK_PALETTE,
+        AUTO_OPTIMIZE_MASK_PROMPT_MODE=lambda: AUTO_OPTIMIZE_MASK_PROMPT_MODE,
+        bounded_text=lambda: bounded_text,
+        alpha_bbox=lambda: alpha_bbox,
+        decode_photo_highlight_mask=lambda: decode_photo_highlight_mask,
+        photo_highlight_auto_roi_mask=lambda: photo_highlight_auto_roi_mask,
+        photo_highlight_auto_compare=lambda: photo_highlight_auto_compare,
+    ),
+    external_LabelGenerationModels=ExternalLabelGenerationModels(
+        auto_optimize_generate_image_with_retry=lambda: auto_optimize_generate_image_with_retry,
+        AiProviderError=lambda: AiProviderError,
+    ),
+    external_ProcessingState=ExternalProcessingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+    ),
+    external_ProcessingArtifacts=ExternalProcessingArtifacts(
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    external_ProcessingExecution=ExternalProcessingExecution(
+        image_generation_settings=lambda: image_generation_settings,
+        AUTO_OPTIMIZE_MASK_MAX_PARALLEL=lambda: AUTO_OPTIMIZE_MASK_MAX_PARALLEL,
+        ThreadPoolExecutor=lambda: ThreadPoolExecutor,
+        as_completed=lambda: as_completed,
+    ),
+    external_SchedulingPolicy=ExternalSchedulingPolicy(
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+    ),
+    external_SchedulingSubmission=ExternalSchedulingSubmission(
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        _request_user=lambda: _request_user,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        selected_accessories=lambda: selected_accessories,
+        TrainingStartRequest=lambda: TrainingStartRequest,
+        pipeline_ai_task_id=lambda: pipeline_ai_task_id,
+        enqueue_training_task=lambda: enqueue_training_task,
+    ),
+    external_SchedulingState=ExternalSchedulingState(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        bounded_text=lambda: bounded_text,
+    ),
+    external_SpriteFiles=ExternalSpriteFiles(
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        OUTPUT_DIR=lambda: OUTPUT_DIR,
+        STATIC_DIR=lambda: STATIC_DIR,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        safe_record_id=lambda: safe_record_id,
+        public_path_sanitized=lambda: public_path_sanitized,
+    ),
+    external_SpriteGeometry=ExternalSpriteGeometry(
+        alpha_bbox=lambda: alpha_bbox,
+        AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE=lambda: AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE,
+        AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE=lambda: AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE,
+    ),
+    external_SyntheticGeometry=ExternalSyntheticGeometry(
+        choose_object_center_inside_background=lambda: choose_object_center_inside_background,
+        paste_masked_asset=lambda: paste_masked_asset,
+        alpha_bbox=lambda: alpha_bbox,
+        rotated_rect_tuple=lambda: rotated_rect_tuple,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+    ),
+    external_SyntheticPublication=ExternalSyntheticPublication(
+        safe_background_set_id=lambda: safe_background_set_id,
+        render_training_background=lambda: render_training_background,
+        _image_files=lambda: _image_files,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        _business_files=lambda: _business_files,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+    ),
+    external_SyntheticBatchConfiguration=ExternalSyntheticBatchConfiguration(
+        safe_background_set_id=lambda: safe_background_set_id,
+        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
+        _request_user=lambda: _request_user,
+        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
+        scope_config_for_user=lambda: scope_config_for_user,
+        load_config=lambda: load_config,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    ),
+    external_SyntheticBatchPublication=ExternalSyntheticBatchPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+    ),
+    external_DatasetConfiguration=ExternalDatasetConfiguration(
+        _request_user=lambda: _request_user,
+        load_config=lambda: load_config,
+        scope_config_for_user=lambda: scope_config_for_user,
+        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
+    ),
+    external_DatasetSources=ExternalDatasetSources(
+        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
+    ),
+    external_DatasetPublication=ExternalDatasetPublication(
+        safe_record_id=lambda: safe_record_id,
+        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
+        resolve_service_path=lambda: resolve_service_path,
+        _image_files=lambda: _image_files,
+        _business_files=lambda: _business_files,
+    ),
+    external_DatasetLayout=ExternalDatasetLayout(
+        safe_background_set_id=lambda: safe_background_set_id,
+        split_counts=lambda: split_counts,
+        render_training_background=lambda: render_training_background,
+        yolo_detection_label_line=lambda: yolo_detection_label_line,
+        write_training_annotation_preview=lambda: write_training_annotation_preview,
+        public_training_output_url=lambda: public_training_output_url,
+        write_dataset_yaml=lambda: write_dataset_yaml,
+    ),
+    external_RequestAccess=ExternalRequestAccess(
+        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
+        safe_record_id=lambda: safe_record_id,
+        current_auth_user=lambda: current_auth_user,
+        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
+        require_record_access=lambda: require_record_access,
+        HTTPException=lambda: HTTPException,
+    ),
+    external_RequestActions=ExternalRequestActions(
+        resolve_service_path=lambda: resolve_service_path,
+        _business_files=lambda: _business_files,
+        _image_files=lambda: _image_files,
+        analyze_bgr=lambda: analyze_bgr,
+        AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
+    ),
 )
+_auto_optimization_core = _auto_optimization_workflows.core
+_auto_optimization_state_store = _auto_optimization_core.store
 
 
 def auto_optimize_task_path(task_id: str) -> Path:
@@ -4098,12 +4556,7 @@ auto_optimize_training_parameters = _auto_optimization_settings.auto_optimize_tr
 
 from .training.auto_optimization_recommendations import AutoOptimizationRecommendations
 
-_auto_optimization_recommendations = AutoOptimizationRecommendations(
-    settings=_auto_optimization_settings,
-    accessory_lookup_by_id=lambda config: accessory_lookup_by_id(config),
-    accessory_material_type=lambda item: accessory_material_type(item),
-    bounded_text=lambda: bounded_text,
-)
+_auto_optimization_recommendations = _auto_optimization_core.recommendations
 
 
 def auto_optimize_complexity_rule_recommendation(
@@ -4129,28 +4582,9 @@ def public_auto_optimize_initialization_payload(state: dict[str, Any], settings:
 from .training.auto_optimization_initialization import AutoOptimizationInitialization
 from .training.auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
 
-_auto_optimization_initialization = AutoOptimizationInitialization(
-    negative_samples_default=AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE,
-    advisor=AutoOptimizationAdvisorPorts(
-        ai_detection_settings=lambda: ai_detection_settings,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        accessory_material_type=lambda: accessory_material_type,
-        bounded_text=lambda: bounded_text,
-        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-        clamp_auto_optimize_initialization_recommendation=lambda: clamp_auto_optimize_initialization_recommendation,
-    ),
-    task=AutoOptimizationTaskInitializationPorts(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        auto_optimize_complexity_rule_recommendation=lambda: auto_optimize_complexity_rule_recommendation,
-        agent_auto_optimize_initialization_recommendation=lambda: agent_auto_optimize_initialization_recommendation,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-    ),
-)
+
+_auto_optimization_execution = _auto_optimization_workflows.execution
+_auto_optimization_initialization = _auto_optimization_execution.initialization
 
 
 def agent_auto_optimize_initialization_recommendation(
@@ -4200,36 +4634,7 @@ def list_auto_optimize_states() -> list[dict[str, Any]]:
 from .training.auto_optimization_status import AutoOptimizationStatus
 from .training.auto_optimization_status_ports import AutoOptimizationStatusState, AutoOptimizationStatusPolicy
 
-_auto_optimization_status = AutoOptimizationStatus(
-    AutoOptimizationStatusState(
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        hydrate_auto_optimize_background_from_ai_task=lambda: hydrate_auto_optimize_background_from_ai_task,
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        find_training_task=lambda: find_training_task,
-        record_visible_to_user=lambda: record_visible_to_user,
-        current_auth_user=lambda: current_auth_user,
-        start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-        public_auto_optimize_state=lambda: public_auto_optimize_state,
-    ),
-    AutoOptimizationStatusPolicy(
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_public_sprite_pool=lambda: auto_optimize_public_sprite_pool,
-        background_set_payload=lambda: background_set_payload,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        public_path_sanitized=lambda: public_path_sanitized,
-        auto_optimize_phase_name=lambda: auto_optimize_phase_name,
-        normalize_expected_production_count=lambda: normalize_expected_production_count,
-        public_auto_optimize_initialization_payload=lambda: public_auto_optimize_initialization_payload,
-    ),
-)
+_auto_optimization_status = _auto_optimization_core.status
 
 
 def public_auto_optimize_state(task_id: str, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -4239,19 +4644,7 @@ def public_auto_optimize_state(task_id: str, *, user: dict[str, Any] | None = No
 from .training.auto_optimization_readiness import AutoOptimizationReadiness
 from .training.auto_optimization_readiness_ports import AutoOptimizationReadinessPorts
 
-_auto_optimization_readiness = AutoOptimizationReadiness(AutoOptimizationReadinessPorts(
-    find_training_task=lambda: find_training_task,
-    auto_optimize_linked_pipeline_model_id=lambda: auto_optimize_linked_pipeline_model_id,
-    load_config=lambda: load_config,
-    canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-    normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-    load_pipeline_tasks=lambda: load_pipeline_tasks,
-    normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-    pipeline_task_model_status=lambda: pipeline_task_model_status,
-    pipeline_task_model_id=lambda: pipeline_task_model_id,
-    default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-))
+_auto_optimization_readiness = _auto_optimization_core.readiness
 
 
 def auto_optimize_phase_name(state: dict[str, Any]) -> str:
@@ -4304,21 +4697,7 @@ def auto_optimize_update_settings(task_id: str, request: Any) -> dict[str, Any]:
 from .training.auto_optimization_capture import AutoOptimizationCapture
 from .training.auto_optimization_capture_ports import AutoOptimizationCapturePorts
 
-_auto_optimization_capture = AutoOptimizationCapture(AutoOptimizationCapturePorts(
-    _auto_optimize_lock=lambda: _auto_optimize_lock,
-    load_auto_optimize_state=lambda: load_auto_optimize_state,
-    save_auto_optimize_state=lambda: save_auto_optimize_state,
-    sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-    auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-    auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-    auto_optimize_capture_enabled=lambda: auto_optimize_capture_enabled,
-    resolve_service_path=lambda: resolve_service_path,
-    bounded_text=lambda: bounded_text,
-    current_owner_fields=lambda: current_owner_fields,
-    start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
-    start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker,
-    auto_optimize_detection_candidates=lambda: auto_optimize_detection_candidates,
-))
+_auto_optimization_capture = _detection_workflows.capture
 
 
 def auto_optimize_detection_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -4337,27 +4716,9 @@ from .training.auto_optimization_mask_prompts import AutoOptimizationMaskPrompts
 from .training.auto_optimization_mask_visuals import AutoOptimizationMaskVisuals
 from .training.auto_optimization_mask_ports import AutoOptimizationMaskPromptPorts, AutoOptimizationMaskVisualPorts
 
-_auto_optimization_mask_prompts = AutoOptimizationMaskPrompts(AutoOptimizationMaskPromptPorts(
-    LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-    AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION=lambda: AUTO_OPTIMIZE_MASK_SYSTEM_PROMPT_VERSION,
-    bounded_text=lambda: bounded_text,
-    string_list=lambda: string_list,
-    accessory_material_type=lambda: accessory_material_type,
-    load_config=lambda: load_config,
-    scope_config_for_user=lambda: scope_config_for_user,
-    accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-    build_mask_target_profile=lambda: build_mask_target_profile,
-    auto_optimize_mask_owner_user=lambda: auto_optimize_mask_owner_user,
-    auto_optimize_mask_target_payload=lambda: auto_optimize_mask_target_payload,
-))
+_auto_optimization_mask_prompts = _auto_optimization_execution.mask_prompts
 
-_auto_optimization_mask_visuals = AutoOptimizationMaskVisuals(AutoOptimizationMaskVisualPorts(
-    DOCUMENT_LIKE_TEXT_HINTS=lambda: DOCUMENT_LIKE_TEXT_HINTS,
-    bounded_text=lambda: bounded_text,
-    _image_files=lambda: _image_files,
-    public_output_url_for_existing=lambda: public_output_url_for_existing,
-    auto_optimize_text_mask_requires_document_gate=lambda: auto_optimize_text_mask_requires_document_gate,
-))
+_auto_optimization_mask_visuals = _auto_optimization_execution.mask_visuals
 
 
 def auto_optimize_mask_system_prompt() -> str:
@@ -4472,18 +4833,7 @@ def clamp_unit_score(value: Any, default: float = 0.0) -> float:
 from .training.auto_optimization_mask_verification import AutoOptimizationMaskVerification
 from .training.auto_optimization_mask_verification_ports import AutoOptimizationMaskVerificationPorts
 
-_auto_optimization_mask_verification = AutoOptimizationMaskVerification(AutoOptimizationMaskVerificationPorts(
-    ai_detection_settings=lambda: ai_detection_settings,
-    bounded_text=lambda: bounded_text,
-    string_list=lambda: string_list,
-    image_bgr_data_url=lambda: image_bgr_data_url,
-    auto_optimize_mask_verifier_overlay=lambda: auto_optimize_mask_verifier_overlay,
-    auto_optimize_mask_verifier_crop=lambda: auto_optimize_mask_verifier_crop,
-    generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-    MASK_VERIFIER_SYSTEM_PROMPT=lambda: MASK_VERIFIER_SYSTEM_PROMPT,
-    AiProviderError=lambda: AiProviderError,
-    clamp_unit_score=lambda: clamp_unit_score,
-))
+_auto_optimization_mask_verification = _auto_optimization_execution.mask_verification
 
 
 def verify_auto_optimize_mask_sample(sample: dict[str, Any], image_bgr: np.ndarray, labels: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -4493,17 +4843,7 @@ def verify_auto_optimize_mask_sample(sample: dict[str, Any], image_bgr: np.ndarr
 from .training.auto_optimization_sprite_publication import AutoOptimizationSpritePublication
 from .training.auto_optimization_sprite_publication_ports import SpritePublication
 
-_auto_optimization_sprite_publication = AutoOptimizationSpritePublication(
-    publication=SpritePublication(
-        safe_record_id=lambda: safe_record_id,
-        _image_files=lambda: _image_files,
-        write_clean_sprite=lambda: write_clean_sprite,
-        resolve_service_path=lambda: resolve_service_path,
-        _business_files=lambda: _business_files,
-        public_output_url_for_existing=lambda: public_output_url_for_existing,
-        public_path_sanitized=lambda: public_path_sanitized,
-    ),
-)
+_auto_optimization_sprite_publication = _auto_optimization_execution.sprite_publication
 
 
 def auto_optimize_write_sprite_artifact(
@@ -4523,38 +4863,7 @@ def auto_optimize_write_sprite_artifact(
 from .training.auto_optimization_label_generation import AutoOptimizationLabelGeneration
 from .training.auto_optimization_label_generation_ports import LabelGenerationArtifacts, LabelGenerationPolicy, LabelGenerationModels
 
-_auto_optimization_label_generation = AutoOptimizationLabelGeneration(
-    LabelGenerationArtifacts(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        _business_files=lambda: _business_files,
-        public_output_url_for_existing=lambda: public_output_url_for_existing,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
-    ),
-    LabelGenerationPolicy(
-        photo_highlight_input_data_url=lambda: photo_highlight_input_data_url,
-        auto_optimize_accessory_lookup_for_sample=lambda: auto_optimize_accessory_lookup_for_sample,
-        auto_optimize_mask_target_profile=lambda: auto_optimize_mask_target_profile,
-        AUTO_OPTIMIZE_MASK_PALETTE=lambda: AUTO_OPTIMIZE_MASK_PALETTE,
-        AUTO_OPTIMIZE_MASK_PROMPT_MODE=lambda: AUTO_OPTIMIZE_MASK_PROMPT_MODE,
-        auto_optimize_multicolor_mask_prompt=lambda: auto_optimize_multicolor_mask_prompt,
-        bounded_text=lambda: bounded_text,
-        decode_multicolor_mask=lambda: decode_multicolor_mask,
-        alpha_bbox=lambda: alpha_bbox,
-        validate_auto_optimize_text_mask_region=lambda: validate_auto_optimize_text_mask_region,
-        draw_auto_optimize_review_overlay=lambda: draw_auto_optimize_review_overlay,
-        decode_photo_highlight_mask=lambda: decode_photo_highlight_mask,
-        photo_highlight_auto_roi_mask=lambda: photo_highlight_auto_roi_mask,
-        photo_highlight_auto_compare=lambda: photo_highlight_auto_compare,
-    ),
-    LabelGenerationModels(
-        auto_optimize_generate_image_with_retry=lambda: auto_optimize_generate_image_with_retry,
-        AiProviderError=lambda: AiProviderError,
-        auto_optimize_generate_label_for_candidate=lambda: auto_optimize_generate_label_for_candidate,
-        verify_auto_optimize_mask_sample=lambda: verify_auto_optimize_mask_sample,
-    ),
-)
+_auto_optimization_label_generation = _auto_optimization_execution.label_generation
 
 
 def auto_optimize_generate_labels_for_sample(sample: dict[str, Any], provider_settings: dict[str, Any], model: str, artifact_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
@@ -4568,36 +4877,7 @@ def auto_optimize_generate_label_for_candidate(sample: dict[str, Any], candidate
 from .training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
 from .training.auto_optimization_label_processing_ports import ProcessingState, ProcessingArtifacts, ProcessingExecution
 
-_auto_optimization_label_processing = AutoOptimizationLabelProcessing(
-    state=ProcessingState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        _auto_optimize_label_threads=lambda: _auto_optimize_label_threads,
-        auto_optimize_label_worker=lambda: auto_optimize_label_worker,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
-    ),
-    artifacts=ProcessingArtifacts(
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_generate_labels_for_sample=lambda: auto_optimize_generate_labels_for_sample,
-        bounded_text=lambda: bounded_text,
-        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
-    ),
-    execution=ProcessingExecution(
-        image_generation_settings=lambda: image_generation_settings,
-        AUTO_OPTIMIZE_MASK_MAX_PARALLEL=lambda: AUTO_OPTIMIZE_MASK_MAX_PARALLEL,
-        ThreadPoolExecutor=lambda: ThreadPoolExecutor,
-        as_completed=lambda: as_completed,
-        auto_optimize_process_label_sample=lambda: auto_optimize_process_label_sample,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    model_resolver=resolve_model_profiles,
-)
+_auto_optimization_label_processing = _auto_optimization_execution.label_processing
 
 
 def start_auto_optimize_label_worker(task_id: str) -> None:
@@ -4621,40 +4901,7 @@ def auto_optimize_label_worker(task_id: str) -> None:
 from .training.auto_optimization_training_scheduling import AutoOptimizationTrainingScheduling
 from .training.auto_optimization_training_scheduling_ports import SchedulingPolicy, SchedulingSubmission, SchedulingState
 
-_auto_optimization_training_scheduling = AutoOptimizationTrainingScheduling(
-    policy=SchedulingPolicy(
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-        auto_optimize_training_parameters=_auto_optimization_settings.auto_optimize_training_parameters,
-    ),
-    submission=SchedulingSubmission(
-        build_auto_optimize_dataset=lambda: build_auto_optimize_dataset,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        _request_user=lambda: _request_user,
-        scope_config_for_user=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        selected_accessories=lambda: selected_accessories,
-        TrainingStartRequest=lambda: TrainingStartRequest,
-        pipeline_ai_task_id=lambda: pipeline_ai_task_id,
-        enqueue_training_task=lambda: enqueue_training_task,
-    ),
-    state=SchedulingState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        maybe_start_auto_optimize_training_locked=lambda: maybe_start_auto_optimize_training_locked,
-        bounded_text=lambda: bounded_text,
-        auto_optimize_training_check_worker=lambda: auto_optimize_training_check_worker,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-)
+_auto_optimization_training_scheduling = _auto_optimization_execution.training_scheduling
 
 
 def maybe_start_auto_optimize_training_locked(state: dict[str, Any]) -> None:
@@ -4673,28 +4920,7 @@ def start_auto_optimize_training_check_worker(task_id: str, delay_seconds: float
 from .training.auto_optimization_sprites import AutoOptimizationSprites
 from .training.auto_optimization_sprites_ports import SpriteFiles, SpriteGeometry
 
-_auto_optimization_sprites = AutoOptimizationSprites(
-    SpriteFiles(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        OUTPUT_DIR=lambda: OUTPUT_DIR,
-        STATIC_DIR=lambda: STATIC_DIR,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        safe_record_id=lambda: safe_record_id,
-        auto_optimize_write_sprite_artifact=lambda: auto_optimize_write_sprite_artifact,
-        public_path_sanitized=lambda: public_path_sanitized,
-        auto_optimize_resolve_artifact_path=lambda: auto_optimize_resolve_artifact_path,
-    ),
-    SpriteGeometry(
-        alpha_bbox=lambda: alpha_bbox,
-        AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE=lambda: AUTO_OPTIMIZE_SYNTHETIC_CANVAS_SIZE,
-        AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE=lambda: AUTO_OPTIMIZE_SYNTHETIC_MAX_UPSCALE,
-        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
-        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
-        auto_optimize_sprite_visible_size=lambda: auto_optimize_sprite_visible_size,
-        auto_optimize_source_to_canvas_scale=lambda: auto_optimize_source_to_canvas_scale,
-    ),
-)
+_auto_optimization_sprites = _auto_optimization_execution.sprites
 
 
 def auto_optimize_load_sprite(sprite: dict[str, Any]) -> tuple[np.ndarray, np.ndarray] | None:
@@ -4744,26 +4970,7 @@ def auto_optimize_sprite_target_size(
 from .training.auto_optimization_rendering import AutoOptimizationRendering
 from .training.auto_optimization_rendering_ports import SyntheticGeometry, SyntheticPublication
 
-_auto_optimization_rendering = AutoOptimizationRendering(
-    geometry=SyntheticGeometry(
-        auto_optimize_load_sprite=lambda: auto_optimize_load_sprite,
-        auto_optimize_sprite_target_size=lambda: auto_optimize_sprite_target_size,
-        choose_object_center_inside_background=lambda: choose_object_center_inside_background,
-        paste_masked_asset=lambda: paste_masked_asset,
-        alpha_bbox=lambda: alpha_bbox,
-        rotated_rect_tuple=lambda: rotated_rect_tuple,
-        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-    ),
-    publication=SyntheticPublication(
-        safe_background_set_id=lambda: safe_background_set_id,
-        render_training_background=lambda: render_training_background,
-        _image_files=lambda: _image_files,
-        yolo_detection_label_line=lambda: yolo_detection_label_line,
-        _business_files=lambda: _business_files,
-        write_training_annotation_preview=lambda: write_training_annotation_preview,
-        public_training_output_url=lambda: public_training_output_url,
-    ),
-)
+_auto_optimization_rendering = _auto_optimization_execution.rendering
 
 
 def auto_optimize_render_synthetic_sample(
@@ -4798,29 +5005,7 @@ from .training.auto_optimization_synthetic_batch_ports import (
     SyntheticBatchConfiguration, SyntheticBatchSprites, SyntheticBatchPublication,
 )
 
-_auto_optimization_synthetic_batch = AutoOptimizationSyntheticBatch(
-    configuration=SyntheticBatchConfiguration(
-        safe_background_set_id=lambda: safe_background_set_id,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY=lambda: AUTO_OPTIMIZE_SYNTHETIC_SIZE_POLICY,
-        _request_user=lambda: _request_user,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        scope_config_for_user=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-    ),
-    sprites=SyntheticBatchSprites(
-        auto_optimize_backfill_missing_sprites_for_sample=lambda: auto_optimize_backfill_missing_sprites_for_sample,
-        auto_optimize_sprite_records_for_sample=lambda: auto_optimize_sprite_records_for_sample,
-        auto_optimize_canonical_sprite_sizes=lambda: auto_optimize_canonical_sprite_sizes,
-    ),
-    publication=SyntheticBatchPublication(
-        safe_record_id=lambda: safe_record_id,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        auto_optimize_render_synthetic_sample=lambda: auto_optimize_render_synthetic_sample,
-    ),
-)
+_auto_optimization_synthetic_batch = _auto_optimization_execution.synthetic_batch
 
 
 def auto_optimize_generate_synthetic_batch_for_sample(
@@ -4836,40 +5021,7 @@ from .training.auto_optimization_dataset_ports import (
     DatasetConfiguration, DatasetSources, DatasetPublication, DatasetLayout,
 )
 
-_auto_optimization_dataset = AutoOptimizationDataset(
-    configuration=DatasetConfiguration(
-        _request_user=lambda: _request_user,
-        load_config=lambda: load_config,
-        scope_config_for_user=lambda: scope_config_for_user,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        auto_optimize_samples_per_real_image=_auto_optimization_settings.auto_optimize_samples_per_real_image,
-        auto_optimize_positive_derivatives_per_real_image=_auto_optimization_settings.auto_optimize_positive_derivatives_per_real_image,
-        auto_optimize_negative_samples_per_real_image=_auto_optimization_settings.auto_optimize_negative_samples_per_real_image,
-        auto_optimize_training_requirements=_auto_optimization_settings.auto_optimize_training_requirements,
-    ),
-    sources=DatasetSources(
-        auto_optimize_generate_synthetic_batch_for_sample=lambda: auto_optimize_generate_synthetic_batch_for_sample,
-        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
-        AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT=lambda: AUTO_OPTIMIZE_REAL_BBOX_SAMPLE_WEIGHT,
-    ),
-    publication=DatasetPublication(
-        safe_record_id=lambda: safe_record_id,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        _business_files=lambda: _business_files,
-    ),
-    layout=DatasetLayout(
-        safe_background_set_id=lambda: safe_background_set_id,
-        split_counts=lambda: split_counts,
-        render_training_background=lambda: render_training_background,
-        yolo_detection_label_line=lambda: yolo_detection_label_line,
-        write_training_annotation_preview=lambda: write_training_annotation_preview,
-        public_training_output_url=lambda: public_training_output_url,
-        write_dataset_yaml=lambda: write_dataset_yaml,
-    ),
-)
+_auto_optimization_dataset = _auto_optimization_execution.dataset
 
 
 def auto_optimize_bbox_training_entries(sample: dict[str, Any]) -> list[dict[str, Any]]:
@@ -4883,33 +5035,7 @@ def build_auto_optimize_dataset(task_id: str, state: dict[str, Any], samples: li
 from .training.auto_optimization_shadow_evaluation import AutoOptimizationShadowEvaluation
 from .training.auto_optimization_shadow_evaluation_ports import ShadowState, ShadowObservation, ShadowPromotion
 
-_auto_optimization_shadow_evaluation = AutoOptimizationShadowEvaluation(
-    state=ShadowState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        _auto_optimize_shadow_threads=lambda: _auto_optimize_shadow_threads,
-        auto_optimize_shadow_worker=lambda: auto_optimize_shadow_worker,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        bounded_text=lambda: bounded_text,
-    ),
-    observation=ShadowObservation(
-        resolve_service_path=lambda: resolve_service_path,
-        _image_files=lambda: _image_files,
-        analyze_bgr=lambda: analyze_bgr,
-        safe_record_id=lambda: safe_record_id,
-    ),
-    promotion=ShadowPromotion(
-        maybe_promote_auto_optimize_model_locked=lambda: maybe_promote_auto_optimize_model_locked,
-        default_auto_optimize_settings=_auto_optimization_settings.default_auto_optimize_settings,
-        cleanup_auto_optimize_retired_candidate_locked=lambda: cleanup_auto_optimize_retired_candidate_locked,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        delete_training_task_record=lambda: delete_training_task_record,
-        training_run_roots=lambda: training_run_roots,
-        _business_files=lambda: _business_files,
-    ),
-    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-)
+_auto_optimization_shadow_evaluation = _auto_optimization_core.shadow
 
 
 def start_auto_optimize_shadow_worker(task_id: str, sample_id: str) -> None:
@@ -5413,33 +5539,9 @@ def resolve_required_accessory_refs(required_refs: list[Any]) -> list[dict[str, 
 
 
 from .model_providers.tool_dispatch import ModelToolDispatch
+from .model_providers.tool_composition import ModelTools, JsonProviderCalls, McpRuntimeSelection, AccessoryTools, PresencePreparation
 from .model_providers.tool_dispatch_ports import ToolErrorPolicy, JsonToolExecution, McpToolTransport
 
-_model_tool_dispatch = ModelToolDispatch(
-    errors=ToolErrorPolicy(
-        bounded_text=lambda: bounded_text,
-        _text_v2_diagnostic_value=lambda: _text_v2_diagnostic_value,
-        AiProviderError=lambda: AiProviderError,
-        AiProviderTimeout=lambda: AiProviderTimeout,
-        AiProviderOverloaded=lambda: AiProviderOverloaded,
-        AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS,
-    ),
-    execution=JsonToolExecution(
-        ai_detection_settings=lambda: ai_detection_settings,
-        ai_tool_provider_meta=lambda: ai_tool_provider_meta,
-        provider_generate_json_error_payload=lambda: provider_generate_json_error_payload,
-        generate_provider_json_with_fallback=lambda: generate_provider_json_with_fallback,
-    ),
-    transport=McpToolTransport(
-        admission=lambda: _ai_mcp_client.admission,
-        ai_mcp_runtime=lambda: ai_mcp_runtime,
-        AI_MCP_RUNTIME_STDIO=lambda: AI_MCP_RUNTIME_STDIO,
-        AI_MCP_RUNTIME_IN_PROCESS=lambda: AI_MCP_RUNTIME_IN_PROCESS,
-        _ai_mcp_client=lambda: _ai_mcp_client,
-        prepare_ai_mcp_payload=lambda: prepare_ai_mcp_payload,
-        AI_MCP_TOOL_HANDLERS=lambda: AI_MCP_TOOL_HANDLERS,
-    ),
-)
 
 
 def provider_generate_json_error_payload(
@@ -5531,39 +5633,30 @@ def tool_accessory_profile_generate(payload: dict[str, Any]) -> dict[str, Any]:
 from .detection.presence_inspection import PresenceInspection
 from .detection.presence_inspection_ports import PresenceInput, PresenceGeneration, PresenceOutput, PresencePolicy
 
-_presence_inspection = PresenceInspection(
-    PresenceInput(lambda: ai_detection_settings(), lambda: resolve_required_accessory_refs,
-                  lambda: image_path_data_url, lambda: image_bgr_data_url),
-    PresenceGeneration(lambda required: ai_detection_task_payload(required),
-                       lambda required, settings: ensure_required_profile_cache(required, settings),
-                       lambda: ai_detection_provider_output_token_budget, lambda: call_ai_mcp_tool,
-                       lambda: ai_detection_parsed_covers_required),
-    PresenceOutput(lambda: ai_presence_failure_payload, lambda: normalize_ai_detection_result),
-    PresencePolicy(lambda: AI_INSPECTION_IMAGE_MAX_SIDE, lambda: AI_INSPECTION_IMAGE_QUALITY,
-                   lambda: AI_PROVIDER_MAX_ATTEMPTS, lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY,
-                   lambda: AI_DETECTION_SYSTEM_PROMPT, lambda: AI_DETECTION_OUTPUT_SCHEMA),
-    lambda: time.monotonic(),
-)
 
 
 def tool_vision_inspect_presence(payload: dict[str, Any]) -> dict[str, Any]:
     return _presence_inspection.tool_vision_inspect_presence(payload)
 
 
-AI_MCP_TOOL_HANDLERS = {
-    "accessory.profile.generate": tool_accessory_profile_generate,
-    "accessory.reference.collect": tool_accessory_reference_collect,
-    "vision.inspect.presence": tool_vision_inspect_presence,
-    "provider.gemini.generate_json": tool_provider_gemini_generate_json,
-}
 
 
 from .model_providers.mcp_client import LocalAiMcpClient
 
 
-_ai_mcp_client = LocalAiMcpClient(
-    root=lambda: ROOT, error=lambda: AiProviderError, runtime=lambda: AI_MCP_RUNTIME_STDIO,
+_model_tools = ModelTools(
+    errors=ToolErrorPolicy(bounded_text=lambda: bounded_text, _text_v2_diagnostic_value=lambda: _text_v2_diagnostic_value, AiProviderError=lambda: AiProviderError, AiProviderTimeout=lambda: AiProviderTimeout, AiProviderOverloaded=lambda: AiProviderOverloaded, AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS),
+    provider=JsonProviderCalls(settings=lambda: ai_detection_settings, metadata=lambda: ai_tool_provider_meta, generate=lambda: generate_provider_json_with_fallback),
+    runtime=McpRuntimeSelection(root=lambda: ROOT, runtime=lambda: ai_mcp_runtime, stdio=lambda: AI_MCP_RUNTIME_STDIO, in_process=lambda: AI_MCP_RUNTIME_IN_PROCESS, prepare=lambda: prepare_ai_mcp_payload),
+    accessories=AccessoryTools(profile=tool_accessory_profile_generate, reference=tool_accessory_reference_collect),
+    presence_input=PresenceInput(lambda: ai_detection_settings(), lambda: resolve_required_accessory_refs, lambda: image_path_data_url, lambda: image_bgr_data_url),
+    presence=PresencePreparation(task=lambda required: ai_detection_task_payload(required), cache=lambda required, settings: ensure_required_profile_cache(required, settings), tokens=lambda: ai_detection_provider_output_token_budget, covers=lambda: ai_detection_parsed_covers_required),
+    presence_output=PresenceOutput(lambda: ai_presence_failure_payload, lambda: normalize_ai_detection_result), policy=PresencePolicy(lambda: AI_INSPECTION_IMAGE_MAX_SIDE, lambda: AI_INSPECTION_IMAGE_QUALITY, lambda: AI_PROVIDER_MAX_ATTEMPTS, lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_DETECTION_SYSTEM_PROMPT, lambda: AI_DETECTION_OUTPUT_SCHEMA), clock=lambda: time.monotonic(),
 )
+_model_tool_dispatch = _model_tools.dispatch
+_presence_inspection = _model_tools.presence
+AI_MCP_TOOL_HANDLERS = _model_tools.handlers
+_ai_mcp_client = _model_tools.client
 
 
 from .model_providers.mcp_runtime import ai_mcp_runtime, external_ai_mcp_enabled, McpPayloadPreparation, McpWarmup
@@ -6509,14 +6602,7 @@ def create_accessory_candidate(
 
 
 from .accessories.candidate_repository import CandidateRepository, CandidateStoreDependencies
-_candidate_repository = CandidateRepository(CandidateStoreDependencies(
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    directory=lambda: ACCESSORY_CANDIDATES_DIR, lock=lambda: _candidate_store_lock,
-    ensure_task_ids=lambda candidate: ensure_candidate_image_job_task_ids(candidate),
-    safe_id=lambda value: safe_record_id(value),
-    created_at=lambda record, path: record_created_at(record, path),
-    updated_at=lambda record, path: record_updated_at(record, path),
-))
+_candidate_repository = _image_jobs.candidates
 
 
 def load_accessory_candidate(candidate_id: str) -> dict[str, Any]:
@@ -6569,42 +6655,7 @@ def write_accessory_candidate_file(path: Path, candidate: dict[str, Any]) -> Non
 from .accessories.image_job_queue import ImageJobQueue
 from .accessories.image_job_queue_ports import ImageQueueStorage, ImageQueueMetadata, ImageQueueExecution
 
-_image_job_queue = ImageJobQueue(
-    storage=ImageQueueStorage(
-        _candidate_store_lock=lambda: _candidate_store_lock,
-        CONFIG_PATH=lambda: CONFIG_PATH,
-        load_config=lambda: load_config,
-        save_config=lambda: save_config,
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        load_accessory_candidate=lambda: load_accessory_candidate,
-        save_accessory_candidate=lambda: save_accessory_candidate,
-        list_accessory_candidate_records=lambda: list_accessory_candidate_records,
-        _business_files=lambda: _business_files,
-        HTTPException=lambda: HTTPException,
-    ),
-    metadata=ImageQueueMetadata(
-        ensure_image_job_task_id=lambda: ensure_image_job_task_id,
-        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
-        candidate_image_jobs=lambda: candidate_image_jobs,
-        store_candidate_image_job=lambda: store_candidate_image_job,
-        accessory_uid=lambda: accessory_uid,
-        file_stem_identifier=lambda: file_stem_identifier,
-        accessory_material_type=lambda: accessory_material_type,
-        ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs,
-        image_job_output_path=lambda: image_job_output_path,
-        public_output_url=lambda: public_output_url,
-        resolve_service_path=lambda: resolve_service_path,
-        preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites,
-    ),
-    execution=ImageQueueExecution(
-        _image_worker_runtime=lambda: _image_worker_runtime,
-        IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES,
-        MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS,
-        next_queued_image_job=lambda: next_queued_image_job,
-        update_image_worker_status=lambda: update_image_worker_status,
-        run_image_generation_job=lambda: run_image_generation_job,
-    ),
-)
+_image_job_queue = _image_jobs.queue
 
 
 def mutate_candidate_image_job(
@@ -6666,27 +6717,7 @@ def image_job_prompt(job: dict[str, Any]) -> str:
 from .accessories.image_worker_diagnostics import ImageWorkerDiagnostics
 from .accessories.image_worker_diagnostic_ports import ImageDiagnosticMedia, ImageDiagnosticRuntime, ImageDiagnosticPolicy
 
-_image_worker_diagnostics = ImageWorkerDiagnostics(
-    media=ImageDiagnosticMedia(
-        _business_files=lambda: _business_files,
-        resolve_service_path=lambda: resolve_service_path,
-        safe_name=lambda: safe_name,
-        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
-        read_image_worker_log_tail=lambda: read_image_worker_log_tail,
-    ),
-    runtime=ImageDiagnosticRuntime(
-        _image_worker_processes=lambda: _image_worker_processes,
-        image_worker_process_alive=lambda: image_worker_process_alive,
-        codex_process_has_log_open=lambda: codex_process_has_log_open,
-        image_job_has_live_worker=lambda: image_job_has_live_worker,
-    ),
-    policy=ImageDiagnosticPolicy(
-        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
-        IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES,
-        IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS,
-        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
-    ),
-)
+_image_worker_diagnostics = _image_jobs.diagnostics
 
 
 def image_job_is_active(status: str) -> bool:
@@ -6787,46 +6818,7 @@ def windows_worker_image_response_bytes(payload: dict[str, Any]) -> bytes:
 from .accessories.image_job_execution import ImageJobExecution
 from .accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
 
-_image_job_execution = ImageJobExecution(
-    files=ImageExecutionFiles(
-        _business_files=lambda: _business_files,
-        _image_files=lambda: _image_files,
-        image_job_output_path=lambda: image_job_output_path,
-        IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR,
-        ROOT=lambda: ROOT,
-        safe_name=lambda: safe_name,
-        resolve_service_path=lambda: resolve_service_path,
-        public_output_url=lambda: public_output_url,
-    ),
-    evidence=ImageExecutionEvidence(
-        mutate_candidate_image_job=lambda: mutate_candidate_image_job,
-        update_image_worker_status=lambda: update_image_worker_status,
-        _image_worker_processes=lambda: _image_worker_processes,
-        image_job_prompt=lambda: image_job_prompt,
-        codex_log_has_generated_image=lambda: codex_log_has_generated_image,
-        classify_image_worker_failure=lambda: classify_image_worker_failure,
-        bounded_text=lambda: bounded_text,
-    ),
-    providers=ImageExecutionProviders(
-        LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER,
-        CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER,
-        CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS,
-        CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS,
-        MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS,
-        cursor_image2_settings=lambda: cursor_image2_settings,
-        cursor_image2_payload=lambda: cursor_image2_payload,
-        cursor_auth_headers=lambda: cursor_auth_headers,
-        extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes,
-        run_codex_image_job=lambda: run_codex_image_job,
-        run_cursor_image2_job=lambda: run_cursor_image2_job,
-        run_cos_codex_image_job=lambda: run_cos_codex_image_job,
-        windows_worker_base_url=lambda: windows_worker_base_url,
-        windows_worker_headers=lambda: windows_worker_headers,
-        windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds,
-        windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes,
-        masked_url_for_status=lambda: masked_url_for_status,
-    ),
-)
+_image_job_execution = _image_jobs.execution
 
 
 def run_windows_worker_image_job(path: Path, candidate: dict[str, Any], job: dict[str, Any], *, reason: str) -> bool:
@@ -7006,18 +6998,15 @@ def list_codex_image_jobs(user: dict[str, Any] | None = None, target_user_id: st
 from .training.task_identity import training_task_identity_values, training_task_matches_identifier, training_task_sort_key
 from .training.record_store import TrainingRecordStore, TrainingRows
 
-_training_records = TrainingRecordStore(
-    repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR,
-    guard=lambda: _training_task_lock, resolver=lambda: resolve_model_profiles,
-    invalidate=lambda key: store_read_cache_invalidate(key),
-    rows=TrainingRows(encode=lambda: training_task_row,
-                      decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
-    enrich=lambda *args: enrich_record_audit_fields(*args),
-)
+from .training.state_composition import TrainingRecordAccess, TrainingStateWorkflows
+from .training.task_lifecycle import TrainingTaskWrites
+from .training.task_views import TrainingViewAccess
+_training_state_workflows = _training_account_state.records
+_training_records = _training_state_workflows.records
 
 
 def training_task_path(task_id: str) -> Path:
-    return _training_records.training_task_path(task_id)
+    return _training_state_workflows.training_task_path(task_id)
 
 
 
@@ -7027,19 +7016,19 @@ def training_task_path(task_id: str) -> Path:
 
 
 def load_training_task_records() -> list[dict[str, Any]]:
-    return _training_records.load_training_task_records()
+    return _training_state_workflows.load_training_task_records()
 
 
 def save_training_task(task: dict[str, Any]) -> None:
-    return _training_records.save_training_task(task)
+    return _training_state_workflows.save_training_task(task)
 
 
 def load_training_task(path: Path) -> dict[str, Any] | None:
-    return _training_records.load_training_task(path)
+    return _training_state_workflows.load_training_task(path)
 
 
 def find_training_task(job_id: str) -> dict[str, Any] | None:
-    return _training_records.find_training_task(job_id)
+    return _training_state_workflows.find_training_task(job_id)
 
 
 from .training.task_lifecycle import (
@@ -7048,32 +7037,20 @@ from .training.task_lifecycle import (
 from .runtime.training_tasks import TrainingTaskState
 from .training.task_views import TrainingTaskViews, TrainingViewAccess
 
-_training_lifecycle = TrainingTaskLifecycle(
-    state=TrainingTaskState(guard=lambda: _training_task_lock, threads=lambda: _training_task_threads,
-                            tombstones=lambda: _training_task_delete_tombstones),
-    records=TrainingTaskRecords(path=lambda job_id: training_task_path(job_id), load=lambda path: load_training_task(path),
-        save=lambda task: save_training_task(task), find=lambda job_id: find_training_task(job_id)),
-    writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(),
-        row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
-    require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
-)
-_training_views = TrainingTaskViews(
-    records=lambda: load_training_task_records(), refresh=lambda task: refresh_interrupted_local_training_task(task),
-    access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized,
-        visible=lambda record, user, target: record_visible_to_user(record, user, target)),
-)
+_training_lifecycle = _training_state_workflows.lifecycle
+_training_views = _training_state_workflows.views
 
 
 def local_training_task_is_active(task: dict[str, Any]) -> bool:
-    return _training_lifecycle.local_training_task_is_active(task)
+    return _training_state_workflows.local_training_task_is_active(task)
 
 
 def refresh_interrupted_local_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    return _training_lifecycle.refresh_interrupted_local_training_task(task)
+    return _training_state_workflows.refresh_interrupted_local_training_task(task)
 
 
 def public_refreshed_training_task(task: dict[str, Any], *, allow_remote_refresh: bool = False) -> dict[str, Any]:
-    return _training_views.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)
+    return _training_state_workflows.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)
 
 
 def list_training_tasks(
@@ -7082,26 +7059,26 @@ def list_training_tasks(
     *,
     allow_remote_refresh: bool = False,
 ) -> list[dict[str, Any]]:
-    return _training_views.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)
+    return _training_state_workflows.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)
 
 
 def public_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    return _training_views.public_training_task(task)
+    return _training_state_workflows.public_training_task(task)
 
 
 from .training.local_process import parse_yolo_epoch_progress, yolo_cli_command
 
 
 def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:
-    return _training_lifecycle.update_training_task(job_id, **updates)
+    return _training_state_workflows.update_training_task(job_id, **updates)
 
 
 def stop_training_task_process(task: dict[str, Any], *, note: str) -> dict[str, Any]:
-    return _training_lifecycle.stop_training_task_process(task, note=note)
+    return _training_state_workflows.stop_training_task_process(task, note=note)
 
 
 def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
-    return _training_lifecycle.delete_training_task_record(job_id, user, missing_ok=missing_ok)
+    return _training_state_workflows.delete_training_task_record(job_id, user, missing_ok=missing_ok)
 
 
 def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lookup_id: str, action: str) -> dict[str, Any]:
@@ -8009,34 +7986,21 @@ from .training.submission import (
     TrainingSubmission, TrainingSubmissionPolicy, TrainingSubmissionIdentity, TrainingSubmissionRecords, TrainingSubmissionThreads,
 )
 
-_training_runner = TrainingRunner(
-    files=_business_files,
-    records=TrainingRunnerRecords(find=lambda job_id: find_training_task(job_id), path=lambda job_id: training_task_path(job_id),
-        load=lambda: load_training_task, update_provider=lambda: update_training_task,
-        sync=lambda job_id: sync_training_state_from_task(job_id)),
-    paths=TrainingRunnerPaths(resolve=lambda: resolve_service_path, tasks=lambda: TRAINING_TASKS_DIR, app=lambda: APP_DIR,
-        output=lambda: output_write_dir_for_owner),
-    datasets=TrainingDatasetExecution(mode=lambda: training_executor_mode(), generate=lambda task: generate_training_dataset(task),
-        runpod=lambda job_id, task, dataset: run_runpod_training_task(job_id, task, dataset),
-        remote=lambda job_id, task, dataset: run_remote_training_task(job_id, task, dataset)),
-    local=TrainingLocalExecution(base_model=lambda: detect_base_model(), device=lambda: yolo_inference_device(), cli=lambda: yolo_cli_command(),
-        start=lambda: subprocess.Popen, progress=lambda path, epochs: parse_yolo_epoch_progress(path, epochs),
-        warmup=lambda: start_yolo_warmup),
-    resolver=resolve_model_profiles,
-)
-_training_submission = TrainingSubmission(
-    policy=TrainingSubmissionPolicy(estimate=lambda: training_estimate, uses_ocr=lambda item: accessory_uses_ocr(item)),
-    identity=TrainingSubmissionIdentity(user=lambda: _request_user.get(), owner=lambda: current_owner_fields(),
-        background=lambda: selected_background_set_id),
-    records=TrainingSubmissionRecords(save=lambda task: save_training_task(task), public=lambda task: public_training_task(task)),
-    threads=TrainingSubmissionThreads(target=lambda: run_training_task, create=lambda **kwargs: threading.Thread(**kwargs),
-        records=lambda: _training_task_threads),
-    runtime=_training_task_runtime,
-)
+_training_execution = TrainingExecution(account=_training_account_state,
+files=_business_files,
+paths=TrainingRunnerPaths(resolve=lambda: resolve_service_path, tasks=lambda: TRAINING_TASKS_DIR, app=lambda: APP_DIR, output=lambda: output_write_dir_for_owner),
+datasets=TrainingDatasetExecution(mode=lambda: training_executor_mode(), generate=lambda task: generate_training_dataset(task), runpod=lambda job_id, task, dataset: run_runpod_training_task(job_id, task, dataset), remote=lambda job_id, task, dataset: run_remote_training_task(job_id, task, dataset)),
+local=TrainingLocalExecution(base_model=lambda: detect_base_model(), device=lambda: yolo_inference_device(), cli=lambda: yolo_cli_command(), start=lambda: subprocess.Popen, progress=lambda path, epochs: parse_yolo_epoch_progress(path, epochs), warmup=lambda: start_yolo_warmup),
+resolver=resolve_model_profiles,
+policy=TrainingSubmissionPolicy(estimate=lambda: training_estimate, uses_ocr=lambda item: accessory_uses_ocr(item)),
+identity=TrainingSubmissionIdentity(user=lambda: _request_user.get(), owner=lambda: current_owner_fields(), background=lambda: selected_background_set_id),
+create_thread=lambda **kwargs: threading.Thread(**kwargs))
+_training_runner = _training_execution.runner
+_training_submission = _training_execution.submission
 
 
 def run_training_task(job_id: str) -> None:
-    return _training_runner.run_training_task(job_id)
+    return _training_execution.run_training_task(job_id)
 
 
 def enqueue_training_task(
@@ -8045,36 +8009,13 @@ def enqueue_training_task(
     action: str,
     dataset: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _training_submission.enqueue_training_task(request, selected, action, dataset)
+    return _training_execution.enqueue_training_task(request, selected, action, dataset)
 
 
-from .training.task_lookup import TrainingTaskLookup, LookupCache, LookupRows
-from .training.model_catalog import (
-    TrainedModelCatalog, TrainingFiles, TrainingAccessories, TrainingPipeline, TrainingAccess,
-)
-from .pipeline.training_links import TrainingLinks
 
-_training_task_lookup = TrainingTaskLookup(
-    repository=lambda: runtime_postgres_repository_or_none(), file_loader=lambda: load_training_task,
-    cache=LookupCache(get=lambda key: store_read_cache_get(key), put=lambda key, value: store_read_cache_put(key, value)),
-    rows=LookupRows(decode=lambda rows: row_raw_json_list(rows), identifier=lambda path: file_stem_identifier(path),
-                    matches=lambda task, requested, row: training_task_matches_identifier(task, requested, row)),
-)
-_training_links = TrainingLinks(tasks=lambda: load_pipeline_tasks(), name=lambda task: task_record_name(task))
-_trained_model_catalog = TrainedModelCatalog(
-    config=lambda: load_config(),
-    files=TrainingFiles(roots=lambda: training_run_roots(), finder=lambda: training_task_finder(),
-        task_path=lambda: training_task_path, read=lambda path: load_json_file_mtime_cached(path),
-        output=lambda: OUTPUT_DIR, resolve=lambda: resolve_service_path),
-    accessories=TrainingAccessories(uid=lambda item: accessory_uid(item), serialize=lambda item: serialize_accessory(item),
-        uses_ocr=lambda: accessory_uses_ocr, profiles=lambda: build_ocr_accessory_profiles),
-    pipeline=TrainingPipeline(tasks=lambda: load_pipeline_tasks(),
-        link=lambda: pipeline_task_link_for_training_run,
-        method=lambda: normalize_pipeline_detection_method),
-    access=TrainingAccess(current_user=lambda: _request_user.get(), visible=lambda record, user: record_visible_to_user(record, user),
-        audit=lambda: record_audit_fields),
-    rules=lambda spec, config: apply_task_rule_override_to_spec(spec, config), business_files=_business_files
-)
+_training_task_lookup = _model_catalog.lookup
+_training_links = _model_catalog.links
+_trained_model_catalog = _model_catalog.catalog
 
 
 def training_task_finder() -> Callable[[Path], dict[str, Any] | None]:
@@ -8559,44 +8500,8 @@ from .detection.analysis_ports import (
     AiProfiles, AiInspectionTools, AiAnalysisEvidence,
 )
 
-_ai_detection_analysis = AiDetectionAnalysis(
-    AiProfiles(
-        lambda config, spec: ai_required_accessories(config, spec), lambda item: accessory_uid(item),
-        lambda profile, item: normalize_accessory_ai_profile(profile, item),
-        lambda item: accessory_reference_image_contexts(item),
-        lambda item, count, profile: required_accessory_profile_payload(item, count, profile), lambda config: save_config(config),
-    ),
-    AiInspectionTools(
-        lambda: call_ai_mcp_tool, lambda: ai_detection_settings,
-        lambda: external_ai_mcp_enabled(), lambda image, request_id: write_mcp_inspection_image(image, request_id),
-        lambda: AI_REFERENCE_IMAGES_PER_ACCESSORY, lambda: AI_REFERENCE_IMAGE_MAX_SIDE, lambda: AI_REFERENCE_IMAGE_QUALITY,
-    ),
-    AiAnalysisEvidence(
-        lambda image, request_id: write_ai_original_output(image, request_id),
-        lambda request_id, spec, required, url, *, reason: ai_detection_failure_result(request_id, spec, required, url, reason=reason),
-        lambda spec, settings: ai_model_payload(spec, settings),
-        lambda result, request_id, *, image_path=None: persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path),
-    ),
-)
-_detection_analysis = DetectionAnalysis(
-    AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
-                  lambda model_id, config: selected_model_spec(model_id, config),
-                  lambda: sanitize_ai_detection_task_id, lambda task_id: load_auto_optimize_state(task_id)),
-    AnalysisRouting(
-        lambda image, request_id, model_id=None, *, image_path=None: analyze_bgr(image, request_id, model_id, image_path=image_path),
-        lambda image, request_id, spec, config, *, image_path=None: analyze_bgr_ai_detection(image, request_id, spec, config, image_path=image_path),
-        lambda feature: removed_phase1_feature(feature), lambda: bounded_text,
-    ),
-    AnalysisInference(
-        lambda: model, lambda: yolo_inference_device(), lambda result, spec: parse_detections(result, spec),
-        lambda image, detections, config, spec: attach_ocr_results(image, detections, config, spec),
-        lambda detections, config, spec: apply_rule(detections, config, spec),
-        lambda image, detections, rule: draw_detections(image, detections, rule),
-    ),
-    AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
-                   lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
-    runtime_provider=lambda: _business_files.runtime_provider(),
-)
+_ai_detection_analysis = _detection_workflows.ai
+_detection_analysis = _detection_workflows.detection
 
 
 @pinned_model_profiles(resolve_model_profiles)
@@ -9269,32 +9174,7 @@ def delete_ai_detection_task(task_id: str) -> dict[str, Any]:
 from .training.auto_optimization_requests import AutoOptimizationRequests
 from .training.auto_optimization_requests_ports import RequestAccess, RequestState, RequestActions
 
-_auto_optimization_requests = AutoOptimizationRequests(
-    access=RequestAccess(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        safe_record_id=lambda: safe_record_id,
-        current_auth_user=lambda: current_auth_user,
-        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
-        require_record_access=lambda: require_record_access,
-        HTTPException=lambda: HTTPException,
-    ),
-    state=RequestState(
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        public_auto_optimize_state=lambda: public_auto_optimize_state,
-        auto_optimize_update_settings=lambda: auto_optimize_update_settings,
-    ),
-    actions=RequestActions(
-        resolve_service_path=lambda: resolve_service_path,
-        _business_files=lambda: _business_files,
-        _image_files=lambda: _image_files,
-        analyze_bgr=lambda: analyze_bgr,
-        AI_DETECTION_TASK_PREFIX=lambda: AI_DETECTION_TASK_PREFIX,
-        auto_optimize_bbox_training_entries=lambda: auto_optimize_bbox_training_entries,
-        start_auto_optimize_training_check_worker=lambda: start_auto_optimize_training_check_worker,
-    ),
-)
+_auto_optimization_requests = _auto_optimization_execution.requests
 
 
 @app.get("/api/ai/tasks/{task_id}/auto-optimize")
@@ -9373,22 +9253,23 @@ from .training.task_mutations import TaskMutationRecords, TrainingTaskMutations
 from .training.jobs_api import ImageJobActions
 from .training import jobs_api as _training_jobs_api
 
-_training_jobs_query = TrainingJobsQuery(
-    JobsReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user),
-                   lambda task, user, **kwargs: require_record_access(task, user, **kwargs)),
-    JobsTraining(lambda job: find_training_task(job), lambda task: training_task_uses_worker(task),
-                 lambda task: public_training_task(task),
-                 lambda task, **kwargs: public_refreshed_training_task(task, **kwargs)),
-    lambda **kwargs: list_training_tasks(**kwargs), lambda **kwargs: list_codex_image_jobs(**kwargs),
-    lambda: IMAGE_JOB_ACTIVE_STATUSES,
-)
-_training_task_mutations = TrainingTaskMutations(
-    lambda: current_auth_user(), lambda task, user, **kwargs: require_record_access(task, user, **kwargs),
-    TaskMutationRecords(lambda job: find_training_task(job), lambda task: save_training_task(task),
-                        lambda task: public_training_task(task), lambda job, user: delete_training_task_record(job, user),
-                        lambda **kwargs: list_training_tasks(**kwargs)),
-    lambda: time.time(),
-)
+_training_task_workflows = TrainingTaskWorkflows(account=_training_account_state,
+execution=_training_execution,
+files=_business_files,
+jobs_access=JobsReadAccess(lambda: current_auth_user(), lambda user: user_is_admin(user), lambda task, user, **kwargs: require_record_access(task, user, **kwargs)),
+image_jobs=lambda **kwargs: list_codex_image_jobs(**kwargs),
+image_active=lambda: IMAGE_JOB_ACTIVE_STATUSES,
+mutations=TrainingMutationAccess(lambda: current_auth_user(), lambda task, user, **kwargs: require_record_access(task, user, **kwargs), lambda: time.time()),
+launch_config=TrainingLaunchConfiguration(lambda: load_config(), lambda full, user: scope_config_for_user(full, user), lambda: ensure_training_assets_for_request, lambda full, config, user: merge_scoped_accessory_updates(full, config, user), lambda full: save_config(full)),
+launch=TrainingLaunchAccess(lambda: current_auth_user(), lambda: selected_accessories, lambda: time.time(), lambda: BACKGROUND_SIZE_MM),
+status=TrainingStatusRead(lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: load_config(), lambda: scope_config_for_user),
+dataset=TrainingDatasetAccess(lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs), lambda record, user, **kwargs: require_record_access(record, user, **kwargs), lambda: public_path_sanitized),
+preview=TrainingPreviewInputs(lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id, lambda selected: preview_cache_key(selected)),
+status_access=StatusAccess(lambda task, user, target: record_visible_to_user(task, user, target), lambda user: user_is_admin(user), lambda record: record_owner_id(record)),
+status_preview=StatusPreview(lambda: selected_accessories, lambda selected: preview_cache_key(selected), lambda state, selected: training_preview_metadata_missing(state, selected)),
+transfer=TrainingTransferAccess(lambda: runpod_yolo_artifact_max_bytes(), lambda token: runpod_dataset_token_hash(token), lambda: time.time(), TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR)))
+_training_jobs_query = _training_task_workflows.jobs_query
+_training_task_mutations = _training_task_workflows.task_mutations
 _training_jobs_routes = _training_jobs_api.register(
     app, _training_jobs_query, _training_task_mutations,
     ImageJobActions(lambda job, action: update_codex_image_job(job, action),
@@ -9708,24 +9589,8 @@ from .training.launch_submission import LaunchConfiguration, LaunchInputs, Train
 from .training.status_query import TrainingStatusQuery
 from .training import launch_api as _training_launch_api
 
-_training_launch_submission = TrainingLaunchSubmission(
-    lambda: current_auth_user(),
-    LaunchConfiguration(lambda: load_config(), lambda full, user: scope_config_for_user(full, user),
-                        lambda: ensure_training_assets_for_request,
-                        lambda full, user, state: set_training_state_for_user(full, user, state),
-                        lambda full, config, user: merge_scoped_accessory_updates(full, config, user),
-                        lambda full: save_config(full)),
-    LaunchInputs(lambda: selected_accessories,
-                 lambda: dataset_for_training,
-                 lambda config, request, selected, **kwargs: validate_approved_preview(config, request, selected, **kwargs)),
-    lambda request, selected, action, **kwargs: enqueue_training_task(request, selected, action, **kwargs),
-    lambda: time.time(), lambda: BACKGROUND_SIZE_MM,
-)
-_training_status_query = TrainingStatusQuery(
-    lambda: current_auth_user(), lambda user: user_is_admin(user), lambda: load_config(),
-    lambda: scope_config_for_user,
-    lambda config, user, target: filtered_training_state(config, user, target),
-)
+_training_launch_submission = _training_task_workflows.launch_submission
+_training_status_query = _training_task_workflows.status_query
 
 
 request_training = _training_launch_api.register_start(app, _training_launch_submission)
@@ -9735,12 +9600,8 @@ from .training.runpod_transfer import RunPodTrainingTransfer, TransferPaths
 from .training.runpod_upload_store import RunPodUploadStore
 from .training import runpod_transfer_api as _training_transfer_api
 
-_training_upload_store = RunPodUploadStore(lambda: runpod_yolo_artifact_max_bytes(), runtime_provider=_business_files.runtime_provider)
-_training_transfer = RunPodTrainingTransfer(
-    lambda job: find_training_task(job), lambda token: runpod_dataset_token_hash(token), lambda: time.time(),
-    TransferPaths(lambda: resolve_service_path, lambda: OUTPUT_DIR),
-    _training_upload_store, lambda: update_training_task, runtime_provider=_business_files.runtime_provider
-)
+_training_upload_store = _training_task_workflows.upload_store
+_training_transfer = _training_task_workflows.transfer
 _training_transfer_routes = _training_transfer_api.register(app, _training_transfer)
 download_runpod_training_dataset = _training_transfer_routes.download_runpod_training_dataset
 upload_runpod_training_artifact = _training_transfer_routes.upload_runpod_training_artifact
@@ -9753,26 +9614,13 @@ from .training.dataset_input import TrainingDatasetInput
 from .training.preview_approval import TrainingPreviewApproval
 from .training.status_projection import StatusAccess, StatusPreview, StatusTasks, TrainingStatusProjection
 
-_training_dataset_input = TrainingDatasetInput(
-    lambda identifier, **kwargs: find_dataset_resource(identifier, **kwargs),
-    lambda record, user, **kwargs: require_record_access(record, user, **kwargs),
-    lambda: public_path_sanitized, files=_business_files
-)
-_training_preview_approval = TrainingPreviewApproval(
-    lambda: TRAINING_JOBS_DIR, lambda: selected_background_set_id,
-    lambda selected: preview_cache_key(selected), files=_business_files
-)
-_training_status_projection = TrainingStatusProjection(
-    StatusTasks(lambda job: find_training_task(job), lambda task: public_refreshed_training_task(task)),
-    StatusAccess(lambda task, user, target: record_visible_to_user(task, user, target),
-                 lambda user: user_is_admin(user), lambda record: record_owner_id(record)),
-    StatusPreview(lambda: selected_accessories, lambda selected: preview_cache_key(selected),
-                  lambda state, selected: training_preview_metadata_missing(state, selected)),
-)
+_training_dataset_input = _training_task_workflows.dataset_input
+_training_preview_approval = _training_task_workflows.preview_approval
+_training_status_projection = _training_task_workflows.status_projection
 
 
 def dataset_for_training(dataset_id: str, user: dict[str, Any] | None = None) -> dict[str, Any]:
-    return _training_dataset_input.dataset_for_training(dataset_id, user)
+    return _training_task_workflows.dataset_for_training(dataset_id, user)
 
 
 training_status = _training_launch_api.register_status(app, _training_status_query)
@@ -9784,7 +9632,7 @@ def validate_approved_preview(
     selected: list[dict[str, Any]],
     user: dict[str, Any] | None = None,
 ) -> None:
-    return _training_preview_approval.validate_approved_preview(config, request, selected, user)
+    return _training_task_workflows.validate_approved_preview(config, request, selected, user)
 
 
 def filtered_training_state(
@@ -9792,7 +9640,7 @@ def filtered_training_state(
     user: dict[str, Any] | None = None,
     target_user_id: str | None = None,
 ) -> dict[str, Any]:
-    return _training_status_projection.filtered_training_state(config, user, target_user_id)
+    return _training_task_workflows.filtered_training_state(config, user, target_user_id)
 
 
 from .training.dataset_catalog import (DatasetAccess, DatasetAudit, DatasetCatalog, DatasetPaths,
@@ -11218,8 +11066,7 @@ def sync_pipeline_task(
     return _pipeline_training_status.sync_pipeline_task(task, load_task)
 
 
-from .pipeline.training_links import PipelineTrainedModelLink as _PipelineTrainedModelLink
-_pipeline_trained_model_link = _PipelineTrainedModelLink(catalog=lambda: list_trained_model_specs)
+_pipeline_trained_model_link = _model_catalog.pipeline_link
 
 
 def link_pipeline_trained_model(task: dict[str, Any]) -> dict[str, Any] | None:
@@ -11970,18 +11817,10 @@ advance_pipeline_task_endpoint, cancel_pipeline_advance_endpoint = register_pipe
 # Account-scoped text inspection v2 (independent from the legacy task flow).
 
 from local_inspection_service.text_inspection.record_store import (
-    TEXT_INSPECTION_TABLES, TextRecordDependencies, TextRecordStore, record_row as _text_v2_row,
+    TEXT_INSPECTION_TABLES, record_row as _text_v2_row,
 )
 
-_text_records = TextRecordStore(TextRecordDependencies(
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    directory=lambda: TEXT_INSPECTION_JSON_DIR,
-    tables=lambda: TEXT_INSPECTION_TABLES,
-    json_reader=lambda: _incoming_text_json_list,
-    json_writer=lambda: _save_incoming_text_json_list,
-    row_decoder=lambda: row_raw_json_list,
-))
+_text_records = _text_storage.records
 
 
 def _text_v2_json_path(kind: str) -> Path:
@@ -12016,15 +11855,55 @@ from local_inspection_service.text_inspection.images import (
     prepare_provider_image as _prepare_text_provider_image,
 )
 
-_text_media = TextMedia(
-    runtime_provider=_business_files.runtime_provider,
-    directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
-    digest=lambda contents: sha256_bytes(contents),
-    records=TextMediaRecords(
-        owned=lambda: _text_v2_owned,
-        save=lambda kind, value: _text_v2_save(kind, value),
-    ),
+from .text_inspection.standard_composition import (
+    TextStandardWorkflows, StandardMediaStorage, StandardPolicy, StandardThreadScope,
 )
+from .text_inspection.standard_ports import StandardAccess, StandardParsers
+from .text_inspection.document_ports import DocumentModels
+from .text_inspection.preparation_ports import PreparationModels
+
+_text_standards = TextStandardWorkflows(
+    records=_text_storage.records,
+    access=StandardAccess(
+        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
+        owner=lambda: _text_v2_owner(),
+    ),
+    media=StandardMediaStorage(
+        directory=lambda: TEXT_INSPECTION_MEDIA_DIR,
+        digest=lambda contents: sha256_bytes(contents),
+        data_url=lambda data, mime: _text_v2_data_url(data, mime),
+        runtime_provider=_business_files.runtime_provider,
+        files=_business_files,
+    ),
+    policy=StandardPolicy(
+        public=lambda: _text_v2_public,
+        snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
+        expected=lambda: _text_v2_expected_revision,
+        bounded_text=lambda: bounded_text,
+        prepare_image=lambda contents: _text_v2_prepare_image(contents),
+        preparation_enabled=lambda owner: _standard_preparation_policy.enabled(owner),
+    ),
+    parsers=StandardParsers(doc=lambda: extract_doc_images,
+                    docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
+    documents=DocumentModels(
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+        settings=lambda purpose: ai_detection_settings(purpose),
+        transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
+        record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage),
+    ),
+    preparation=PreparationModels(
+        settings=lambda purpose: ai_detection_settings(purpose),
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+        call_tool=lambda name, payload: call_ai_mcp_tool(name, payload),
+        diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
+    ),
+    runtime=StandardThreadScope(
+        scope=_runtime_repositories.thread_scope,
+        clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    ),
+    raw_rows=lambda rows: row_raw_json_list(rows),
+)
+_text_media = _text_standards.media
 
 
 def _text_v2_media_path(owner_user_id: str, standard_id: str, filename: str) -> Path:
@@ -12045,13 +11924,7 @@ from local_inspection_service.text_inspection.revisions import (
     confirmed_snapshot as _text_v2_confirmed_snapshot, expected_revision as _text_v2_expected_revision,
 )
 
-_text_revisions = TextRevisions(
-    RevisionRecords(
-        load=lambda kind: _text_v2_load(kind),
-        save=lambda kind, value, insert_only=False: _text_v2_save(kind, value, insert_only=insert_only),
-    ),
-    snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
-)
+_text_revisions = _text_standards.revisions
 
 
 def _text_v2_asset_bytes(asset: dict[str, Any], owner_user_id: str) -> bytes:
@@ -12074,47 +11947,13 @@ from .text_inspection.standard_ports import (
 )
 from .text_inspection import preparation_policy as _standard_preparation_policy
 
-_standard_access = StandardAccess(
-    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-    owner=lambda: _text_v2_owner(),
-)
-_standard_records = StandardRecords(
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    public=lambda: _text_v2_public,
-)
-_standard_media = StandardMedia(
-    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-    write=lambda: _text_v2_write,
-    digest=lambda contents: sha256_bytes(contents),
-)
-_standard_imports = StandardImports(
-    _standard_access, _standard_records, _standard_media,
-    StandardParsers(doc=lambda: extract_doc_images,
-                    docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data)),
-    StandardClassification(start=lambda standard, owner: document_import_jobs.start(standard, owner),
-                           mark_unavailable=lambda: document_import_jobs.mark_unavailable),
-    bounded_text=lambda: bounded_text,
-)
-_standard_library = TextStandardLibrary(
-    _standard_access, _standard_records,
-    refresh=lambda standard, owner: document_import_jobs.refresh(standard, owner),
-    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-)
-_standard_edits = StandardEdits(
-    _standard_access, _standard_records,
-    StandardWrites(repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock),
-    _standard_media,
-    StandardRevisions(expected=lambda: _text_v2_expected_revision,
-                      snapshot=lambda assets: _text_v2_confirmed_snapshot(assets),
-                      apply=lambda: _text_v2_apply_revision),
-    StandardPreparation(start=lambda standard, owner: standard_preparation_jobs.start(standard, owner),
-                        enabled=lambda owner: _standard_preparation_policy.enabled(owner)),
-    prepare_image=lambda contents: _text_v2_prepare_image(contents),
-    bounded_text=lambda: bounded_text, files=_business_files
-)
-_standard_routes = register_text_standards(app, _standard_imports, _standard_library, _standard_edits)
+_standard_access = _text_standards.access
+_standard_records = _text_standards.standard_records
+_standard_media = _text_standards.standard_media
+_standard_imports = _text_standards.imports
+_standard_library = _text_standards.library
+_standard_edits = _text_standards.edits
+_standard_routes = _text_standards.register_standards(app)
 import_text_inspection_standard = _standard_routes.import_text_inspection_standard
 list_text_inspection_standards = _standard_routes.list_text_inspection_standards
 get_text_inspection_standard = _standard_routes.get_text_inspection_standard
@@ -12158,132 +11997,89 @@ from local_inspection_service.document_import_jobs import register as register_d
 
 from .text_inspection.document_ports import DocumentAccess, DocumentRecords, DocumentModels
 from .text_inspection.document_jobs import DocumentJobs
-_document_records = DocumentRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, record: _text_v2_save(kind, record),
-    public=lambda record: _text_v2_public(record),
-)
-_document_models = DocumentModels(
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-    settings=lambda purpose: ai_detection_settings(purpose),
-    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
-    record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage),
-)
-document_import_jobs = register_document_import_jobs(
-    app,
-    DocumentAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _document_records,
-    DocumentJobs(
-        _document_records, _document_models,
-        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-        clear_repository=lambda: clear_thread_runtime_repository_selection(),
-        runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope),
-    ),
-)
+_document_records = _text_standards.document_records
+_document_models = _text_standards.document_models
+document_import_jobs = _text_standards.register_documents(app)
 from local_inspection_service.standard_preparation_jobs import register as register_standard_preparation
 from .text_inspection.preparation_ports import PreparationAccess, PreparationRecords, PreparationMedia, PreparationModels, PreparationHistory
 from .text_inspection.preparation_jobs import PreparationJobs
-_preparation_records = PreparationRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    guard=lambda: _incoming_text_store_lock,
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value: _text_v2_save(kind, value),
-    apply_revision=lambda standard, assets, **kwargs: _text_v2_apply_revision(standard, assets, **kwargs),
-)
-_preparation_media = PreparationMedia(
-    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
-    write=lambda path, data: _text_v2_write(path, data),
-    digest=lambda data: sha256_bytes(data),
-    asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-    data_url=lambda data, mime: _text_v2_data_url(data, mime),
-    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
-)
-_preparation_models = PreparationModels(
-    settings=lambda purpose: ai_detection_settings(purpose),
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-    call_tool=lambda name, payload: call_ai_mcp_tool(name, payload),
-    diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
-)
-standard_preparation_jobs = register_standard_preparation(
-    app,
-    PreparationAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _preparation_records,
-    PreparationHistory(
-        record_table=lambda: TEXT_INSPECTION_TABLES["records"],
-        raw_rows=lambda rows: row_raw_json_list(rows),
-        public=lambda record: _text_v2_public(record),
-        attempt_writer=lambda: _text_v2_update_attempt,
-    ),
-    _preparation_media,
-    PreparationJobs(_preparation_records, _preparation_media, _preparation_models,
-                    clear_repository=lambda: clear_thread_runtime_repository_selection(),
-                    runtime=TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)),
-)
+_preparation_records = _text_standards.preparation_records
+_preparation_media = _text_standards.preparation_media
+_preparation_models = _text_standards.preparation_models
+standard_preparation_jobs = _text_standards.register_preparation(app)
 from local_inspection_service.comparison_history import register as register_comparison_history, display_snapshot as comparison_display_snapshot
 from .text_inspection.history_ports import HistoryAccess, HistoryRecords, HistoryMedia
-_history_records = HistoryRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    load=lambda kind: _text_v2_load(kind),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    public=lambda record: _text_v2_public(record),
-)
-_history_media = HistoryMedia(
-    path=lambda owner, standard, name: _text_v2_media_path(owner, standard, name),
-    read_verified=lambda path, owner, standard, **kwargs: _text_v2_read_verified(path, owner, standard, **kwargs),
-)
-register_comparison_history(
-    app,
-    HistoryAccess(
+from .text_inspection.comparison_composition import TextComparisonWorkflows, ComparisonImages, ComparisonAudit
+from .text_inspection.inspection_ports import InspectionAccess, SubmissionModels, SubmissionPolicy, SubmissionDiagnostics
+from .text_inspection.extraction_ports import ExtractionModels
+from .text_inspection.comparison_ports import ComparisonModels
+from . import qwen_evidence_jobs as _qwen_evidence_policy
+
+_text_comparisons = TextComparisonWorkflows(
+    standards=_text_standards,
+    access=InspectionAccess(
         require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
         owner=lambda: _text_v2_owner(),
     ),
-    _history_records,
-    _history_media,
+    images=ComparisonImages(
+        prepare=lambda: _text_v2_prepare_image,
+        provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
+        annotate=lambda: _text_v2_annotate,
+        data_url=lambda data, mime: _text_v2_data_url(data, mime),
+    ),
+    models=SubmissionModels(
+        settings=lambda purpose: ai_detection_settings(purpose),
+        call=lambda: call_ai_mcp_tool,
+        prompt=lambda: strict_compare_prompt(),
+        normalize=lambda: normalize_vlm_provider_result,
+        validate=lambda value: validate_vlm_result(value),
+    ),
+    policy=SubmissionPolicy(
+        timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
+        prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION,
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+        automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
+        qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner),
+    ),
+    diagnostics=SubmissionDiagnostics(
+        image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs),
+        event=lambda: _text_v2_diagnostic_event,
+        provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
+        value=lambda value: _text_v2_diagnostic_value(value),
+        write=lambda record: _text_v2_write_server_diagnostic(record),
+    ),
+    extraction=ExtractionModels(
+        image_settings=lambda: image_generation_settings(),
+        detection_settings=lambda purpose: ai_detection_settings(purpose),
+        image_provider=lambda settings: image_generation_provider_from_settings(settings),
+        transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
+        diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
+        external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
+    ),
+    prepared_models=lambda: ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
+    digest=lambda: sha256_bytes,
+    environment=lambda: lambda name, default, environment=os: environment.getenv(name, default),
+    prepared_cleanup=lambda: clear_thread_runtime_repository_selection,
+    audit=ComparisonAudit(
+        append=lambda: append_incoming_text_audit,
+        bounded_text=lambda: bounded_text,
+    ),
+    runtime=StandardThreadScope(
+        scope=_runtime_repositories.thread_scope,
+        clear_repository=lambda: clear_thread_runtime_repository_selection(),
+    ),
+    files=_business_files,
 )
+_history_records = _text_comparisons.history_records
+_history_media = _text_comparisons.history_media
+_text_comparisons.register_history(app)
 
 from .text_inspection.extraction_ports import ExtractionAccess, ExtractionRecords, ExtractionMedia, ExtractionModels
-_extraction_records = ExtractionRecords(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    owned=lambda kind, identifier, owner: _text_v2_owned(kind, identifier, owner),
-    load=lambda kind: _text_v2_load(kind),
-    save=lambda kind, value, **kwargs: _text_v2_save(kind, value, **kwargs),
-)
-_extraction_media = ExtractionMedia(
-    path=lambda owner, identifier, name: _text_v2_media_path(owner, identifier, name),
-    write=lambda path, data: _text_v2_write(path, data),
-    read_verified=lambda path, owner, identifier, **kwargs: _text_v2_read_verified(path, owner, identifier, **kwargs),
-    digest=lambda data: sha256_bytes(data),
-    data_url=lambda data, mime: _text_v2_data_url(data, mime),
-)
-_extraction_models = ExtractionModels(
-    image_settings=lambda: image_generation_settings(),
-    detection_settings=lambda purpose: ai_detection_settings(purpose),
-    image_provider=lambda settings: image_generation_provider_from_settings(settings),
-    transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs),
-    diagnostic_value=lambda value: _text_v2_diagnostic_value(value),
-    external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-)
-_text_extraction_runtime = TrainingThreadLifecycle(scope=_runtime_repositories.thread_scope)
-resolve_label_extraction = register_label_extraction(
-    app,
-    ExtractionAccess(
-        require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-        owner=lambda: _text_v2_owner(),
-    ),
-    _extraction_records, _extraction_media, _extraction_models,
-    clear_repository=lambda: clear_thread_runtime_repository_selection(),
-    runtime=_text_extraction_runtime, files=_business_files
-)
+_extraction_records = _text_comparisons.extraction_records
+_extraction_media = _text_comparisons.extraction_media
+_extraction_models = _text_comparisons.extraction_models
+_text_extraction_runtime = _text_comparisons.extraction_runtime
+resolve_label_extraction = _text_comparisons.register_extraction(app)
 from .agent.dependencies import AgentAccess, AgentAccounts
 register_agent_api(
     app,
@@ -12358,70 +12154,18 @@ from . import qwen_evidence_jobs as _qwen_evidence_policy
 
 
 from .text_inspection.comparison_runtime import ComparisonRuntime
-_prepared_comparison_runtime = ComparisonRuntime(scope=_runtime_repositories.thread_scope)
+_prepared_comparison_runtime = _text_comparisons.comparison_runtime
 
 
 def _submit_prepared_text_comparison(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction):
-    from local_inspection_service.standard_preparation_compare import submit
-    from local_inspection_service.text_inspection.comparison_ports import ComparisonRecords, ComparisonMedia, ComparisonModels
-    return submit(
-        ComparisonRecords(_text_v2_load, _text_v2_save, _text_v2_owned, _text_v2_update_attempt, _text_v2_public),
-        ComparisonMedia(_text_v2_media_path, _text_v2_write, sha256_bytes),
-        ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call),
-        clear_thread_runtime_repository_selection,
-        lambda name, default, environment=os: environment.getenv(name, default),
-        standard_preparation_jobs, owner_user_id, owner_username,
-        standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction,
-        execution=_prepared_comparison_runtime)
+    return _text_comparisons.submit_prepared(owner_user_id, owner_username, standard, asset, confirmed_snapshot, captured_upload, comparison_id, extraction)
 
 
-_inspection_access = InspectionAccess(
-    require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs),
-    owner=lambda: _text_v2_owner(),
-)
-_inspection_records = InspectionRecords(
-    owned=lambda: _text_v2_owned,
-    save=lambda kind, record, **kwargs: _text_v2_save(kind, record, **kwargs),
-    public=lambda record: _text_v2_public(record),
-)
-_comparison_submission = ComparisonSubmission(
-    _inspection_access, _inspection_records, load=lambda kind: _text_v2_load(kind),
-    media=SubmissionMedia(path=lambda: _text_v2_media_path,
-                          write=lambda path, data: _text_v2_write(path, data), digest=lambda: sha256_bytes),
-    images=SubmissionImages(
-        prepare=lambda: _text_v2_prepare_image,
-        provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime),
-        asset_bytes=lambda asset, owner: _text_v2_asset_bytes(asset, owner),
-        annotate=lambda: _text_v2_annotate,
-        data_url=lambda data, mime: _text_v2_data_url(data, mime),
-    ),
-    models=SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose),
-                            call=lambda: call_ai_mcp_tool,
-                            prompt=lambda: strict_compare_prompt(),
-                            normalize=lambda: normalize_vlm_provider_result,
-                            validate=lambda value: validate_vlm_result(value)),
-    policy=SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS,
-                            prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION,
-                            external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED,
-                            automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED,
-                            qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner)),
-    diagnostics=SubmissionDiagnostics(
-        image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs),
-        event=lambda: _text_v2_diagnostic_event,
-        provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings),
-        value=lambda value: _text_v2_diagnostic_value(value),
-        write=lambda record: _text_v2_write_server_diagnostic(record),
-    ),
-    prepared_submit=lambda *args: _submit_prepared_text_comparison(*args),
-    resolve_extraction=lambda *args: resolve_label_extraction(*args),
-    display_snapshot=lambda standard, asset: comparison_display_snapshot(standard, asset),
-)
-_inspection_reviews = InspectionReviews(
-    _inspection_access, _inspection_records,
-    read_verified=lambda: _text_v2_read_verified,
-    audit=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text,
-)
-_inspection_routes = register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)
+_inspection_access = _text_comparisons.access
+_inspection_records = _text_comparisons.inspection_records
+_comparison_submission = _text_comparisons.submission
+_inspection_reviews = _text_comparisons.reviews
+_inspection_routes = _text_comparisons.register_inspections(app)
 compare_text_inspection_label = _inspection_routes.compare_text_inspection_label
 get_text_inspection_v2_evidence = _inspection_routes.get_text_inspection_v2_evidence
 create_text_manual_session = _inspection_routes.create_text_manual_session
@@ -12437,20 +12181,8 @@ review_text_inspection_v2 = _inspection_routes.review_text_inspection_v2
 from .runtime.json_records import (
     read_json_list as _incoming_text_json_list, write_json_list as _save_incoming_text_json_list,
 )
-from .text_inspection.incoming_store import IncomingTextStore, IncomingPaths, IncomingRows
 
-_incoming_text_store = IncomingTextStore(
-    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
-    paths=IncomingPaths(references=lambda: INCOMING_TEXT_REFERENCES_PATH,
-                        inspections=lambda: INCOMING_TEXT_INSPECTIONS_PATH, audit=lambda: INCOMING_TEXT_AUDIT_PATH),
-    rows=IncomingRows(reference=lambda record: incoming_text_reference_row(record),
-                      inspection=lambda record: incoming_text_inspection_row(record),
-                      audit=lambda event: audit_event_row(event), decode=lambda: row_raw_json_list),
-    read_json=lambda path: _incoming_text_json_list(path),
-    write_json=lambda path, values: _save_incoming_text_json_list(path, values),
-    load_references=lambda: load_incoming_text_references(),
-    load_inspections=lambda: load_incoming_text_inspections(),
-)
+_incoming_text_store = _text_storage.incoming
 
 
 def load_incoming_text_references() -> list[dict[str, Any]]:
@@ -12494,7 +12226,6 @@ from .text_inspection.incoming_catalog import IncomingCatalog
 from .text_inspection.incoming_execution import IncomingExecution
 from .text_inspection.incoming_reviews import IncomingReviews
 from .text_inspection.incoming_retention import IncomingCapacity, IncomingRetention
-from .text_inspection.incoming_api import register_catalog as register_incoming_catalog, register_inspections as register_incoming_inspections
 
 _incoming_task_access = IncomingTaskAccess(
     load=lambda task_id: load_pipeline_task(task_id), user=lambda: current_auth_user(),
@@ -12554,15 +12285,6 @@ _incoming_access = IncomingAccess(
     record=lambda: require_record_access,
     owner=lambda record: record_owner_id(record), task_allowed=lambda task, user: incoming_text_task_access_allowed(task, user),
 )
-_incoming_references = IncomingReferences(
-    all=lambda: load_incoming_text_references(), load=lambda reference_id: load_incoming_text_reference(reference_id),
-    save=lambda record, **kwargs: save_incoming_text_reference(record, **kwargs),
-)
-_incoming_inspections = IncomingInspections(
-    all=lambda: load_incoming_text_inspections(), load=lambda inspection_id: load_incoming_text_inspection(inspection_id),
-    save=lambda record, **kwargs: save_incoming_text_inspection(record, **kwargs),
-    duplicate=lambda owner, task_id, capture_id: _duplicate_incoming_capture(owner, task_id, capture_id),
-)
 _incoming_tasks = IncomingTasks(
     all=lambda: load_pipeline_tasks(), save=lambda task: save_pipeline_task(task),
     public=lambda: pipeline_task_public, config=lambda: scope_config_for_user(load_config()),
@@ -12571,41 +12293,32 @@ _incoming_media = IncomingMedia(
     output=lambda: output_write_dir_for_owner, root=lambda: OUTPUT_DIR,
     under=lambda path, root: path_is_under(path, root), decode=lambda: decode_incoming_reference,
 )
-_incoming_writes = IncomingWrites(
-    repository=lambda: runtime_postgres_repository_or_none(), guard=lambda: _incoming_text_store_lock,
-)
-_incoming_json = IncomingJSON(
-    paths=_incoming_text_store.paths,
-    read=lambda path: _incoming_text_json_list(path), write=lambda path, values: _save_incoming_text_json_list(path, values),
-)
+_incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
+from .text_inspection.incoming_composition import IncomingWorkflows
+
 _incoming_image_files = ImageFiles(lambda: cv2, files=_business_files)
-_incoming_catalog = IncomingCatalog(
-    _incoming_access, _incoming_references, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
-    public=lambda record: incoming_text_public(record), verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+_incoming_workflows = IncomingWorkflows(
+    storage=_text_storage, access=_incoming_access, tasks=_incoming_tasks, media=_incoming_media,
+    ocr=IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
+                    corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
+                    field=lambda: _field_observation),
+    imaging=IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda: rectify_label,
+                          similarity=lambda: local_visual_similarity, annotate=lambda: annotate_inspection),
+    capacity=lambda: require_incoming_text_storage_capacity,
+    verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
+    public=lambda record: incoming_text_public(record), decode_rows=lambda: row_raw_json_list,
+    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID,
     files=_business_files, images=_incoming_image_files,
 )
-_incoming_reviews = IncomingReviews(
-    _incoming_access, _incoming_inspections, _incoming_tasks, _incoming_media, _incoming_writes, _incoming_json,
-    decode_rows=lambda: row_raw_json_list, public=lambda record: incoming_text_public(record),
-    files=_business_files,
-)
-_incoming_capacity = IncomingCapacity(data_dir=lambda: DATA_DIR, minimum_free=lambda: INCOMING_TEXT_MIN_FREE_BYTES)
-_incoming_execution = IncomingExecution(
-    _incoming_access, _incoming_references, _incoming_inspections, _incoming_media,
-    IncomingOCR(observe=lambda image: incoming_text_ocr_observations(image),
-                corroborate=lambda image, rules: incoming_text_corroboration_observations(image, rules),
-                field=lambda: _field_observation),
-    IncomingImaging(quality=lambda image: assess_image_quality(image), rectify=lambda: rectify_label,
-                    similarity=lambda: local_visual_similarity,
-                    annotate=lambda: annotate_inspection),
-    capacity=lambda: require_incoming_text_storage_capacity, verified=lambda: INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED,
-    public=lambda record: incoming_text_public(record), files=_business_files, images=_incoming_image_files,
-)
-_incoming_retention = IncomingRetention(
-    _incoming_inspections, _incoming_media, _incoming_writes, _incoming_json,
-    audit=lambda: append_incoming_text_audit, system_owner=lambda: SYSTEM_OWNER_ID, files=_business_files,
-)
-_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog, files=lambda: _business_files)
+_incoming_references = _incoming_workflows.references
+_incoming_inspections = _incoming_workflows.inspections
+_incoming_writes = _incoming_workflows.writes
+_incoming_json = _incoming_workflows.json
+_incoming_catalog = _incoming_workflows.catalog
+_incoming_reviews = _incoming_workflows.reviews
+_incoming_execution = _incoming_workflows.execution
+_incoming_retention = _incoming_workflows.retention
+_incoming_catalog_routes = _incoming_workflows.register_catalog(app)
 get_incoming_text_task = _incoming_catalog_routes.get_incoming_text_task
 get_incoming_text_reference_asset = _incoming_catalog_routes.get_incoming_text_reference_asset
 create_incoming_text_reference = _incoming_catalog_routes.create_incoming_text_reference
@@ -12657,7 +12370,7 @@ analyze_text_compare_beta = register_beta_comparison(
 )
 
 
-_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews, files=lambda: _business_files)
+_incoming_inspection_routes = _incoming_workflows.register_inspections(app)
 inspect_incoming_text = _incoming_inspection_routes.inspect_incoming_text
 get_incoming_text_inspection_evidence = _incoming_inspection_routes.get_incoming_text_inspection_evidence
 review_incoming_text_inspection = _incoming_inspection_routes.review_incoming_text_inspection

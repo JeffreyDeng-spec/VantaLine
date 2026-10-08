@@ -112,10 +112,27 @@ class RecommendationContract(unittest.TestCase):
             accessory_lookup_by_id=lambda config:config,
             accessory_material_type=lambda item:'object')
         if not BASELINE:
+            import copy
+            from types import SimpleNamespace
             from local_inspection_service.training.auto_optimization_recommendations import AutoOptimizationRecommendations
             namespace['AutoOptimizationRecommendations']=AutoOptimizationRecommendations
-            nodes=[node for node in tree.body if isinstance(node,ast.Assign) and
-                any(isinstance(target,ast.Name) and target.id=='_auto_optimization_recommendations' for target in node.targets)]+nodes
+            namespace['_auto_optimization_core']=SimpleNamespace(settings=namespace['_auto_optimization_settings'])
+            core_call=next(node.value for node in tree.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='_auto_optimization_core' for target in node.targets))
+            if isinstance(core_call,ast.Attribute):
+                assert ast.dump(core_call,include_attributes=False)==ast.dump(ast.parse('_auto_optimization_workflows.core',mode='eval').body,include_attributes=False)
+                core_call=next(node.value for node in tree.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='_auto_optimization_workflows' for target in node.targets))
+            supplied={item.arg:item.value for item in core_call.keywords}
+            owned_tree=ast.parse((ROOT/'local_inspection_service/training/core_composition.py').read_text(encoding='utf-8'))
+            owned=next(node for node in ast.walk(owned_tree) if isinstance(node,ast.Assign) and any(isinstance(target,ast.Attribute) and target.attr=='recommendations' for target in node.targets))
+            class ActualPorts(ast.NodeTransformer):
+                def visit_Name(self,node):
+                    if node.id=='self':return ast.copy_location(ast.Name(id='_auto_optimization_core',ctx=node.ctx),node)
+                    if node.id in ('accessory_lookup','material_type','bounded_text'):
+                        return copy.deepcopy(supplied[node.id])
+                    return node
+            construction=ast.fix_missing_locations(ActualPorts().visit(copy.deepcopy(owned)))
+            aliases=[node for node in tree.body if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='_auto_optimization_recommendations' for target in node.targets)]
+            nodes=[construction]+aliases+nodes
         for key in ('complexity','reason'):
             for fail in (False,True):
                 events=[];sentinel=RuntimeError('selected text callback')

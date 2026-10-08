@@ -70,7 +70,10 @@ class RunnerFileTests(unittest.TestCase):
         with self.assertRaises(TypeError):TrainingRunner(**kwargs,files=None)
         files=Falsey();self.assertIs(TrainingRunner(**kwargs,files=files).files,files)
         tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        call=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TrainingRunner')
+        call=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TrainingExecution')
         self.assertEqual(ast.dump(next(k.value for k in call.keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
+        actual=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/training/native_execution_composition.py').read_text())
+        inner=next(n for n in ast.walk(actual) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TrainingRunner')
+        self.assertEqual(ast.dump(next(k.value for k in inner.keywords if k.arg=='files')),ast.dump(ast.parse('files',mode='eval').body))
 
 if __name__=='__main__':unittest.main()
