@@ -9889,7 +9889,8 @@ from .training.real_photo_dispatch import Dispatcher, DispatchPorts
 from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
 
 def _submit_real_photo_training(job,dataset):
-    owner={'id':job['owner_user_id'],'username':job['owner_user_id'],'role':'user'}
+    owner=find_user(load_auth_store(),job['owner_user_id'])
+    if not owner:raise ValueError('training owner account no longer exists')
     token=_request_user.set(owner)
     try:
         _,current_task=_real_photo_feedback.task(job['task_id'])
