@@ -11,6 +11,7 @@ import threading
 import unittest
 import uuid
 from unittest.mock import Mock, patch
+from training_state_test_ports import patch_training_port
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 PG_CHECK='--postgres' in sys.argv
 if PG_CHECK:sys.argv.remove('--postgres')
@@ -55,7 +56,7 @@ class Fixture:
             'require_record_access':self.access,'runtime_postgres_repository_or_none':self.repository,'store_read_cache_invalidate':self.invalidate,
             'load_training_task_records':self.list,'enrich_record_audit_fields':self.enrich,'public_path_sanitized':self.sanitize,
             'record_visible_to_user':self.visible}
-        for name,value in values.items():stack.enter_context(patch.object(api,name,value))
+        for name,value in values.items():stack.enter_context(patch_training_port(api,name,value))
 
 
 class TrainingLifecycleContracts(unittest.TestCase):
@@ -67,8 +68,11 @@ class TrainingLifecycleContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
-        cls.originals={name:getattr(server,name) for name in ('training_task_path','load_training_task','save_training_task','find_training_task')}
+        cls.originals={name:getattr(server._training_state_workflows,name) for name in ('training_task_path','load_training_task','save_training_task','find_training_task')}
         cls.runtime_aliases=(server._training_task_lock,server._training_task_threads,server._training_task_delete_tombstones)
+        runtime=server._training_task_runtime
+        for actual,alias in zip((runtime.lock,runtime.threads,runtime.tombstones),cls.runtime_aliases):
+            if actual is not alias:raise AssertionError('initial runtime alias identity changed')
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
@@ -172,7 +176,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
             case.assertFalse(available(f.guard),'tombstone construction must hold the shared guard')
             clock_checks.append(True);return next(timestamps)
         f.tombstones=GuardedTombstones()
-        with patch.object(api,'_training_task_delete_tombstones',f.tombstones),patch('time.time',side_effect=clock):
+        with patch_training_port(api,'_training_task_delete_tombstones',f.tombstones),patch('time.time',side_effect=clock):
             result=api.delete_training_task_record(' alias ',f.user)
         self.assertIs(result,value);self.assertFalse(path.exists());self.assertEqual(value['status'],'completed')
         tombstone=f.tombstones['alias'];self.assertIs(f.tombstones['canonical'],tombstone)
@@ -181,7 +185,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
         self.assertEqual(tombstone,{'job_id':'canonical','task_id':'task-id','status':'stopped','progress':100,
             'stopped_at':11,'completed_at':12,'cancelled_at':13,'deleted_at':14,'delete_tombstone':True,'note':'关联流水线任务已删除，训练任务已停止。'})
         f.invalidate.assert_not_called();f.save.assert_not_called();self.kill.assert_not_called();self.assertTrue(available(f.guard))
-        with patch.object(api,'_training_task_delete_tombstones',f.tombstones):
+        with patch_training_port(api,'_training_task_delete_tombstones',f.tombstones):
             for identity in ('alias','canonical'):
                 self.assertEqual(api.update_training_task(identity,status='completed'),tombstone)
         f.save.assert_not_called()
@@ -219,13 +223,13 @@ class TrainingLifecycleContracts(unittest.TestCase):
         self.assertIs(api.delete_training_task_record('alias',f.user),f.found)
         f.invalidate.assert_called_once_with('training_task_pairs');repo.delete_by_primary_key.assert_called_once()
         f.invalidate.reset_mock();repo.delete_by_primary_key.reset_mock()
-        with patch.object(api,'training_task_row',return_value=None):api.delete_training_task_record('second-alias',f.user)
+        with patch_training_port(api,'training_task_row',return_value=None):api.delete_training_task_record('second-alias',f.user)
         f.invalidate.assert_not_called();repo.delete_by_primary_key.assert_not_called()
         f.repo=RuntimeError('repository')
         with self.assertRaisesRegex(RuntimeError,'repository'):api.delete_training_task_record('factory-alias',f.user)
         self.assertIs(f.tombstones['factory-alias'],f.tombstones['job']);self.assertTrue(available(f.guard))
         f.repo=repo
-        with patch.object(api,'training_task_row',side_effect=ValueError('row')):
+        with patch_training_port(api,'training_task_row',side_effect=ValueError('row')):
             with self.assertRaisesRegex(ValueError,'row'):api.delete_training_task_record('row-alias',f.user)
         self.assertIs(f.tombstones['row-alias'],f.tombstones['job']);self.assertTrue(available(f.guard))
         repo.delete_by_primary_key.side_effect=RuntimeError('delete-row')
@@ -268,7 +272,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
         from local_inspection_service.training.task_views import TrainingTaskViews,TrainingViewAccess
         from local_inspection_service.storage.runtime_records import training_task_row
         runtime=self.api._training_task_runtime
-        for actual,alias in zip((runtime.lock,runtime.threads,runtime.tombstones),self.runtime_aliases):self.assertIs(actual,alias)
+        for actual,alias in zip((runtime.lock,runtime.threads,runtime.tombstones),(self.f.guard,self.f.threads,self.f.tombstones)):self.assertIs(actual,alias)
         second_runtime=TrainingTaskRuntime()
         self.assertIsNot(runtime.lock,second_runtime.lock);self.assertIsNot(runtime.threads,second_runtime.threads);self.assertIsNot(runtime.tombstones,second_runtime.tombstones)
         self.assertIs(self.api.training_task_uses_worker,training_task_uses_worker)
@@ -288,7 +292,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
         self.assertEqual(first_views.list_training_tasks()[0]['job_id'],'one')
         self.assertTrue(second_views.list_training_tasks()[0]['executor_retired'])
         thread=Mock();thread.is_alive.return_value=True
-        with patch.object(self.api,'_training_task_threads',{'late':thread}):
+        with patch_training_port(self.api,'_training_task_threads',{'late':thread}):
             self.assertTrue(self.api.local_training_task_is_active({'job_id':'late'}))
         self.assertFalse(first.local_training_task_is_active({'job_id':'late'}))
 
@@ -301,7 +305,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
                     def sanitize(record):events.append(label);return {**record,'chosen':label}
                     return sanitize
                 a,b,c=(callback(label) for label in ('A','B','C'))
-                stack.enter_context(patch.object(api,'public_path_sanitized',None if mode=='missing' else a))
+                stack.enter_context(patch_training_port(api,'public_path_sanitized',None if mode=='missing' else a))
                 def records():
                     events.append('records')
                     if mode=='prior':events.append('prior');api.public_path_sanitized=b
@@ -343,7 +347,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
                     if callback.call_count==fail_at:raise error
                     if case=='save_preserve':f._save(args[0])
                     return valid
-                callback.side_effect=fail;stack.enter_context(patch.object(owner,name,callback))
+                callback.side_effect=fail;stack.enter_context(patch_training_port(owner,name,callback))
                 if case in ('path_update','load_update','load_tombstone','save_update'):action=lambda:api.update_training_task('job',progress=42)
                 elif case in ('list','enrich','sanitize','visible','refresh'):action=lambda:api.list_training_tasks(f.user)
                 elif case in ('thread','proc'):action=lambda:api.local_training_task_is_active(value)
@@ -401,7 +405,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
                         calls.append(key)
                         if len(calls)==fail_at:raise error
                         return super().__setitem__(key,value)
-                markers=Tombstones();stack.enter_context(patch.object(api,'_training_task_delete_tombstones',markers))
+                markers=Tombstones();stack.enter_context(patch_training_port(api,'_training_task_delete_tombstones',markers))
                 with self.assertRaises(RuntimeError) as caught:api.delete_training_task_record('alias',f.user)
                 self.assertIs(caught.exception,error);self.assertEqual(calls,['alias','job'][:fail_at]);self.assertEqual(list(markers),[] if fail_at==1 else ['alias'])
                 f.repository.assert_not_called();self.assertTrue(available(f.guard))
@@ -454,7 +458,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
         class Record(dict):
             def update(self,*args,**kwargs):events.append(('update',available(f.guard)));return super().update(*args,**kwargs)
         value=Record(job_id='job',status='queued');f.records['job']=value
-        with patch.object(api,'_training_task_delete_tombstones',Markers()):
+        with patch_training_port(api,'_training_task_delete_tombstones',Markers()):
             self.assertIs(api.update_training_task('job',status='running'),value)
         self.assertEqual(events,[('marker',False),('update',False)]);self.assertTrue(available(f.guard))
 
@@ -471,7 +475,7 @@ class TrainingLifecycleContracts(unittest.TestCase):
                 def fail(*args,**kwargs):
                     if callback.call_count==1:raise error
                     return valid
-                callback.side_effect=fail;stack.enter_context(patch.object(owner,name,callback))
+                callback.side_effect=fail;stack.enter_context(patch_training_port(owner,name,callback))
                 action=(lambda:life.delete_training_task_record('alias',f.user)) if case=='delete_active' else (lambda:views.public_refreshed_training_task(value)) if case=='worker_public' else (lambda:life.refresh_interrupted_local_training_task(value))
                 with self.assertRaises(RuntimeError) as caught:action()
                 self.assertIs(caught.exception,error);self.assertEqual(callback.call_count,1);self.assertEqual(f.tombstones,{});self.assertTrue(available(f.guard))
@@ -498,8 +502,8 @@ class TrainingLifecycleContracts(unittest.TestCase):
         api=self.api;f=self.f;events=[];thread=Mock()
         thread.is_alive.side_effect=lambda:events.append('alive') or True
         class Identifier:
-            def __str__(self):events.append('str');api._training_task_threads={'job':thread};return 'job'
-        with patch.object(api,'_training_task_threads',{}):self.assertTrue(api.local_training_task_is_active({'job_id':Identifier()}))
+            def __str__(self):events.append('str');api._training_state_workflows.runtime.threads={'job':thread};return 'job'
+        with patch_training_port(api,'_training_task_threads',{}):self.assertTrue(api.local_training_task_is_active({'job_id':Identifier()}))
         self.assertEqual(events,['str','alive'])
         for missing in (False,True):
             with self.subTest(missing=missing),ExitStack() as stack:
@@ -509,9 +513,9 @@ class TrainingLifecycleContracts(unittest.TestCase):
                     def get(self,*args):events.append(self.label);return super().get(*args)
                 a,b,c=(Markers(label) for label in ('A','B','C'))
                 class Key:
-                    def __str__(self):events.append('str');api._training_task_delete_tombstones=c;return 'job'
-                def path(job):events.append('path');api._training_task_delete_tombstones=None if missing else b;return f.root/'job.json'
-                stack.enter_context(patch.object(api,'_training_task_delete_tombstones',a));stack.enter_context(patch.object(api,'training_task_path',path))
+                    def __str__(self):events.append('str');api._training_state_workflows.runtime.tombstones=c;return 'job'
+                def path(job):events.append('path');api._training_state_workflows.runtime.tombstones=None if missing else b;return f.root/'job.json'
+                stack.enter_context(patch_training_port(api,'_training_task_delete_tombstones',a));stack.enter_context(patch_training_port(api,'training_task_path',path))
                 if missing:
                     with self.assertRaises(AttributeError):api.update_training_task(Key(),status='completed')
                     self.assertEqual(events,['path'])
@@ -529,8 +533,8 @@ class TrainingLifecycleContracts(unittest.TestCase):
         schema='training_lifecycle_'+uuid.uuid4().hex;dsn=os.environ['VANTALINE_POSTGRES_DSN']
         api=self.api;f=self.f
         with ExitStack() as stack:
-            for name,operation in self.originals.items():stack.enter_context(patch.object(api,name,operation))
-            stack.enter_context(patch.object(api,'TRAINING_TASKS_DIR',f.root))
+            for name,operation in self.originals.items():stack.enter_context(patch_training_port(api,name,operation))
+            stack.enter_context(patch_training_port(api,'TRAINING_TASKS_DIR',f.root))
             with psycopg.connect(dsn,autocommit=True) as control:
                 control.execute(postgres_ddl(schema))
                 try:

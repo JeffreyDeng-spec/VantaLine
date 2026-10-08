@@ -33,6 +33,11 @@
   },
   "impact_rules": [
     {
+      "name": "Training state workflow assembly",
+      "paths": ["local_inspection_service/training/state_composition.py", "scripts/smoke_training_state_workflows_composition.py", "scripts/training_state_test_ports.py", "tests/backend_contract/training_state_workflows_ports.json"],
+      "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/configuration-reference.md"]
+    },
+    {
       "name": "Extracted backend dependency direction",
       "paths": ["scripts/verify_backend_boundaries.py"],
       "required_docs": ["docs/architecture.md", "docs/testing.md"]

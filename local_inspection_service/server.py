@@ -6979,18 +6979,33 @@ def list_codex_image_jobs(user: dict[str, Any] | None = None, target_user_id: st
 from .training.task_identity import training_task_identity_values, training_task_matches_identifier, training_task_sort_key
 from .training.record_store import TrainingRecordStore, TrainingRows
 
-_training_records = TrainingRecordStore(
-    repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR,
-    guard=lambda: _training_task_lock, resolver=lambda: resolve_model_profiles,
-    invalidate=lambda key: store_read_cache_invalidate(key),
-    rows=TrainingRows(encode=lambda: training_task_row,
-                      decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
-    enrich=lambda *args: enrich_record_audit_fields(*args),
+from .training.state_composition import TrainingRecordAccess, TrainingStateWorkflows
+from .training.task_lifecycle import TrainingTaskWrites
+from .training.task_views import TrainingViewAccess
+_training_state_workflows = TrainingStateWorkflows(
+    runtime=_training_task_runtime,
+    storage=TrainingRecordAccess(
+        repository=lambda: runtime_postgres_repository_or_none(),
+        directory=lambda: TRAINING_TASKS_DIR,
+        resolver=lambda: resolve_model_profiles,
+        invalidate=lambda key: store_read_cache_invalidate(key),
+        enrich=lambda *args: enrich_record_audit_fields(*args),
+    ),
+    rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list,
+                      identifier=lambda path: file_stem_identifier(path)),
+    writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(),
+                             row=lambda task, **kwargs: training_task_row(task, **kwargs),
+                             invalidate=lambda key: store_read_cache_invalidate(key)),
+    require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
+    view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task),
+                                  sanitize=lambda: public_path_sanitized,
+                                  visible=lambda record, user, target: record_visible_to_user(record, user, target)),
 )
+_training_records = _training_state_workflows.records
 
 
 def training_task_path(task_id: str) -> Path:
-    return _training_records.training_task_path(task_id)
+    return _training_state_workflows.training_task_path(task_id)
 
 
 
@@ -7000,19 +7015,19 @@ def training_task_path(task_id: str) -> Path:
 
 
 def load_training_task_records() -> list[dict[str, Any]]:
-    return _training_records.load_training_task_records()
+    return _training_state_workflows.load_training_task_records()
 
 
 def save_training_task(task: dict[str, Any]) -> None:
-    return _training_records.save_training_task(task)
+    return _training_state_workflows.save_training_task(task)
 
 
 def load_training_task(path: Path) -> dict[str, Any] | None:
-    return _training_records.load_training_task(path)
+    return _training_state_workflows.load_training_task(path)
 
 
 def find_training_task(job_id: str) -> dict[str, Any] | None:
-    return _training_records.find_training_task(job_id)
+    return _training_state_workflows.find_training_task(job_id)
 
 
 from .training.task_lifecycle import (
@@ -7021,32 +7036,20 @@ from .training.task_lifecycle import (
 from .runtime.training_tasks import TrainingTaskState
 from .training.task_views import TrainingTaskViews, TrainingViewAccess
 
-_training_lifecycle = TrainingTaskLifecycle(
-    state=TrainingTaskState(guard=lambda: _training_task_lock, threads=lambda: _training_task_threads,
-                            tombstones=lambda: _training_task_delete_tombstones),
-    records=TrainingTaskRecords(path=lambda job_id: training_task_path(job_id), load=lambda path: load_training_task(path),
-        save=lambda task: save_training_task(task), find=lambda job_id: find_training_task(job_id)),
-    writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(),
-        row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
-    require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
-)
-_training_views = TrainingTaskViews(
-    records=lambda: load_training_task_records(), refresh=lambda task: refresh_interrupted_local_training_task(task),
-    access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized,
-        visible=lambda record, user, target: record_visible_to_user(record, user, target)),
-)
+_training_lifecycle = _training_state_workflows.lifecycle
+_training_views = _training_state_workflows.views
 
 
 def local_training_task_is_active(task: dict[str, Any]) -> bool:
-    return _training_lifecycle.local_training_task_is_active(task)
+    return _training_state_workflows.local_training_task_is_active(task)
 
 
 def refresh_interrupted_local_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    return _training_lifecycle.refresh_interrupted_local_training_task(task)
+    return _training_state_workflows.refresh_interrupted_local_training_task(task)
 
 
 def public_refreshed_training_task(task: dict[str, Any], *, allow_remote_refresh: bool = False) -> dict[str, Any]:
-    return _training_views.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)
+    return _training_state_workflows.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)
 
 
 def list_training_tasks(
@@ -7055,26 +7058,26 @@ def list_training_tasks(
     *,
     allow_remote_refresh: bool = False,
 ) -> list[dict[str, Any]]:
-    return _training_views.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)
+    return _training_state_workflows.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)
 
 
 def public_training_task(task: dict[str, Any]) -> dict[str, Any]:
-    return _training_views.public_training_task(task)
+    return _training_state_workflows.public_training_task(task)
 
 
 from .training.local_process import parse_yolo_epoch_progress, yolo_cli_command
 
 
 def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:
-    return _training_lifecycle.update_training_task(job_id, **updates)
+    return _training_state_workflows.update_training_task(job_id, **updates)
 
 
 def stop_training_task_process(task: dict[str, Any], *, note: str) -> dict[str, Any]:
-    return _training_lifecycle.stop_training_task_process(task, note=note)
+    return _training_state_workflows.stop_training_task_process(task, note=note)
 
 
 def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
-    return _training_lifecycle.delete_training_task_record(job_id, user, missing_ok=missing_ok)
+    return _training_state_workflows.delete_training_task_record(job_id, user, missing_ok=missing_ok)
 
 
 def apply_codex_image_job_action(record: dict[str, Any], job: dict[str, Any], lookup_id: str, action: str) -> dict[str, Any]:

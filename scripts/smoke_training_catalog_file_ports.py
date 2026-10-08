@@ -71,7 +71,15 @@ class TrainingCatalogFilePortsTests(unittest.TestCase):
             owner = Falsey(); self.assertIs(getattr(cls(**args, **{key:owner}),key),owner)
         tree = ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
         calls = [n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('DatasetCatalog','TrainingResources','TrainedModelCatalog')]
-        self.assertEqual(len(calls), 3)
+        # ModelCatalog now owns the actual TrainedModelCatalog constructor.
+        domain=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/training/catalog_composition.py').read_text(encoding='utf-8'))
+        owned=[n for n in ast.walk(domain) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TrainedModelCatalog']
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(owned), 1)
+        self.assertEqual(ast.dump(next(k.value for k in owned[0].keywords if k.arg=='business_files')),ast.dump(ast.parse('files',mode='eval').body))
+        builders=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='ModelCatalog']
+        self.assertEqual(len(builders),1)
+        self.assertEqual(ast.dump(next(k.value for k in builders[0].keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
         for call in calls:
             key = 'business_files' if call.func.id == 'TrainedModelCatalog' else 'files'
             self.assertEqual(ast.dump(next(k.value for k in call.keywords if k.arg==key)), ast.dump(ast.parse('_business_files',mode='eval').body))

@@ -12,6 +12,7 @@ import threading
 import unittest
 import uuid
 from unittest.mock import Mock, patch
+from training_state_test_ports import patch_training_port
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 PG_CHECK='--postgres' in sys.argv
 if PG_CHECK: sys.argv.remove('--postgres')
@@ -63,7 +64,7 @@ class Fixture:
         for name,value in {'TRAINING_TASKS_DIR':self.directory,'runtime_postgres_repository_or_none':self.repository,
             'store_read_cache_invalidate':self.invalidate,'_training_task_lock':self.guard,
             'resolve_model_profiles':self.provider,'enrich_record_audit_fields':self.enrich}.items():
-            stack.enter_context(patch.object(api,name,value))
+            stack.enter_context(patch_training_port(api,name,value))
 
 
 class TrainingStoreContracts(unittest.TestCase):
@@ -106,14 +107,14 @@ class TrainingStoreContracts(unittest.TestCase):
         self.assertEqual(value['model_profiles'],expected['model_profiles']); self.assertNotIn('resolver',f.events)
         for snapshot in ({},None):
             old=task('old',model_profiles=snapshot)
-            with patch.object(api,'resolve_model_profiles',side_effect=AssertionError('old snapshot rewritten')):
+            with patch_training_port(api,'resolve_model_profiles',side_effect=AssertionError('old snapshot rewritten')):
                 api.save_training_task(old)
             self.assertIs(old['model_profiles'],snapshot)
         self.assertTrue(f.guard.available_to_other_thread())
 
     def test_write_stage_lock_coverage_invalidation_failure_and_partial_file(self):
         api=self.api; f=self.f; value=task()
-        with patch.object(api,'store_read_cache_invalidate',side_effect=RuntimeError('invalidate')):
+        with patch_training_port(api,'store_read_cache_invalidate',side_effect=RuntimeError('invalidate')):
             with self.assertRaisesRegex(RuntimeError,'invalidate'): api.save_training_task(value)
         self.assertIn('model_profiles',value); self.assertNotIn('enter',f.events)
         self.assertFalse(any(isinstance(event,tuple) and event[0]=='repository' for event in f.events))
@@ -125,7 +126,7 @@ class TrainingStoreContracts(unittest.TestCase):
             stages.append('upsert')
             self.assertFalse(f.guard.available_to_other_thread()); raise RuntimeError('locked-upsert')
         f.repo.upsert_row.side_effect=upsert
-        with patch.object(api,'training_task_row',side_effect=encode):
+        with patch_training_port(api,'training_task_row',side_effect=encode):
             # No outer lock: the save operation itself must protect both stages.
             with self.assertRaisesRegex(RuntimeError,'locked-upsert'):api.save_training_task(task(' job ',task_id='task'))
             self.assertEqual(encoded,[(False,{'fallback_id':' job '})])
@@ -136,7 +137,7 @@ class TrainingStoreContracts(unittest.TestCase):
                 self.assertFalse(f.guard.available_to_other_thread())
         self.assertEqual(encoded,[(False,{'fallback_id':' job '})]); self.assertTrue(f.guard.available_to_other_thread())
         self.assertEqual(stages,['encode','upsert'])
-        with patch.object(api,'training_task_row',side_effect=ValueError('encode')):
+        with patch_training_port(api,'training_task_row',side_effect=ValueError('encode')):
             with self.assertRaisesRegex(ValueError,'encode'):api.save_training_task(value)
         self.assertTrue(f.guard.available_to_other_thread())
         f.repo=None; original_write=Path.write_text; path=f.seed('job',{'old':True})
@@ -149,7 +150,7 @@ class TrainingStoreContracts(unittest.TestCase):
 
     def test_missing_resolver_and_save_failures_preserve_order_and_release_lock(self):
         api=self.api; f=self.f; value=task()
-        with patch.object(api,'resolve_model_profiles',return_value=None):
+        with patch_training_port(api,'resolve_model_profiles',return_value=None):
             with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'): api.save_training_task(value)
         self.assertEqual(f.events,[]); self.assertEqual(f.cached,['existing']); self.assertNotIn('model_profiles',value)
         self.assertFalse(api.training_task_path('job').exists())
@@ -161,7 +162,7 @@ class TrainingStoreContracts(unittest.TestCase):
         with self.assertRaises(KeyError): api.save_training_task({'model_profiles':{}})
         self.assertEqual(f.events,[('invalidate','training_task_pairs',True),'enter',('repository',False),'exit'])
         missing=f.root/'missing'
-        with patch.object(api,'TRAINING_TASKS_DIR',missing):
+        with patch_training_port(api,'TRAINING_TASKS_DIR',missing):
             with self.assertRaises(FileNotFoundError): api.save_training_task(task('missing',model_profiles={}))
         self.assertFalse(missing.exists()); self.assertTrue(f.guard.available_to_other_thread())
         path=f.seed('job',{'old':True})
@@ -288,7 +289,7 @@ class TrainingStoreContracts(unittest.TestCase):
         self.assertEqual(second.find_training_task('second')['model_profiles']['pipeline']['version'],200)
         self.assertIsNone(first.find_training_task('second')); self.assertIsNot(self.f.guard,other.guard)
         moved=self.f.root/'moved'; moved.mkdir()
-        with patch.object(self.api,'TRAINING_TASKS_DIR',moved),patch.object(self.api,'resolve_model_profiles',return_value=other.resolver):
+        with patch_training_port(self.api,'TRAINING_TASKS_DIR',moved),patch_training_port(self.api,'resolve_model_profiles',return_value=other.resolver):
             self.api.save_training_task(task('late'))
             value=self.api.load_training_task(self.api.training_task_path('late'))
             self.assertEqual(value['model_profiles']['pipeline']['version'],200)
@@ -310,7 +311,7 @@ class TrainingStoreContracts(unittest.TestCase):
                             return original()
                         return call
                     a,b,c=(callback(label) for label in ('A','B','C'))
-                    stack.enter_context(patch.object(api,target,a if mode!='missing' else None))
+                    stack.enter_context(patch_training_port(api,target,a if mode!='missing' else None))
                     def argument():events.append('argument');setattr(api,target,c)
                     if mode=='prior':
                         base_repository=f.repository
@@ -318,7 +319,7 @@ class TrainingStoreContracts(unittest.TestCase):
                             result=base_repository();events.append('prior');setattr(api,target,b);return result
                         # Resolver is captured before all persistence work; prior replacement belongs to the caller.
                         if window=='resolver':events.append('prior');setattr(api,target,b)
-                        else:stack.enter_context(patch.object(api,'runtime_postgres_repository_or_none',repository))
+                        else:stack.enter_context(patch_training_port(api,'runtime_postgres_repository_or_none',repository))
                     if window=='decode':
                         def fetch(table):argument();return []
                         f.repo.fetch_all.side_effect=fetch;action=api.load_training_task_records
@@ -345,7 +346,7 @@ class TrainingStoreContracts(unittest.TestCase):
         class Identifier:
             def __str__(self):
                 events.append('str');api.TRAINING_TASKS_DIR=destination;return '../task'
-        with patch.object(api,'TRAINING_TASKS_DIR',f.directory):
+        with patch_training_port(api,'TRAINING_TASKS_DIR',f.directory):
             self.assertEqual(api.training_task_path(Identifier()),destination/'task.json')
         self.assertEqual(events,['str'])
 
@@ -455,14 +456,14 @@ class TrainingStoreContracts(unittest.TestCase):
                 def b(rows):events.append('B');api.row_raw_json_list=c;return []
                 def a(rows):events.append('A');return [value]
                 def fetch(table):events.append('fetch');api.row_raw_json_list=None if missing else b;return [{},{}]
-                stack.enter_context(patch.object(api,'row_raw_json_list',a));f.repo.fetch_all.side_effect=fetch
+                stack.enter_context(patch_training_port(api,'row_raw_json_list',a));f.repo.fetch_all.side_effect=fetch
                 if missing:
                     with self.assertRaises(TypeError):api.load_training_task(Path('job.json'))
                     self.assertEqual(events,['fetch'])
                 else:
                     self.assertIs(api.load_training_task(Path('job.json')),value);self.assertEqual(events,['fetch','B','C'])
         f.repo.fetch_all.side_effect=None;f.repo.fetch_all.return_value=[]
-        with patch.object(api,'row_raw_json_list',side_effect=AssertionError('empty rows decoded')) as decoder:
+        with patch_training_port(api,'row_raw_json_list',side_effect=AssertionError('empty rows decoded')) as decoder:
             self.assertIsNone(api.load_training_task(Path('job.json')));decoder.assert_not_called()
 
     def test_nested_repository_first_failures_are_not_retried(self):
