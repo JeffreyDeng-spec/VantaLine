@@ -9890,7 +9890,7 @@ from .training.real_photo_training_config import freeze as freeze_real_photo_tra
 
 def _submit_real_photo_training(job,dataset):
     owner=find_user(load_auth_store(),job['owner_user_id'])
-    if not owner:raise ValueError('training owner account no longer exists')
+    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
     token=_request_user.set(owner)
     try:
         _,current_task=_real_photo_feedback.task(job['task_id'])
