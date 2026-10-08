@@ -209,7 +209,9 @@ def proxy_environment(value):
             'NO_PROXY': 'localhost,127.0.0.1,::1', 'no_proxy': 'localhost,127.0.0.1,::1'}
 
 
-def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None, proxy_url=''):
+def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None, proxy_url='', *, tools_module=None, skill_directory=None):
+    tool_root = Path(tools_module) if tools_module else MODULE
+    skill_root = Path(skill_directory) if skill_directory else SKILL
     executable = shutil.which('bwrap')
     if not executable or not runtime.is_file():
         raise RuntimeError('Linux bubblewrap and pinned native Codex binary are required')
@@ -226,11 +228,11 @@ def sandbox_command(task_dir, auth_dir, runtime, token, model, socket_path=None,
     command += ['--proc', '/proc', '--dev', '/dev', *temporary_mount, '--dir', '/run',
                 '--ro-bind', str(runtime.parent), '/codex-runtime',
                 '--ro-bind', str(task_dir/'input'), '/input', '--bind', str(task_dir/'work'), '/work',
-                '--bind', str(auth_dir), '/codex', '--dir', '/tools', '--ro-bind', str(MODULE/'cli.py'), '/tools/cli.py',
+                '--bind', str(auth_dir), '/codex', '--dir', '/tools', '--ro-bind', str(tool_root/'cli.py'), '/tools/cli.py',
                 '--ro-bind', str(task_dir/'bin'), '/tools/bin',
-                '--ro-bind', str(MODULE/'image_tools.py'), '/tools/image_tools.py',
+                '--ro-bind', str(tool_root/'image_tools.py'), '/tools/image_tools.py',
                 '--dir', '/work/.agents', '--dir', '/work/.agents/skills',
-                '--ro-bind', str(SKILL), '/work/.agents/skills/vantaline-label-inspection',
+                '--ro-bind', str(skill_root), '/work/.agents/skills/'+skill_root.name,
                 '--bind', str(socket_path or task_dir/'report.sock'), '/run/vantaline.sock', '--chdir', '/work']
     env = {'PATH': '/tools/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': '/work', 'CODEX_HOME': '/codex',
            'LANG': 'C.UTF-8', 'VANTALINE_TASK_SOCKET': '/run/vantaline.sock', 'VANTALINE_TASK_TOKEN': token}

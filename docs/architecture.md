@@ -1767,3 +1767,5 @@ This background candidate retains native-history/readiness and detection composi
 ## Real-photo feedback foundation
 
 The account-opt-in `real_photo_vlm` feedback adapter collects readable original photos independently of detector pass/fail and instance count. Task-associated AI/YOLO results use the independent `real_photo_states`, `real_photo_jobs`, and `real_photo_events` tables; original bytes are frozen under the owner and exact hashes deduplicate admission. Camera session, source-video and upload-request groups travel only as capture provenance. Initial generated-image pretraining and its shared providers are retained. See [real-photo feedback](real-photo-feedback.md) for shipped boundaries and later proposal phases.
+
+Independent review runs in `training_review.worker`, separate from Web and the label queue. A whole-image report is validated and stored before successful CLI exit grants acceptance. Source/annotation/class-version changes invalidate the review key; partial rounds never enqueue executable training. Frozen train proposals remain queued until the subsequent dispatcher batch.

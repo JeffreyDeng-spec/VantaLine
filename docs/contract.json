@@ -18,7 +18,8 @@
     "local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/batch.md",
     "local_inspection_service/codex_compare/skills/vantaline-label-inspection/SKILL.md",
     "local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/cli.md",
-    "docs/real-photo-feedback.md"
+    "docs/real-photo-feedback.md",
+    "local_inspection_service/training_review/skills/vantaline-training-review/SKILL.md"
   ],
   "historical_docs": {
     "local_inspection_service/docs/plc-phase2-address-capture-coordination.md": "docs/plc-web-serial-v4.md",

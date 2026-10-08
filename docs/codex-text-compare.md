@@ -292,3 +292,7 @@ never resurrects a tombstoned local file. Default local media behavior is retain
 this adapter alone does not authorize a production storage switch.
 
 In opt-in COS mode, comparison execution uses the shared exclusive work reservation on the kernel-limited system-disk temporary volume. Input media still passes the owner-scoped media adapter; the child retains its existing bubblewrap isolation and cannot access object-store credentials or original data roots. An unavailable work reservation settles the claimed task as failed before launch. The existing local-mode worker and terminal-state contracts remain unchanged.
+
+## Separate training reviewer launcher
+
+The bubblewrap launcher now accepts explicit alternative tool/skill roots for the independent training-review service. Omitted parameters retain the existing label inspection CLI and skill mounts. No training-review operation is added to the label queue or broker, and the training child receives no label mutation tools.
