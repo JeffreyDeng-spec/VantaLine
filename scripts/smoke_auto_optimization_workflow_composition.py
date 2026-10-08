@@ -57,6 +57,8 @@ def verify_source(source):
         assert matches[0].level == 1
         expected = 'training.workflow_composition' if name in ('AutoOptimizationWorkflows', 'AutoOptimizationStatusLookups', 'AutoOptimizationStatusProjection') else 'training.execution_composition' if name.startswith('External') or name == 'AutoOptimizationExecution' else 'runtime.training_tasks' if name == 'TrainingThreadLifecycle' else 'training.core_composition'
         assert matches[0].module == expected, name
+        alias = next(alias for alias in matches[0].names if (alias.asname or alias.name) == name)
+        assert alias.name == name, 'wrong constructor imported under expected binding'
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 assert node.name != name
@@ -93,7 +95,17 @@ def verify_composition_source(source):
         assert len(imports) == 1
         node, alias = imports[0]
         assert isinstance(node, ast.ImportFrom) and node.level == 1 and node.module == expected_module and alias.name == binding
-    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'AutoOptimizationWorkflows')
+    definitions = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'AutoOptimizationWorkflows']
+    assert len(definitions) == 1, 'duplicate workflow owner'
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            assert node.name != 'AutoOptimizationWorkflows'
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            assert not any(isinstance(target, ast.Name) and target.id == 'AutoOptimizationWorkflows' for target in targets)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            assert not any((alias.asname or (alias.name.split('.')[0] if isinstance(node, ast.Import) else alias.name)) == 'AutoOptimizationWorkflows' for alias in node.names)
+    cls = definitions[0]
     init = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == '__init__')
     calls = {node.targets[0].attr: node.value for node in init.body if isinstance(node, ast.Assign)}
     assert list(calls) == ['core', 'execution']
@@ -171,11 +183,14 @@ class Contracts(unittest.TestCase):
         for old, new in [('_auto_optimization_workflows.core', '_auto_optimization_workflows.execution'), ('shadow_resolver=resolve_model_profiles,', 'shadow_resolver=lambda: None,'), ('from .training.workflow_composition import', 'from training.workflow_composition import')]:
             self.assertIn(old, source)
             with self.assertRaises(AssertionError): verify_source(source.replace(old, new, 1))
+        for old, new in [('AutoOptimizationStatusLookups, AutoOptimizationStatusProjection', 'AutoOptimizationStatusProjection as AutoOptimizationStatusLookups, AutoOptimizationStatusProjection'), ('    ExternalRequestActions,', '    ExternalRequestAccess as ExternalRequestActions,'), ('AutoOptimizationCore, StateStorage', 'StateStorage as AutoOptimizationCore, StateStorage')]:
+            self.assertIn(old, source)
+            with self.assertRaises(AssertionError): verify_source(source.replace(old, new, 1))
         for extra in ('_auto_optimization_workflows += None', '_auto_optimization_core: object = None', 'import os as AutoOptimizationWorkflows'):
             with self.assertRaises(AssertionError): verify_source(source + '\n' + extra)
         source = Path(composition.__file__).read_text()
         verify_composition_source(source)
-        for extra in ('AutoOptimizationCore = None', 'AutoOptimizationExecution: object = None', 'from collections import deque as StatusLookups', 'def StatusProjection(): pass'):
+        for extra in ('AutoOptimizationCore = None', 'AutoOptimizationExecution: object = None', 'from collections import deque as StatusLookups', 'def StatusProjection(): pass', 'class AutoOptimizationWorkflows: pass', 'AutoOptimizationWorkflows = None', 'AutoOptimizationWorkflows: object = None', 'AutoOptimizationWorkflows += None', 'import os as AutoOptimizationWorkflows'):
             with self.assertRaises(AssertionError): verify_composition_source(source + '\n' + extra)
         for old, new in [('lambda: self.start_auto_optimize_label_worker', 'lambda: self.auto_optimize_public_sprite_pool'), ('return self.execution.auto_optimize_public_sprite_pool', 'return self.core.public_auto_optimize_state')]:
             self.assertIn(old, source)
