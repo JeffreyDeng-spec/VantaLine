@@ -11,6 +11,7 @@ from .auto_optimization_capture_ports import AutoOptimizationCapturePorts
 @dataclass(frozen=True)
 class AutoOptimizationCapture:
     ports: AutoOptimizationCapturePorts
+    feedback_capture: Any = None
 
     def auto_optimize_detection_candidates(self, result: dict[str, Any]) -> list[dict[str, Any]]:
         detections = result.get("detections") if isinstance(result.get("detections"), list) else []
@@ -39,6 +40,8 @@ class AutoOptimizationCapture:
 
     def record_auto_optimize_capture(self, record: dict[str, Any] | None, result: dict[str, Any], request_id: str, image_path: Path | None) -> None:
         if not record:
+            return
+        if self.feedback_capture is not None and self.feedback_capture(record, result, request_id, image_path):
             return
         model_payload = result.get("model") if isinstance(result.get("model"), dict) else {}
         if not model_payload.get("is_ai_detection"):

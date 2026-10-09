@@ -4623,7 +4623,7 @@ _auto_optimization_capture = AutoOptimizationCapture(AutoOptimizationCapturePort
     start_auto_optimize_label_worker=lambda: start_auto_optimize_label_worker,
     start_auto_optimize_shadow_worker=lambda: start_auto_optimize_shadow_worker,
     auto_optimize_detection_candidates=lambda: auto_optimize_detection_candidates,
-))
+), feedback_capture=lambda record, result, request_id, image_path: _real_photo_feedback.capture(record, result, request_id, image_path))
 
 
 def auto_optimize_detection_candidates(result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -8850,6 +8850,8 @@ _ai_detection_analysis = AiDetectionAnalysis(
         lambda spec, settings: ai_model_payload(spec, settings),
         lambda result, request_id, *, image_path=None: persist_data_analysis_record_for_ai_detection(result, request_id, image_path=image_path),
     ),
+    feedback=lambda result,request_id,path,pixels: _real_photo_feedback.capture_local(result,request_id,path,pixels,
+        lambda image: cv2.imencode('.png',image)[1].tobytes()),
 )
 _detection_analysis = DetectionAnalysis(
     AnalysisInput(lambda: load_config(), lambda: scope_config_for_user,
@@ -8868,6 +8870,8 @@ _detection_analysis = DetectionAnalysis(
     ),
     AnalysisOutput(lambda kind: output_write_dir(kind), lambda: resize_bgr_max_side, lambda: INSPECTION_PREVIEW_MAX_SIDE,
                    lambda: cv2, lambda: INSPECTION_PREVIEW_JPEG_QUALITY, lambda path: output_url(path)),
+    feedback=lambda result,request_id,path,pixels: _real_photo_feedback.capture_local(result,request_id,path,pixels,
+        lambda image: cv2.imencode('.png',image)[1].tobytes()),
 )
 
 
@@ -9845,6 +9849,41 @@ def approve_ai_task_auto_optimize_sample(
 ) -> dict[str, Any]:
     return _auto_optimization_requests.approve_ai_task_auto_optimize_sample(task_id, sample_id, request)
 
+
+from .training.real_photo_api import FeedbackPorts, FeedbackService, associated_task as real_photo_associated_task, compose as compose_real_photo
+
+def _real_photo_repository():
+    selection = build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS)
+    return selection.repository if selection.store == "postgres" else None
+
+_real_photo_feedback = compose_real_photo(app, FeedbackService(FeedbackPorts(
+    repository=_real_photo_repository,
+    user=lambda: current_auth_user(),
+    tasks=lambda: load_ai_detection_tasks(),
+    authorize=lambda record, user, **kw: require_record_access(record, user, **kw),
+    config=lambda user: scope_config_for_user(load_config(), user),
+    references=lambda item: ai_profile_reference_paths(item) or [first_source_ai_reference_path(item)] if first_source_ai_reference_path(item) else ai_profile_reference_paths(item),
+    read=lambda path: _business_files.read_bytes(resolve_service_path(path)),
+    profiles=lambda: resolve_model_profiles(),
+    legacy_state=lambda task: load_auto_optimize_state(task),
+    freeze=lambda user,data,sha: _freeze_real_photo_original(user,data,sha),
+    legacy_disable=lambda task: _disable_legacy_feedback_for_real_photo(task),
+    model_task=lambda model_id,user: real_photo_associated_task(model_id,user,list_trained_model_specs(scope_config_for_user(load_config(),user)),load_pipeline_tasks()),
+)))
+
+def _freeze_real_photo_original(user, data, sha):
+    path=output_write_dir_for_owner('real_photo_feedback', user['id']) / (sha+'.source')
+    if not _business_files.is_file(path):_business_files.write_bytes(path,data)
+    elif _business_files.read_bytes(path)!=data:raise ValueError('immutable real photo conflict')
+    return str(path)
+
+def _disable_legacy_feedback_for_real_photo(task_id):
+    with _auto_optimize_lock:
+        state=load_auto_optimize_state(task_id)
+        if any(s.get('label_status') in {'labeling','rendering'} for s in state.get('samples',[])):
+            raise HTTPException(409,'历史标注正在执行，请等待当前调用结算后切换实拍回流')
+        state['settings']={**(state.get('settings') or {}),'enabled':False,'auto_promote':False}
+        save_auto_optimize_state(state)
 
 from .detection.rule_api import compose_detection_rule_api
 from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess

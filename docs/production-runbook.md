@@ -1391,3 +1391,7 @@ Auto-optimization settings composition freezes only the chosen policy instance a
 
 
 The dedicated tmpfs database exists only for synthetic CI benchmarks. Production PostgreSQL and ordinary disk-backed CI contracts retain their existing storage and durability settings. The experiment aims to isolate algorithm/resource regression from shared storage variance; it is not a historical cause finding or production write-amplification assessment. Complete release rollback is unchanged and no customer records or deployment configuration are migrated. Do not run the CI storage inspector against a production DSN; it accepts only the fixed synthetic CI endpoints.
+
+## Real-photo feedback foundation rollout
+
+Leave `VANTALINE_REAL_PHOTO_ACCOUNTS` empty until subsequent worker commissioning. Deploy through the complete immutable release and its additive migration. Do not bind the new bbox purpose to a changing detection alias, automatically start historical synthetic feedback, or replay an uncertain paid attempt. Disable new admission and settle current attempts before whole-release rollback; retain all new tables, receipts, originals, masks and previous models. Later worker/automatic-training phases are proposals until separately released and verified; see [real-photo feedback](real-photo-feedback.md).

@@ -174,3 +174,7 @@ CPU/GPU fallback or new paid retry is introduced. Real remote acceptance remains
 a separate budgeted gate after synthetic transfer tests.
 
 The Web shared file checksum helper resolves mapped business files through a pinned verified COS cache before streaming their bytes. This also covers startup image-guide provenance, which shares the helper. Temporary training ZIPs outside the business root still use their local file stream; the RunPod payload and worker format are unchanged.
+
+## Real-photo feedback foundation boundary
+
+The feedback foundation adds source/annotation queues and strict original-image contracts but submits no RunPod training. Initial generated-image training and the worker request contract remain unchanged in this batch. Held-out real-photo evaluation and grouped dataset publication require the later training batch and compatible worker commissioning.

@@ -1,5 +1,5 @@
 {
-  "version": 176,
+  "version": 177,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -507,6 +507,10 @@
     "accessories/catalog.py",
     "runtime/image_worker.py",
     "pipeline/runtime_state.py",
-    "training/auto_optimization_runtime_state.py"
+    "training/auto_optimization_runtime_state.py",
+    "training/real_photo_annotation.py",
+    "training/real_photo_contracts.py",
+    "training/real_photo_api.py",
+    "training/real_photo_provenance.py"
   ]
 }

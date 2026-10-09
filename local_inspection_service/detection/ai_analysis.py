@@ -6,8 +6,9 @@ from .analysis_ports import AiProfiles, AiInspectionTools, AiAnalysisEvidence
 
 
 class AiDetectionAnalysis:
-    def __init__(self, profiles: AiProfiles, tools: AiInspectionTools, evidence: AiAnalysisEvidence):
+    def __init__(self, profiles: AiProfiles, tools: AiInspectionTools, evidence: AiAnalysisEvidence, feedback=None):
         self.profiles, self.tools, self.evidence = profiles, tools, evidence
+        self.feedback=feedback
 
     def analyze_bgr_ai_detection(self,
         image_bgr: np.ndarray,
@@ -28,6 +29,7 @@ class AiDetectionAnalysis:
                 reason="AI detection task has no required accessories configured.",
             )
             self.evidence.persist(result, request_id, image_path=image_path)
+            if self.feedback:self.feedback(result,request_id,image_path,image_bgr)
             return result
         changed = False
         real_ids = {self.profiles.uid(item) for item in config.get("accessories", [])}
@@ -114,4 +116,5 @@ class AiDetectionAnalysis:
             "ai": ai_debug,
         }
         self.evidence.persist(result, request_id, image_path=image_path)
+        if self.feedback:self.feedback(result,request_id,image_path,image_bgr)
         return result
