@@ -1,5 +1,5 @@
 {
-  "version": 264,
+  "version": 265,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -574,6 +574,7 @@
     "plc/capture_composition.py",
     "pipeline/persistence_composition.py",
     "pipeline/execution_composition.py",
-    "pipeline/query_composition.py"
+    "pipeline/query_composition.py",
+    "agent/pipeline_composition.py"
   ]
 }

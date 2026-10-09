@@ -142,9 +142,9 @@ class LeaseDiagnosticContracts(unittest.TestCase):
 
     def test_whole_root_inverse_and_actual_owner_mutation_guards(self):
         import ast
-        from application_integration_source_contract import ROOT,PIPELINE_QUERIES,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,PLC_CAPTURE,PLC_OPERATIONS,restore_delta,restore_plc_domain_root,digest
+        from application_integration_source_contract import ROOT,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,PLC_CAPTURE,PLC_OPERATIONS,restore_delta,restore_plc_domain_root,digest
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_QUERIES),PIPELINE_EXECUTION),PIPELINE_PERSISTENCE),PLC_CAPTURE),PLC_OPERATIONS))),PLC_OPERATIONS['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION),PIPELINE_PERSISTENCE),PLC_CAPTURE),PLC_OPERATIONS))),PLC_OPERATIONS['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in [('_plc_lease_diagnostic_workflows.acquisition','_plc_lease_diagnostic_workflows.maintenance'),('workstation=_plc_workstation_workflows','workstation=None')]:
             with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace(old,new,1))

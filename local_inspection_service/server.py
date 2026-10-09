@@ -11043,26 +11043,44 @@ from .agent.decision_context import AgentDecisionContext as _AgentDecisionContex
 from .agent.decision_policy import AgentDecisionPolicy as _AgentDecisionPolicy
 from .agent.decision_flow import AgentDecisionFlow as _AgentDecisionFlow
 from .agent.pipeline_decision_ports import AgentConversationRuntime as _AgentConversationRuntime, AgentDecisionText as _AgentDecisionText, AgentPipelineEvidence as _AgentPipelineEvidence, AgentDecisionAccessories as _AgentDecisionAccessories, AgentDecisionContextCalls as _AgentDecisionContextCalls, AgentDecisionPolicyValues as _AgentDecisionPolicyValues, AgentDecisionRuleCalls as _AgentDecisionRuleCalls, AgentDecisionInvocationSettings as _AgentDecisionInvocationSettings, AgentDecisionCodec as _AgentDecisionCodec, AgentDecisionFlowCalls as _AgentDecisionFlowCalls
-_agent_conversation = _AgentConversation(
-    _AgentConversationRuntime(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT),
-    _AgentDecisionText(bounded=lambda: bounded_text),
+from .agent.pipeline_composition import (
+    AgentPipelineWorkflows,
+    AgentConversationRuntimeInputs,
+    AgentDecisionTextInputs,
+    AgentPipelineEvidenceInputs,
+    AgentDecisionAccessoriesInputs,
+    AgentDecisionContextCallsInputs,
+    AgentDecisionPolicyValuesInputs,
+    AgentDecisionInvocationSettingsInputs,
+    AgentDecisionCodecInputs,
+    AgentDecisionFlowCallsInputs,
+    AgentActionStateInputs,
+    AgentActionAdvanceInputs,
+    AgentActionJobsInputs,
+    AgentActionPoseInputs
 )
-_agent_decision_context = _AgentDecisionContext(
-    _AgentPipelineEvidence(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
-    _AgentDecisionAccessories(canonical=lambda: canonical_pipeline_accessory_ids, counts=lambda: normalize_pipeline_accessory_counts, lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type, detection=lambda: normalize_pipeline_detection_method),
-    _AgentDecisionContextCalls(quality=lambda: agent_pipeline_quality_signals, stage_order=lambda: PIPELINE_STAGE_ORDER),
-    _AgentDecisionText(bounded=lambda: bounded_text),
+
+_agent_pipeline_workflows = AgentPipelineWorkflows(
+    queries=_pipeline_queries,
+    model_resolver=resolve_model_profiles,
+    conversation_runtime=AgentConversationRuntimeInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT),
+    decision_text=AgentDecisionTextInputs(bounded=lambda: bounded_text),
+    pipeline_evidence=AgentPipelineEvidenceInputs(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    decision_accessories=AgentDecisionAccessoriesInputs(lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type),
+    decision_context_calls=AgentDecisionContextCallsInputs(stage_order=lambda: PIPELINE_STAGE_ORDER),
+    decision_policy_values=AgentDecisionPolicyValuesInputs(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS),
+    decision_invocation_settings=AgentDecisionInvocationSettingsInputs(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT),
+    decision_codec=AgentDecisionCodecInputs(dumps=lambda: json.dumps, parse=lambda: parse_agent_json),
+    decision_flow_calls=AgentDecisionFlowCallsInputs(chat=lambda: agent_chat_completion),
+    action_state=AgentActionStateInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException),
+    action_advance=AgentActionAdvanceInputs(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task),
+    action_jobs=AgentActionJobsInputs(delete=lambda: delete_training_task_record),
+    action_pose=AgentActionPoseInputs(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls)
 )
-_agent_decision_policy = _AgentDecisionPolicy(
-    _AgentDecisionPolicyValues(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS),
-    _AgentDecisionRuleCalls(rerun=lambda: _rule_rerun_failed_stage, normalize=lambda: normalize_agent_pipeline_decision),
-    _AgentDecisionText(bounded=lambda: bounded_text),
-)
-_agent_decision_flow = _AgentDecisionFlow(
-    _AgentDecisionInvocationSettings(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT),
-    _AgentDecisionCodec(dumps=lambda: json.dumps, parse=lambda: parse_agent_json),
-    _AgentDecisionFlowCalls(context=lambda: agent_pipeline_context, chat=lambda: agent_chat_completion, normalize=lambda: normalize_agent_pipeline_decision, rule=lambda: agent_pipeline_rule_decision),
-)
+_agent_conversation = _agent_pipeline_workflows.conversation
+_agent_decision_context = _agent_pipeline_workflows.context
+_agent_decision_policy = _agent_pipeline_workflows.policy
+_agent_decision_flow = _agent_pipeline_workflows.decision
 
 def agent_mcp_append_conversation(
     task: dict[str, Any],
@@ -11134,17 +11152,8 @@ def agent_pipeline_decide(
 from .agent.pipeline_actions import AgentPipelineActions as _AgentPipelineActions
 from .agent.pipeline_turns import AgentPipelineTurns as _AgentPipelineTurns
 from .agent.pipeline_action_ports import AgentActionState as _AgentActionState, AgentActionAdvance as _AgentActionAdvance, AgentActionJobs as _AgentActionJobs, AgentActionPolicy as _AgentActionPolicy, AgentActionPose as _AgentActionPose, AgentActionCalls as _AgentActionCalls, AgentTurnCalls as _AgentTurnCalls
-_agent_pipeline_actions = _AgentPipelineActions(
-    _AgentActionState(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException),
-    _AgentActionAdvance(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task),
-    _AgentActionJobs(delete=lambda: delete_training_task_record),
-    _AgentActionPolicy(normalize=lambda: normalize_pipeline_detection_method, uses_training=lambda: pipeline_method_uses_training),
-    _AgentActionPose(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls),
-    _AgentActionCalls(safe_advance=lambda: agent_safe_advance, reset=lambda: reset_pipeline_task_to_stage),
-)
-_agent_pipeline_turns = _AgentPipelineTurns(
-    _AgentTurnCalls(append=lambda: agent_mcp_append_conversation, apply=lambda: apply_agent_pipeline_decision),
-)
+_agent_pipeline_actions = _agent_pipeline_workflows.actions
+_agent_pipeline_turns = _agent_pipeline_workflows.turns
 
 def agent_safe_advance(
     task: dict[str, Any], config: dict[str, Any], pending_advances: list[str] | None = None

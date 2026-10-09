@@ -178,3 +178,5 @@ Pipeline persistence assembly leaves capture 410 routes, browser workstation own
 The pipeline native runtime graph does not enable capture routes, server serial workers or PLC transport factories. Only leased browser dispatch retains physical I/O authority; ordinary pipeline/image tasks do not gain PLC write permissions.
 
 The PipelineQueries assembly retains existing auto-optimization stop-capture capabilities and does not change browser ownership, workstation leases, diagnostic receipts, actual ACK or uncertain-write rules. It starts no legacy PLC polling worker.
+
+Pipeline Agent conversation/action composition preserves the existing supplied pause and pose execution capabilities. It changes no workstation/browser ownership, lease or actual ACK rules, and starts no PLC poller or worker.

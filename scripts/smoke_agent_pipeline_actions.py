@@ -19,7 +19,9 @@ class AgentPipelineActionsContracts(unittest.TestCase):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
-    def patch(self,name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+    def patch(self,name,**kwargs):
+        from agent_pipeline_test_ports import patch_agent_pipeline
+        return self.stack.enter_context(patch_agent_pipeline(self.api,name,**kwargs))
     def action_dependencies(self,orch=None):
         orch={} if orch is None else orch
         self.patch('normalize_pipeline_detection_method',return_value='yolo');self.patch('pipeline_method_uses_training',return_value=True)
@@ -126,13 +128,13 @@ class AgentPipelineActionsContracts(unittest.TestCase):
         self.api.agent_safe_advance({},{});first.assert_called_once();later.assert_not_called();self.assertEqual(first.call_args.kwargs['stage'],'samples')
     def test_commit_refreshes_append_callback_after_user_message(self):
         later=Mock();events=[]
-        def first(*args,**kwargs):events.append(args[1]);self.api.agent_mcp_append_conversation=later
+        def first(*args,**kwargs):events.append(args[1]);self.api._agent_pipeline_workflows.agent_mcp_append_conversation=later
         self.patch('agent_mcp_append_conversation',side_effect=first);self.patch('apply_agent_pipeline_decision');decision={'message_to_user':'answer'}
         self.assertIs(self.api.commit_pipeline_agent_turn({}, {},None,'question',decision,'chat'),decision);self.assertEqual(events,['user']);later.assert_called_once();self.assertEqual(later.call_args.args[1:3],('agent','answer'))
     def test_commit_agent_append_selected_before_decision_reads(self):
         later=Mock();first=self.patch('agent_mcp_append_conversation');self.patch('apply_agent_pipeline_decision');api=self.api
         class Decision(dict):
-            def get(self,*args):api.agent_mcp_append_conversation=later;return super().get(*args)
+            def get(self,*args):api._agent_pipeline_workflows.agent_mcp_append_conversation=later;return super().get(*args)
         decision=Decision(message_to_user='answer')
         self.assertIs(self.api.commit_pipeline_agent_turn({}, {},None,None,decision,'chat'),decision);first.assert_called_once();later.assert_not_called()
     def test_inline_exception_matcher_is_read_after_sync_failure(self):

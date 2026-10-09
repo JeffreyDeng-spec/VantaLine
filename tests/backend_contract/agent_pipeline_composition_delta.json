@@ -1,0 +1,46 @@
+{
+  "parent_sha": "3839fd8955b38457adf13d62cafef8db4fbefa3b",
+  "parent_ast_sha256": "ec78f14291a7b52ed335f365f8ef4a29e54f082394ce2dc6373d340df1727ba4",
+  "integrated_ast_sha256": "43a546eb00fe5b36b7b359dca9aeddd0c2a37df84355f4cf1cf317d5df5410a6",
+  "regions": [
+    {
+      "start": 2519,
+      "end": 2525,
+      "expected": [
+        "from .agent.pipeline_composition import AgentPipelineWorkflows, AgentConversationRuntimeInputs, AgentDecisionTextInputs, AgentPipelineEvidenceInputs, AgentDecisionAccessoriesInputs, AgentDecisionContextCallsInputs, AgentDecisionPolicyValuesInputs, AgentDecisionInvocationSettingsInputs, AgentDecisionCodecInputs, AgentDecisionFlowCallsInputs, AgentActionStateInputs, AgentActionAdvanceInputs, AgentActionJobsInputs, AgentActionPoseInputs",
+        "_agent_pipeline_workflows = AgentPipelineWorkflows(queries=_pipeline_queries, model_resolver=resolve_model_profiles, conversation_runtime=AgentConversationRuntimeInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT), decision_text=AgentDecisionTextInputs(bounded=lambda: bounded_text), pipeline_evidence=AgentPipelineEvidenceInputs(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), decision_accessories=AgentDecisionAccessoriesInputs(lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type), decision_context_calls=AgentDecisionContextCallsInputs(stage_order=lambda: PIPELINE_STAGE_ORDER), decision_policy_values=AgentDecisionPolicyValuesInputs(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS), decision_invocation_settings=AgentDecisionInvocationSettingsInputs(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT), decision_codec=AgentDecisionCodecInputs(dumps=lambda: json.dumps, parse=lambda: parse_agent_json), decision_flow_calls=AgentDecisionFlowCallsInputs(chat=lambda: agent_chat_completion), action_state=AgentActionStateInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException), action_advance=AgentActionAdvanceInputs(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task), action_jobs=AgentActionJobsInputs(delete=lambda: delete_training_task_record), action_pose=AgentActionPoseInputs(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls))",
+        "_agent_conversation = _agent_pipeline_workflows.conversation",
+        "_agent_decision_context = _agent_pipeline_workflows.context",
+        "_agent_decision_policy = _agent_pipeline_workflows.policy",
+        "_agent_decision_flow = _agent_pipeline_workflows.decision"
+      ],
+      "original": [
+        "_agent_conversation = _AgentConversation(_AgentConversationRuntime(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT), _AgentDecisionText(bounded=lambda: bounded_text))",
+        "_agent_decision_context = _AgentDecisionContext(_AgentPipelineEvidence(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), _AgentDecisionAccessories(canonical=lambda: canonical_pipeline_accessory_ids, counts=lambda: normalize_pipeline_accessory_counts, lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type, detection=lambda: normalize_pipeline_detection_method), _AgentDecisionContextCalls(quality=lambda: agent_pipeline_quality_signals, stage_order=lambda: PIPELINE_STAGE_ORDER), _AgentDecisionText(bounded=lambda: bounded_text))",
+        "_agent_decision_policy = _AgentDecisionPolicy(_AgentDecisionPolicyValues(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS), _AgentDecisionRuleCalls(rerun=lambda: _rule_rerun_failed_stage, normalize=lambda: normalize_agent_pipeline_decision), _AgentDecisionText(bounded=lambda: bounded_text))",
+        "_agent_decision_flow = _AgentDecisionFlow(_AgentDecisionInvocationSettings(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT), _AgentDecisionCodec(dumps=lambda: json.dumps, parse=lambda: parse_agent_json), _AgentDecisionFlowCalls(context=lambda: agent_pipeline_context, chat=lambda: agent_chat_completion, normalize=lambda: normalize_agent_pipeline_decision, rule=lambda: agent_pipeline_rule_decision))"
+      ]
+    },
+    {
+      "start": 2536,
+      "end": 2538,
+      "expected": [
+        "_agent_pipeline_actions = _agent_pipeline_workflows.actions",
+        "_agent_pipeline_turns = _agent_pipeline_workflows.turns"
+      ],
+      "original": [
+        "_agent_pipeline_actions = _AgentPipelineActions(_AgentActionState(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException), _AgentActionAdvance(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task), _AgentActionJobs(delete=lambda: delete_training_task_record), _AgentActionPolicy(normalize=lambda: normalize_pipeline_detection_method, uses_training=lambda: pipeline_method_uses_training), _AgentActionPose(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls), _AgentActionCalls(safe_advance=lambda: agent_safe_advance, reset=lambda: reset_pipeline_task_to_stage))",
+        "_agent_pipeline_turns = _AgentPipelineTurns(_AgentTurnCalls(append=lambda: agent_mcp_append_conversation, apply=lambda: apply_agent_pipeline_decision))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "d0371038aa4da7665e1a0490122e57070754a8d3e1719ba6ce3254cb22d6bd53",
+  "unchanged_business_sha256": {
+    "local_inspection_service/agent/conversation.py": "b192889878ef29c95578dd3119c4291db6ffa764e17126651e894984f77a462c",
+    "local_inspection_service/agent/decision_context.py": "79246bfde3b36e3686ab11379c2a2e6b8497f2c42d1aaf1bf74993c9df1be786",
+    "local_inspection_service/agent/decision_policy.py": "d1ef8bef88450e2b4001c2d5f48a8b105bf4bb9146313e01896857dcbd186167",
+    "local_inspection_service/agent/decision_flow.py": "2eb2c6905884d98996400ac94b1301efa647bbd1dbf9e5320963b3cc55eb165f",
+    "local_inspection_service/agent/pipeline_actions.py": "2748c1c7f06c22ca083d3e30486e79ba6e0b9dbbf5dd7b41ffde7181a4d248b0",
+    "local_inspection_service/agent/pipeline_turns.py": "0154955ba388d2339c55f4adda0c08a8bb0a5046cc6771cd7660a4eea5f6d29d"
+  }
+}

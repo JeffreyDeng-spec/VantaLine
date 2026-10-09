@@ -1830,3 +1830,5 @@ PipelinePersistence introduces no new business configuration. Model resolver sup
 PipelineExecution adds no model or worker configuration. It retains the original ResolverProvider object and native task ID/stage/user signatures. Existing task model_profiles takes precedence when binding; missing resolver fails explicitly before the runtime body. Manifest v263 includes pipeline/execution_composition.py; task snapshots and prompts are unchanged.
 
 PipelineQueries adds no setting. Model snapshots remain unchanged; prompt source manifest v264 records pipeline/query_composition.py. Public responses retain model_profiles removal, original normalization/defaults, account visibility and preloaded resource semantics.
+
+Agent pipeline composition adds no setting or prompt change. Manifest v265 records agent/pipeline_composition.py as actual source. The model resolver is directly captured; record model_profiles precedes inherited scope, and a missing resolver fails before the flow can fall back or invoke a provider. The existing system prompt remains an operation-time supplier.
