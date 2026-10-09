@@ -207,11 +207,19 @@ class WebShutdownTests(unittest.TestCase):
         for names in (('duplicate', 'duplicate'), ('/private',), ('',)):
             with self.assertRaises(ValueError): WebShutdown((), tuple(ShutdownStep(name, lambda _: True) for name in names))
 
+    def test_real_photo_disabled_start_does_not_create_threads(self):
+        from unittest.mock import patch
+        with patch("local_inspection_service.training.real_photo_api.accounts", return_value=set()), \
+             patch.object(self.server._real_photo_dispatch_runtime, "start") as start:
+            self.server.start_real_photo_training_dispatcher()
+        start.assert_not_called()
+
     def test_real_root_composition_drains_idle_owned_resources_without_startup(self):
         server = self.server
         owner = server.app.state.web_shutdown
         self.assertEqual([hook.__name__ for hook in owner.hooks], ['stop_real_photo_training_dispatcher', 'set', 'stop'])
-        bindings = [('pdf-import', server.app.state.label_pdf_import.close),
+        bindings = [('real-photo-dispatch', server._real_photo_dispatch_runtime.close),
+            ('pdf-import', server.app.state.label_pdf_import.close),
             ('pipeline-auto-agent', server._pipeline_auto_agent_runtime.close),
             ('pipeline-advance', server._pipeline_advance_runtime.close),
             ('pipeline-recommendation', server._pipeline_recommendation_runtime.close),

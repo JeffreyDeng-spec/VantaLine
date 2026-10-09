@@ -576,6 +576,7 @@ jobs:
           python scripts/smoke_pipeline_auto_agent_runtime.py
           python scripts/smoke_pipeline_advance_runtime.py
           python scripts/smoke_pipeline_thread_drain.py
+          python scripts/smoke_real_photo_dispatcher_runtime.py
           python scripts/smoke_web_shutdown.py
           python scripts/smoke_pipeline_stage_advance.py
           python scripts/smoke_pipeline_decision_contract.py

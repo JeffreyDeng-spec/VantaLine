@@ -789,3 +789,16 @@ introduced as new behavior by the composition refactor. Current manifest v256
 contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
 source oracle records the exact two-region main root delta and the exact updated
 runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.

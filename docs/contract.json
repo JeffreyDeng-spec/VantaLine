@@ -34,7 +34,7 @@
     "local_inspection_service/frontend/docs/migration-parity-checklist.md": "docs/testing.md"
   },
   "impact_rules": [
-    {"name": "Real-photo feedback", "paths": ["local_inspection_service/training/real_photo*", "local_inspection_service/training_review/**", "local_inspection_service/storage/real_photo_feedback.py", "tests/test_real_photo*"], "required_docs": ["docs/real-photo-feedback.md", "docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md", "docs/production-runbook.md", "docs/postgresql-runtime.md"]},
+    {"name": "Real-photo feedback", "paths": ["local_inspection_service/training/real_photo*", "local_inspection_service/training_review/**", "local_inspection_service/storage/real_photo_feedback.py", "tests/test_real_photo*", "local_inspection_service/training/dispatcher_runtime.py", "scripts/smoke_real_photo_dispatcher_runtime.py"], "required_docs": ["docs/real-photo-feedback.md", "docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md", "docs/production-runbook.md", "docs/postgresql-runtime.md"]},
     {
       "name": "Combined training task domain assembly",
       "paths": ["local_inspection_service/training/account_state_composition.py", "local_inspection_service/training/native_execution_composition.py", "local_inspection_service/training/task_composition.py", "scripts/smoke_training_task_workflows_composition.py", "scripts/training_task_source_contract.py", "scripts/training_task_graph_fixtures.py", "tests/backend_contract/training_task_workflows_ports.json"],

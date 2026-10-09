@@ -49,6 +49,7 @@ def restore_delta(source, fixture):
 
 def verify_actual_compositions():
     """Validate real owned constructor edges before using an old-location oracle."""
+    assert digest(ast.parse((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text())) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text(encoding="utf-8"))) == expected, \
             "Actual composition capability changed: " + path

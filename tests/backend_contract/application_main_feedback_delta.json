@@ -1,13 +1,13 @@
 {
   "parent": "e23ca1aef870680353bf393cafa9745d09b85017",
-  "integrated": "7282077",
   "main": "5bd0bafbe0e34470c587b9fb938cf821196f0638",
+  "description": "Preserved current main feedback plus independently required producer drain integration; configuration inverse is verified separately.",
   "parent_ast_sha256": "772ee81202b766473b8f0f59e907c775170585b9b4855e27b495e868309a0f9b",
-  "integrated_ast_sha256": "db28624d89bea9577ee4fd04ad8a5affa0bbabd7db195c056d53804090ca589c",
+  "integrated_ast_sha256": "56576570e4289f5bd260c25f104b8c735a5977dfc044450343f94ba280acad4b",
   "regions": [
     {
       "start": 2036,
-      "end": 2046,
+      "end": 2047,
       "expected": [
         "from .training.real_photo_dispatch import Dispatcher, DispatchPorts",
         "from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration",
@@ -16,21 +16,33 @@
         "_real_photo_dispatcher = Dispatcher(DispatchPorts(repository=_real_photo_repository, files=lambda: _business_files, output=lambda owner: output_write_dir_for_owner('real_photo_datasets', owner), submit=_submit_real_photo_training, training=lambda identifier: load_training_task(identifier), configuration=lambda: freeze_real_photo_training_configuration(training_executor_mode(), detect_base_model, yolo_inference_device, os.environ), metadata=_real_photo_training_metadata))",
         "from .training.real_photo_masks import MaskDispatcher",
         "_real_photo_mask_dispatcher = MaskDispatcher(_real_photo_dispatcher.ports, lambda: resolve_model_profiles(), lambda settings: image_generation_provider_from_settings(settings))",
-        "_real_photo_dispatch_stop = threading.Event()",
-        "@app.on_event('startup')\ndef start_real_photo_training_dispatcher():\n    from .training.real_photo_api import accounts\n    if not accounts():\n        return\n\n    def loop(dispatcher):\n        while not _real_photo_dispatch_stop.wait(2):\n            try:\n                dispatcher.tick()\n            except Exception as exc:\n                print('real-photo training dispatcher failed: ' + type(exc).__name__, flush=True)\n    threading.Thread(target=loop, args=(_real_photo_mask_dispatcher,), name='real-photo-mask-dispatch', daemon=True).start()\n    if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED', '') == '1':\n        threading.Thread(target=loop, args=(_real_photo_dispatcher,), name='real-photo-training-dispatch', daemon=True).start()",
-        "@app.on_event('shutdown')\ndef stop_real_photo_training_dispatcher():\n    _real_photo_dispatch_stop.set()"
+        "from .training.dispatcher_runtime import DispatcherRuntime",
+        "_real_photo_dispatch_runtime = DispatcherRuntime(scope=lambda: _runtime_repositories.thread_scope())",
+        "@app.on_event('startup')\ndef start_real_photo_training_dispatcher():\n    from .training.real_photo_api import accounts\n    if not accounts():\n        return\n    _real_photo_dispatch_runtime.start(_real_photo_mask_dispatcher.tick, _real_photo_dispatcher.tick if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED', '') == '1' else None)",
+        "@app.on_event('shutdown')\ndef stop_real_photo_training_dispatcher():\n    _real_photo_dispatch_runtime.stop()"
       ],
       "original": []
     },
     {
-      "start": 2115,
-      "end": 2116,
+      "start": 2116,
+      "end": 2117,
       "expected": [
         "@app.post('/api/analyze/image')\nasync def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None), capture_session_id: str | None=Form(None)) -> dict[str, Any]:\n    return await _image_upload.analyze_image(file, model_id, capture_session_id)"
       ],
       "original": [
         "@app.post('/api/analyze/image')\nasync def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None)) -> dict[str, Any]:\n    return await _image_upload.analyze_image(file, model_id)"
       ]
+    },
+    {
+      "start": 2799,
+      "end": 2800,
+      "expected": [
+        "_web_shutdown = register_web_shutdown(app, (ShutdownStep('real-photo-dispatch', _real_photo_dispatch_runtime.close), ShutdownStep('pdf-import', app.state.label_pdf_import.close), ShutdownStep('pipeline-auto-agent', _pipeline_auto_agent_runtime.close), ShutdownStep('pipeline-advance', _pipeline_advance_runtime.close), ShutdownStep('pipeline-recommendation', _pipeline_recommendation_runtime.close), ShutdownStep('auto-label', _auto_optimization_label_processing.close), ShutdownStep('auto-shadow', _auto_optimization_shadow_evaluation.close), ShutdownStep('auto-training-check', _auto_optimization_training_scheduling.close), ShutdownStep('training', _training_task_runtime.close), ShutdownStep('background-codex', _background_codex_thread.close), ShutdownStep('image-worker', _image_worker_runtime.close), ShutdownStep('document-import', document_import_jobs.close), ShutdownStep('prepared-comparison', _prepared_comparison_runtime.close), ShutdownStep('standard-preparation', standard_preparation_jobs.close), ShutdownStep('text-extraction', _text_extraction_runtime.close), ShutdownStep('transfer-progress', _transfer_progress.close), ShutdownStep('yolo-warmup', _yolo_warmup_runtime.close), ShutdownStep('model-mcp', _ai_mcp_client.shutdown)))"
+      ],
+      "original": [
+        "_web_shutdown = register_web_shutdown(app, (ShutdownStep('pdf-import', app.state.label_pdf_import.close), ShutdownStep('pipeline-auto-agent', _pipeline_auto_agent_runtime.close), ShutdownStep('pipeline-advance', _pipeline_advance_runtime.close), ShutdownStep('pipeline-recommendation', _pipeline_recommendation_runtime.close), ShutdownStep('auto-label', _auto_optimization_label_processing.close), ShutdownStep('auto-shadow', _auto_optimization_shadow_evaluation.close), ShutdownStep('auto-training-check', _auto_optimization_training_scheduling.close), ShutdownStep('training', _training_task_runtime.close), ShutdownStep('background-codex', _background_codex_thread.close), ShutdownStep('image-worker', _image_worker_runtime.close), ShutdownStep('document-import', document_import_jobs.close), ShutdownStep('prepared-comparison', _prepared_comparison_runtime.close), ShutdownStep('standard-preparation', standard_preparation_jobs.close), ShutdownStep('text-extraction', _text_extraction_runtime.close), ShutdownStep('transfer-progress', _transfer_progress.close), ShutdownStep('yolo-warmup', _yolo_warmup_runtime.close), ShutdownStep('model-mcp', _ai_mcp_client.shutdown)))"
+      ]
     }
-  ]
+  ],
+  "dispatcher_runtime_ast_sha256": "70f71165ac12178b5237ecf286f6d3c406e094807b8df90f0aed96410495a0ea"
 }

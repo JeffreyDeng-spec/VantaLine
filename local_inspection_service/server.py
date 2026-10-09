@@ -9257,23 +9257,19 @@ _real_photo_dispatcher=Dispatcher(DispatchPorts(repository=_real_photo_repositor
         training_executor_mode(),detect_base_model,yolo_inference_device,os.environ),metadata=_real_photo_training_metadata))
 from .training.real_photo_masks import MaskDispatcher
 _real_photo_mask_dispatcher=MaskDispatcher(_real_photo_dispatcher.ports,lambda:resolve_model_profiles(),lambda settings:image_generation_provider_from_settings(settings))
-_real_photo_dispatch_stop=threading.Event()
+from .training.dispatcher_runtime import DispatcherRuntime
+_real_photo_dispatch_runtime = DispatcherRuntime(scope=lambda: _runtime_repositories.thread_scope())
 
 @app.on_event('startup')
 def start_real_photo_training_dispatcher():
     from .training.real_photo_api import accounts
     if not accounts():return
-    def loop(dispatcher):
-        while not _real_photo_dispatch_stop.wait(2):
-            try:
-                dispatcher.tick()
-            except Exception as exc:print('real-photo training dispatcher failed: '+type(exc).__name__,flush=True)
-    threading.Thread(target=loop,args=(_real_photo_mask_dispatcher,),name='real-photo-mask-dispatch',daemon=True).start()
-    if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED','')=='1':
-        threading.Thread(target=loop,args=(_real_photo_dispatcher,),name='real-photo-training-dispatch',daemon=True).start()
+    _real_photo_dispatch_runtime.start(
+        _real_photo_mask_dispatcher.tick,
+        _real_photo_dispatcher.tick if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED','')=='1' else None)
 
 @app.on_event('shutdown')
-def stop_real_photo_training_dispatcher():_real_photo_dispatch_stop.set()
+def stop_real_photo_training_dispatcher():_real_photo_dispatch_runtime.stop()
 
 from .detection.rule_api import compose_detection_rule_api
 from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess
@@ -12546,6 +12542,7 @@ def enforce_incoming_text_image_retention() -> None:
 from .runtime.shutdown import ShutdownStep, register_web_shutdown
 
 _web_shutdown = register_web_shutdown(app, (
+    ShutdownStep("real-photo-dispatch", _real_photo_dispatch_runtime.close),
     ShutdownStep("pdf-import", app.state.label_pdf_import.close),
     ShutdownStep("pipeline-auto-agent", _pipeline_auto_agent_runtime.close),
     ShutdownStep("pipeline-advance", _pipeline_advance_runtime.close),
