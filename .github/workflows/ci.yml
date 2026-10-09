@@ -603,6 +603,7 @@ jobs:
           python scripts/smoke_trained_model_catalog.py --postgres
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres
+          python scripts/smoke_application_integration_source_contract.py
           python scripts/smoke_training_state_workflows_composition.py
           python scripts/smoke_training_task_workflows_composition.py
           python scripts/smoke_training_executor_client.py

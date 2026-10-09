@@ -7,6 +7,20 @@ import benchmark_label_beta_summaries as benchmark
 
 
 class Protocol(unittest.TestCase):
+    def test_only_the_two_legacy_probes_can_increase_query_count(self):
+        zero = {'catalog': 0, 'eligibility': 0}
+        probes = {'catalog': 1, 'eligibility': 1}
+        benchmark.verify_query_counts('AA', [10] * 31, [10] * 31, [zero] * 31, [zero] * 31)
+        benchmark.verify_query_counts('AB', [10] * 31, [12] * 31, [zero] * 31, [probes] * 31)
+        for counts, measured in [([13] * 31, probes), ([11] * 31, probes),
+                                 ([12] * 31, zero), ([12] * 31, {'catalog': 2, 'eligibility': 0})]:
+            with self.assertRaises(AssertionError):
+                benchmark.verify_query_counts('AB', [10] * 31, counts, [zero] * 31, [measured] * 31)
+        with self.assertRaises(AssertionError):
+            benchmark.verify_query_counts('AA', [10] * 31, [12] * 31, [zero] * 31, [probes] * 31)
+        with self.assertRaises(AssertionError):
+            benchmark.verify_query_counts('AB', [10] * 31, [12] * 30 + [11], [zero] * 31, [probes] * 31)
+
     def record(self,mode,repetition,size,shape,reports):
         reports.append(dict(mode=mode,repetition=repetition,tasks=size,shape=shape))
 
