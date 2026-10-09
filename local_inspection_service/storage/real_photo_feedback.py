@@ -106,19 +106,20 @@ class RealPhotoRepository:
                 state = {'owner_user_id': owner, 'task_id': task, 'strategy': STRATEGY,
                          'epoch': uuid.uuid4().hex, 'classes': classes, 'profiles': profiles,
                          'samples': [], 'rounds': [], 'datasets': [], 'candidate_models': [], 'created_at': time.time(), 'business_context':context or {}}
-            if state['classes'] != classes or state['profiles'] != profiles:
+            changed=state['classes'] != classes or state['profiles'] != profiles
+            if changed:
                 state.update(classes=classes, profiles=profiles, epoch=uuid.uuid4().hex)
                 state.pop('round', None)
                 state.pop('initialization', None)
             state['enabled'] = enabled
-            if not enabled:
+            if not enabled or changed:
                 state['epoch'] = uuid.uuid4().hex
                 c.execute(f'''SELECT raw_json FROM {self.table("jobs")}
                     WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running')''', (owner, task))
                 for job in self.rows(c):
                     job.update(status='cancel_requested' if job['status']=='running' else 'cancelled', token_hash='')
                     self.save_job(c, job)
-            elif not state.get('initialization'):
+            if enabled and not state.get('initialization'):
                 self.enqueue(c, state, 'initialize', 'initialize:' + state['epoch'],
                              {'classes': classes, 'history_count': len(state['samples']), 'business_context':state.get('business_context',{})})
             self.save_state(c, state)
@@ -149,7 +150,7 @@ class RealPhotoRepository:
         with self.tx() as c:
             job=self.read_job(c,identifier)
             if not job or job.get('attempt_id')!=attempt:raise ValueError('wrong attempt receipt')
-            if set(metadata)-{'external_call_started','usage','session_id','evidence','elapsed_seconds'}:
+            if set(metadata)-{'external_call_started','usage','session_id','evidence','elapsed_seconds','crops'}:
                 raise ValueError('invalid receipt fields')
             job.setdefault('attempt_receipt',{}).update(metadata)
             self.save_job(c,job)
@@ -161,11 +162,13 @@ class RealPhotoRepository:
         result={}
         for j in jobs:
             kind='doubao' if j['kind']=='annotate' else 'agent' if j['kind'] in {'initialize','review','assess'} else j['kind']
-            group=result.setdefault(kind,{'attempts':0,'failures':0,'elapsed_seconds':0,'usage':{},'unknown_usage_count':0,'estimated_cost':None})
+            group=result.setdefault(kind,{'attempts':0,'failures':0,'elapsed_seconds':0,'usage':{},'unknown_usage_count':0,'unknown_elapsed_count':0,'estimated_cost':None})
             receipt=j.get('attempt_receipt') or {}
             if not receipt.get('external_call_started'):continue
             group['attempts']+=1;group['failures']+=int(j['status'] in {'failed','interrupted','stale','cancel_requested','cancelled'} or (j.get('result') or {}).get('status')=='failed')
-            group['elapsed_seconds']+=j.get('elapsed_seconds',receipt.get('elapsed_seconds',0))
+            elapsed=j.get('elapsed_seconds',receipt.get('elapsed_seconds'))
+            if elapsed is None:group['unknown_elapsed_count']+=1
+            else:group['elapsed_seconds']+=elapsed
             usage=j.get('usage') or receipt.get('usage') or {}
             if not usage:group['unknown_usage_count']+=1
             for key,value in usage.items():
@@ -181,6 +184,9 @@ class RealPhotoRepository:
                     job.update(status='interrupted', token_hash='', error='uncertain attempt; explicit new attempt required')
                     self.save_job(c, job)
                     state = self.read_state(c, job['owner_user_id'], job['task_id'])
+                    if job['kind']=='train':
+                        state['pause_reason']='训练调度中断；请结算既有任务后明确恢复，不自动重提交'
+                        self.save_state(c,state)
                     if job['kind'] in {'initialize','review','assess'}:
                         state['pause_reason']='Agent会话中断或超时；请核查并明确重新启动'
                         self.save_state(c,state)
@@ -193,7 +199,8 @@ class RealPhotoRepository:
                 AND s.raw_json->>'enabled'='true' AND j.raw_json->>'epoch'=s.raw_json->>'epoch'
                 AND (j.kind='initialize' OR j.kind='mask' OR j.raw_json->'inputs'->>'explicit'='true'
                      OR (s.raw_json->'initialization' IS NOT NULL AND COALESCE(s.raw_json->>'pause_reason','')=''))
-                ORDER BY CASE WHEN j.kind='initialize' THEN 0 ELSE 1 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
+                ORDER BY CASE WHEN j.kind='initialize' THEN 0
+                    WHEN j.kind IN ('review','assess') THEN 1 ELSE 2 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
             rows = self.rows(c)
             if not rows:
                 return None
@@ -235,6 +242,7 @@ class RealPhotoRepository:
                 job['status'] = 'completed'
             else:
                 job['status'] = 'failed'
+                if job['kind']=='train':state['pause_reason']='实拍训练准备或提交失败；请核查配置和既有任务后明确恢复'
                 if job['kind'] in {'initialize','review','assess'}:
                     state['pause_reason']='Agent任务未完整成功；需处理原因并明确重新启动，不自动重放付费会话'
             self.event(c, state, identifier, {'kind': job['status'], 'result': result})

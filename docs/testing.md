@@ -2745,3 +2745,20 @@ comparison decisions, revisions, read-only history and frontend diagnostics
 assertions remain. A moved constructor must not be asserted at its former root
 location. The older foundation hosted run failed this source-location assertion;
 that failure is retained as evidence and is not a performance result.
+
+
+Third batch: run `python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py` with the disposable PostgreSQL DSN. Contracts cover original-only export, exact accepted versions, fixed splits/full classes, drifted weights, single dispatch, restart observation and class-definition revocation. CI runs the same suite in its artifact-storage PostgreSQL service. Run training runner/submission/RunPod and pretraining regression smokes, frontend typecheck/build, additive application contract, docs contract and diff checks. The test suite does not execute a paid business CLI session or GPU training.
+
+The real-photo dataset CI fixture explicitly installs PyYAML. Shared RunPod base-weight setting names live in a side-effect-free module so freezing and payload validation do not create a transport dependency cycle; retain `scripts/smoke_model_dependency_contract.py` in the required backend checks.
+
+`tests/test_real_photo_provenance.py` verifies unleased-camera session grouping, original byte hashes and context cleanup while the ordinary upload API remains free of PLC capabilities. The upload source guard follows the additive metadata argument into the inspected implementation; the leased camera contract is unchanged.
+
+Definition-change tests cover one new initialization, revoked old tokens, and no reference-image rereads during unchanged status polling. Training submission also rechecks frozen class/reference content before enqueue.
+
+Dispatch fixtures assert task quantity rules (including zero requirements) remain frozen through dataset publication. Frontend validation covers explicit completed-candidate inclusion; actual model switching/continued feedback is part of pilot commissioning, not established by a typecheck.
+
+Real PostgreSQL workflow regressions now cover freezing before labels settle, late pending/failed originals outside the cohort, review/assessment precedence over older queued annotations, archived incomplete preparation, failed assessment stopping further paid admission, and explicit version rechecks without new photos or duplicate wakeups. These deterministic contracts do not establish private-business visual quality.
+
+Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
+
+The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.

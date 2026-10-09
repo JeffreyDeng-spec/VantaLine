@@ -1748,3 +1748,14 @@ deltas restore the older assembly for its retained assertions; they do not
 represent current source locations. Positive and adverse checks cover changed
 repository timing/owner/import, missing or reordered nodes, route/shutdown order
 and corrupted delta regions. This is test adaptation, with no production change.
+
+
+`VANTALINE_REAL_PHOTO_TRAINING_ENABLED=1` enables server execution of accepted-original proposals in addition to the owner allowlist and independent screening worker. Default is disabled. Local training requires existing base weights; RunPod additionally requires a base SHA256 (including URL mode), a compatible held-out-evaluation worker, and verified executor readiness. Executor/device/weights/80 epochs/640 image size are frozen in the dataset before submission; drift fails rather than falling back. No secret or signed model URL is included in that snapshot.
+
+The production reviewer inherits `/etc/vantaline/cos-storage.env` and receives its own systemd `CREDENTIALS_DIRECTORY`. Its private review environment overrides only intended settings; it must explicitly provide PostgreSQL/account admission and the training-specific binary/auth/work-root/secret-file configuration. Reusing the COS credential source does not reuse the label worker's Codex login or queue.
+
+The real-photo review trigger is a cumulative original ordinal, independent of the approved target. Its cohort is frozen before pending labels settle; later originals wait for the next cohort. Explicit annotation-version rechecks retain the previous original cutoff and do not count as new photos. No additional configuration variables are introduced. Failed preparation/review/assessment requires explicit recovery and never raises a synthesized-sample fallback.
+
+Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
+
+The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.

@@ -1776,3 +1776,22 @@ deltas restore the older assembly for its retained assertions; they do not
 represent current source locations. Positive and adverse checks cover changed
 repository timing/owner/import, missing or reordered nodes, route/shutdown order
 and corrupted delta regions. This is test adaptation, with no production change.
+
+
+Real-photo activation is staged: release all code with both admission and training flags off; commission the independent reviewer and fixed bbox binding with private originals; verify the chosen local/RunPod executor and held-out metrics; then enable only the pilot owner and, last, training execution. Restart monitoring must reconcile existing deterministic tasks, never re-enqueue uncertain ones. Mask attachments are user-requested and never automatic training inputs. Rollback closes new admission, settles attempts and restores the whole immutable release while retaining additive evidence.
+
+The production review unit loads the standard COS storage environment and its own `cos-credentials.json` systemd credential from `/etc/vantaline/credentials/cos-credentials.json`; credentials are not mounted in the Agent child. The bounded artifact filesystem at `/var/lib/vantaline-artifacts` is writable by the trusted parent under existing cache/scratch leases. The host must grant the review account the shared artifact-group permissions and supply its separate queue/profile-secret configuration. Verify those mounts with `--check` as the actual service user; missing credentials or capacity must block startup, not disable isolation.
+
+For real-photo RunPod commissioning, dispatch `.github/workflows/yolo-worker-release.yml` with the accepted published whole-release tag. Verify its source SHA and recorded image digest before updating the existing single-worker, scale-to-zero endpoint. Settle any existing GPU job first, retain the previous template/image digest for rollback, and verify a real held-out job before opening automatic training. Container publication does not itself prove endpoint or model readiness.
+
+The released worker image uses the main repository-owned `<repository>-real-photo-yolo-worker` GHCR package, separate from the historical standalone worker package. Preserve the previous endpoint digest for whole-release reconciliation and rollback.
+
+The released real-photo GPU image inherits the existing public training runtime by immutable digest `sha256:001b40ca66148beef5cf8f76b75897ecd7207337335d0a7feb978d041096d9fc`, retaining its native libraries and controlled `/models/vantaline-yolo-base.pt` checkpoint. The build verifies checkpoint SHA-256 `646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b` and fails on a missing or changed file before publishing the new released handler. A default bare PyTorch Docker build still requires an explicitly supplied controlled checkpoint at runtime; it is not the production commissioning image.
+
+Before real-photo admission, verify that continuous YOLO arrivals cannot extend a frozen review cohort or starve ready review/assessment jobs. A user-requested annotation version change must recheck that version without inflating original counts. Incomplete preparation keeps its membership evidence and pauses; failed assessment must stop further automatic paid work. Keep pending commissioning calls closed until the selected owner and sample scope are authorized.
+
+Before rolling back a release with pending frozen review cohorts, close Web and reviewer admission, settle active attempts and stop the newer reviewer. Keep pending membership and job evidence intact; an older scheduler must not consume a new-format cohort with no review jobs. Reconcile the cohort explicitly before reopening any reviewer.
+
+Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
+
+The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.

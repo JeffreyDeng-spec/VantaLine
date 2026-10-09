@@ -1,3 +1,4 @@
+import hashlib
 """Ordinary uploaded-video sampling and analysis; no camera dispatch."""
 from collections.abc import Callable
 from pathlib import Path
@@ -45,7 +46,7 @@ class VideoUpload:
                 break
             if idx % stride == 0:
                 request_id = f'{Path(upload_name).stem}_frame_{idx:06d}'
-                with group('source_video:'+upload_name):
+                with group('source_video:'+upload_name,pixel_hash=hashlib.sha256(frame.tobytes()).hexdigest()):
                     result = self.analyze(frame, request_id, model_id)
                 if first_preview_url is None:
                     first_preview_url = result['annotated_url']
@@ -75,7 +76,7 @@ class VideoUpload:
                     break
                 if idx % stride == 0:
                     request_id = f'{Path(upload_name).stem}_frame_{idx:06d}'
-                    with group('source_video:'+upload_name):
+                    with group('source_video:'+upload_name,pixel_hash=hashlib.sha256(frame.tobytes()).hexdigest()):
                         result = self.analyze(frame, request_id, model_id)
                     if first_preview_url is None:
                         first_preview_url = result['annotated_url']

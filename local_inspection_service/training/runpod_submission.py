@@ -7,11 +7,8 @@ from typing import Any, Protocol
 Record = dict[str, Any]
 
 
-RUNPOD_YOLO_BASE_MODEL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL"
-RUNPOD_YOLO_BASE_MODEL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_SHA256"
-RUNPOD_YOLO_BASE_MODEL_URL_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL"
-RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV = "VANTALINE_RUNPOD_YOLO_BASE_MODEL_URL_SHA256"
-
+from .runpod_model_settings import (RUNPOD_YOLO_BASE_MODEL_ENV, RUNPOD_YOLO_BASE_MODEL_SHA256_ENV,
+                                    RUNPOD_YOLO_BASE_MODEL_URL_ENV, RUNPOD_YOLO_BASE_MODEL_URL_SHA256_ENV)
 
 class RunPodRequest(Protocol):
     def __call__(self, method: str, path: str, *, json_body: Record | None = None,
@@ -37,6 +34,10 @@ class RunPodPayload:
             "inference_smoke": True,
             "timeout_seconds": self.timeout(),
         }
+        if task.get('feedback_strategy')=='real_photo_vlm':
+            payload.update(feedback_strategy='real_photo_vlm', class_ids=task['selected_accessory_ids'],
+                           test_class_counts=task['split_class_instance_counts']['test'],
+                           unsupported_by_real_data=task['unsupported_by_real_data'])
         archive_path = Path(str(archive.get("path") or ""))
         inline_limit = self.inline_limit()
         if inline_limit and archive_path.exists() and archive_path.stat().st_size <= inline_limit:
@@ -58,6 +59,9 @@ class RunPodPayload:
         device = str(self.environment().get("VANTALINE_RUNPOD_YOLO_DEVICE", "") or "").strip()
         if device:
             payload["device"] = device
+        if task.get('feedback_strategy')=='real_photo_vlm':
+            from .real_photo_training_config import validate_runpod
+            validate_runpod(task['real_photo_training_configuration'],payload)
         return payload
 
 class RunPodSubmission:

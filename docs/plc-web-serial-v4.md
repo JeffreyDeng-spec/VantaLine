@@ -151,3 +151,8 @@ Bootstrap location composition retains the existing plc_web_serial_state.json lo
 Cost service composition is initialized immediately after the retained legacy PLC route slot; those PLC route bodies, registration order, browser ownership and serial prohibition remain unchanged. The early PipelineTaskStore constructor stores suppliers only and performs no database or physical operation.
 
 DetectionWorkflows closes internal ordinary/AI/publication/capture routing without adding PLC dispatch. The no-dispatch source contract follows root aliases through the actual graph to both original analysis implementations, checks the real pinned teacher route, and rejects class/decorator import shadowing. Dedicated camera provenance, browser leases, actual ACK and uncertain-write no-retry rules remain unchanged. Synthetic graph tests perform no physical PLC I/O.
+
+
+Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.
+
+An ordinary upload's optional capture-session identifier is feedback grouping metadata only. It never asserts a PLC camera request, station lease or dispatch. Non-PLC camera frames can therefore remain in one dataset source group while using ordinary image detection.

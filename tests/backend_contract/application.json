@@ -1103,6 +1103,17 @@
         },
         "Body_analyze_image_api_analyze_image_post": {
           "properties": {
+            "capture_session_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capture Session Id"
+            },
             "file": {
               "contentMediaType": "application/octet-stream",
               "title": "File",
@@ -5469,6 +5480,61 @@
           "summary": "Mask"
         }
       },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/masks/{mask_id}/image": {
+        "get": {
+          "operationId": "mask_image_api_ai_tasks__task_id__real_photo_samples__sample_id__masks__mask_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "mask_id",
+              "required": true,
+              "schema": {
+                "title": "Mask Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Mask Image"
+        }
+      },
       "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/relabel": {
         "post": {
           "operationId": "relabel_api_ai_tasks__task_id__real_photo_samples__sample_id__relabel_post",
@@ -5513,6 +5579,52 @@
             }
           },
           "summary": "Relabel"
+        }
+      },
+      "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/versions": {
+        "get": {
+          "operationId": "versions_api_ai_tasks__task_id__real_photo_samples__sample_id__versions_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Versions"
         }
       },
       "/api/analyze/camera": {
@@ -14371,6 +14483,38 @@
       "include_in_schema": true,
       "kind": "route",
       "methods": [
+        "GET"
+      ],
+      "name": "versions",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/versions",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "mask_image",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/masks/{mask_id}/image",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
         "POST"
       ],
       "name": "update_rules",
@@ -16814,6 +16958,7 @@
   ],
   "shutdown": [
     "shutdown_application"
+
   ],
   "startup": [
     "verify_label_list_database",
@@ -16821,6 +16966,7 @@
     "start_ai_mcp_warmup",
     "start_worker_training_watcher",
     "start_yolo_model_warmup",
+    "start_real_photo_training_dispatcher",
     "<lambda>",
     "start",
     "resume_image_worker_queue",

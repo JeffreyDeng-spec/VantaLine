@@ -1535,3 +1535,12 @@ deltas restore the older assembly for its retained assertions; they do not
 represent current source locations. Positive and adverse checks cover changed
 repository timing/owner/import, missing or reordered nodes, route/shutdown order
 and corrupted delta regions. This is test adaptation, with no production change.
+
+
+The third real-photo batch includes Web dispatch/UI and compatible local/RunPod held-out evaluation. Release code with account admission and training execution disabled. Installing code is distinct from commissioning the dedicated review login and RunPod image. Do not claim a worker image supports the new strategy until a real held-out job has returned per-class metrics; existing images fail explicitly when metrics are absent.
+
+The `Build released YOLO worker` workflow accepts only a published, non-prerelease immutable VantaLine tag whose exact SHA is on main. It checks out that SHA, builds the Linux amd64 training container, records OCI release/commit labels and uploads `yolo-worker-release.json` with the image digest. Existing commit tags are not intentionally rebuilt. RunPod commissioning must select the recorded digest and verify held-out evaluation; this workflow does not change an endpoint or production training flags.
+
+The released worker image uses the main repository-owned `<repository>-real-photo-yolo-worker` GHCR package, separate from the historical standalone worker package. Preserve the previous endpoint digest for whole-release reconciliation and rollback.
+
+The released real-photo GPU image inherits the existing public training runtime by immutable digest `sha256:001b40ca66148beef5cf8f76b75897ecd7207337335d0a7feb978d041096d9fc`, retaining its native libraries and controlled `/models/vantaline-yolo-base.pt` checkpoint. The build verifies checkpoint SHA-256 `646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b` and fails on a missing or changed file before publishing the new released handler. A default bare PyTorch Docker build still requires an explicitly supplied controlled checkpoint at runtime; it is not the production commissioning image.

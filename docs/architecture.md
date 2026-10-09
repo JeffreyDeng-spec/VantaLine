@@ -2220,3 +2220,14 @@ deltas restore the older assembly for its retained assertions; they do not
 represent current source locations. Positive and adverse checks cover changed
 repository timing/owner/import, missing or reordered nodes, route/shutdown order
 and corrupted delta regions. This is test adaptation, with no production change.
+
+
+The accepted-real-photo dispatcher exports group-disjoint original-only YOLO datasets with frozen labels/reviews and full class order. Local/RunPod held-out evaluation yields unavailable metrics for unsupported categories; candidates remain manual and collection continues. Supplemental masks use a separate explicit dispatcher and have no training admission effect. Training submission is reserved durably and never replayed after an uncertain outcome.
+
+Camera inspection without a PLC lease may use the ordinary image endpoint with bounded `capture_session_id` metadata, grouping its real-photo feedback by the browser capture session. This metadata grants no camera dispatch or PLC capability; the leased dedicated camera endpoint retains its existing physical contract.
+
+Real-photo scheduling freezes source IDs at the cumulative review trigger while labels are still pending. Later arrivals cannot starve the cohort; ready review and assessment jobs have queue precedence. Explicit changed annotation versions may be rechecked without new originals, preserving the real-photo count and prior cumulative cutoff. Incomplete annotation preparation is archived before pausing; failed review or assessment pauses the controller.
+
+Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
+
+The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.

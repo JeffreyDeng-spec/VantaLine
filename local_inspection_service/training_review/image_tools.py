@@ -20,7 +20,8 @@ def crop(source, target, bounds, scale=1):
         size=[round((x2-x1)*scale),round((y2-y1)*scale)]
         if min(size)<1 or max(size)>4096 or size[0]*size[1]>16000000:
             raise ValueError('crop output exceeds bounds')
-        im.crop(pixels).resize(size,Image.Resampling.LANCZOS).save(target,'PNG')
+        resampler=getattr(Image,'Resampling',Image).LANCZOS
+        im.crop(pixels).resize(size,resampler).save(target,'PNG')
     evidence={'source':source,'crop_pixels':pixels,'output_size':size,'resampler':'LANCZOS','image':target}
     Path(target+'.transform.json').write_text(json.dumps(evidence))
     return evidence

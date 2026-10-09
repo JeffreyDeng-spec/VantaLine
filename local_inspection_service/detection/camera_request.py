@@ -1,3 +1,4 @@
+import hashlib
 """Dedicated camera analysis and durable browser dispatch evidence workflow."""
 from dataclasses import dataclass
 import hashlib
@@ -58,7 +59,7 @@ class CameraDetectionRequest:
         upload_path = self.images.UPLOAD_DIR() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
         try:
             self.images._business_files().write_bytes(upload_path, payload)
-            with group('camera_session:'+str(station['id'])+':'+plc_session_id):
+            with group('camera_session:'+str(station['id'])+':'+plc_session_id,original_hash=hashlib.sha256(payload).hexdigest()):
                 result = self.images.analyze_bgr()(image, request_id, model_id, image_path=upload_path)
             completed_dispatch = self.evidence.plc_web_serial_finish_camera_detection()(
                 str(station["id"]), dispatch_id, plc_session_id, result

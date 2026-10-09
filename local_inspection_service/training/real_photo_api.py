@@ -9,7 +9,7 @@ from fastapi import HTTPException, Response
 from pydantic import BaseModel
 from .real_photo_annotation import canonical
 from .real_photo_contracts import MODEL, STRATEGY, digest, approved, review_key, objects
-from .real_photo_provenance import source_group
+from .real_photo_provenance import source_group, original_sha, pixel_sha
 from ..storage.real_photo_feedback import RealPhotoRepository
 
 
@@ -75,26 +75,42 @@ class FeedbackService:
             raise HTTPException(403, '仅任务所属账户可操作实拍回流')
         return user, task
 
-    def classes(self, task, user):
+    def class_metadata(self, task, user):
         config = self.ports.config(user)
         ids = task.get('selected_accessory_ids') or task.get('accessory_ids') or []
         items = {i['id']:i for i in config.get('accessories', []) if i.get('id')}
         result = []
         for cid in ids:
             item = items.get(cid)
-            if not item:
-                raise HTTPException(409, '任务配件定义缺失')
+            if not item:raise HTTPException(409, '任务配件定义缺失')
             paths = self.ports.references(item)
-            if not paths:
-                raise HTTPException(409, '任务配件参考图缺失')
-            source = str(paths[0]); data = self.ports.read(source)
-            _, meta = canonical(data)
+            if not paths:raise HTTPException(409, '任务配件参考图缺失')
             result.append({'class_id':cid, 'name':str(item.get('name') or cid),
                            'definition':str(item.get('ai_profile') or item.get('description') or item.get('name') or cid)[:8000],
-                           'reference_path':source,'reference_sha256':meta['source_sha256']})
-        if not result or len(result) > 50:
-            raise HTTPException(409, '需要1至50个有效任务类别')
+                           'reference_path':str(paths[0])})
+        if not result or len(result)>50:raise HTTPException(409, '需要1至50个有效任务类别')
         return result
+
+    def classes(self, task, user):
+        result=self.class_metadata(task,user)
+        for item in result:
+            _,meta=canonical(self.ports.read(item['reference_path']))
+            item['reference_sha256']=meta['source_sha256']
+        return result
+
+    def sync_definitions(self,repo,state,task,user):
+        if not state or not state['enabled']:return state
+        try:
+            current=self.class_metadata(task,user)
+            previous=[{k:v for k,v in item.items() if k!='reference_sha256'} for item in state['classes']]
+            if current!=previous:
+                # Full image hashes are read only on a definition/reference identity change.
+                return repo.enable(user['id'],state['task_id'],self.classes(task,user),state['profiles'],True,state.get('business_context'))
+        except (HTTPException,ValueError,OSError):
+            repo.enable(user['id'],state['task_id'],state['classes'],state['profiles'],False)
+            repo.mutate(user['id'],state['task_id'],lambda s,c:s.update(pause_reason='当前任务类别或参考图不完整；修复后重新启用实拍回流'))
+            return repo.get(user['id'],state['task_id'])
+        return state
 
     def enable(self, identifier, request):
         user, task = self.task(identifier, True)
@@ -123,11 +139,12 @@ class FeedbackService:
         return self.status(identifier)
 
     def status(self, identifier):
-        user, _ = self.task(identifier)
+        user, task = self.task(identifier)
         if user['id'] not in accounts():
             return {'available':False,'strategy':STRATEGY}
         with self.repo() as repo:
             state = repo.get(user['id'], identifier)
+            state = self.sync_definitions(repo,state,task,user)
             jobs = repo.jobs(user['id'], identifier) if state else []
             stats = repo.statistics(user['id'], identifier) if state else {}
         if state is None:
@@ -141,6 +158,8 @@ class FeedbackService:
         public_jobs = [{k:j.get(k) for k in ('id','kind','status','created_at','elapsed_seconds','model','runner_version','usage','result')}
                        for j in jobs]
         for j in public_jobs:
+            if j['kind']=='mask' and isinstance(j.get('result'),dict):
+                j['result']={k:v for k,v in j['result'].items() if k!='path'}
             if (j.get('result') or {}).get('receipt'):
                 j['result']={k:v for k,v in j['result'].items() if k!='receipt'}
         accepted=approved(state)
@@ -223,8 +242,12 @@ class FeedbackService:
             # Once explicitly selected, do not fall back into legacy synthetic feedback, even paused.
             if not state['enabled']:
                 return True
-            self.task(task_id)
+            _,task=self.task(task_id)
+            state=self.sync_definitions(repo,state,task,user)
+            if not state['enabled']:return True
             source = record.get('source_image') or {}
+            if not (source_group.get() or record.get('source_group') or source.get('source_group')):
+                return True  # no ordinary/camera/video ingestion evidence; never harvest pretraining renders.
             path = source.get('path')
             if not path:
                 return True
@@ -232,6 +255,7 @@ class FeedbackService:
                 data = self.ports.read(str(path)); _, meta = canonical(data)
             except (ValueError, OSError):
                 return True
+            if original_sha.get() and meta['source_sha256']!=original_sha.get():return True
             group = record.get('source_group') or source.get('source_group') or source_group.get()
             if not group:
                 for key in ('source_video_id','camera_session_id','upload_batch_id'):
@@ -253,6 +277,8 @@ class FeedbackService:
         except Exception as exc:print('real-photo local capture unavailable: '+type(exc).__name__,flush=True)
 
     def _capture_local(self,result,request_id,image_path,pixels,encode_pixels):
+        if not source_group.get():return
+        if pixel_sha.get() and digest(pixels.tobytes())!=pixel_sha.get():return
         user=self.ports.user()
         if user.get('id') not in accounts():return
         model=result.get('model') or {}
@@ -321,10 +347,31 @@ class FeedbackService:
             if not state['enabled']:raise HTTPException(409,'请先启用实拍回流')
             sample=next((s for s in state['samples'] if s['sample_id']==sample_id),None)
             if sample is None:raise HTTPException(404,'样本不存在')
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='mask' AND status IN ('queued','running')",(user['id'],identifier))
+            if any(j['inputs']['sample']['sample_id']==sample_id for j in repo.rows(c)):raise HTTPException(409,'此图已有按需 mask 任务')
             repo.enqueue(c,state,'mask','mask:'+uuid.uuid4().hex,
                          {'sample':sample,'classes':state['classes'],'image_profile':reference})
         with self.repo() as repo:repo.mutate(user['id'],identifier,update)
         return self.status(identifier)
+
+    def versions(self,identifier,sample_id):
+        user,_=self.task(identifier)
+        with self.repo() as repo:state=repo.get(user['id'],identifier)
+        sample=next((s for s in (state or {}).get('samples',[]) if s['sample_id']==sample_id),None)
+        if sample is None:raise HTTPException(404,'样本不存在')
+        return {'annotations':sample.get('annotation_history',[])+([sample['annotation']] if sample.get('annotation') else []),
+                'reviews':sample.get('review_history',[])+([sample['review']] if sample.get('review') else []),
+                'masks':[{k:m.get(k) for k in ('job_id','model_profile','annotation_version','geometry','mapping_status','mask_sha256')} for m in sample.get('masks',[])]}
+
+    def mask_image(self,identifier,sample_id,mask_id):
+        user,_=self.task(identifier)
+        with self.repo() as repo:state=repo.get(user['id'],identifier)
+        sample=next((s for s in (state or {}).get('samples',[]) if s['sample_id']==sample_id),None)
+        mask=next((m for m in (sample or {}).get('masks',[]) if m['job_id']==mask_id),None)
+        if mask is None:raise HTTPException(404,'Mask 附件不存在')
+        data=self.ports.read(mask['path'])
+        if digest(data)!=mask['mask_sha256']:raise HTTPException(409,'Mask 附件内容已改变')
+        return Response(data,media_type='image/png',headers={'Cache-Control':'private, no-store'})
 
     def import_historical(self,identifier,sample_id,request):
         user,_=self.task(identifier,True)
@@ -375,6 +422,10 @@ def compose(app, service):
         return {'geometry':meta,'objects':boxes,'mapping_status':'requires_explicit_original_geometry_confirmation'}
     @app.post('/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/mask')
     def mask(task_id:str,sample_id:str):return service.request_mask(task_id,sample_id)
+    @app.get('/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/versions')
+    def versions(task_id:str,sample_id:str):return service.versions(task_id,sample_id)
+    @app.get('/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/masks/{mask_id}/image')
+    def mask_image(task_id:str,sample_id:str,mask_id:str):return service.mask_image(task_id,sample_id,mask_id)
     return service
 
 
