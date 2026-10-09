@@ -1891,3 +1891,11 @@ remains valid evidence; corrected wiring does not diagnose that failure or prove
 production physical-storage latency. A new complete fixed-environment result and
 required CI are still necessary. No PostgreSQL write durability setting or
 production topology changes.
+
+The default Web entry now constructs its infrastructure through the tested
+typed builder, retaining its explicitly preallocated artifact owner for root
+discovery and the existing mkdir, registration and startup/shutdown order.
+This internal change requires no new production setting, service or data move.
+The CI infrastructure smoke is synthetic and does not certify complete repeated
+Web lifecycle or release acceptance; retain those final gates and whole-package
+rollback.

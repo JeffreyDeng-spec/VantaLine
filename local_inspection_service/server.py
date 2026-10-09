@@ -829,19 +829,69 @@ from .auth.sessions import SessionSettings
 from .auth.login_limits import LoginLimitSettings
 
 from .runtime.application_foundation import FoundationInputs, build_foundation
-_foundation = build_foundation(FoundationInputs(
-    environment=os.environ,
-    data_directory=DATA_DIR, auth_path=AUTH_PATH,
-    legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID,
-    authentication=AuthenticationSettings(
-        password_iterations=lambda iterations=PASSWORD_HASH_ITERATIONS: iterations,
-        sessions=lambda cookie=AUTH_SESSION_COOKIE, ttl=AUTH_SESSION_TTL_SECONDS,
-                        persist=AUTH_SESSION_PERSIST_INTERVAL_SECONDS: SessionSettings(cookie, ttl, persist),
-        login_limits=lambda window=LOGIN_RATE_LIMIT_WINDOW_SECONDS, attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS,
-                            lockout=LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: LoginLimitSettings(window, attempts, lockout),
-        legacy_owner=lambda owner=LEGACY_OWNER_ID: owner,
-    ),
-))
+from .runtime.path_configuration_composition import PathConfigurationWorkflows, PathConfigurationLocations
+from .runtime.service_path_ports import ServicePathSettings, PathProjectionPolicy, PathIdentity
+from .config.app_store_ports import AppConfigRows
+from local_inspection_service.model_providers.configuration_ports import JsonDefaults, ImageDefaults, ValidationCapabilities, PublicUrlCapabilities
+from local_inspection_service.model_providers.key_material_ports import KeyIdentityRuntime as _KeyIdentityRuntime, SecretPaths as _SecretPaths, SecretCodec as _SecretCodec, SecretFileOperations as _SecretFileOperations, SecretEnvironment as _SecretEnvironment, SecretPolicy as _SecretPolicy, SecretStoreAccess as _SecretStoreAccess
+from local_inspection_service.model_providers.key_registry_ports import KeyMaterial as _KeyMaterial, KeyPresentation as _KeyPresentation, JsonKeyPolicy as _JsonKeyPolicy, ImageKeyPolicy as _ImageKeyPolicy, AgentKeyPolicy as _AgentKeyPolicy
+from local_inspection_service.model_providers.proxy_runtime_ports import ProxySettings, ProxyCalls, ProxyTransports
+from local_inspection_service.model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
+from local_inspection_service.model_providers.legacy_settings_ports import LegacySettingsIO, LegacyPresentation, LegacyJsonPolicy, LegacyJsonCallbacks, LegacyImagePolicy, LegacyImageEnvironment, LegacyImageCallbacks
+from local_inspection_service.agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
+from .model_providers.configuration_composition import ProviderConfiguration
+from .model_providers.key_material_ports import KeyIdentityRuntime as _KeyIdentityRuntime, SecretPaths as _SecretPaths, SecretCodec as _SecretCodec, SecretFileOperations as _SecretFileOperations, SecretEnvironment as _SecretEnvironment, SecretPolicy as _SecretPolicy, SecretStoreAccess as _SecretStoreAccess
+from .model_providers.key_registry_ports import KeyMaterial as _KeyMaterial, KeyPresentation as _KeyPresentation, JsonKeyPolicy as _JsonKeyPolicy, ImageKeyPolicy as _ImageKeyPolicy, AgentKeyPolicy as _AgentKeyPolicy
+from .model_providers.proxy_runtime_ports import ProxySettings, ProxyCalls, ProxyTransports
+from .model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
+from .agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
+from .runtime.infrastructure import InfrastructureInputs, ConfigurationRowCodecs, build_infrastructure
+from .model_providers.configuration_inputs import ProviderConfigurationInputs
+_infrastructure = build_infrastructure(InfrastructureInputs(
+    foundation=FoundationInputs(environment=os.environ, data_directory=DATA_DIR, auth_path=AUTH_PATH, legacy_owner=LEGACY_OWNER_ID, system_owner=SYSTEM_OWNER_ID, authentication=AuthenticationSettings(password_iterations=lambda iterations=PASSWORD_HASH_ITERATIONS: iterations, sessions=lambda cookie=AUTH_SESSION_COOKIE, ttl=AUTH_SESSION_TTL_SECONDS, persist=AUTH_SESSION_PERSIST_INTERVAL_SECONDS: SessionSettings(cookie, ttl, persist), login_limits=lambda window=LOGIN_RATE_LIMIT_WINDOW_SECONDS, attempts=LOGIN_RATE_LIMIT_MAX_ATTEMPTS, lockout=LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: LoginLimitSettings(window, attempts, lockout), legacy_owner=lambda owner=LEGACY_OWNER_ID: owner)), cv2=lambda: cv2, pil=lambda: Image,
+    locations=PathConfigurationLocations(directories=lambda: (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, AUTO_OPTIMIZE_DIR, IMAGE_WORKER_LOG_DIR, BACKGROUND_DIR, BACKGROUND_SETS_DIR), primary=lambda: CONFIG_PATH, backup=lambda: CONFIG_BACKUP_PATH, data=lambda: DATA_DIR, migration_roots=lambda: (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR)), paths=ServicePathSettings(ROOT=lambda: ROOT, APP_DIR=lambda: APP_DIR, OUTPUT_DIR=lambda: OUTPUT_DIR), path_policy=PathProjectionPolicy(STALE_REPO_PATH_PREFIXES=lambda: STALE_REPO_PATH_PREFIXES, REMOVED_PHASE1_PUBLIC_CONFIG_KEYS=lambda: REMOVED_PHASE1_PUBLIC_CONFIG_KEYS, LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID, SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID),
+    rows=ConfigurationRowCodecs(config_from_rows, app_config_rows, accessory_rows),
+    defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS,
+    provider=ProviderConfigurationInputs(        json_defaults=JsonDefaults(lambda: AI_DEFAULT_MODELS, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_BASE_URLS, lambda: AI_DEFAULT_PROVIDER, lambda: AI_PROVIDER_LABELS),
+        image_defaults=ImageDefaults(lambda: IMAGE_GENERATION_DEFAULT_MODELS, lambda: IMAGE_GENERATION_DEFAULT_BASE_URLS, lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_API_KEY_ENVS, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: IMAGE_GENERATION_PROVIDER_KEYS, lambda: IMAGE_GENERATION_PROVIDER_LABELS),
+        validation_capabilities=ValidationCapabilities(lambda: AI_SUPPORTED_PROVIDERS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, lambda: HTTPException, lambda: re.fullmatch, lambda: urlsplit),
+        public_url_capabilities=PublicUrlCapabilities(lambda: urlsplit, lambda: urlunsplit, lambda: bounded_text),
+        key_identity_runtime=_KeyIdentityRuntime(sha256=lambda: hashlib.sha256, time_ns=lambda: time.time_ns, substitute=lambda: re.sub, fullmatch=lambda: re.fullmatch, key_id=lambda: ai_key_id),
+        secret_paths=_SecretPaths(directory=lambda: DATA_DIR, file=lambda: LOCAL_SECRET_ENV_PATH),
+        secret_codec=_SecretCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+        secret_file_operations=_SecretFileOperations(chmod=lambda: os.chmod, replace=lambda: os.replace),
+        secret_environment=_SecretEnvironment(values=lambda: os.environ),
+        secret_policy=_SecretPolicy(fullmatch=lambda: re.fullmatch, validate=lambda: validate_ai_key_env, default_environment=lambda: default_secret_env_name, identity=lambda: secret_key_item_id, text=lambda: bounded_text),
+        secret_store_access=_SecretStoreAccess(load=lambda: load_local_secret_env, save=lambda: save_local_secret_env, set=lambda: set_local_secret_env),
+        key_material=_KeyMaterial(environment=lambda: local_secret_env_value, identity=lambda: secret_key_item_id, default_environment=lambda: default_secret_env_name),
+        key_presentation=_KeyPresentation(text=lambda: bounded_text, mask=lambda: mask_secret, json_label=lambda: ai_provider_label, image_label=lambda: image_generation_provider_label, agent_label=lambda: agent_provider_label),
+        json_key_policy=_JsonKeyPolicy(default_provider=lambda: AI_DEFAULT_PROVIDER, supported=lambda: AI_SUPPORTED_PROVIDERS),
+        image_key_policy=_ImageKeyPolicy(default_provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, supported=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, validate=lambda: validate_image_generation_provider),
+        agent_key_policy=_AgentKeyPolicy(supported=lambda: AGENT_SUPPORTED_PROVIDERS, normalize=lambda: normalize_agent_provider),
+        proxy_settings=ProxySettings(AI_PROXY_ENV_NAMES=lambda: AI_PROXY_ENV_NAMES, AI_LOCAL_PROXY_URL=lambda: AI_LOCAL_PROXY_URL, AI_AUTO_LOCAL_PROXY_ENV=lambda: AI_AUTO_LOCAL_PROXY_ENV),
+        proxy_calls=ProxyCalls(validate_ai_proxy_url=lambda: validate_ai_proxy_url, ai_proxy_url_from_environment=lambda: ai_proxy_url_from_environment, env_flag_enabled=lambda: env_flag_enabled, local_proxy_available=lambda: local_proxy_available),
+        proxy_transports=ProxyTransports(os=lambda: os, socket=lambda: socket, urllib=lambda: urllib),
+        local_model_config_files=LocalModelConfigFiles(ensure_dirs=lambda: ensure_dirs, _business_files=lambda: _business_files, AI_LOCAL_CONFIG_PATH=lambda: AI_LOCAL_CONFIG_PATH, DATA_DIR=lambda: DATA_DIR, ai_local_config_temp_path=lambda: ai_local_config_temp_path, DEFAULT_AI_CONFIG=lambda: DEFAULT_AI_CONFIG, HTTPException=lambda: HTTPException),
+        local_json_model_policy=LocalJsonModelPolicy(AI_DEFAULT_PROVIDER=lambda: AI_DEFAULT_PROVIDER, AI_SUPPORTED_PROVIDERS=lambda: AI_SUPPORTED_PROVIDERS, AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS, default_ai_model=lambda: default_ai_model, default_ai_base_url=lambda: default_ai_base_url, validate_ai_proxy_url=lambda: validate_ai_proxy_url, validate_ai_timeout=lambda: validate_ai_timeout, normalize_ai_key_items=lambda: normalize_ai_key_items, ai_keys_for_provider=lambda: ai_keys_for_provider),
+        local_image_model_policy=LocalImageModelPolicy(IMAGE_GENERATION_DEFAULT_PROVIDER=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, IMAGE_GENERATION_SUPPORTED_PROVIDERS=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, default_image_generation_model=lambda: default_image_generation_model, default_image_generation_base_url=lambda: default_image_generation_base_url, validate_ai_base_url=lambda: validate_ai_base_url, validate_image_generation_timeout=lambda: validate_image_generation_timeout, normalize_image_key_items=lambda: normalize_image_key_items, image_keys_for_provider=lambda: image_keys_for_provider),
+        legacy_settings_i_o=LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
+        legacy_presentation=LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
+        legacy_json_policy=LegacyJsonPolicy(lambda: AI_DEFAULT_PROVIDER, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_TIMEOUT_SECONDS, lambda: AI_MODEL_OPTIONS, lambda: AI_SUPPORTED_PROVIDERS, lambda: AI_AUTO_LOCAL_PROXY_ENV),
+        legacy_json_callbacks=LegacyJsonCallbacks(lambda: default_ai_base_url, lambda: validate_ai_timeout, lambda: normalize_ai_key_items, lambda: ai_keys_for_provider, lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_label, lambda: env_flag_enabled),
+        legacy_image_policy=LegacyImagePolicy(lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, lambda: IMAGE_GENERATION_MODEL_OPTIONS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS),
+        legacy_image_environment=LegacyImageEnvironment(lambda: IMAGE_GENERATION_PROVIDER_ENV, lambda: IMAGE_GENERATION_MODEL_ENV, lambda: IMAGE_GENERATION_BASE_URL_ENV, lambda: IMAGE_GENERATION_TIMEOUT_ENV, lambda: IMAGE_GENERATION_NAMED_API_KEY_ENV, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
+        legacy_image_callbacks=LegacyImageCallbacks(lambda: default_image_generation_model, lambda: default_image_generation_base_url, lambda: default_image_generation_api_key_env, lambda: validate_image_generation_timeout, lambda: normalize_image_key_items, lambda: image_keys_for_provider, lambda: image_generation_provider_label, lambda: image_generation_provider_key),
+        agent_settings_defaults=_AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
+        agent_provider_policy=_AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
+        agent_settings_keys=_AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
+        agent_settings_paths=_AgentSettingsPaths(file=lambda: AGENT_LOCAL_CONFIG_PATH, directory=lambda: DATA_DIR),
+        agent_settings_codec=_AgentSettingsCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
+        agent_settings_files=_AgentSettingsFiles(replace=lambda: os.replace, chmod=lambda: os.chmod),
+        agent_settings_persistence=_AgentSettingsPersistence(normalize=lambda: normalize_agent_config, keys=lambda: normalize_agent_key_items, persist=lambda: persist_secret_key_items)),
+    legacy_label=lambda: legacy_label_settings(), agent_defaults=lambda: DEFAULT_AGENT_CONFIG,
+    cache_ttl=lambda: STORE_READ_CACHE_TTL_SECONDS, clock=lambda: time.monotonic()),
+    artifacts=_artifact_composition)
+_foundation = _infrastructure.foundation
 _runtime_repository_owner = _foundation.repositories
 _runtime_repositories = _runtime_repository_owner.factory
 _runtime_repository_access = _runtime_repository_owner.access
@@ -1882,9 +1932,7 @@ from .runtime.directories import ServiceDirectories, LocalPathMigration
 from .runtime.path_configuration_composition import PathConfigurationWorkflows, PathConfigurationLocations
 from .runtime.service_path_ports import ServicePathSettings, PathProjectionPolicy, PathIdentity
 from .config.app_store_ports import AppConfigRows
-_path_configuration = PathConfigurationWorkflows(
-    locations=PathConfigurationLocations(directories=lambda: (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, AUTO_OPTIMIZE_DIR, IMAGE_WORKER_LOG_DIR, BACKGROUND_DIR, BACKGROUND_SETS_DIR), primary=lambda: CONFIG_PATH, backup=lambda: CONFIG_BACKUP_PATH, data=lambda: DATA_DIR, migration_roots=lambda: (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR)),
-    settings=ServicePathSettings(ROOT=lambda: ROOT, APP_DIR=lambda: APP_DIR, OUTPUT_DIR=lambda: OUTPUT_DIR), path_policy=PathProjectionPolicy(STALE_REPO_PATH_PREFIXES=lambda: STALE_REPO_PATH_PREFIXES, REMOVED_PHASE1_PUBLIC_CONFIG_KEYS=lambda: REMOVED_PHASE1_PUBLIC_CONFIG_KEYS, LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID, SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID), identity=PathIdentity(_request_user=lambda: _request_user, user_is_admin=lambda: user_is_admin), files=lambda: _business_files, rows=AppConfigRows(runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, config_from_rows=lambda: config_from_rows, app_config_rows=lambda: app_config_rows, accessory_rows=lambda: accessory_rows), defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS)
+_path_configuration = _infrastructure.paths
 _service_directories = _path_configuration.directories
 ensure_dirs = _service_directories.ensure
 
@@ -3566,44 +3614,7 @@ from local_inspection_service.agent.settings_policy import AgentSettingsPolicy a
 from local_inspection_service.agent.legacy_settings_store import LegacyAgentSettingsStore as _LegacyAgentSettingsStore
 from local_inspection_service.agent.settings_ports import AgentSettingsDefaults as _AgentSettingsDefaults, AgentProviderPolicy as _AgentProviderPolicy, AgentSettingsKeys as _AgentSettingsKeys, AgentSettingsAccess as _AgentSettingsAccess, AgentSettingsAuthorization as _AgentSettingsAuthorization, AgentSettingsPresentation as _AgentSettingsPresentation, AgentSettingsPaths as _AgentSettingsPaths, AgentSettingsCodec as _AgentSettingsCodec, AgentSettingsFiles as _AgentSettingsFiles, AgentSettingsPersistence as _AgentSettingsPersistence
 from .model_providers.configuration_composition import ProviderConfiguration
-_provider_configuration = ProviderConfiguration(
-    json_defaults=JsonDefaults(lambda: AI_DEFAULT_MODELS, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_BASE_URLS, lambda: AI_DEFAULT_PROVIDER, lambda: AI_PROVIDER_LABELS),
-    image_defaults=ImageDefaults(lambda: IMAGE_GENERATION_DEFAULT_MODELS, lambda: IMAGE_GENERATION_DEFAULT_BASE_URLS, lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_API_KEY_ENVS, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: IMAGE_GENERATION_PROVIDER_KEYS, lambda: IMAGE_GENERATION_PROVIDER_LABELS),
-    validation_capabilities=ValidationCapabilities(lambda: AI_SUPPORTED_PROVIDERS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, lambda: HTTPException, lambda: re.fullmatch, lambda: urlsplit),
-    public_url_capabilities=PublicUrlCapabilities(lambda: urlsplit, lambda: urlunsplit, lambda: bounded_text),
-    key_identity_runtime=_KeyIdentityRuntime(sha256=lambda: hashlib.sha256, time_ns=lambda: time.time_ns, substitute=lambda: re.sub, fullmatch=lambda: re.fullmatch, key_id=lambda: ai_key_id),
-    secret_paths=_SecretPaths(directory=lambda: DATA_DIR, file=lambda: LOCAL_SECRET_ENV_PATH),
-    secret_codec=_SecretCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
-    secret_file_operations=_SecretFileOperations(chmod=lambda: os.chmod, replace=lambda: os.replace),
-    secret_environment=_SecretEnvironment(values=lambda: os.environ),
-    secret_policy=_SecretPolicy(fullmatch=lambda: re.fullmatch, validate=lambda: validate_ai_key_env, default_environment=lambda: default_secret_env_name, identity=lambda: secret_key_item_id, text=lambda: bounded_text),
-    secret_store_access=_SecretStoreAccess(load=lambda: load_local_secret_env, save=lambda: save_local_secret_env, set=lambda: set_local_secret_env),
-    key_material=_KeyMaterial(environment=lambda: local_secret_env_value, identity=lambda: secret_key_item_id, default_environment=lambda: default_secret_env_name),
-    key_presentation=_KeyPresentation(text=lambda: bounded_text, mask=lambda: mask_secret, json_label=lambda: ai_provider_label, image_label=lambda: image_generation_provider_label, agent_label=lambda: agent_provider_label),
-    json_key_policy=_JsonKeyPolicy(default_provider=lambda: AI_DEFAULT_PROVIDER, supported=lambda: AI_SUPPORTED_PROVIDERS),
-    image_key_policy=_ImageKeyPolicy(default_provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, supported=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, validate=lambda: validate_image_generation_provider),
-    agent_key_policy=_AgentKeyPolicy(supported=lambda: AGENT_SUPPORTED_PROVIDERS, normalize=lambda: normalize_agent_provider),
-    proxy_settings=ProxySettings(AI_PROXY_ENV_NAMES=lambda: AI_PROXY_ENV_NAMES, AI_LOCAL_PROXY_URL=lambda: AI_LOCAL_PROXY_URL, AI_AUTO_LOCAL_PROXY_ENV=lambda: AI_AUTO_LOCAL_PROXY_ENV),
-    proxy_calls=ProxyCalls(validate_ai_proxy_url=lambda: validate_ai_proxy_url, ai_proxy_url_from_environment=lambda: ai_proxy_url_from_environment, env_flag_enabled=lambda: env_flag_enabled, local_proxy_available=lambda: local_proxy_available),
-    proxy_transports=ProxyTransports(os=lambda: os, socket=lambda: socket, urllib=lambda: urllib),
-    local_model_config_files=LocalModelConfigFiles(ensure_dirs=lambda: ensure_dirs, _business_files=lambda: _business_files, AI_LOCAL_CONFIG_PATH=lambda: AI_LOCAL_CONFIG_PATH, DATA_DIR=lambda: DATA_DIR, ai_local_config_temp_path=lambda: ai_local_config_temp_path, DEFAULT_AI_CONFIG=lambda: DEFAULT_AI_CONFIG, HTTPException=lambda: HTTPException),
-    local_json_model_policy=LocalJsonModelPolicy(AI_DEFAULT_PROVIDER=lambda: AI_DEFAULT_PROVIDER, AI_SUPPORTED_PROVIDERS=lambda: AI_SUPPORTED_PROVIDERS, AI_DEFAULT_TIMEOUT_SECONDS=lambda: AI_DEFAULT_TIMEOUT_SECONDS, default_ai_model=lambda: default_ai_model, default_ai_base_url=lambda: default_ai_base_url, validate_ai_proxy_url=lambda: validate_ai_proxy_url, validate_ai_timeout=lambda: validate_ai_timeout, normalize_ai_key_items=lambda: normalize_ai_key_items, ai_keys_for_provider=lambda: ai_keys_for_provider),
-    local_image_model_policy=LocalImageModelPolicy(IMAGE_GENERATION_DEFAULT_PROVIDER=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, IMAGE_GENERATION_SUPPORTED_PROVIDERS=lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS, IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, default_image_generation_model=lambda: default_image_generation_model, default_image_generation_base_url=lambda: default_image_generation_base_url, validate_ai_base_url=lambda: validate_ai_base_url, validate_image_generation_timeout=lambda: validate_image_generation_timeout, normalize_image_key_items=lambda: normalize_image_key_items, image_keys_for_provider=lambda: image_keys_for_provider),
-    legacy_settings_i_o=LegacySettingsIO(lambda: load_ai_local_config, lambda: os.environ, lambda: ai_proxy_url_from_config, lambda: validate_ai_base_url, lambda: HTTPException),
-    legacy_presentation=LegacyPresentation(lambda: public_ai_key_items, lambda: mask_secret, lambda: public_ai_base_url, lambda: masked_url_for_status),
-    legacy_json_policy=LegacyJsonPolicy(lambda: AI_DEFAULT_PROVIDER, lambda: AI_DEFAULT_MODEL, lambda: AI_DEFAULT_TIMEOUT_SECONDS, lambda: AI_MODEL_OPTIONS, lambda: AI_SUPPORTED_PROVIDERS, lambda: AI_AUTO_LOCAL_PROXY_ENV),
-    legacy_json_callbacks=LegacyJsonCallbacks(lambda: default_ai_base_url, lambda: validate_ai_timeout, lambda: normalize_ai_key_items, lambda: ai_keys_for_provider, lambda: secret_key_item_id, lambda: bounded_text, lambda: ai_provider_label, lambda: env_flag_enabled),
-    legacy_image_policy=LegacyImagePolicy(lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, lambda: IMAGE_GENERATION_MODEL_OPTIONS, lambda: IMAGE_GENERATION_SUPPORTED_PROVIDERS),
-    legacy_image_environment=LegacyImageEnvironment(lambda: IMAGE_GENERATION_PROVIDER_ENV, lambda: IMAGE_GENERATION_MODEL_ENV, lambda: IMAGE_GENERATION_BASE_URL_ENV, lambda: IMAGE_GENERATION_TIMEOUT_ENV, lambda: IMAGE_GENERATION_NAMED_API_KEY_ENV, lambda: IMAGE_GENERATION_API_KEY_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
-    legacy_image_callbacks=LegacyImageCallbacks(lambda: default_image_generation_model, lambda: default_image_generation_base_url, lambda: default_image_generation_api_key_env, lambda: validate_image_generation_timeout, lambda: normalize_image_key_items, lambda: image_keys_for_provider, lambda: image_generation_provider_label, lambda: image_generation_provider_key),
-    agent_settings_defaults=_AgentSettingsDefaults(cursor=lambda: AGENT_PROVIDER_CURSOR, openai=lambda: AGENT_PROVIDER_OPENAI_COMPATIBLE, config=lambda: DEFAULT_AGENT_CONFIG, cursor_url=lambda: AGENT_CURSOR_DEFAULT_BASE_URL, statuses=lambda: AGENT_CONNECTION_STATUSES),
-    agent_provider_policy=_AgentProviderPolicy(split_url=lambda: urlsplit, host=lambda: agent_base_url_host, is_cursor=lambda: is_cursor_base_url, detect=lambda: detect_agent_provider_from_base_url, normalize=lambda: normalize_agent_provider, options=lambda: normalize_agent_model_options),
-    agent_settings_keys=_AgentSettingsKeys(validate_environment=lambda: validate_ai_key_env, normalize=lambda: normalize_agent_key_items, for_provider=lambda: agent_keys_for_provider, environment_value=lambda: local_secret_env_value),
-    agent_settings_paths=_AgentSettingsPaths(file=lambda: AGENT_LOCAL_CONFIG_PATH, directory=lambda: DATA_DIR),
-    agent_settings_codec=_AgentSettingsCodec(loads=lambda: json.loads, dumps=lambda: json.dumps, decode_error=lambda: json.JSONDecodeError),
-    agent_settings_files=_AgentSettingsFiles(replace=lambda: os.replace, chmod=lambda: os.chmod),
-    agent_settings_persistence=_AgentSettingsPersistence(normalize=lambda: normalize_agent_config, keys=lambda: normalize_agent_key_items, persist=lambda: persist_secret_key_items),
-)
+_provider_configuration = _infrastructure.provider
 
 _provider_configuration_defaults = _provider_configuration.defaults
 _provider_configuration_validation = _provider_configuration.validation
@@ -4476,18 +4487,18 @@ def initialize_auto_optimize_for_pipeline_task(task: dict[str, Any], config: dic
 # or database connection is retained in shared cache state.
 from .runtime.read_caches import RequestReadCache, StoreReadCache, JsonFileReadCache
 
-_request_read_cache = RequestReadCache()
+_request_read_cache = _infrastructure.caches.request
 _read_path_cache = _request_read_cache.current
 read_path_cache_scope = _request_read_cache.scope
 
 # The unchanged TTL bounds cross-process writes; local writers invalidate keys.
 STORE_READ_CACHE_TTL_SECONDS = 5.0
-_store_cache = StoreReadCache(lambda: STORE_READ_CACHE_TTL_SECONDS, lambda: time.monotonic())
+_store_cache = _infrastructure.caches.store
 store_read_cache_get = _store_cache.get
 store_read_cache_put = _store_cache.put
 store_read_cache_invalidate = _store_cache.invalidate
 
-_json_cache = JsonFileReadCache(lambda: _business_files)
+_json_cache = _infrastructure.caches.json
 load_json_file_mtime_cached = _json_cache.load
 
 
@@ -12069,11 +12080,7 @@ def react_production_spa_enabled() -> bool:
 from .model_profiles.dependencies import ProfileApiDependencies
 from .label_inspection.model import legacy_settings as legacy_label_settings
 
-_model_profile_configuration = _provider_configuration.create_model_configuration(
-    runtime_repository=lambda: runtime_postgres_repository_or_none(),
-    legacy_label=lambda: legacy_label_settings(),
-    agent_defaults=lambda: DEFAULT_AGENT_CONFIG,
-)
+_model_profile_configuration = _infrastructure.models
 model_profile_service = _model_profile_configuration.service
 _model_profile_configuration.register(app, ProfileApiDependencies(
     require_admin=lambda: require_admin_role(),

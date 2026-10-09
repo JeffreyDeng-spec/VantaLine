@@ -1642,3 +1642,10 @@ remains valid evidence; corrected wiring does not diagnose that failure or prove
 production physical-storage latency. A new complete fixed-environment result and
 required CI are still necessary. No PostgreSQL write durability setting or
 production topology changes.
+
+The backend CI also runs `smoke_infrastructure.py` for the actual default and
+independent infrastructure graphs. It exercises synthetic owners, thread
+connections and artifact stores without deployment, paid inference or PLC IO.
+Passing this check does not replace the complete Web factory, performance,
+exact-head CI or whole-release runtime acceptance gates. Manifest v272 records
+the two real construction sources; historical snapshots are unchanged.

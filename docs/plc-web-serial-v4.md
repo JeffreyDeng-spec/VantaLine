@@ -206,3 +206,11 @@ before reversing those layers and inspecting its original PLC binding assertions
 This test adaptation preserves protocol, browser ownership, lease/ACK rules,
 uncertain-write non-retry behavior and the original Web shutdown order; it adds
 no PLC access or production worker transition.
+
+The default infrastructure builder adds one strict outer source delta before
+the existing path/Pose replay. Actual construction modules and unchanged
+business sources are verified; the original PLC regressions retain their
+assertions. HTTP route order, Web lifecycle positions, browser lease/ACK and
+uncertain-write non-retry behavior remain unchanged. Source manifest v272
+includes the real infrastructure modules for new tasks only; historical model
+snapshots are not rewritten. This change introduces no physical PLC IO.

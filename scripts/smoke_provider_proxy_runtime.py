@@ -1,4 +1,5 @@
 """Proxy selection and transport dispatch with no real network I/O."""
+from application_integration_source_contract import restore_infrastructure_root
 import ast,contextlib,os,sys,unittest
 from dataclasses import fields
 from pathlib import Path
@@ -60,7 +61,7 @@ class Contracts(unittest.TestCase):
   self.b['urllib'].request.ProxyHandler=handler;self.assertEqual(self.s.ai_urlopen(object(),{'proxy_url':'proxy'},timeout=1),'proxied');original.assert_called_once_with('handler')
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());alias=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets))
+  tree=ast.parse(restore_infrastructure_root((ROOT/'local_inspection_service/server.py').read_text()));alias=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets))
   self.assertEqual(ast.unparse(alias),'_provider_configuration.proxy')
   binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_configuration' for t in n.targets));count=0
   for group in [k for k in binding.keywords if k.arg in ('proxy_settings','proxy_calls','proxy_transports')]:

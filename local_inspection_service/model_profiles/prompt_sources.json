@@ -1,5 +1,5 @@
 {
-  "version": 271,
+  "version": 272,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -584,6 +584,8 @@
     "agent/state_composition.py",
     "agent/planning_composition.py",
     "agent/pose_execution_composition.py",
-    "runtime/path_configuration_composition.py"
+    "runtime/path_configuration_composition.py",
+    "runtime/infrastructure.py",
+    "model_providers/configuration_inputs.py"
   ]
 }
