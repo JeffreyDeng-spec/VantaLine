@@ -210,7 +210,7 @@ class WebShutdownTests(unittest.TestCase):
     def test_real_root_composition_drains_idle_owned_resources_without_startup(self):
         server = self.server
         owner = server.app.state.web_shutdown
-        self.assertEqual([hook.__name__ for hook in owner.hooks], ['set', 'stop'])
+        self.assertEqual([hook.__name__ for hook in owner.hooks], ['stop_real_photo_training_dispatcher', 'set', 'stop'])
         bindings = [('pdf-import', server.app.state.label_pdf_import.close),
             ('pipeline-auto-agent', server._pipeline_auto_agent_runtime.close),
             ('pipeline-advance', server._pipeline_advance_runtime.close),

@@ -86,7 +86,7 @@ class TrainingTaskWorkflowsContracts(unittest.TestCase):
             self.assertIsNone(web_identity.get())
             for graph in graphs:self.assertTrue(graph.state.runtime.close(1))
 
-    def test_parent_inverse_and_fifteen_unchanged_business_services(self):
+    def test_parent_inverse_and_fifteen_reviewed_business_services(self):
         verify_training_task_sources()
 
     def test_wrong_owner_shadow_and_route_mutants_are_rejected(self):

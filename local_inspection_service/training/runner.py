@@ -79,12 +79,16 @@ class TrainingRunner:
         try:
             self.records.update_provider()(job_id, status="running", progress=5, started_at=int(time.time()), note="任务已启动。")
             executor_mode = self.datasets.mode()
+            if task.get('feedback_strategy')=='real_photo_vlm' and executor_mode!=task['real_photo_training_configuration']['executor']:
+                raise RuntimeError('frozen executor changed')
             runtime = self.files.runtime_provider()
             if runtime is not None and executor_mode != "runpod":
                 raise RuntimeError("COS training requires RunPod; local training fallback is disabled")
             task_dataset_yaml = self.paths.resolve()(task.get("dataset_yaml", ""))
             files = self.files
             has_local_dataset = bool(task.get("dataset_yaml") and files.exists(task_dataset_yaml))
+            if task.get('feedback_strategy') == 'real_photo_vlm' and not has_local_dataset:
+                raise RuntimeError('frozen real-photo dataset missing; image generation fallback is forbidden')
             if task.get("dataset_yaml") and files.exists(task_dataset_yaml):
                 dataset = {
                     "dataset_dir": str(self.paths.resolve()(task.get("dataset_dir", "")) if task.get("dataset_dir") else task_dataset_yaml.parent),
@@ -108,6 +112,8 @@ class TrainingRunner:
                 self.datasets.runpod(job_id, task, dataset)
                 return
             if self.datasets.mode() == "remote":
+                if task.get('feedback_strategy')=='real_photo_vlm':
+                    raise RuntimeError('legacy remote executor lacks frozen real-photo evaluation; use RunPod or local executor')
                 self.datasets.remote(job_id, task, dataset)
                 return
             self.records.update_provider()(job_id, status="running", progress=76, note="样本已生成，正在启动 YOLO 训练。", **dataset)
@@ -118,6 +124,12 @@ class TrainingRunner:
             epochs = max(1, min(500, int(task.get("epochs") or 1)))
             image_size = max(320, min(1280, int(task.get("image_size") or 640)))
             training_device = self.local.device()
+            if task.get('feedback_strategy')=='real_photo_vlm':
+                from .real_photo_training_config import validate_local
+                frozen=task['real_photo_training_configuration']
+                validate_local(frozen,model_path,training_device)
+                if epochs!=frozen['epochs'] or image_size!=frozen['image_size']:
+                    raise ValueError('frozen real-photo training parameters changed')
             training_device_text = str(training_device).strip().lower()
             cpu_training = training_device_text == "cpu"
             command = [
@@ -175,9 +187,14 @@ class TrainingRunner:
                 parsed_epoch = self.local.progress(log_path, epochs)
                 if parsed_epoch:
                     last_epoch = max(last_epoch, parsed_epoch[0])
+            real_metrics=None
+            if return_code==0 and task.get('feedback_strategy')=='real_photo_vlm':
+                from .real_photo_evaluation import evaluate
+                real_metrics=evaluate(task,run_dir/job_id,dataset['dataset_yaml'],training_device)
             self.records.update_provider()(
                 job_id,
                 status="completed" if return_code == 0 else "failed",
+                **({'real_photo_test_metrics':real_metrics} if real_metrics is not None else {}),
                 progress=100,
                 completed_at=int(time.time()),
                 return_code=return_code,

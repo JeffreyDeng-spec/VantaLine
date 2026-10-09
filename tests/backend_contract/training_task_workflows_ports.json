@@ -874,8 +874,8 @@
     "task_lifecycle.py": "bf024be573a5c22238fa2f2d1f239c031d81013456c2d39d082365c8c87b0fb7",
     "task_views.py": "61c51dcca434285fc3559f1d892eedad84260ed1ec1b0d5f78546459cb406bdf",
     "user_state.py": "95b7e37905ae4188aaf9e025aa491e214026582ed8caefbe29f9e3caae6f3d56",
-    "runner.py": "9997bb8ce1e78c21b3814207937005b4c980936aa80893729a336e9001bdf585",
-    "submission.py": "165c7d629ee5278d387eea1e9f6aeed4d48f74f4b35995365f43409dc3cba55b",
+    "runner.py": "cae19ee6a10857cfe78c952b08d05d23e497be687a06c282e5856f6d1e76ea4b",
+    "submission.py": "3df92996ec85d56eb5f6050016f2c07119ed5d2a68aa25ccab8694cc7ecf28ef",
     "jobs_query.py": "e7dffc88f0d35d68fbd4b53a2b3498134e9f09c5adc4012c24560a68600fd289",
     "task_mutations.py": "6e4f9b82e45b92fd71adcc163818c78b53ca4d341984a95d87a127e97d257b03",
     "launch_submission.py": "4e979ef974f07f6f1e60f1bbc671eded48b001357ba94f5c7fde3260dd86080e",
@@ -890,5 +890,19 @@
     "account_state_composition.py": "b874df8b280050c0223560413fcd3dcff0724729939120ecf0b07ea1aa14c5e4",
     "native_execution_composition.py": "3ea6ec7900736c0aa4749bba8e31f3dfd731404eaa38bf38c6f698ffa3705691",
     "task_composition.py": "165674de2d1ea6bcf6a5f66d0f4141daf6a8e497c34b077258dde328e0505dda"
+  },
+  "business_main_update": {
+    "runner.py": {
+      "prior_sha256": "9997bb8ce1e78c21b3814207937005b4c980936aa80893729a336e9001bdf585",
+      "current_sha256": "cae19ee6a10857cfe78c952b08d05d23e497be687a06c282e5856f6d1e76ea4b",
+      "main": "5bd0bafbe0e34470c587b9fb938cf821196f0638",
+      "main_git_blob": "e834e96aed8311d1114ad5da1a1b87cee2ee7bcc"
+    },
+    "submission.py": {
+      "prior_sha256": "165c7d629ee5278d387eea1e9f6aeed4d48f74f4b35995365f43409dc3cba55b",
+      "current_sha256": "3df92996ec85d56eb5f6050016f2c07119ed5d2a68aa25ccab8694cc7ecf28ef",
+      "main": "5bd0bafbe0e34470c587b9fb938cf821196f0638",
+      "main_git_blob": "df8fdb18aff42beca96927f0808f7d23196f43bf"
+    }
   }
 }

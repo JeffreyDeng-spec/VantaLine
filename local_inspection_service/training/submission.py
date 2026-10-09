@@ -76,6 +76,12 @@ class TrainingSubmission:
             train_mode=request.train_mode,
         )
         job_id = f"{'train' if action == 'train_model' else 'samples'}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
+        if dataset and dataset.get('strategy') == 'real_photo_vlm':
+            import re
+            frozen_id = str(dataset.get('training_job_id') or '')
+            if not re.fullmatch(r'train_real_[a-f0-9]{32}', frozen_id):
+                raise ValueError('frozen real-photo training identity required')
+            job_id = frozen_id
         task = {
             "job_id": job_id,
             "task_id": job_id,
@@ -121,6 +127,13 @@ class TrainingSubmission:
                     "candidate_name": dataset.get("display_name") or task["candidate_name"],
                 }
             )
+            if dataset.get('strategy') == 'real_photo_vlm':
+                task.update(feedback_strategy='real_photo_vlm',
+                            unsupported_by_real_data=dataset['unsupported_by_real_data'],
+                            split_class_instance_counts=dataset['split_class_instance_counts'],
+                            dataset_snapshot=dataset['snapshot_fingerprint'],
+                            real_photo_training_configuration=dataset['training_configuration'],
+                            required_accessory_counts=dataset['required_accessory_counts'])
         self.records.save(task)
         def register(thread):
             self.threads.records()[job_id] = thread

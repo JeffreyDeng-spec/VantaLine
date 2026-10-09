@@ -45,6 +45,7 @@ def restore_application_configuration_root(source):
     for item in sorted(FIXTURE["removed"], key=lambda item: item["index"]):
         restored.insert(item["index"], ast.parse(item["original"]).body[0])
     tree = ast.Module(body=restored, type_ignores=[])
-    assert digest(tree) == FIXTURE["parent_ast_sha256"], \
+    from application_integration_source_contract import restore_delta, MAIN_FEEDBACK
+    assert digest(ast.parse(restore_delta(ast.unparse(tree), MAIN_FEEDBACK))) == FIXTURE["parent_ast_sha256"], \
         "Unrelated root, routing or lifetime changed"
     return ast.unparse(tree)
