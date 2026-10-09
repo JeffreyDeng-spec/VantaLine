@@ -180,3 +180,7 @@ sample dataset:
 3. Verify training reaches `completed`.
 4. Verify `best.pt` SHA256 and artifact download/upload.
 5. Run inference smoke using the returned model artifact.
+
+## Released image commissioning
+
+Production images are built by `.github/workflows/yolo-worker-release.yml` from an accepted published immutable whole-release SHA. The workflow records the exact GHCR digest and release/commit labels. Configure RunPod with that digest after settling current jobs. Real-photo jobs require the held-out evaluation response; an older image is not accepted as evidence of this feature.

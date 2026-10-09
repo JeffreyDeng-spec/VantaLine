@@ -1,0 +1,91 @@
+name: Build released YOLO worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Published immutable VantaLine release tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: vantaline-yolo-worker-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve published immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          tag=os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v[0-9]{4}\.[0-9]{2}\.[0-9]+',tag):raise SystemExit('invalid release tag')
+          release=json.loads(subprocess.check_output(['gh','release','view',tag,'--json','isDraft,isPrerelease,targetCommitish']))
+          sha=release['targetCommitish']
+          if release['isDraft'] or release['isPrerelease'] or not re.fullmatch(r'[0-9a-f]{40}',sha):raise SystemExit('published immutable commit required')
+          subprocess.run(['git','merge-base','--is-ancestor',sha,'origin/main'],check=True)
+          subprocess.run(['git','checkout','--detach',sha],check=True)
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              f.write('SOURCE_SHA='+sha+'\n')
+              f.write('WORKER_IMAGE=ghcr.io/'+os.environ['GITHUB_REPOSITORY'].lower()+'-yolo-train-worker:'+sha+'\n')
+          PY
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse replacement of an existing commit tag
+        run: |
+          python3 - <<'PY'
+          import os, subprocess
+          result=subprocess.run(['docker','manifest','inspect',os.environ['WORKER_IMAGE']],capture_output=True,text=True)
+          if result.returncode==0:raise SystemExit('Commit tag already exists; use its verified digest.')
+          error=result.stderr.lower()
+          if 'manifest unknown' not in error and 'no such manifest' not in error:
+              raise SystemExit('Registry lookup uncertain; refusing publication.')
+          PY
+      - uses: docker/build-push-action@v6
+        id: image
+        with:
+          context: local_inspection_service/workers/vantaline_yolo_train_worker
+          file: local_inspection_service/workers/vantaline_yolo_train_worker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.WORKER_IMAGE }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            io.vantaline.release=${{ inputs.release }}
+      - name: Record exact worker digest
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          RELEASE_TAG: ${{ inputs.release }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          digest=os.environ['IMAGE_DIGEST']
+          if not re.fullmatch(r'sha256:[0-9a-f]{64}',digest):raise SystemExit('missing immutable image digest')
+          value={'release':os.environ['RELEASE_TAG'],'git_commit':os.environ['SOURCE_SHA'],'image':os.environ['WORKER_IMAGE'],'digest':digest}
+          with open('yolo-worker-release.json','w') as f:json.dump(value,f,indent=2)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:f.write('```json\n'+json.dumps(value,indent=2)+'\n```\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yolo-worker-${{ env.SOURCE_SHA }}
+          path: yolo-worker-release.json
+          retention-days: 90
+          if-no-files-found: error
