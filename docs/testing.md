@@ -2627,3 +2627,6 @@ The real-photo routes, purpose bindings, incremental tables and review worker
 remain present. Manifest v253 contains 557 actual sources at this checkpoint;
 historical task snapshots are not rewritten. Full factory, combined CI and
 release acceptance are separate remaining gates.
+Frozen label-list API tests bind both historical worker adapter locations to the
+fixture runtime explicitly. The accepted `register` body remains unchanged;
+list comparisons do not enter an application lifespan or start a worker.
