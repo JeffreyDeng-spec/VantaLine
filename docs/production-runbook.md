@@ -743,6 +743,12 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+Path/configuration assembly performs no storage I/O until the existing bootstrap
+directory initialization. Failure to save initial config prevents migration;
+failure during migration keeps its completion flag unset for a later attempt.
+Use complete-release rollback; do not copy a configuration/path module alone.
+The new focused CI smoke does not establish full application-lifecycle acceptance.
+
 For a managed active release, root may run its packaged Python with
 `-m local_inspection_service.runtime.observe_label_runtime --commit <full-sha> --release <release-id>`
 from that release directory. This is a bounded read-only database observation,

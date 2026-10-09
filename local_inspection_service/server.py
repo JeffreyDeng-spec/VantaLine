@@ -1879,16 +1879,13 @@ def apply_ai_profile_dimensions_to_physical_size(item: dict[str, Any], dimension
 
 from .runtime.directories import ServiceDirectories, LocalPathMigration
 
-_service_directories = ServiceDirectories(
-    paths=lambda: (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR,
-                   TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, AUTO_OPTIMIZE_DIR,
-                   IMAGE_WORKER_LOG_DIR, BACKGROUND_DIR, BACKGROUND_SETS_DIR),
-    config_path=lambda: CONFIG_PATH,
-    defaults=lambda: DEFAULT_CONFIG,
-    files=lambda: _business_files,
-    save_config=lambda: save_config,
-    migrate=lambda: migrate_persisted_local_paths_once,
-)
+from .runtime.path_configuration_composition import PathConfigurationWorkflows, PathConfigurationLocations
+from .runtime.service_path_ports import ServicePathSettings, PathProjectionPolicy, PathIdentity
+from .config.app_store_ports import AppConfigRows
+_path_configuration = PathConfigurationWorkflows(
+    locations=PathConfigurationLocations(directories=lambda: (UPLOAD_DIR, OUTPUT_DIR, DATA_DIR, NORMALIZED_DIR, TRAINING_JOBS_DIR, TRAINING_TASKS_DIR, ACCESSORY_CANDIDATES_DIR, AUTO_OPTIMIZE_DIR, IMAGE_WORKER_LOG_DIR, BACKGROUND_DIR, BACKGROUND_SETS_DIR), primary=lambda: CONFIG_PATH, backup=lambda: CONFIG_BACKUP_PATH, data=lambda: DATA_DIR, migration_roots=lambda: (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR)),
+    settings=ServicePathSettings(ROOT=lambda: ROOT, APP_DIR=lambda: APP_DIR, OUTPUT_DIR=lambda: OUTPUT_DIR), path_policy=PathProjectionPolicy(STALE_REPO_PATH_PREFIXES=lambda: STALE_REPO_PATH_PREFIXES, REMOVED_PHASE1_PUBLIC_CONFIG_KEYS=lambda: REMOVED_PHASE1_PUBLIC_CONFIG_KEYS, LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID, SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID), identity=PathIdentity(_request_user=lambda: _request_user, user_is_admin=lambda: user_is_admin), files=lambda: _business_files, rows=AppConfigRows(runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, config_from_rows=lambda: config_from_rows, app_config_rows=lambda: app_config_rows, accessory_rows=lambda: accessory_rows), defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS)
+_service_directories = _path_configuration.directories
 ensure_dirs = _service_directories.ensure
 
 
@@ -2229,23 +2226,7 @@ def plc_web_serial_record_receipt(
 from .config.application_composition import ApplicationConfiguration, ConfigurationFiles, ConfigurationPolicy
 from .config.app_store_ports import AppConfigRows
 
-_app_configuration = ApplicationConfiguration(
-    files=ConfigurationFiles(
-        files=lambda: _business_files, primary=lambda: CONFIG_PATH,
-        backup=lambda: CONFIG_BACKUP_PATH, directory=lambda: DATA_DIR,
-        ensure=lambda: ensure_dirs,
-    ),
-    rows=AppConfigRows(
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        config_from_rows=lambda: config_from_rows,
-        app_config_rows=lambda: app_config_rows,
-        accessory_rows=lambda: accessory_rows,
-    ),
-    policy=ConfigurationPolicy(
-        defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS,
-        sanitize=lambda: public_path_sanitized,
-    ),
-)
+_app_configuration = _path_configuration.configuration
 _app_config_store = _app_configuration.store
 _config_io_lock = _app_configuration.lock
 
@@ -2965,36 +2946,7 @@ def object_alpha_policy_label(policy: str) -> str:
 from .runtime.service_paths import ServicePaths
 from .runtime.service_path_ports import ServicePathSettings, PathProjectionPolicy, PathCalls, PathFiles, PathIdentity
 
-_service_paths = ServicePaths(
-    settings=ServicePathSettings(
-        ROOT=lambda: ROOT,
-        APP_DIR=lambda: APP_DIR,
-        OUTPUT_DIR=lambda: OUTPUT_DIR,
-    ),
-    policy=PathProjectionPolicy(
-        STALE_REPO_PATH_PREFIXES=lambda: STALE_REPO_PATH_PREFIXES,
-        REMOVED_PHASE1_PUBLIC_CONFIG_KEYS=lambda: REMOVED_PHASE1_PUBLIC_CONFIG_KEYS,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
-    ),
-    calls=PathCalls(
-        rebase_stale_local_path_text=lambda: rebase_stale_local_path_text,
-        rebase_stale_local_payload_text=lambda: rebase_stale_local_payload_text,
-        public_path_sanitized=lambda: public_path_sanitized,
-        service_rebased_path=lambda: service_rebased_path,
-        resolve_service_path=lambda: resolve_service_path,
-        path_is_under=lambda: path_is_under,
-        public_output_url=lambda: public_output_url,
-        output_write_dir_for_owner=lambda: output_write_dir_for_owner,
-    ),
-    files=PathFiles(
-        _business_files=lambda: _business_files,
-    ),
-    identity=PathIdentity(
-        _request_user=lambda: _request_user,
-        user_is_admin=lambda: user_is_admin,
-    ),
-)
+_service_paths = _path_configuration.paths
 
 
 def service_rebased_path(path: Path) -> Path | None:
@@ -3029,12 +2981,7 @@ def migrate_json_file_paths(path: Path) -> bool:
     return _service_paths.migrate_json_file_paths(path)
 
 
-_local_path_migration = LocalPathMigration(
-    config_path=lambda: CONFIG_PATH,
-    roots=lambda: (DATA_DIR, BACKGROUND_DIR, STANDARDIZED_MANUALS_DIR, PRECISE_MANUALS_DIR),
-    files=lambda: _business_files,
-    migrate_file=lambda: migrate_json_file_paths,
-)
+_local_path_migration = _path_configuration.migration
 migrate_persisted_local_paths_once = _local_path_migration.run
 
 

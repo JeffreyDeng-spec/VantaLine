@@ -1070,6 +1070,14 @@ Results remain REVIEW_REQUIRED; the synthetic experiment does not commission MAT
 
 **Status: Authoritative**
 
+`runtime/path_configuration_composition.py` owns ServicePaths, ServiceDirectories,
+LocalPathMigration and ApplicationConfiguration as one inert graph. Directory
+initialization, config save/read, sanitization and migration recursion select
+named methods on that domain owner, without calling entry forwarders. Request
+identity and PostgreSQL selection remain operation-time capabilities. The default
+entry retains explicit compatibility aliases. This closes the path/configuration
+graph, not the complete infrastructure builder or application factory.
+
 ### Qwen OCR evidence comparison — opt-in, not commissioned
 
 `VANTALINE_QWEN_OCR_ACCOUNTS` selects `qwen_evidence_jobs.py` at prepared-comparison

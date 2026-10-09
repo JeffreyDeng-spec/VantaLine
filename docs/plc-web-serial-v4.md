@@ -44,6 +44,12 @@ rules unchanged.
 
 **Status: Authoritative — only current PLC implementation contract**
 
+Path/configuration composition retains ApplicationConfiguration's atomic protected
+namespace mutation and per-owner authorization ContextVar. Moving directory,
+sanitizer and path-migration callbacks into their domain owner does not change
+leases, browser ownership, protocol or uncertain-write no-retry behavior. Source
+contracts validate the actual new owner before replaying the original PLC oracle.
+
 ## Ownership and profile
 
 Physical PLC communication runs in a foreground desktop Edge/Chrome page through feature-detected `navigator.serial`; the production server performs zero serial I/O. Configuration is workstation-scoped, survives account logout, and is not a user preference.

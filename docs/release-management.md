@@ -664,6 +664,12 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The backend CI runs the actual path/configuration-cycle smoke before the original
+app-store contracts. This is a composition change in the existing immutable
+package, with no runtime topology or protocol change. Whole-release rollback
+preserves configuration, task evidence and historical model snapshots. Complete
+application-factory and release acceptance remain required separately.
+
 The packaged `local_inspection_service.runtime.observe_label_runtime` command
 provides a root-only database observation for an active managed release. It reads
 the captured runtime configuration without starting Web, workers or migrations.

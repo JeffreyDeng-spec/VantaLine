@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+PATH_CONFIGURATION = json.loads((ROOT / "tests/backend_contract/path_configuration_composition_delta.json").read_text())
 FIXTURE = json.loads((ROOT / "tests/backend_contract/application_integration_delta.json").read_text())
 BUSINESS = json.loads((ROOT / "tests/backend_contract/application_business_delta.json").read_text())
 MAIN_FEEDBACK = json.loads((ROOT / "tests/backend_contract/application_main_feedback_delta.json").read_text())
@@ -62,6 +63,9 @@ def restore_delta(source, fixture):
 
 
 def verify_actual_compositions():
+    assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
+    for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
+        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
     """Validate real owned constructor edges before using an old-location oracle."""
     assert digest(ast.parse((ROOT / "local_inspection_service/agent/state_composition.py").read_text())) == AGENT_STATE["actual_owner_ast_sha256"], "Actual Agent state composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/agent/planning_composition.py").read_text())) == POSE_PLANNING["actual_owner_ast_sha256"], "Actual Pose planning composition changed"
@@ -100,6 +104,7 @@ def restore_business_root(source):
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
     verify_actual_compositions()
+    source = restore_path_configuration_root(source)
     fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE, CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
                 AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
                 PIPELINE_PERSISTENCE, PLC_CAPTURE, PLC_OPERATIONS, PLC_WORKSTATION)
@@ -119,6 +124,7 @@ def restore_plc_domain_root(source):
 def restore_pose_domain_root(source):
     """Check real Pose owners and fold only the three immutable outer deltas."""
     verify_actual_compositions()
+    source = restore_path_configuration_root(source)
     fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE)
     older = (CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
              AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
@@ -131,4 +137,22 @@ def restore_pose_domain_root(source):
         source = restore_delta(source, fixture)
     assert digest(ast.parse(source)) in {item[key] for item in older
                                         for key in ("integrated_ast_sha256", "parent_ast_sha256")}
+    return source
+
+
+def restore_path_configuration_root(source):
+    """Validate the actual closed graph before preserving older strict oracles."""
+    assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"]
+    for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
+        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+    actual = digest(ast.parse(source))
+    if actual == PATH_CONFIGURATION["integrated_ast_sha256"]:
+        return restore_delta(source, PATH_CONFIGURATION)
+    earlier = (PATH_CONFIGURATION, POSE_EXECUTION, POSE_PLANNING, AGENT_STATE,
+               CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
+               AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
+               PIPELINE_PERSISTENCE, PLC_CAPTURE, PLC_OPERATIONS, PLC_WORKSTATION,
+               FIXTURE, BUSINESS, MAIN_FEEDBACK)
+    assert actual in {item[key] for item in earlier for key in
+                      ("parent_ast_sha256", "integrated_ast_sha256")}, "Unreviewed path/configuration root"
     return source

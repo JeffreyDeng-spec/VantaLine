@@ -22,6 +22,8 @@ def node_key(node):
 
 
 def restore_application_configuration_root(source):
+    from application_integration_source_contract import restore_path_configuration_root
+    source = restore_path_configuration_root(source)
     assert digest(ast.parse((ROOT / "local_inspection_service/config/application_composition.py").read_text())) == FIXTURE["composition_ast_sha256"], "Actual configuration constructor changed"
     tree = ast.parse(source)
     if not any(node_key(node) == "_app_configuration" for node in tree.body):

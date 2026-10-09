@@ -1342,6 +1342,15 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+`scripts/smoke_path_configuration_graph.py` checks the actual directory/config/path
+cycle, inert construction, first save and migration, independent roots/locks,
+request-owned outputs, call-time component replacement and partial failure recovery.
+Keep original service-path and app-store assertions, including isolated PostgreSQL
+mutation/rollback checks. The immutable path-composition delta validates the real
+module and unchanged business sources before replaying older assembly oracles;
+new, changed, missing and reordered nodes remain rejected. This is not a full
+application lifecycle test.
+
 Run `scripts/smoke_label_runtime_observation.py` for per-role periodic progress,
 deadline, process/admission changes and fixed-error redaction. With an isolated
 `VANTALINE_POSTGRES_DSN`, also run `scripts/smoke_label_runtime_observation_postgres.py`

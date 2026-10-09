@@ -63,7 +63,7 @@ Accessory image workflow code is grouped under `accessories/` with explicit file
 
 Application-config persistence lives under `config/`; model local configuration and tool dispatch live under `model_providers/`; status request projection remains an auth-domain service. Tests replace explicit capabilities and source guards inspect those actual modules instead of removing requirements.
 
-Service path and output placement policy is owned by `runtime/service_paths.py`; composition supplies focused settings, file access and call-time identity interfaces.
+Service path and output placement policy is owned by `runtime/service_paths.py`; `runtime/path_configuration_composition.py` assembles its directory, persisted-path migration and application-configuration cycle. Composition supplies focused settings, file access and call-time identity/repository interfaces. Internal recursion selects named domain methods while the entry retains compatibility aliases. Complete infrastructure and application assembly remain separate work.
 
 Account configuration/media/response projections are owned by `auth/account_projections.py`; resource-name normalization and owner-scoped catalog checks are owned by `records/resource_names.py`. Their typed interfaces contain only relevant capabilities, with request identity resolved for each call.
 

@@ -176,7 +176,8 @@ class StoreContract(unittest.TestCase):
     def test_actual_composition_getters_and_instance_isolation(self):
         from local_inspection_service.config.application_composition import ApplicationConfiguration,ConfigurationFiles,ConfigurationPolicy
         from local_inspection_service.config.app_store_ports import AppConfigRows
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        from application_integration_source_contract import restore_path_configuration_root
+        tree=ast.parse(restore_path_configuration_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')))
         node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_app_configuration' for t in n.targets))
         symbols=dict(ApplicationConfiguration=ApplicationConfiguration,ConfigurationFiles=ConfigurationFiles,AppConfigRows=AppConfigRows,ConfigurationPolicy=ConfigurationPolicy)
         exec(compile(ast.Module(body=[node],type_ignores=[]),'<assembly>','exec'),symbols)

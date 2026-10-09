@@ -34,8 +34,29 @@ class IntegrationContracts(unittest.TestCase):
             with self.subTest(fixture=name), patch.object(contract, name, altered), self.assertRaises(AssertionError):
                 contract.restore_pose_domain_root(self.source)
 
+    def test_path_configuration_actual_owner_and_delta_are_guarded(self):
+        target = (contract.ROOT / "local_inspection_service/runtime/path_configuration_composition.py").resolve()
+        original_read = Path.read_text
+        def read(path, *args, **kwargs):
+            value = original_read(path, *args, **kwargs)
+            return value + "\nunreviewed_owner = None\n" if path.resolve() == target else value
+        with patch.object(Path, "read_text", read), self.assertRaises(AssertionError):
+            contract.restore_path_configuration_root(self.source)
+        for mode in ("edit", "delete", "duplicate", "order"):
+            altered = copy.deepcopy(contract.PATH_CONFIGURATION)
+            if mode == "edit":
+                altered["regions"][0]["expected"][0] = "unreviewed_owner = None"
+            elif mode == "delete":
+                altered["regions"].pop()
+            elif mode == "duplicate":
+                altered["regions"].append(copy.deepcopy(altered["regions"][-1]))
+            else:
+                altered["regions"].reverse()
+            with self.subTest(mode=mode), patch.object(contract, "PATH_CONFIGURATION", altered), self.assertRaises(AssertionError):
+                contract.restore_path_configuration_root(self.source)
+
     def test_exact_partial_replays_remain_guarded_at_every_checkpoint(self):
-        fixtures = (contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
+        fixtures = (contract.PATH_CONFIGURATION, contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
                     contract.PIPELINE_TASKS, contract.PIPELINE_STAGES,
                     contract.AGENT_PIPELINE, contract.PIPELINE_QUERIES,
                     contract.PIPELINE_EXECUTION, contract.PIPELINE_PERSISTENCE,

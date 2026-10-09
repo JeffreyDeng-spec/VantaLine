@@ -834,6 +834,13 @@ retained unchanged.
 
 **Status: Authoritative**
 
+PathConfigurationWorkflows assembles directories, persisted-path migration,
+service paths and ApplicationConfiguration without reading storage during
+construction. Initial defaults still save before migration; failed saves prevent
+migration and failed migration leaves its completion flag unset. Protected PLC
+configuration retains atomic mutation. Each composition owns its config lock,
+authorization ContextVar and migration state; identity/repositories remain per call.
+
 HTTP configuration/authentication request shapes now live in `schemas/` by domain.
 This location change adds no configuration keys, validation rule or default value;
 the assembled OpenAPI and real HTTP error baseline remain the compatibility gate.
