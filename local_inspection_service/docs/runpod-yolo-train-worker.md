@@ -178,3 +178,40 @@ The Web shared file checksum helper resolves mapped business files through a pin
 ## Real-photo feedback foundation boundary
 
 The feedback foundation adds source/annotation queues and strict original-image contracts but submits no RunPod training. Initial generated-image training and the worker request contract remain unchanged in this batch. Held-out real-photo evaluation and grouped dataset publication require the later training batch and compatible worker commissioning.
+Local training submission now has a shared Python thread admission/drain owner with repository cleanup in that thread. Runpod transport, worker subprocess algorithms, snapshot binding and remote settlement stay unchanged. close(...) returning True certifies local thread/scope exit only and cannot be used as a remote-job cancellation or completion signal.
+
+The shared training thread lifecycle now also owns the separately launched Codex background-generation thread. Runpod transport and training process/remote worker behavior are unchanged; Python-thread close results do not certify remote or child-process completion.
+
+Periodic transfer progress threads now have explicit admission, stop signals and bounded join ownership. Closing reporting does not terminate or replay RunPod/network work. The transfer caller continues to own its upload/download and final task state; the application shutdown hook is not enabled in this slice.
+
+Auto-optimization label, shadow and delayed-check Python threads now have explicit admission and drain ownership. Their algorithms, task guards and RunPod transport remain unchanged. Closing these owners waits for local thread/scope completion and is not a remote-job completion or cancellation signal.
+
+Automatic-mask executor tasks release local repository selections on the executor thread. This change retains the existing executor ContextVar behavior, mask batch limits and remote training behavior; local cleanup is not a remote completion guarantee.
+
+Automatic-mask child work now explicitly inherits the submitting task model snapshot for downstream training-vision resolution. It does not inherit unrelated request/cache/authorization contexts or change mask algorithms, concurrency, prompts or remote training behavior.
+
+Dataset label and manifest writes now use an explicitly supplied file capability. Sample planning, rendering, archive construction, remote worker commands and partial-failure behavior are unchanged. This composition change neither starts a training worker nor alters its retry policy.
+
+This offline training file replay follows generation candidate 2fdb9ee and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 214fe9c. Manifest v213 lists 526 sources, appending training/file_ports.py. Five services capture matching file capabilities while preserving validation, cache, write ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Training preview and annotation image I/O and dataset YAML writes use explicitly supplied storage capabilities. Dataset formats, labels, image quality, worker bundle preparation and remote training commands remain unchanged.
+
+This offline training image replay follows file candidate 94c1eec and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 75d63a9. Manifest v214 lists 526 sources. Image adapters are captured and YAML selects its writer per call; arbitrary private rebinding is not preserved as an atomic hot swap. Algorithms, goldens and public signatures remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Dataset archives and strict file digests receive storage/runtime dependencies explicitly. Remote archives still stream original bytes; local worker conversion, skipped folders, JPEG quality, digest chunks and lease duration remain unchanged. No training process, remote transport or retry policy changes.
+
+This offline training resource replay follows image candidate 9063ace and preserves current history, readiness, model/tail, shutdown, corrected boundary documentation and canonical LF guards. Production and test blobs match reviewed fbf5434. At this replay boundary manifest v215 selects 526 sources. Explicit resource and archive capabilities preserve file operation ordering, strict digest failures, partial publication and archive formats. Current source changes require actual-main rebind, independent review and full CI/release acceptance before publication.
+
+TrainingRunner now receives explicit file/runtime capabilities. COS still requires RunPod, selected dataset existence is checked twice at the original call sites, and sample generation retains its work reservation. The worker package, paid submission and timeout policies are unchanged.
+
+This offline training runner replay follows text media candidate da44932. Owned source/test blobs and ordered entry match reviewed 9b024f4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v230 selects 528 sources. Running-state persistence, runtime mode, repeated existence reads, failure settlement and pinned model restoration remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Web RunPod exports/imports receive explicit runtime providers. Repeated selection remains at the original points, including the existing local fallback if a later selection returns None. Token expiry, worker archive format, selected best.pt ordering and partial publication remain unchanged.
+
+This offline RunPod artifact replay follows training runner candidate b7b8760. Owned source/test blobs and ordered entry match reviewed 671f233. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v231 selects 528 sources. Repeated runtime selection, cleanup exception masking, publication ordering and local replacement remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+The Web RunPod flow, download validation and upload receiver now use explicitly supplied runtime providers. Token/hash/expiry order, limits, claims, polling and unknown-result no-retry semantics are unchanged; no additional worker process or paid validation is introduced.
+
+This offline RunPod transport replay follows artifact candidate 97a9963. Owned source/test blobs and ordered entry match reviewed 12f1743. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v232 selects 528 sources. Durable claim ordering, ambiguous submit retention, streaming limits and partial upload publication remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+TrainingAccountState, TrainingExecution and TrainingTaskWorkflows compose the existing account/task storage, native submission/runner and token-protected transfer APIs. All use the same original local task runtime; background submission retains that runtime and its existing shutdown owner. RunPod payloads, token checks, worker algorithms and remote settlement are unchanged. Local artifact publication remains committed before task metadata update, so a later metadata failure keeps the published artifact without uploading again. A local close result still certifies only local thread/scope exit. The combined domain is one review/release batch, with synthetic verification and whole-bundle rollback.

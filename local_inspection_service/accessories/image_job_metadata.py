@@ -1,6 +1,5 @@
 """Image-job identity and provenance, with an explicit immutable-model resolver."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import AccessoryProvenanceFiles
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
@@ -56,7 +55,10 @@ def ensure_image_job_task_id(candidate: dict[str, Any], job: dict[str, Any]) -> 
 
 
 class ImageJobMetadata:
-    def __init__(self, provenance: ProvenanceDependencies, model_resolver: ResolverProvider):
+    def __init__(self, provenance: ProvenanceDependencies, model_resolver: ResolverProvider, *, files: AccessoryProvenanceFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.provenance, self.model_resolver = provenance, model_resolver
 
     def ensure_anchor_image_provenance(self, job: dict[str, Any]) -> bool:
@@ -71,7 +73,7 @@ class ImageJobMetadata:
             output_path = Path(str(job.get("output_path") or ""))
             output_predates_anchor = False
             try:
-                output_predates_anchor = _business_files.exists(output_path) and _business_files.exists(anchor_path) and _business_files.stat(output_path).st_mtime < _business_files.stat(anchor_path).st_mtime
+                output_predates_anchor = self.files.exists(output_path) and self.files.exists(anchor_path) and self.files.stat(output_path).st_mtime < self.files.stat(anchor_path).st_mtime
             except OSError:
                 output_predates_anchor = False
             if job.get("status") == "completed" or output_predates_anchor:
@@ -96,7 +98,7 @@ class ImageJobMetadata:
 
     def ensure_image_job_target_guides(self, job: dict[str, Any]) -> bool:
         pose_family = str(job.get("pose_family") or "")
-        guides = [path for path in self.provenance.guide_images().get(pose_family, []) if _business_files.exists(path)]
+        guides = [path for path in self.provenance.guide_images().get(pose_family, []) if self.files.exists(path)]
         if not guides:
             return False
         changed = False

@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 
 
 def capture_ai_refresh(api, Fixture, mode):
@@ -78,7 +79,10 @@ class AiAnalysisFixture:
             'external_ai_mcp_enabled':self.external,'write_mcp_inspection_image':self.mcp_image,'call_ai_mcp_tool':self.tool,
             'write_ai_original_output':self.original,'ai_model_payload':self.model,'ai_detection_failure_result':self.failure,
             'persist_data_analysis_record_for_ai_detection':self.persist,'AI_REFERENCE_IMAGES_PER_ACCESSORY':2,
-            'AI_REFERENCE_IMAGE_MAX_SIDE':512,'AI_REFERENCE_IMAGE_QUALITY':80}.items():stack.enter_context(patch.object(api,name,value))
+            'AI_REFERENCE_IMAGE_MAX_SIDE':512,'AI_REFERENCE_IMAGE_QUALITY':80}.items():stack.enter_context(patch_fixture_capability(api, name, value))
+        stack.enter_context(patch.object(api._detection_workflows.analysis.publisher,
+            'persist_data_analysis_record_for_ai_detection',
+            lambda *a,**k:api.persist_data_analysis_record_for_ai_detection(*a,**k)))
 
 
 class AiAnalysisContracts(unittest.TestCase):
@@ -184,7 +188,7 @@ class AiAnalysisContracts(unittest.TestCase):
             self.assertIs(caught.exception,error); self.assertIs(f.resolver.current_snapshot(),ambient)
         self.assertIsNone(f.resolver.current_snapshot()); self.assertEqual(f.spec['model_profiles']['pipeline']['version'],99)
         f.required.reset_mock()
-        with patch.object(self.api,'model_profile_service',None):
+        with patch_profile_service(self.api, None):
             with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'): self.analyze()
         f.required.assert_not_called()
 
@@ -296,6 +300,13 @@ class AiAnalysisContracts(unittest.TestCase):
         self.assertEqual(f.tool.call_args.args[0],'vision.inspect.presence'); self.assertEqual(f.tool.call_args.args[1]['inspection_image_path'],'mcp-synthetic.jpg')
 
 
+    def test_public_entry_binds_once_before_owned_raw_ai(self):
+        self.analyze()
+        self.assertEqual(len(self.f.resolver.scopes), 1)
+        self.assertEqual(len(self.f.resolver.records), 1)
+        self.assertIsNone(self.f.resolver.current_snapshot())
+        self.assertEqual(sum(c.args[0]=='vision.inspect.presence' for c in self.f.tool.call_args_list), 1)
+
     def test_independent_compositions_route_through_their_own_pinned_ai_services(self):
         from local_inspection_service.detection.ai_analysis import AiDetectionAnalysis
         from local_inspection_service.detection.analysis import DetectionAnalysis
@@ -315,7 +326,7 @@ class AiAnalysisContracts(unittest.TestCase):
             service=DetectionAnalysis(AnalysisInput(ordinary.load,lambda:ordinary.scope,ordinary.selected,lambda:ordinary.sanitize,ordinary.state_load),
                 AnalysisRouting(Mock(),bound,ordinary.retired,lambda:ordinary.text),
                 AnalysisInference(lambda:ordinary.model,ordinary.device,ordinary.parse,ordinary.ocr,ordinary.apply,ordinary.draw),
-                AnalysisOutput(ordinary.directory,lambda:ordinary.resize,lambda:640,lambda:ordinary.backend,lambda:87,ordinary.url))
+                AnalysisOutput(ordinary.directory,lambda:ordinary.resize,lambda:640,lambda:ordinary.backend,lambda:87,ordinary.url), runtime_provider=lambda: None)
             services.append((owner,f,ordinary,service,call_provider,settings_provider))
         with ExitStack() as stack:
             for name in ['analyze_bgr','analyze_bgr_ai_detection','resolve_model_profiles','ai_required_accessories','accessory_uid','normalize_accessory_ai_profile',

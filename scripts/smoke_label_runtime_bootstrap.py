@@ -35,7 +35,7 @@ class Bootstrap(unittest.TestCase):
             with patch.object(runtime.ConfigurationSnapshot,'read_worker',side_effect=lambda path,**kw:actual(path,owner=os.getuid(),**kw)), \
                     patch.object(runtime,'create_control_factory',side_effect=controls), \
                     patch.object(runtime,'build_runtime_repository',return_value=SimpleNamespace(repository='business')) as build, \
-                    patch.object(runtime,'LabelProcess',side_effect=lambda *args:args):
+                    patch.object(runtime,'LabelProcess',side_effect=lambda *args, runtime_provider:args):
                 args=runtime.bootstrap(config,root=root,current=root)
                 identity,configuration,directory,business,control=args
                 assert identity.mode=='external' and identity.config_revision==snapshot.revision

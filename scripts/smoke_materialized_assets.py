@@ -7,6 +7,9 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock,patch,call
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
+import cv2
 class MaterializedAssetContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -117,7 +120,7 @@ class MaterializedAssetContracts(unittest.TestCase):
         def build(tag,size):
             path=self.file(tag+'.png');ops={'resolve':Mock(return_value=path),'top':Mock(return_value=False),'footprint':Mock(return_value={'render_footprint_px':[size,size]}),'upright':Mock(),'laying':Mock(),'expected':Mock(return_value=tag),'normalize':Mock(return_value=tag),'sprites':Mock(return_value=[{'id':tag}]),'metadata':Mock(return_value=True),'material':Mock(return_value=True),'suffixes':{'.png'},'text':Mock(return_value=[{'width':size,'height':size}])}
             getters={key:Mock(return_value=value) for key,value in ops.items()}
-            paths=MaterializedAssetPaths(getters['resolve']);sprite=SpriteAssetCatalog(paths,SpriteCatalogPoseOperations(getters['top'],getters['footprint'],getters['upright'],getters['laying']),SpriteCatalogMaterialPolicy(getters['expected'],getters['normalize']),SpriteCatalogReadiness(getters['sprites'],getters['metadata'],getters['material']));text=TextAssetCatalog(paths,TextCatalogOperations(getters['suffixes'],getters['text']))
+            paths=MaterializedAssetPaths(getters['resolve']);sprite=SpriteAssetCatalog(paths,SpriteCatalogPoseOperations(getters['top'],getters['footprint'],getters['upright'],getters['laying']),SpriteCatalogMaterialPolicy(getters['expected'],getters['normalize']),SpriteCatalogReadiness(getters['sprites'],getters['metadata'],getters['material']), files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()));text=TextAssetCatalog(paths,TextCatalogOperations(getters['suffixes'],getters['text']), files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
             for getter in getters.values():getter.assert_not_called()
             return sprite,text,ops,path,size
         a=build('catalog-a',7);b=build('catalog-b',11)

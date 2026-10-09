@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Protocol
 from fastapi import HTTPException
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 
 class UploadStream(Protocol):
@@ -16,8 +16,10 @@ class ArtifactReceiver(Protocol):
 
 
 class RunPodUploadStore:
-    def __init__(self, limit: Callable[[], int], *, runtime_provider=get_runtime):
+    def __init__(self, limit: Callable[[], int], *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.limit = limit
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
     async def receive(self, target_path: Path, request: UploadStream) -> tuple[str, int]:

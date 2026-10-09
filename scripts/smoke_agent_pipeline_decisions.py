@@ -29,7 +29,7 @@ class AgentPipelineDecisionContracts(unittest.TestCase):
             try:yield
             finally:events.append(('exit',snapshot))
         service=SimpleNamespace(current_snapshot=Mock(return_value=None),snapshot_for_record=Mock(return_value={'synthetic':'fresh'}),scope=scope)
-        self.patch('model_profile_service',new=service)
+        self.stack.enter_context(patch.object(self.api._model_profile_configuration,'service',service))
         return service,events
     def quality_dependencies(self,orch=None):
         self.patch('agent_mcp_orchestration',return_value=orch or {})

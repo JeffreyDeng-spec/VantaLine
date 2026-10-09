@@ -3,8 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .background_file_ports import BackgroundImageIO
 import numpy as np
 
 
@@ -13,11 +12,14 @@ class CreateBackgroundVariants(Protocol):
 
 
 class BackgroundVariants:
-    def __init__(self, clock: Callable[[], float]):
+    def __init__(self, clock: Callable[[], float], *, images: BackgroundImageIO):
         self.clock = clock
+        if images is None:
+            raise TypeError("explicit background images are required")
+        self.images = images
 
     def create_background_variants_from_source(self, source_path: Path, set_dir: Path, count: int = 5) -> list[Path]:
-        image = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
+        image = self.images.imread(str(source_path), cv2.IMREAD_COLOR)
         if image is None:
             return []
         set_dir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +51,7 @@ class BackgroundVariants:
             alpha = float(rng.uniform(0.025, 0.06))
             variant = cv2.addWeighted(overlay, alpha, variant, 1.0 - alpha, 0)
             output = set_dir / f"{source_path.stem}_variant_{idx:02d}.png"
-            _image_files.imwrite(str(output), variant)
+            self.images.imwrite(str(output), variant)
             created.append(output)
         return created
 

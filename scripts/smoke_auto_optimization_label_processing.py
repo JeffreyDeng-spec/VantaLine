@@ -26,7 +26,9 @@ def create(bindings):
     from local_inspection_service.training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
     from local_inspection_service.training.auto_optimization_label_processing_ports import ProcessingState,ProcessingArtifacts,ProcessingExecution
     def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
-    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution));bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
+    from contextlib import nullcontext
+    resolver=SimpleNamespace(current_snapshot=lambda:{},scope=lambda snapshot:nullcontext())
+    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution),model_resolver=lambda:resolver);bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
 class ProcessingContract(unittest.TestCase):
     def fixture(self):
@@ -68,12 +70,18 @@ class ProcessingContract(unittest.TestCase):
         with self.assertRaises(ValueError):f.service.auto_optimize_process_label_sample('t',sample,{},'m')
 
     def test_starter_sanitization_existing_live_and_start_failure_state(self):
-        f=self.fixture();existing=Mock();existing.is_alive.return_value=True;f.threads['task']=existing
+        f=self.fixture();f.b['auto_optimize_label_worker']=Mock();existing=Mock();existing.is_alive.return_value=True;f.threads['task']=existing
         with patch.object(threading,'Thread',side_effect=AssertionError('unexpected')):
             f.service.start_auto_optimize_label_worker(' ');f.service.start_auto_optimize_label_worker(' task ')
         existing.is_alive.return_value=False;thread=Mock();error=RuntimeError('start');thread.start.side_effect=error
         with patch.object(threading,'Thread',return_value=thread) as factory,self.assertRaises(RuntimeError) as caught:f.service.start_auto_optimize_label_worker('task')
-        self.assertIs(caught.exception,error);self.assertIs(f.threads['task'],thread);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=f.b['auto_optimize_label_worker'],args=('task',),name='auto-opt-label-task',daemon=True)
+        self.assertIs(caught.exception,error);self.assertIs(f.threads['task'],thread);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=factory.call_args.kwargs['target'],args=('task',),name='auto-opt-label-task',daemon=True)
+        if BASELINE:self.assertIs(factory.call_args.kwargs['target'],f.b['auto_optimize_label_worker'])
+        else:
+            self.assertIsNot(factory.call_args.kwargs['target'],f.b['auto_optimize_label_worker'])
+            factory.call_args.kwargs['target'](*factory.call_args.kwargs['args'])
+            f.b['auto_optimize_label_worker'].assert_not_called()
+            self.assertFalse(f.service.close(0))  # Failed start is still owned; invoked late target was revoked.
 
     def test_not_configured_completed_disabled_and_empty(self):
         f=self.fixture();f.settings['configured']=False;self.run_worker(f);self.assertEqual(f.events,[])

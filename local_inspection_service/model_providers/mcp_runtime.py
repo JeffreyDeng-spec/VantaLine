@@ -1,5 +1,6 @@
 """MCP mode policy, image payload preparation and optional warmup boundary."""
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 import os
 from typing import Any, Protocol
@@ -62,13 +63,15 @@ class McpPayloadPreparation:
 
 @dataclass(frozen=True)
 class McpWarmup:
+    admission: Callable[[], AbstractContextManager]
     enabled: Callable[[], bool]
     client: Callable[[], WarmupClient]
 
     def warm_ai_mcp_client(self) -> None:
         if not self.enabled():
             return
-        try:
-            self.client().ensure_started()
-        except Exception:
-            self.client().close()
+        with self.admission():
+            try:
+                self.client().ensure_started()
+            except Exception:
+                self.client().close()

@@ -13,6 +13,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class PreviewWorkflowFixture:
@@ -602,7 +603,7 @@ class PreviewWorkflowContracts(unittest.TestCase):
             current_port = Mock(side_effect=current)
             output = Mock(return_value=fixture.output); jobs = Mock(return_value=fixture.jobs)
             physical = Mock(return_value=fixture.physical)
-            artifacts = PreviewArtifactStore(output, jobs)
+            artifacts = PreviewArtifactStore(output, jobs, files=BusinessFiles())
             query = TrainingPlanQuery(PlanAccess(current_port, b['user_is_admin'], (lambda fn=b['public_path_sanitized']: fn)),
                                       PlanConfiguration(b['load_config'], (lambda fn=b['scope_config_for_user']: fn), b['filtered_training_state']),
                                       PlanBackgrounds(b['list_background_sets'], (lambda fn=b['selected_background_set_id']: fn), physical),

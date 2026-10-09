@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository, PostgresRuntimeRepositoryError
 
 
@@ -58,7 +59,7 @@ def handlers():
         StandardRevisions(lambda: lambda value: value, ns["_text_v2_confirmed_snapshot"], lambda: ns["_text_v2_apply_revision"]),
         StandardPreparation(lambda *args: None, lambda owner: False),
         prepare_image=lambda data: (data, "image/png", ".png", "PNG"),
-        bounded_text=lambda: lambda value, limit: value[:limit],
+        bounded_text=lambda: lambda value, limit: value[:limit], files=BusinessFiles()
     )
     routes = register(FastAPI(), None, None, service)
     ns["patch_text_inspection_asset"] = routes.patch_text_inspection_asset

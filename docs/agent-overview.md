@@ -70,3 +70,54 @@ Account configuration/media/response projections are owned by `auth/account_proj
 Real-photo detection feedback is introduced behind an owner allowlist in `training/real_photo_*` and `storage/real_photo_feedback.py`. Its data contracts are independent from initial generated-image pretraining; follow [real-photo feedback](real-photo-feedback.md) for staged implementation and commissioning gates.
 
 `training_review/` owns the dedicated Codex screening service, local crop tools and report-only broker. It does not import the Web application or share the label comparison queue. Inspect `docs/real-photo-feedback.md` and its versioned skill before changing screening behavior.
+The initial FastAPI allocation and transport middleware assembly live in runtime/http_application.py. Use its explicit environment mapping when composing a new shell; application domains and lifetime are not yet assembled by this focused builder.
+
+The HTTP transport-shell constructor accepts an explicit upload runtime provider for independently composed apps. This isolates only upload admission; complete artifact services and application lifecycle still require per-app composition.
+
+ArtifactRuntimeProvider owns a lazy artifact runtime, configuration signature and lock for one composition. Existing get_runtime still selects one process-default owner; complete app wiring and artifact lifecycle remain separate.
+
+The three pipeline runtime schedulers expose bounded close through their own thread owner. Keep repository cleanup on the native worker thread and retain task/model binding at the existing decorated runner. Do not close the advance or model dependencies while admitted auto-Agent work can still use them.
+
+AutoOptimizationExecution in training/execution_composition.py composes initialization, mask prompts/visuals/verification, sprite publication, label generation/processing, scheduling, sprites/rendering, synthetic batches, dataset and requests. Its narrow external groups retain their original lazy selection; internal calls select the actual component after argument evaluation. Core, settings, shared runtime and separate label/check lifecycles are explicitly supplied. Native label/check entrypoints pin the supplied model resolver and actual task store once after repository scope entry; the public compatibility decorators remain unchanged. No model, prompt, task-state or process topology change is included. Core status selects the same workflow owner for label-start and sprite-pool callbacks. Route/lifecycle assembly and a complete application factory remain pending.
+
+AutoOptimizationWorkflows in training/workflow_composition.py composes the existing Core and Execution owners with the same explicit settings/shared runtime and three separate native lifecycle owners. The two status-to-execution edges select named workflow forwarders; those select execution after argument evaluation. It constructs both inert graphs at the former Core position, with all eager dependencies already defined and the External port imports explicitly moved before their first use. No generic registry, delayed binding slot, new process, algorithm or API change is introduced. Original aliases, public worker decorators, route order and close order remain. This closes only the automatic-optimization graph; capture, pipeline collaborators and complete application assembly still require explicit final integration.
+
+TrainingStateWorkflows in training/state_composition.py composes the existing TrainingRecordStore, TrainingTaskLifecycle and TrainingTaskViews around the supplied TrainingTaskRuntime. Records and lifecycle select the same existing RLock; lifecycle record operations and view load/refresh operations select named methods on this owner after argument evaluation. Repository factories and the two-layer model resolver remain operation-time suppliers; no user, connection or current snapshot is captured. Model freeze precedes invalidation and locking. Visibility still precedes refresh, and retired worker records remain read-only. Authorization, dual canonical/alias tombstones and partial deletion failures retain the original behavior. The entry keeps its public signatures and original component aliases. Replacing those private aliases no longer redirects owned edges; tests replace actual owner capabilities. This composes only training state, not datasets, training execution, submission, pipeline or the complete application factory.
+
+TrainingAccountState in training/account_state_composition.py combines TrainingStateWorkflows and TrainingUserState around one supplied runtime, with operation-time repository/model/identity suppliers and explicit configuration load/save and pipeline synchronization. TrainingExecution in training/native_execution_composition.py owns the original Runner and Submission with the same account records/runtime; the existing Runner model pin remains single. TrainingTaskWorkflows in training/task_composition.py owns jobs, mutations, launch, status, dataset, preview and RunPod transfer services and validates shared account/execution identity. Internal calls use named owners; five HTTP registrars stay at their original positions. The runtime remains shared with background submission, with its original shutdown owner. Launch configuration failure preserves the already-started task; upload metadata failure preserves the published artifact; a failed completion sync retains the original failed-task update and second sync attempt without repeating generation. Neighboring assets, catalogs, background workflows and pipeline services remain explicit collaborators. This is training-task domain composition, not a complete application factory.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.
+
+The model-profile engines route receives an explicit Codex-model supplier. The
+default composition reads the existing process environment at request time;
+independent registrars can supply separate environments without importing a
+process-global environment from the HTTP module. Empty and whitespace values
+retain the original truthiness behavior, and the administrator check remains
+first. This does not establish independent construction of the full Web app.
+
+The consolidated offline integration now starts from accepted main e1cfee3
+(real-photo feedback and independent review worker). DetectionWorkflows receives
+narrow analysis/capture feedback callbacks; both original capture gates and
+provenance scopes remain. Compatibility aliases select the composed owners.
+The real-photo routes, purpose bindings, incremental tables and review worker
+remain present. Manifest v253 contains 557 actual sources at this checkpoint;
+historical task snapshots are not rewritten. Full factory, combined CI and
+release acceptance are separate remaining gates.

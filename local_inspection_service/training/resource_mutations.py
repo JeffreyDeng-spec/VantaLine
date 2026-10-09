@@ -1,6 +1,5 @@
 """Resource file mutations and existing partial-completion semantics."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingMutationFiles
 from collections.abc import Callable
 from dataclasses import dataclass
 import json
@@ -58,7 +57,10 @@ class ResourceRetirement:
 
 class TrainingResourceMutations:
     def __init__(self, access: ResourceWriteAccess, catalog: ResourceWriteCatalog,
-                 retirement: ResourceRetirement):
+                 retirement: ResourceRetirement, *, files: TrainingMutationFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.access, self.catalog, self.retirement = access, catalog, retirement
 
     def delete_training_dataset_resource(self, dataset_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
@@ -67,19 +69,19 @@ class TrainingResourceMutations:
             if missing_ok:
                 return None
             raise HTTPException(status_code=404, detail="Dataset not found")
-        _business_files.rmtree(dataset_dir)
+        self.files.rmtree(dataset_dir)
         return item
 
     def delete_training_model_resource(self, run_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:
         clean_id = re.sub(r"^trained_", "", run_id)
         spec = next((item for item in self.catalog.models() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
         run_dir = self.catalog.resolve()(spec.get("run_dir")) if spec else None
-        if not run_dir or not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir) or not spec:
+        if not run_dir or not self.files.exists(run_dir) or not self.files.is_dir(run_dir) or not spec:
             if missing_ok:
                 return None
             raise HTTPException(status_code=404, detail="Model run not found")
         self.access.require(spec, user, write=True)
-        _business_files.rmtree(run_dir)
+        self.files.rmtree(run_dir)
         return spec
 
     def delete_training_dataset(self, dataset_id: str) -> dict[str, Any]:
@@ -104,7 +106,7 @@ class TrainingResourceMutations:
             raise HTTPException(status_code=404, detail="Dataset not found")
         manifest_path = dataset_dir / "manifest.json"
         try:
-            manifest = _business_files.read_json(manifest_path)
+            manifest = self.files.read_json(manifest_path)
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=500, detail="Dataset manifest is unreadable") from exc
         if request.display_name is not None:
@@ -114,7 +116,7 @@ class TrainingResourceMutations:
         if request.note is not None:
             manifest["note"] = request.note.strip()
         manifest["updated_at"] = int(time.time())
-        _business_files.write_json(manifest_path, manifest, indent=2)
+        self.files.write_json(manifest_path, manifest, indent=2)
         return {"status": "updated", "dataset_id": dataset_id, **self.catalog.payload(user=user)}
 
     def delete_training_dataset_sample(self, dataset_id: str, sample_name: str) -> dict[str, Any]:
@@ -130,14 +132,14 @@ class TrainingResourceMutations:
                 dataset_dir / "labels" / split / f"{sample_stem}.txt",
                 dataset_dir / "previews" / split / f"{sample_stem}_boxed.jpg",
             ):
-                if _business_files.exists(path):
-                    _business_files.unlink(path)
+                if self.files.exists(path):
+                    self.files.unlink(path)
                     removed += 1
         manifest_path = dataset_dir / "manifest.json"
         removed_manifest_records = 0
-        if _business_files.exists(manifest_path):
+        if self.files.exists(manifest_path):
             try:
-                manifest = _business_files.read_json(manifest_path)
+                manifest = self.files.read_json(manifest_path)
                 raw_samples = manifest.get("samples") if isinstance(manifest.get("samples"), list) else []
                 samples = [
                     item
@@ -147,7 +149,7 @@ class TrainingResourceMutations:
                 removed_manifest_records = len(raw_samples) - len(samples)
                 manifest["samples"] = samples
                 manifest["sample_count"] = len(samples)
-                _business_files.write_json(manifest_path, manifest, indent=2)
+                self.files.write_json(manifest_path, manifest, indent=2)
             except (OSError, json.JSONDecodeError):
                 pass
         if removed == 0 and removed_manifest_records == 0:
@@ -172,12 +174,12 @@ class TrainingResourceMutations:
         clean_id = re.sub(r"^trained_", "", run_id)
         spec = next((item for item in self.catalog.models() if str(item.get("run_id")) == re.sub(r"[^a-zA-Z0-9_.-]+", "_", clean_id)), None)
         run_dir = self.catalog.resolve()(spec.get("run_dir")) if spec else None
-        if not run_dir or not _business_files.exists(run_dir) or not _business_files.is_dir(run_dir) or not spec:
+        if not run_dir or not self.files.exists(run_dir) or not self.files.is_dir(run_dir) or not spec:
             raise HTTPException(status_code=404, detail="Model run not found")
         self.access.require(spec, user, write=True)
         meta_path = run_dir / "library_metadata.json"
         try:
-            meta = _business_files.read_json(meta_path) if _business_files.exists(meta_path) else {}
+            meta = self.files.read_json(meta_path) if self.files.exists(meta_path) else {}
         except json.JSONDecodeError:
             meta = {}
         if request.display_name is not None:
@@ -187,5 +189,5 @@ class TrainingResourceMutations:
         if request.note is not None:
             meta["note"] = request.note.strip()
         meta["updated_at"] = int(time.time())
-        _business_files.write_json(meta_path, meta, indent=2)
+        self.files.write_json(meta_path, meta, indent=2)
         return {"status": "updated", "run_id": run_id, **self.catalog.payload(user=user)}

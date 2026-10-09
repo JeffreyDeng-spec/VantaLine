@@ -43,6 +43,7 @@ class StationIdentity:
 
 @dataclass(frozen=True)
 class StationPolicy:
+    clock: Callable[[], Callable[[], float]]
     PlcConfigError: Callable[[], type[PlcConfigError]]
     HTTPException: Callable[[], type[HTTPException]]
     DEFAULT_WEB_SERIAL_CONFIG: Callable[[], Mapping[str, Any]]

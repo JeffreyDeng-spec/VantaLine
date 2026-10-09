@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability
 
 
 class AgentSettingsContracts(unittest.TestCase):
@@ -35,7 +36,7 @@ class AgentSettingsContracts(unittest.TestCase):
         self.path = self.directory / "agent.json"
         self.stack.enter_context(patch.object(self.api, "DATA_DIR", self.directory))
         self.stack.enter_context(patch.object(self.api, "AGENT_LOCAL_CONFIG_PATH", self.path))
-        self.lookup = self.stack.enter_context(patch.object(self.api, "local_secret_env_value", return_value=""))
+        self.lookup = self.stack.enter_context(patch_provider_capability(self.api, 'local_secret_env_value', return_value=''))
         for name in ("requests.sessions.Session.request", "urllib.request.urlopen", "subprocess.Popen", "os.kill"):
             self.stack.enter_context(patch(name, side_effect=AssertionError("external operation forbidden")))
 
@@ -124,7 +125,7 @@ class AgentSettingsContracts(unittest.TestCase):
 
     def test_member_projection_has_only_six_safe_fields_and_skips_key_expansion(self):
         config = self.configured()
-        with patch.object(self.api, "current_auth_user", return_value={"role": "member"}), patch.object(self.api, "normalize_agent_key_items", side_effect=AssertionError("member key expansion")):
+        with patch.object(self.api, "current_auth_user", return_value={"role": "member"}), patch_provider_capability(self.api, 'normalize_agent_key_items', side_effect=AssertionError('member key expansion')):
             result = self.api.public_agent_config(config)
         self.assertEqual(result, {"enabled": True, "configured": True, "connection_status": "connected", "recommendation_supported": True, "auto_advance_default": True, "mode": "agent"})
         self.assertNotIn("synthetic-primary", str(result))
@@ -145,7 +146,7 @@ class AgentSettingsContracts(unittest.TestCase):
 
     def test_legacy_load_omits_absent_provider_and_ignores_unknown_fields(self):
         self.path.write_text(json.dumps({"base_url": "https://api.cursor.com", "unknown": "synthetic-private"}), encoding="utf-8")
-        with patch.object(self.api, "normalize_agent_config", return_value={"normalized": True}) as normalizer:
+        with patch_provider_capability(self.api, 'normalize_agent_config', return_value={'normalized': True}) as normalizer:
             self.assertEqual(self.api._legacy_load_agent_config(), {"normalized": True})
         values = normalizer.call_args.args[0]
         self.assertNotIn("provider", values)
@@ -158,7 +159,7 @@ class AgentSettingsContracts(unittest.TestCase):
         config = self.configured()
         before = copy.deepcopy(config)
         refs = [{"id": "synthetic-id", "env": "SYNTHETIC_ENV", "label": "Synthetic", "provider": "openai_compatible"}]
-        with patch.object(self.api, "persist_secret_key_items", return_value=refs) as persist:
+        with patch_provider_capability(self.api, 'persist_secret_key_items', return_value=refs) as persist:
             self.api.save_agent_config(config)
         payload = json.loads(self.path.read_text())
         self.assertEqual(payload["api_key"], "")
@@ -171,7 +172,7 @@ class AgentSettingsContracts(unittest.TestCase):
     def test_save_replace_failure_preserves_previous_file_without_retry(self):
         self.path.write_text('"synthetic-previous"', encoding="utf-8")
         error = OSError("synthetic replacement failure")
-        with patch.object(self.api, "persist_secret_key_items", return_value=[]), patch.object(self.api.os, "replace", side_effect=error) as replace:
+        with patch_provider_capability(self.api, 'persist_secret_key_items', return_value=[]), patch.object(self.api.os, "replace", side_effect=error) as replace:
             with self.assertRaises(OSError) as caught:
                 self.api.save_agent_config(self.configured())
         self.assertIs(caught.exception, error)
@@ -202,10 +203,10 @@ class AgentSettingsContracts(unittest.TestCase):
         class EffectfulConfig(dict):
             def __getitem__(self, key):
                 if key == "api_key":
-                    api.mask_secret = late
+                    set_provider_capability(api, 'mask_secret', late)
                 return super().__getitem__(key)
         config = EffectfulConfig(self.configured())
-        with patch.object(api, "mask_secret", selected), patch.object(api, "public_ai_key_items", return_value=[]), patch.object(api, "current_auth_user", return_value={"role": "admin"}):
+        with patch_provider_capability(api, 'mask_secret', selected), patch_provider_capability(api, 'public_ai_key_items', return_value=[]), patch.object(api, "current_auth_user", return_value={"role": "admin"}):
             result = api.public_agent_config(config)
         self.assertEqual(result["api_key_masked"], "selected-mask")
         selected.assert_called_once_with("synthetic-primary")
@@ -218,9 +219,9 @@ class AgentSettingsContracts(unittest.TestCase):
         late = Mock(return_value=[])
         def keys(value):
             events.append("keys")
-            self.api.persist_secret_key_items = late
+            set_provider_capability(self.api, 'persist_secret_key_items', late)
             return [{"id": "synthetic-key"}]
-        with patch.object(self.api, "normalize_agent_config", return_value=config), patch.object(self.api, "normalize_agent_key_items", keys), patch.object(self.api, "persist_secret_key_items", selected):
+        with patch_provider_capability(self.api, 'normalize_agent_config', return_value=config), patch_provider_capability(self.api, 'normalize_agent_key_items', keys), patch_provider_capability(self.api, 'persist_secret_key_items', selected):
             self.api.save_agent_config(config)
         self.assertEqual(events, ["keys", ("persist", [{"id": "synthetic-key"}], "VANTALINE_AGENT_KEY")])
         late.assert_not_called()
@@ -235,7 +236,7 @@ class AgentSettingsContracts(unittest.TestCase):
                 raise error
         defaults = Defaults(self.api.DEFAULT_AGENT_CONFIG)
         persist = Mock(return_value=[])
-        with patch.object(self.api, "DEFAULT_AGENT_CONFIG", defaults), patch.object(self.api, "normalize_agent_config", return_value=config), patch.object(self.api, "persist_secret_key_items", persist):
+        with patch.object(self.api, "DEFAULT_AGENT_CONFIG", defaults), patch_provider_capability(self.api, 'normalize_agent_config', return_value=config), patch_provider_capability(self.api, 'persist_secret_key_items', persist):
             with self.assertRaises(RuntimeError) as caught:
                 self.api.save_agent_config(config)
         self.assertIs(caught.exception, error)
@@ -260,7 +261,7 @@ class AgentSettingsContracts(unittest.TestCase):
             if events.count("replace") == 1:
                 raise error
             return real_replace(source, destination)
-        with patch.object(self.api, "persist_secret_key_items", persist), patch.object(self.api.os, "replace", replace), patch.object(self.api.os, "chmod") as chmod:
+        with patch_provider_capability(self.api, 'persist_secret_key_items', persist), patch.object(self.api.os, "replace", replace), patch.object(self.api.os, "chmod") as chmod:
             with self.assertRaises(RuntimeError) as caught:
                 self.api.save_agent_config(config)
         self.assertIs(caught.exception, error)
@@ -281,7 +282,7 @@ class AgentSettingsContracts(unittest.TestCase):
                 if len(calls) == 1:
                     raise error
             return real_read(path, *args, **kwargs)
-        with patch.object(Path, "read_text", read), patch.object(self.api, "normalize_agent_config", return_value={}) as normalize:
+        with patch.object(Path, "read_text", read), patch_provider_capability(self.api, 'normalize_agent_config', return_value={}) as normalize:
             with self.assertRaises(RuntimeError) as caught:
                 self.api._legacy_load_agent_config()
         self.assertIs(caught.exception, error)
@@ -291,7 +292,7 @@ class AgentSettingsContracts(unittest.TestCase):
     def test_public_short_circuit_keeps_dependency_order_and_modern_loader(self):
         events = []
         config = {"enabled": True, "auto_advance_default": True}
-        with patch.object(self.api, "load_agent_config", side_effect=lambda: events.append("modern") or config), patch.object(self.api, "agent_credentials_present", side_effect=lambda value: events.append("credentials") or False), patch.object(self.api, "agent_recommendation_supported", side_effect=lambda value: events.append("recommendation") or False), patch.object(self.api, "current_auth_user", side_effect=lambda: events.append("identity") or {}), patch.object(self.api, "user_is_admin", side_effect=lambda value: events.append("permission") or False), patch.object(self.api, "normalize_agent_key_items") as keys:
+        with patch.object(self.api, "load_agent_config", side_effect=lambda: events.append("modern") or config), patch.object(self.api, "agent_credentials_present", side_effect=lambda value: events.append("credentials") or False), patch.object(self.api, "agent_recommendation_supported", side_effect=lambda value: events.append("recommendation") or False), patch.object(self.api, "current_auth_user", side_effect=lambda: events.append("identity") or {}), patch.object(self.api, "user_is_admin", side_effect=lambda value: events.append("permission") or False), patch_provider_capability(self.api, 'normalize_agent_key_items') as keys:
             result = self.api.public_agent_config({})
         self.assertEqual(events, ["modern", "credentials", "recommendation", "identity", "permission"])
         self.assertEqual(result, {"enabled": True, "configured": False, "connection_status": "untested", "recommendation_supported": False, "auto_advance_default": True, "mode": "rules"})
@@ -345,7 +346,7 @@ class AgentSettingsContracts(unittest.TestCase):
             store = LegacyAgentSettingsStore(defaults, paths, codec, group(p.AgentSettingsFiles), persistence)
             return policy, projection, store, config
         instances = {name: make(name) for name in ("first", "second")}
-        with patch.object(self.api, "current_auth_user", side_effect=AssertionError("root identity")), patch.object(self.api, "load_agent_config", side_effect=AssertionError("root loader")), patch.object(self.api, "normalize_agent_config", side_effect=AssertionError("root normalization")):
+        with patch.object(self.api, "current_auth_user", side_effect=AssertionError("root identity")), patch.object(self.api, "load_agent_config", side_effect=AssertionError("root loader")), patch_provider_capability(self.api, 'normalize_agent_config', side_effect=AssertionError('root normalization')):
             for name in ("first", "second", "first"):
                 with self.subTest(instance=name):
                     policy, projection, store, config = instances[name]

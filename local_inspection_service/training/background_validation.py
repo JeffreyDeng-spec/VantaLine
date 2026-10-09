@@ -4,8 +4,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .background_file_ports import BackgroundImageReader
 import numpy as np
 from fastapi import HTTPException
 
@@ -19,16 +18,19 @@ class BackgroundAnalysis(Protocol):
 
 class BackgroundValidation:
     def __init__(self, sanitize: Callable[[str], str], prefix: Callable[[], str], clock: Callable[[], float],
-                 uuid: Callable[[], UUID], analyze: BackgroundAnalysis, text: Callable[[], Callable[[Any, int], str]]):
+                 uuid: Callable[[], UUID], analyze: BackgroundAnalysis, text: Callable[[], Callable[[Any, int], str]], *, images: BackgroundImageReader):
         self.sanitize, self.prefix, self.clock = sanitize, prefix, clock
         self.uuid, self.analyze, self.text = uuid, analyze, text
+        if images is None:
+            raise TypeError("explicit background images are required")
+        self.images = images
 
     def validate_task_environment_background_image(self, task_id: str, task: dict[str, Any], source_path: Path) -> dict[str, Any]:
         """Reject task empty-background captures that still contain required parts."""
         clean_task_id = self.sanitize(task_id)
         if not clean_task_id:
             raise HTTPException(status_code=404, detail="AI detection task not found")
-        image_bgr = _image_files.imread(str(source_path), cv2.IMREAD_COLOR)
+        image_bgr = self.images.imread(str(source_path), cv2.IMREAD_COLOR)
         if image_bgr is None:
             raise HTTPException(status_code=400, detail="无法读取背景图片，请重新上传。")
         model_id = f"{self.prefix()}{clean_task_id}"

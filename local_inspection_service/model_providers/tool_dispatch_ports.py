@@ -1,6 +1,7 @@
 """Explicit JSON tool invocation, error projection and MCP transport dependencies."""
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from contextlib import AbstractContextManager
 from typing import Any, Protocol
 Record = dict[str, Any]
 class McpClient(Protocol):
@@ -22,6 +23,7 @@ class JsonToolExecution:
     generate_provider_json_with_fallback: Callable[[], Callable[..., tuple[Record, int, Record]]]
 @dataclass(frozen=True)
 class McpToolTransport:
+    admission: Callable[[], Callable[[], AbstractContextManager]]
     ai_mcp_runtime: Callable[[], Callable[[], str]]
     AI_MCP_RUNTIME_STDIO: Callable[[], str]
     AI_MCP_RUNTIME_IN_PROCESS: Callable[[], str]

@@ -1,12 +1,14 @@
 """Explicit pose asset materialization service without application imports."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import ExistingAgentFiles
 from typing import Any
 from .pose_materialization_ports import PoseChromaSources, PoseMaterializationState, PoseAssetMedia, PoseMaterializationSprites
 
 
 class PoseAssetMaterialization:
-    def __init__(self, chroma: PoseChromaSources, state: PoseMaterializationState, media: PoseAssetMedia, sprites: PoseMaterializationSprites) -> None:
+    def __init__(self, chroma: PoseChromaSources, state: PoseMaterializationState, media: PoseAssetMedia, sprites: PoseMaterializationSprites, *, files: ExistingAgentFiles) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self._chroma = chroma
         self._state = state
         self._media = media
@@ -33,7 +35,7 @@ class PoseAssetMaterialization:
             if not item:
                 continue
             output_path = self._media.resolve()(call.get("output_path"))
-            if not _business_files.exists(output_path) or output_path.suffix.lower() not in self._media.suffixes():
+            if not self.files.exists(output_path) or output_path.suffix.lower() not in self._media.suffixes():
                 continue
             normalized_assets = item.setdefault("normalized_assets", [])
             if not any(

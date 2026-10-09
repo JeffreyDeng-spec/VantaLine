@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from fastapi import HTTPException
+from ..runtime.image_worker import ImageWork
 Record = dict[str, Any]
 Queued = tuple[Path, Record, Record]
 
@@ -44,8 +45,17 @@ class ImageQueueMetadata:
     resolve_service_path: Callable[[], Callable[[str], Path]]
     preprocess_object_clean_sprites: Callable[[], Callable[..., Any]]
 
+class ImageQueueRuntime(Protocol):
+    @property
+    def closing(self) -> bool: ...
+    def active_children(self) -> int: ...
+    def launch(self, prepare: Callable[[], ImageWork | None]) -> bool: ...
+    def wait(self, timeout: float) -> bool: ...
+
+
 @dataclass(frozen=True)
 class ImageQueueExecution:
+    _image_worker_runtime: Callable[[], ImageQueueRuntime]
     IMAGE_JOB_QUEUED_STATUSES: Callable[[], Set[str]]
     MAX_PARALLEL_IMAGE_WORKERS: Callable[[], int]
     next_queued_image_job: Callable[[], Callable[[], Queued | None]]

@@ -148,8 +148,11 @@ def main() -> None:
     assert '@app.get("/api/incoming-text/tasks/{task_id}")' in incoming_api
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in incoming_api
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in incoming_api
-    assert '_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)' in server_text
-    assert '_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)' in server_text
+    assert '_incoming_catalog_routes = _incoming_workflows.register_catalog(app)' in server_text
+    assert '_incoming_inspection_routes = _incoming_workflows.register_inspections(app)' in server_text
+    composition = (APP_DIR / "text_inspection/incoming_composition.py").read_text(encoding="utf-8")
+    assert "return register_catalog(app, self.catalog, files=lambda: self.files)" in composition
+    assert "return register_inspections(app, self.execution, self.reviews, files=lambda: self.files)" in composition
     assert "normalize_ocr_text" not in server_text[server_text.index("# Package-material incoming text inspection"):]
     assert "normalize_ocr_text" not in analysis_text
     assert "normalize_ocr_text" not in beta_text

@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 
 def _capture_remote_window(ns,site,mode,directory=None):
@@ -89,7 +90,7 @@ class RemoteFixture:
     def bind(self,api,stack):
         for name,value in {'remote_training_endpoint':self.endpoint,'resolve_service_path':self.resolve,'masked_url_for_status':self.mask,
                            'update_training_task':self.update,'package_training_dataset':self.package,'remote_training_timeout_seconds':self.timeout}.items():
-            stack.enter_context(patch.object(api,name,value))
+            stack.enter_context(patch_provider_capability(api, name, value))
         stack.enter_context(patch.object(requests,'post',self.post)); stack.enter_context(patch('time.time',self.clock))
         stack.enter_context(patch.dict(os.environ,{api.REMOTE_TRAINING_API_KEY_ENV:'  synthetic-key  '}))
 
@@ -292,7 +293,7 @@ class TrainingRemoteCompatibilityContracts(unittest.TestCase):
         instances=[build('alice',111),build('bob',222)]
         for name in ['remote_training_endpoint','resolve_service_path','masked_url_for_status','update_training_task','package_training_dataset',
                      'remote_training_timeout_seconds','public_path_sanitized','run_remote_training_task','worker_training_artifact_summary']:
-            self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         self.stack.enter_context(patch.object(requests,'post',side_effect=AssertionError('unexpected network')))
         for index in [1,0,1,0]:
             f,owner,stamp,environment,transport,service,summary=instances[index]

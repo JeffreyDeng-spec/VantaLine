@@ -15,6 +15,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 PG_CHECK = '--postgres' in sys.argv
 if PG_CHECK: sys.argv.remove('--postgres')
 
@@ -486,7 +487,7 @@ class ResourceMutationContracts(unittest.TestCase):
                 ResourceWriteCatalog(find, specs, lambda: resolve, payload),
                 ResourceRetirement(lambda identifier, user, **options: mutations.delete_training_dataset_resource(identifier, user, **options),
                     lambda identifier, user, **options: mutations.delete_training_model_resource(identifier, user, **options),
-                    training.mark_training_task_dataset_deleted, linked.mark_pipeline_dataset_deleted, linked.mark_pipeline_model_deleted))
+                    training.mark_training_task_dataset_deleted, linked.mark_pipeline_dataset_deleted, linked.mark_pipeline_model_deleted), files=BusinessFiles())
             app = FastAPI(); routes = register_writes(app, mutations)
             for name in routes.__dataclass_fields__:
                 self.assertEqual([r.endpoint for r in app.routes if r.name == name], [getattr(routes, name)])

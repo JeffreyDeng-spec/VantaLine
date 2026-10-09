@@ -2,13 +2,14 @@
 from typing import Any
 from pathlib import Path
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import AccessoryImageReader
 import numpy as np
 from .preview_sprite_ports import PreviewSpriteInventory, PreviewSpritePoses, PreviewSpriteMedia, PreviewSpriteGeometry
 
-def load_clean_sprite(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-    image = _image_files.imread(str(path), cv2.IMREAD_UNCHANGED)
+def load_clean_sprite(path: Path, *, images: AccessoryImageReader) -> tuple[np.ndarray, np.ndarray] | None:
+    if images is None:
+        raise TypeError('images is required')
+    image = images.imread(str(path), cv2.IMREAD_UNCHANGED)
     if image is None:
         return None
     if image.ndim != 3 or image.shape[2] < 4:

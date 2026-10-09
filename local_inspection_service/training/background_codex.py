@@ -5,7 +5,8 @@ from pathlib import Path
 import subprocess
 import threading
 from typing import Protocol, TextIO
-from ..storage.artifacts.files import BusinessFiles
+from .background_file_ports import BackgroundGenerationFiles
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 
 class GenerateCodexBackground(Protocol):
@@ -35,11 +36,14 @@ class CodexBackgroundPaths:
 
 class CodexBackgroundGeneration:
     def __init__(self, which: Callable[[str], str | None], paths: CodexBackgroundPaths,
-                 name: Callable[[str], str], start: Callable[[], StartCodexBackgroundProcess]):
+                 name: Callable[[str], str], start: Callable[[], StartCodexBackgroundProcess], *, files: BackgroundGenerationFiles):
+        if files is None:
+            raise TypeError("explicit background generation files are required")
+        self.files = files
         self.which, self.paths, self.name, self.start = which, paths, name, start
 
     def run_codex_background_generation(self, source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> list[Path]:
-        files = BusinessFiles()
+        files = self.files
         runtime = files.runtime(set_dir)
         if runtime is not None:
             return self._cos_backgrounds(runtime, files, source_path, set_dir, set_id, count)
@@ -118,14 +122,20 @@ class CodexBackgroundGeneration:
 
 class CodexBackgroundThread:
     def __init__(self, create: Callable[[], StartCodexBackgroundThread], target: Callable[[], GenerateCodexBackground],
-                 name: Callable[[str], str]):
+                 name: Callable[[str], str], *, runtime: TrainingThreadLifecycle | None = None):
         self.create, self.target, self.name = create, target, name
+        self.runtime = runtime if runtime is not None else TrainingThreadLifecycle()
 
     def start_codex_background_generation(self, source_path: Path, set_dir: Path, set_id: str, count: int = 5) -> None:
-        thread = self.create()(
-            target=self.target(),
+        return self.runtime.submit(lambda launch: self._start(source_path, set_dir, set_id, count, launch))
+
+    def _start(self, source_path: Path, set_dir: Path, set_id: str, count: int, launch: ThreadLaunch) -> None:
+        launch(lambda wrap: self.create()(
+            target=wrap(self.target()),
             args=(source_path, set_dir, set_id, count),
             name=f"codex-background-worker-{self.name(set_id)}",
             daemon=True,
-        )
-        thread.start()
+        ), lambda thread: None)
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

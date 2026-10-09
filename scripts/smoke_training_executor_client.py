@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 
 class TrainingExecutorContracts(unittest.TestCase):
@@ -137,13 +138,13 @@ class TrainingExecutorContracts(unittest.TestCase):
         self.request.assert_not_called()
         original_get=os.environ.get;events=[]
         def get(key,default=None):events.append(key);return original_get(key,default)
-        with patch.object(os.environ,'get',side_effect=get),patch.object(api,'masked_url_for_status',side_effect=lambda value:events.append('mask') or 'masked'):
+        with patch.object(os.environ,'get',side_effect=get),patch_provider_capability(api, 'masked_url_for_status', side_effect=lambda value: events.append('mask') or 'masked'):
             self.assertEqual(api.training_execution_status()['remote_endpoint'],'masked')
         self.assertEqual(events[:3],[api.REMOTE_TRAINING_ENDPOINT_ENV,api.REMOTE_TRAINING_EXECUTOR_ENV,'mask'])
         os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://['
         with self.assertRaises(ValueError):api.training_execution_status()
         os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://x'
-        with patch.object(api,'masked_url_for_status',side_effect=RuntimeError('mask')):
+        with patch_provider_capability(api, 'masked_url_for_status', side_effect=RuntimeError('mask')):
             with self.assertRaisesRegex(RuntimeError,'mask'):api.training_execution_status()
 
     def test_runpod_request_one_success_identity_headers_and_timeout(self):
@@ -501,7 +502,7 @@ class TrainingExecutorContracts(unittest.TestCase):
                 failure=OSError('first-only')
                 if stage=='mask':
                     self.configured();os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://fixture.invalid'
-                    probe=stack.enter_context(patch.object(api,'masked_url_for_status',side_effect=chain([failure],repeat('valid'))))
+                    probe=stack.enter_context(patch_provider_capability(api, 'masked_url_for_status', side_effect=chain([failure], repeat('valid'))))
                     invoke=api.training_execution_status
                 else:
                     probe=stack.enter_context(patch.object(api._training_executor_settings,'environment',side_effect=chain([failure],repeat({}))))

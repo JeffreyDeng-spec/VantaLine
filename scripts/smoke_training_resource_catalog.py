@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.concurrency import run_in_threadpool
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class ResourceCatalogContracts(unittest.TestCase):
@@ -338,7 +339,7 @@ class ResourceCatalogContracts(unittest.TestCase):
             roots = Mock(return_value=[directory / 'training_datasets'])
             catalog = DatasetCatalog(DatasetPaths(output, lambda: self.resolve, roots, clean_training_resource_id),
                                      self.read, DatasetAudit(self.audit, lambda: self.created, lambda: self.updated),
-                                     DatasetAccess(self.visible, self.mutable), Mock())
+                                     DatasetAccess(self.visible, self.mutable), Mock(), files=BusinessFiles())
             catalog.item.side_effect = catalog.dataset_resource_item
             tasks = Mock(return_value=[])
             sanitize = Mock(side_effect=lambda value, marker=index: {**value, 'app_marker': marker})
@@ -346,7 +347,7 @@ class ResourceCatalogContracts(unittest.TestCase):
                                         ResourceRecords(tasks, self.list_models, self.load_ai),
                                         ResourceConfiguration(self.load, lambda: self.scope, self.serialize),
                                         ResourceAccess(self.visible, self.owner, lambda: 'legacy', sanitize),
-                                        lambda: self.resolve, output)
+                                        lambda: self.resolve, output, files=BusinessFiles())
             def current():
                 barrier.wait(timeout=5)
                 return identity.get()

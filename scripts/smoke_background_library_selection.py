@@ -17,6 +17,8 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch,call
 
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class BackgroundLibrarySelectionContracts(unittest.TestCase):
 
@@ -301,13 +303,13 @@ class BackgroundLibrarySelectionContracts(unittest.TestCase):
             catalog=BackgroundCandidateCatalog(
                 BackgroundOwnership(getter('system','system-'+label),getter('legacy','legacy-'+label)),
                 BackgroundCatalogSources(getter('manifest',lambda meta=meta:{'sets':{'one':meta}}),getter('directories',lambda:[]),getter('sanitize',lambda value:str(value)),getter('visible',visible),getter('images',lambda directory,path=path:[path]),getter('resolve',lambda value:Path(value))),
-                BackgroundCatalogPolicy(getter('directory',self.root),getter('suffixes',{'.png'}),getter('limit',1)))
+                BackgroundCatalogPolicy(getter('directory',self.root),getter('suffixes',{'.png'}),getter('limit',1)), files=BusinessFiles())
             holder['catalog']=catalog
             # Matcher candidates intentionally injected: this does not prove the complete catalog-to-matcher chain.
             matcher=BackgroundLibraryMatcher(
                 BackgroundMatchSources(getter('references',lambda item,reference=reference:[reference]),getter('candidates',lambda owner,path=path,meta=meta:[('one',path,meta)])),
                 BackgroundMatchFeatures(getter('boxes',lambda width,height:[]),getter('signature',lambda image:{'shape':image.shape}),getter('distance',lambda source,library,score=score:score)),
-                getter('threshold',0.2))
+                getter('threshold',0.2), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
             self.assertEqual(events,[])
             records.append((catalog,matcher,owner,path,meta,box,score,events))
         with patch.object(self.api.cv2,'imread',return_value=np.zeros((4,4,3),np.uint8)):

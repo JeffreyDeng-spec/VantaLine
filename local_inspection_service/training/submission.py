@@ -6,6 +6,7 @@ import time
 from typing import Any, Protocol
 import uuid
 from ..schemas.training import TrainingStartRequest
+from ..runtime.training_tasks import TrainingTaskRuntime, ThreadLaunch
 
 Record = dict[str, Any]
 
@@ -47,8 +48,10 @@ class TrainingSubmissionThreads:
 
 class TrainingSubmission:
     def __init__(self, policy: TrainingSubmissionPolicy, identity: TrainingSubmissionIdentity,
-                 records: TrainingSubmissionRecords, threads: TrainingSubmissionThreads):
+                 records: TrainingSubmissionRecords, threads: TrainingSubmissionThreads, *,
+                 runtime: TrainingTaskRuntime | None = None):
         self.policy, self.identity, self.records, self.threads = policy, identity, records, threads
+        self.runtime = runtime if runtime is not None else TrainingTaskRuntime()
 
     def enqueue_training_task(self,
         request: TrainingStartRequest,
@@ -56,6 +59,10 @@ class TrainingSubmission:
         action: str,
         dataset: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        return self.runtime.submit(lambda launch: self._enqueue_training_task(request, selected, action, dataset, launch))
+
+    def _enqueue_training_task(self, request: TrainingStartRequest, selected: list[Record],
+                               action: str, dataset: Record | None, launch: ThreadLaunch) -> Record:
         sample_count = max(1, min(20000, int(dataset.get("sample_count") if dataset else request.sample_count)))
         epochs = max(1, min(500, int(request.epochs)))
         image_size = max(320, min(1280, int(request.image_size)))
@@ -115,7 +122,7 @@ class TrainingSubmission:
                 }
             )
         self.records.save(task)
-        thread = self.threads.create(target=self.threads.target(), args=(job_id,), name=f"training-task-{job_id}", daemon=True)
-        self.threads.records()[job_id] = thread
-        thread.start()
+        def register(thread):
+            self.threads.records()[job_id] = thread
+        launch(lambda wrap: self.threads.create(target=wrap(self.threads.target()), args=(job_id,), name=f"training-task-{job_id}", daemon=True), register)
         return self.records.public(task)

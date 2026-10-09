@@ -16,6 +16,8 @@ import cv2
 import numpy as np
 from fastapi import HTTPException, UploadFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 
 def _capture_background_api_window(ns,site,mode,fixture_root):
@@ -429,8 +431,8 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
             def analyze(image,request_id,model_id,*,image_path):
                 self.assertEqual(identity.get()['id'],owner); self.assertTrue(image_path.resolve().is_relative_to(f.root.resolve()))
                 self.assertEqual(model_id,'fixture:task'); return {'request_id':owner,'model':{'provider_model':owner}}
-            validation=BackgroundValidation(port(lambda value:'task'),port(lambda:'fixture:'),clock,uuid,port(analyze),port(lambda:(lambda value,limit:str(value or '').strip()[:limit])))
-            query=BackgroundQuery(port(current),port(user_is_admin),port(lambda value:value),port(f.list),port(f.load),port(lambda:f.selected),port(lambda:f.sets),port(lambda:{'.png'}))
+            validation=BackgroundValidation(port(lambda value:'task'),port(lambda:'fixture:'),clock,uuid,port(analyze),port(lambda:(lambda value,limit:str(value or '').strip()[:limit])), images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
+            query=BackgroundQuery(port(current),port(user_is_admin),port(lambda value:value),port(f.list),port(f.load),port(lambda:f.selected),port(lambda:f.sets),port(lambda:{'.png'}), files=lambda: BusinessFiles(runtime_provider=lambda: None))
             def save_background(identifier,path,user,display_name=''):
                 self.assertEqual(user['id'],owner); self.assertEqual(identity.get()['id'],owner)
                 return {'id':'saved-'+owner,'source':str(path),'image_count':1,'generation_method':'fixture'}
@@ -441,11 +443,11 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
                 self.assertEqual(f.lock.depth,0); self.assertEqual(user['id'],owner); return {'owner':owner}
             upload=BackgroundUpload(BackgroundUploadPaths(port(lambda:f.sets),port(lambda:{'.png'})),
                 BackgroundUploadRecords(port(f.unique),port(lambda: f.meta),port(f.enqueue),port(f.payload)),
-                port(lambda:{'owner_user_id':identity.get()['id']}),clock,port(query.training_background_sets))
+                port(lambda:{'owner_user_id':identity.get()['id']}),clock,port(query.training_background_sets), files=BusinessFiles(lambda: None))
             capture=BackgroundCapture(BackgroundCaptureIdentity(port(lambda value:'task'),port(current),port(lambda value:{'id':value['id']})),
                 BackgroundCapturePaths(port(lambda:{'.png'}),port(lambda:f.output),port(f.url)),BackgroundCaptureTasks(port(f.tasks_load),port(access),port(f.save_task)),
                 BackgroundCaptureSets(port(validation.validate_task_environment_background_image),port(lambda:save_background)),
-                BackgroundCaptureState(port(lambda:f.lock),port(f.state_load),port(f.state_save),port(public)),clock,uuid)
+                BackgroundCaptureState(port(lambda:f.lock),port(f.state_load),port(f.state_save),port(public)),clock,uuid, files=BusinessFiles(lambda: None))
             app=FastAPI(); routes=register(app,query,upload,capture)
             def authenticate(request,*,indexed=False):
                 cookie=request.cookies.get('fixture'); user=f.user if cookie==owner else ({**f.user,'permissions':[]} if cookie=='denied' else None)
@@ -565,7 +567,7 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
             raise error
         lookup=Mock(side_effect=provider)
         service=BackgroundUpload(BackgroundUploadPaths(lambda:f.sets,lambda:{'.png'}),
-            BackgroundUploadRecords(f.unique,lookup,f.enqueue,f.payload),f.owner,f.clock,catalog)
+            BackgroundUploadRecords(f.unique,lookup,f.enqueue,f.payload),f.owner,f.clock,catalog, files=BusinessFiles(lambda: None))
         lookup.assert_not_called(); f.clock.assert_not_called(); f.owner.assert_not_called()
         with self.assertRaises(OSError) as caught: asyncio.run(service.upload_training_background_set('Name',self.upload()))
         self.assertIs(caught.exception,error); lookup.assert_called_once_with()

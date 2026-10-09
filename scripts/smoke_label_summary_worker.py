@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.label_inspection.dependencies import RepositoryLifecycle
 from local_inspection_service.label_inspection.worker import LabelWorker
 from local_inspection_service.label_inspection import worker as module
@@ -19,7 +20,7 @@ class WorkerSummaryContract(unittest.TestCase):
         self.repo=SimpleNamespace(claim=lambda:self.run)
         self.models=SimpleNamespace(resolve=lambda *a:{'api_key':'synthetic'},record_call=lambda *a:None)
         return LabelWorker(RepositoryLifecycle(lambda:self.raw,lambda:self.events.append('clear')),
-                           lambda:Path(tempfile.gettempdir()),lambda:self.models,stopping=stopping)
+                           lambda:Path(tempfile.gettempdir()),lambda:self.models,stopping=stopping, runtime_provider=get_runtime)
 
     def test_publication_failure_occurs_after_process_and_never_replays(self):
         service=self.make();calls=[]

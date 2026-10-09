@@ -8,6 +8,9 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+import cv2
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class PhotoHighlightBuilderContracts(unittest.TestCase):
     @classmethod
@@ -259,13 +262,13 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
             if second and name=='policy':selected['complete']=lambda item,assets:False
             if second and name=='artifacts':selected['write']=lambda path,image,mask,metadata:{'kind':'clean_object_sprite','instance':'second'}
             capabilities.append(getattr(ports,type_name)(**{field:(lambda value=value:value) for field,value in selected.items()}))
-        return PhotoHighlightSpriteBuilder(*capabilities)
+        return PhotoHighlightSpriteBuilder(*capabilities, files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
     def test_constructor_reads_no_capability(self):
         from local_inspection_service.agent import photo_highlight_builder_ports as ports
         from local_inspection_service.agent.photo_highlight_builder import PhotoHighlightSpriteBuilder
         groups=self.builder_capability_groups
         forbidden=Mock(side_effect=AssertionError('eager capability read'))
-        instance=PhotoHighlightSpriteBuilder(*[getattr(ports,type_name)(**{field:forbidden for field in bindings}) for name,type_name,bindings in groups])
+        instance=PhotoHighlightSpriteBuilder(*[getattr(ports,type_name)(**{field:forbidden for field in bindings}) for name,type_name,bindings in groups], files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
         self.assertIsInstance(instance,PhotoHighlightSpriteBuilder);forbidden.assert_not_called()
     def test_independent_builders_first_second_first_success_with_root_poisoned(self):
         first=self.independent_builder();second=self.independent_builder(second=True)

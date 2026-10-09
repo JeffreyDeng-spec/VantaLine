@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+from contextlib import closing
 import json
 import os
 import sys
@@ -118,11 +119,12 @@ def assert_no_password_secrets(payload, label: str, *, allow_temporary: bool = F
 
 
 def assert_local_label_guards() -> None:
+    # Permission probes need separate cookies, without restarting app-owned runtimes.
     registered = {(method, route.path) for route in server.app.routes
                   if str(getattr(route, "path", "")).startswith("/api/label-inspection/")
                   for method in getattr(route, "methods", ()) if method not in {"HEAD", "OPTIONS"}}
     assert registered == LOCAL_LABEL_GUARDS, "update explicit permission probes when label routes change"
-    with TestClient(server.app, base_url="https://testserver") as reader:
+    with closing(TestClient(server.app, base_url="https://testserver")) as reader:
         login(reader, "zero_user", "zero_user-password-1")
         for method, template in sorted(LOCAL_LABEL_GUARDS):
             path = template
@@ -142,7 +144,7 @@ def assert_label_runtime_admin_guard(admin_client: TestClient) -> None:
     worker = server.app.state.label_worker
     monitor = Mock(side_effect=AssertionError("denied account reached runtime monitor"))
     with patch.object(worker, "runtime_control", SimpleNamespace(monitor=monitor)):
-        with TestClient(server.app, base_url="https://testserver") as reader:
+        with closing(TestClient(server.app, base_url="https://testserver")) as reader:
             path = "/api/label-inspection/runtime"
             assert_status(reader.get(path), 401, "anonymous runtime status")
             login(reader, "zero_user", "zero_user-password-1")

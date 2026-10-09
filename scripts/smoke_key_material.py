@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, get_provider_capability, set_provider_capability
 
 
 class KeyMaterialContracts(unittest.TestCase):
@@ -97,7 +98,7 @@ class KeyMaterialContracts(unittest.TestCase):
     def test_environment_precedence_cache_and_invalid_name_short_circuit(self):
         self.api.save_local_secret_env({"SYNTHETIC_KEY": " file-value "})
         os.environ["SYNTHETIC_KEY"] = " process-value "
-        with patch.object(self.api, "load_local_secret_env", side_effect=AssertionError("unexpected file read")):
+        with patch_provider_capability(self.api, 'load_local_secret_env', side_effect=AssertionError('unexpected file read')):
             self.assertEqual(self.api.local_secret_env_value(" SYNTHETIC_KEY "), "process-value")
             self.assertEqual(self.api.local_secret_env_value("BAD-NAME"), "")
         os.environ.pop("SYNTHETIC_KEY")
@@ -105,14 +106,14 @@ class KeyMaterialContracts(unittest.TestCase):
         self.assertEqual(os.environ["SYNTHETIC_KEY"], "file-value")
 
     def test_set_validates_then_persists_before_updating_environment(self):
-        with patch.object(self.api, "save_local_secret_env", side_effect=lambda values: self.assertNotIn("SYNTHETIC_KEY", os.environ)) as save:
+        with patch_provider_capability(self.api, 'save_local_secret_env', side_effect=lambda values: self.assertNotIn('SYNTHETIC_KEY', os.environ)) as save:
             self.api.set_local_secret_env(" SYNTHETIC_KEY ", " synthetic-value ")
         save.assert_called_once_with({"SYNTHETIC_KEY": "synthetic-value"})
         self.assertEqual(os.environ["SYNTHETIC_KEY"], "synthetic-value")
         with self.assertRaises(self.api.HTTPException) as caught:
             self.api.set_local_secret_env("BAD-NAME", "synthetic-value")
         self.assertEqual(caught.exception.status_code, 400)
-        with patch.object(self.api, "load_local_secret_env", side_effect=AssertionError("unexpected read")):
+        with patch_provider_capability(self.api, 'load_local_secret_env', side_effect=AssertionError('unexpected read')):
             self.api.set_local_secret_env("SYNTHETIC_EMPTY", " ")
             self.api.set_local_secret_env("", "synthetic")
 
@@ -129,25 +130,25 @@ class KeyMaterialContracts(unittest.TestCase):
 
     def test_delete_persists_before_process_removal_and_skips_invalid_or_absent_file_key(self):
         self.api.set_local_secret_env("SYNTHETIC_KEY", "synthetic-value")
-        original = self.api.save_local_secret_env
+        original = get_provider_capability(self.api, 'save_local_secret_env')
         def save(values):
             self.assertIn("SYNTHETIC_KEY", os.environ)
             self.assertEqual(os.environ["SYNTHETIC_KEY"], "synthetic-value")
             original(values)
-        with patch.object(self.api, "save_local_secret_env", side_effect=save) as spy:
+        with patch_provider_capability(self.api, 'save_local_secret_env', side_effect=save) as spy:
             self.api.delete_local_secret_env(" SYNTHETIC_KEY ")
         spy.assert_called_once_with({})
         self.assertNotIn("SYNTHETIC_KEY", os.environ)
         self.assertEqual(self.path.read_text(), "")
         os.environ["SYNTHETIC_ONLY_PROCESS"] = "synthetic"
-        with patch.object(self.api, "save_local_secret_env", side_effect=AssertionError("unexpected write")):
+        with patch_provider_capability(self.api, 'save_local_secret_env', side_effect=AssertionError('unexpected write')):
             self.api.delete_local_secret_env("SYNTHETIC_ONLY_PROCESS")
             self.api.delete_local_secret_env("BAD-NAME")
         self.assertNotIn("SYNTHETIC_ONLY_PROCESS", os.environ)
 
     def test_persist_writes_before_deduplication_and_returns_references_only(self):
         entries = [{"id": "same", "provider": "qwen", "key": "synthetic-a", "env": "SYNTHETIC_A"}, {"id": "same", "provider": "qwen", "key": "synthetic-b", "env_name": "SYNTHETIC_B"}, {"id": "same", "provider": "gemini", "api_key_env": "PENDING_GEMINI"}, {}]
-        with patch.object(self.api, "set_local_secret_env") as setter:
+        with patch_provider_capability(self.api, 'set_local_secret_env') as setter:
             result = self.api.persist_secret_key_items(entries, "SYNTHETIC_PREFIX")
         self.assertEqual(setter.call_count, 2)
         self.assertEqual(setter.call_args_list[1].args, ("SYNTHETIC_B", "synthetic-b"))
@@ -156,7 +157,7 @@ class KeyMaterialContracts(unittest.TestCase):
         self.assertEqual(entries[0]["key"], "synthetic-a")
 
     def test_persist_generated_environment_identity_and_label_limit(self):
-        with patch.object(self.api, "set_local_secret_env") as setter:
+        with patch_provider_capability(self.api, 'set_local_secret_env') as setter:
             result = self.api.persist_secret_key_items([{"key": "synthetic-key", "label": "x" * 100}], "SYNTHETIC_PREFIX")
         expected_env = self.api.default_secret_env_name("SYNTHETIC_PREFIX", "synthetic-key")
         self.assertEqual(result, [{"id": self.api.secret_key_item_id(expected_env, "synthetic-key"), "label": "x" * 80, "env": expected_env}])
@@ -169,9 +170,9 @@ class KeyMaterialContracts(unittest.TestCase):
         api = self.api
         class Name:
             def __str__(inner):
-                api.ai_key_id = later
+                set_provider_capability(api, 'ai_key_id', later)
                 return " SYNTHETIC_ENV "
-        with patch.object(api, "ai_key_id", first):
+        with patch_provider_capability(api, 'ai_key_id', first):
             self.assertEqual(api.secret_key_item_id(Name(), "synthetic"), "first-id")
         first.assert_called_once_with("SYNTHETIC_ENV")
         later.assert_not_called()
@@ -183,9 +184,9 @@ class KeyMaterialContracts(unittest.TestCase):
         class Item(dict):
             def get(inner, name, default=None):
                 if name == "provider":
-                    api.default_secret_env_name = later
+                    set_provider_capability(api, 'default_secret_env_name', later)
                 return super().get(name, default)
-        with patch.object(api, "default_secret_env_name", first), patch.object(api, "set_local_secret_env") as setter:
+        with patch_provider_capability(api, 'default_secret_env_name', first), patch_provider_capability(api, 'set_local_secret_env') as setter:
             result = api.persist_secret_key_items([Item(id="one", key="synthetic", provider="qwen")], "SYNTHETIC_PREFIX")
         self.assertEqual(result[0]["env"], "SYNTHETIC_FIRST")
         first.assert_called_once_with("SYNTHETIC_PREFIX", "synthetic", provider="qwen")
@@ -218,7 +219,7 @@ class KeyMaterialContracts(unittest.TestCase):
         def load():
             self.api.os.environ = later
             return {"SYNTHETIC_KEY": " synthetic-value "}
-        with patch.object(self.api.os, "environ", first), patch.object(self.api, "load_local_secret_env", load):
+        with patch.object(self.api.os, "environ", first), patch_provider_capability(self.api, 'load_local_secret_env', load):
             self.assertEqual(self.api.local_secret_env_value("SYNTHETIC_KEY"), "synthetic-value")
         self.assertEqual(first, {})
         self.assertEqual(later, {"SYNTHETIC_KEY": "synthetic-value"})

@@ -50,9 +50,16 @@ class Contracts(unittest.TestCase):
                  (isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_ai_mcp_client' for t in n.targets))]
         self.assertEqual(len(nodes), 2)
         ns = dict(__package__='local_inspection_service', ROOT=Path('/first'), AiProviderError=ProviderError, AI_MCP_RUNTIME_STDIO='stdio')
+        alias = nodes[1]
+        self.assertEqual(ast.dump(alias.value), ast.dump(ast.parse('_model_tools.client', mode='eval').body))
+        owned = ast.parse((ROOT / 'local_inspection_service/model_providers/tool_composition.py').read_text())
+        calls = [n for n in ast.walk(owned) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'LocalAiMcpClient']
+        self.assertEqual(len(calls), 1)
+        self.assertEqual({k.arg: ast.dump(k.value) for k in calls[0].keywords}, {k: ast.dump(ast.parse(v, mode='eval').body) for k,v in {'root':'runtime.root','error':'errors.AiProviderError','runtime':'runtime.stdio'}.items()})
+        from local_inspection_service.model_providers.mcp_client import LocalAiMcpClient
+        ns.update(LocalAiMcpClient=LocalAiMcpClient, runtime=SimpleNamespace(root=lambda: ns['ROOT'], stdio=lambda: ns['AI_MCP_RUNTIME_STDIO']), errors=SimpleNamespace(AiProviderError=lambda: ns['AiProviderError']))
         with patch.object(subprocess, 'Popen', side_effect=AssertionError('constructor must not spawn')):
-            exec(compile(ast.Module(body=nodes, type_ignores=[]), '<entry construction>', 'exec'), ns)
-        client = ns['_ai_mcp_client']
+            client = eval(compile(ast.Expression(calls[0]), '<owned client construction>', 'eval'), ns)
         self.assertIsNone(client.process)
         self.assertEqual(client.root(), Path('/first'))
         ns['ROOT'] = Path('/second')

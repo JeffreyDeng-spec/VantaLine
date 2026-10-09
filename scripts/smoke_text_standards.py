@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from types import SimpleNamespace
 from dataclasses import replace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.text_inspection import standard_ports as ports, standard_imports as imports, standard_edits as edits, standard_api as api
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -148,7 +149,7 @@ def capture_trial(case, window=False):
  imp=imports.StandardImports(access,records,media,ports.StandardParsers(lambda:ns['extract_doc_images'],lambda b:ns['extract_docx_candidates'](b),lambda b:ns['inspect_pdf'](b)),ports.StandardClassification(lambda *a:ns['document_import_jobs'].start(*a),lambda:ns['document_import_jobs'].mark_unavailable),lambda:ns['bounded_text'])
  edit=edits.StandardEdits(access,records,ports.StandardWrites(lambda:ns['runtime_postgres_repository_or_none'](),lambda:ns['_incoming_text_store_lock']),media,
  ports.StandardRevisions(lambda:ns['_text_v2_expected_revision'],lambda a:ns['_text_v2_confirmed_snapshot'](a),lambda:ns['_text_v2_apply_revision']),
- ports.StandardPreparation(lambda *a:ns['standard_preparation_jobs'].start(*a),lambda owner:prep_enabled),lambda b:ns['_text_v2_prepare_image'](b),lambda:ns['bounded_text'])
+ ports.StandardPreparation(lambda *a:ns['standard_preparation_jobs'].start(*a),lambda owner:prep_enabled),lambda b:ns['_text_v2_prepare_image'](b),lambda:ns['bounded_text'], files=BusinessFiles())
  fn=getattr(imp if target=='import_text_inspection_standard' else edit,target)
  if case=='request_json':fn=api.register(FastAPI(),imp,None,edit).patch_text_inspection_asset
  with patch.object(asyncio,'to_thread',side_effect=queued):
@@ -178,7 +179,7 @@ class Fixture:
         self.edits=StandardEdits(self.access,self.records,StandardWrites(self.repository,self.guard),self.media,
             StandardRevisions(lambda:expected_revision,confirmed_snapshot,lambda:self.revision_service.apply),
             StandardPreparation(self.prepare,lambda owner:self.preparation_enabled),
-            lambda data:(data,'image/png','.png','PNG'),lambda:lambda value,limit:value[:limit])
+            lambda data:(data,'image/png','.png','PNG'),lambda:lambda value,limit:value[:limit], files=BusinessFiles())
         self.app=FastAPI();self.routes=register(self.app,self.imports,self.library,self.edits)
         @self.app.middleware('http')
         async def identity(request,call_next):

@@ -6,15 +6,15 @@ import shutil
 import tempfile
 from typing import Any
 from PIL import Image
-from ..storage.artifacts.runtime import get_runtime
-from ..storage.artifacts.files import BusinessFiles
-
-_business_files = BusinessFiles()
+from ..storage.artifacts.runtime import ArtifactRuntime
+from .file_ports import LocalTrainingFiles
 
 
-def file_sha256(path: Path) -> str:
+def file_sha256(path: Path, *, files: LocalTrainingFiles) -> str:
+    if files is None:
+        raise TypeError('files is required')
     digest = hashlib.sha256()
-    with _business_files.local_file(path) as local_path:
+    with files.local_file(path) as local_path:
         with local_path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
@@ -23,7 +23,9 @@ def file_sha256(path: Path) -> str:
 
 class DatasetArchives:
     def __init__(self, safe_name: Callable[[str], str], skip_dirs: Callable[[], Set[str]],
-                 jpeg_quality: Callable[[], int], digest: Callable[[Path], str], *, runtime_provider=get_runtime):
+                 jpeg_quality: Callable[[], int], digest: Callable[[Path], str], *, runtime_provider: Callable[[], ArtifactRuntime | None]):
+        if not callable(runtime_provider):
+            raise TypeError('runtime_provider must be callable')
         self.safe_name, self.skip_dirs = safe_name, skip_dirs
         self.jpeg_quality, self.digest = jpeg_quality, digest
         self.runtime_provider = runtime_provider

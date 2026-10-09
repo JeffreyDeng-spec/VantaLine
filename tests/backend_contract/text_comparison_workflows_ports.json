@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "parent": "c7e9c42ee58a790c51457269846f0baed4f16a32",
+  "expressions": {
+    "standards": "_text_standards",
+    "access": "InspectionAccess(require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs), owner=lambda: _text_v2_owner())",
+    "images": "ComparisonImages(prepare=lambda: _text_v2_prepare_image, provider_copy=lambda data, mime: _text_v2_prepare_provider_image(data, mime), annotate=lambda: _text_v2_annotate, data_url=lambda data, mime: _text_v2_data_url(data, mime))",
+    "models": "SubmissionModels(settings=lambda purpose: ai_detection_settings(purpose), call=lambda: call_ai_mcp_tool, prompt=lambda: strict_compare_prompt(), normalize=lambda: normalize_vlm_provider_result, validate=lambda value: validate_vlm_result(value))",
+    "policy": "SubmissionPolicy(timeout=lambda: TEXT_INSPECTION_PROVIDER_TIMEOUT_SECONDS, prompt_version=lambda: TEXT_INSPECTION_PROMPT_VERSION, external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, automatic_match_verified=lambda: TEXT_INSPECTION_AUTOMATIC_MATCH_VERIFIED, qwen_enabled=lambda owner: _qwen_evidence_policy.enabled(owner))",
+    "diagnostics": "SubmissionDiagnostics(image=lambda data, **kwargs: _text_v2_image_diagnostics(data, **kwargs), event=lambda: _text_v2_diagnostic_event, provider=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings), value=lambda value: _text_v2_diagnostic_value(value), write=lambda record: _text_v2_write_server_diagnostic(record))",
+    "extraction": "ExtractionModels(image_settings=lambda: image_generation_settings(), detection_settings=lambda purpose: ai_detection_settings(purpose), image_provider=lambda settings: image_generation_provider_from_settings(settings), transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs), diagnostic_value=lambda value: _text_v2_diagnostic_value(value), external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED)",
+    "prepared_models": "lambda: ComparisonModels(ai_detection_settings, TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, record_model_call)",
+    "digest": "lambda: sha256_bytes",
+    "environment": "lambda: (lambda name, default, environment=os: environment.getenv(name, default))",
+    "audit": "ComparisonAudit(append=lambda: append_incoming_text_audit, bounded_text=lambda: bounded_text)",
+    "runtime": "StandardThreadScope(scope=_runtime_repositories.thread_scope, clear_repository=lambda: clear_thread_runtime_repository_selection())",
+    "files": "_business_files",
+    "prepared_cleanup": "lambda: clear_thread_runtime_repository_selection"
+  }
+}

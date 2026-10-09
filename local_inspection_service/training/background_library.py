@@ -3,8 +3,6 @@ from collections.abc import Callable, Set
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import re
 from typing import Any
 
@@ -23,16 +21,20 @@ class BackgroundSetLookup:
     manifest: Callable[[], Any]
     selected: Callable[[str | None], str | None]
     files: Callable[[str | None], list[Path]]
+from .background_file_ports import BackgroundLibraryFiles
 
 
 class TrainingBackgroundLibrary:
-    def __init__(self, paths: BackgroundPaths, lookup: BackgroundSetLookup):
+    def __init__(self, paths: BackgroundPaths, lookup: BackgroundSetLookup, *, files: BackgroundLibraryFiles):
         self.paths, self.lookup = paths, lookup
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     def load_training_background_manifest(self) -> dict[str, Any]:
         manifest_path = self.paths.directory() / "background_manifest.json"
         try:
-            return json.loads(_business_files.read_text(manifest_path, encoding="utf-8")) if _business_files.exists(manifest_path) else {}
+            return json.loads(self.files.read_text(manifest_path, encoding="utf-8")) if self.files.exists(manifest_path) else {}
         except json.JSONDecodeError:
             return {}
 
@@ -43,12 +45,12 @@ class TrainingBackgroundLibrary:
         if not files:
             files = sorted(
                 path
-                for path in _business_files.iterdir(self.paths.directory())
-                if _business_files.is_file(path) and path.suffix.lower() in self.paths.suffixes()
-            ) if _business_files.exists(self.paths.directory()) else []
-            if _business_files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
+                for path in self.files.iterdir(self.paths.directory())
+                if self.files.is_file(path) and path.suffix.lower() in self.paths.suffixes()
+            ) if self.files.exists(self.paths.directory()) else []
+            if self.files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
                 files.insert(0, self.paths.default_image())
-        elif set_id == "green_conveyor" and _business_files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
+        elif set_id == "green_conveyor" and self.files.exists(self.paths.default_image()) and self.paths.default_image() not in files:
             files.insert(0, self.paths.default_image())
         library: list[dict[str, Any]] = []
         for index, path in enumerate(files):

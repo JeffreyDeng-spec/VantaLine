@@ -11,6 +11,8 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 
 
 class BodyStream:
@@ -49,7 +51,7 @@ class TrainingTransferContracts(unittest.TestCase):
         self.limit = Mock(return_value=8); self.update = Mock(return_value={'ignored': True})
         values = {'OUTPUT_DIR': self.output, 'find_training_task': self.find, 'runpod_dataset_token_hash': self.hash,
                   'resolve_service_path': self.resolve, 'runpod_yolo_artifact_max_bytes': self.limit, 'update_training_task': self.update}
-        for name, value in values.items(): self.stack.enter_context(patch.object(self.api, name, value))
+        for name, value in values.items(): self.stack.enter_context(patch_training_port(self.api, name, value))
         self.stack.enter_context(patch('time.time', self.clock))
         for target in ['requests.request', 'subprocess.Popen', 'os.kill']:
             self.stack.enter_context(patch(target, side_effect=AssertionError('unexpected external operation')))
@@ -279,16 +281,16 @@ class TrainingTransferContracts(unittest.TestCase):
                         events.append(label)
                         raise done
                     ports = {label: Mock(side_effect=lambda *a, _label=label, **k: hit(_label, *a, **k)) for label in ['A', 'B', 'C']}
-                    stack.enter_context(patch.object(api, target, ports['A']))
+                    stack.enter_context(patch_training_port(api, target, ports['A']))
 
                     def prior():
                         events.append('prior')
                         armed[0] = True
-                        setattr(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
+                        set_training_port(api, target, None if mode == 'missing' else ports['B'] if mode == 'prior' else ports['A'])
 
                     def argument():
                         events.append('argument')
-                        setattr(api, target, ports['C'])
+                        set_training_port(api, target, ports['C'])
                     if site == 'resolve-download':
 
                         class Task(dict):
@@ -422,7 +424,7 @@ class TrainingTransferContracts(unittest.TestCase):
                             calls.append(None)
                             if len(calls) == index: raise failure
                             return original(*args, **kwargs)
-                        scope.enter_context(patch.object(owner, field, fail_once))
+                        scope.enter_context(patch_training_port(owner, field, fail_once))
                         with self.assertRaises(RuntimeError) as caught: operation()
                         self.assertIs(caught.exception, failure); self.assertEqual(len(calls), index)
 
@@ -471,8 +473,8 @@ class TrainingTransferContracts(unittest.TestCase):
                 self.assertEqual(job, 'job'); self.assertEqual(target.read_bytes(), owner.encode() + b'-upload')
                 task.update(values); return False
             update = Mock(side_effect=update_task)
-            store = RunPodUploadStore(limit)
-            transfer = RunPodTrainingTransfer(find, token_hash, clock, TransferPaths((lambda: resolve), output), store, (lambda: update))
+            store = RunPodUploadStore(limit, runtime_provider=get_runtime)
+            transfer = RunPodTrainingTransfer(find, token_hash, clock, TransferPaths((lambda: resolve), output), store, (lambda: update), runtime_provider=get_runtime)
             app = FastAPI(); routes = register(app, transfer)
             for name in routes.__dataclass_fields__:
                 self.assertEqual([route.endpoint for route in app.routes if route.name == name], [getattr(routes, name)])
@@ -481,7 +483,7 @@ class TrainingTransferContracts(unittest.TestCase):
             return app, owner, token, root, target, task, find, resolve, output, clock, limit, update
         instances = [build(owner) for owner in ['alice', 'bob']]
         for name in ['find_training_task', 'runpod_dataset_token_hash', 'resolve_service_path', 'runpod_yolo_artifact_max_bytes', 'update_training_task']:
-            self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_training_port(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         async def request(instance):
             app, owner, token, *_ = instance
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://fixture.invalid') as client:

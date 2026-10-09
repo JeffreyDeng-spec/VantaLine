@@ -5,11 +5,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 from fastapi import HTTPException
-from .incoming_ports import IncomingInspections, IncomingMedia, IncomingWrites, IncomingJSON, Record
-from ..storage.artifacts.files import BusinessFiles
+from .incoming_ports import IncomingInspections, IncomingMedia, IncomingWrites, IncomingJSON, Record, IncomingRetentionFiles
 from ..storage.artifacts.types import ArtifactUnavailable, ArtifactConflict
-
-_business_files = BusinessFiles()
 
 
 class IncomingCapacity:
@@ -28,9 +25,12 @@ class IncomingCapacity:
 
 class IncomingRetention:
     def __init__(self, inspections: IncomingInspections, media: IncomingMedia, writes: IncomingWrites,
-                 json: IncomingJSON, audit: Callable[[], Callable[[Record], None]], system_owner: Callable[[], str]):
+                 json: IncomingJSON, audit: Callable[[], Callable[[Record], None]], system_owner: Callable[[], str], *, files: IncomingRetentionFiles):
         self.inspections, self.media, self.writes = inspections, media, writes
         self.json, self.audit, self.system_owner = json, audit, system_owner
+        if files is None:
+            raise TypeError("explicit incoming storage dependencies are required")
+        self.files = files
 
     def purge(self) -> dict[str, int]:
         """Delete only image evidence after the configured retention period."""
@@ -48,9 +48,9 @@ class IncomingRetention:
             all_removed = True
             for key in ("source_path", "corrected_path", "annotated_path"):
                 path = Path(str(inspection.get(key) or ""))
-                if _business_files.exists(path) and self.media.under(path, self.media.root()):
+                if self.files.exists(path) and self.media.under(path, self.media.root()):
                     try:
-                        _business_files.unlink(path)
+                        self.files.unlink(path)
                         deleted_files += 1
                     except (OSError, ArtifactUnavailable, ArtifactConflict):
                         all_removed = False

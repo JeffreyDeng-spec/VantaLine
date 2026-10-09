@@ -26,6 +26,7 @@ def _capture_worker_transfer_window(ns,site,mode):
  class FakeThread:
   def __init__(self,**kwargs):targets.append(kwargs['target'])
   def start(self):started.append(True)
+  def is_alive(self):return False  # This callback-selection fake starts no native thread.
  def set_callback(callback):
   if site=='get':ns['requests'].get=callback
   elif site=='thread':ns['threading'].Thread=callback

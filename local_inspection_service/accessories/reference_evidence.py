@@ -3,8 +3,7 @@ from typing import Any
 from pathlib import Path
 import hashlib
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import AccessoryImageReader, ReferenceEvidenceFiles
 import numpy as np
 from .reference_evidence_ports import ReferencePolicy, ReferencePaths, ReferenceContexts, ReferenceChroma
 
@@ -20,7 +19,13 @@ def saturated_chroma_mask(image_bgr: np.ndarray, screen: dict[str, Any]) -> np.n
     return (green >= 160) & (red <= 110) & (blue <= 110) & ((green - np.maximum(red, blue)) >= 50)
 
 class ReferenceEvidence:
-    def __init__(self, policy: ReferencePolicy, paths: ReferencePaths, contexts: ReferenceContexts, chroma: ReferenceChroma) -> None:
+    def __init__(self, policy: ReferencePolicy, paths: ReferencePaths, contexts: ReferenceContexts, chroma: ReferenceChroma, *, files: ReferenceEvidenceFiles, images: AccessoryImageReader) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
+        if images is None:
+            raise TypeError('images is required')
+        self.images = images
         self._policy = policy
         self._paths = paths
         self._contexts = contexts
@@ -32,20 +37,20 @@ class ReferenceEvidence:
             if job.get("intermediate"):
                 continue
             output_path = self._paths.resolve()(job.get("output_path"))
-            if _image_files.files.exists(output_path):
+            if self.files.exists(output_path):
                 job["output_path"] = str(output_path)
                 paths.append(output_path)
         for asset in item.get("normalized_assets", []):
             path = self._paths.resolve()(asset.get("path"))
-            if _image_files.files.exists(path):
+            if self.files.exists(path):
                 asset["path"] = str(path)
                 paths.append(path)
         for path_str in item.get("source_files", []):
             path = self._paths.resolve()(path_str)
-            if _image_files.files.exists(path) and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            if self.files.exists(path) and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
                 paths.append(path)
         default_path = self._paths.default()(item)
-        if default_path and _image_files.files.exists(default_path):
+        if default_path and self.files.exists(default_path):
             paths.append(default_path)
         unique = []
         seen = set()
@@ -60,7 +65,7 @@ class ReferenceEvidence:
         paths: list[Path] = []
         for path_str in item.get("ai_profile_reference_files", []) or []:
             path = self._paths.resolve()(path_str)
-            if _image_files.files.exists(path) and path.suffix.lower() in self._policy.suffixes():
+            if self.files.exists(path) and path.suffix.lower() in self._policy.suffixes():
                 paths.append(path)
         unique = []
         seen = set()
@@ -73,10 +78,10 @@ class ReferenceEvidence:
 
     def image_reference_context(self, path: Path, accessory_id: str, ordinal: int) -> dict[str, Any] | None:
         try:
-            if not _image_files.files.exists(path) or path.suffix.lower() not in self._policy.suffixes():
+            if not self.files.exists(path) or path.suffix.lower() not in self._policy.suffixes():
                 return None
-            digest = hashlib.sha256(_image_files.files.read_bytes(path)).hexdigest()
-            image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
+            digest = hashlib.sha256(self.files.read_bytes(path)).hexdigest()
+            image = self.images.imread(str(path), cv2.IMREAD_COLOR)
             height = int(image.shape[0]) if image is not None else 0
             width = int(image.shape[1]) if image is not None else 0
         except OSError:
@@ -123,7 +128,7 @@ class ReferenceEvidence:
         best = 0.0
         for ref in self._contexts.references()(item, max_images=max_images):
             path = self._paths.resolve()(ref.get("source_path"))
-            image = _image_files.imread(str(path), cv2.IMREAD_COLOR)
+            image = self.images.imread(str(path), cv2.IMREAD_COLOR)
             if image is None or image.size == 0:
                 continue
             mask = self._chroma.mask()(image, screen)

@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from local_inspection_service.auth.composition import AuthenticationServices, AuthenticationStorage, AuthenticationSettings
+from local_inspection_service.auth.application import AuthenticationDomain
 from local_inspection_service.auth.http_composition import AuthenticationHttp, AuthenticationHttpPolicy
 from local_inspection_service.auth.policy import user_is_admin
 from local_inspection_service.auth.sessions import SessionSettings
@@ -32,19 +33,18 @@ def application(cookie):
         root=Path(temporary)
         settings=[SessionSettings(cookie,500,30)]
         limits=[LoginLimitSettings(60,10,120)]
-        identity=RequestIdentity()
-        graph=AuthenticationServices(
+        domain=AuthenticationDomain(
             storage=AuthenticationStorage(lambda:root,lambda:root/'auth.json',lambda:None),
             settings=AuthenticationSettings(lambda:120000,lambda:settings[0],lambda:limits[0],lambda:'legacy'),
-            identity=identity,
         )
+        identity,graph=domain.identity,domain.services
         # Preserve the existing HTTP fault fixture's explicit PostgreSQL branch
         # substitute without changing the actual JSON repository used by it.
         postgres=[False]
         graph.flows.postgres=lambda:postgres[0]
         graph.users.postgres=lambda:postgres[0]
         app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
-        http=AuthenticationHttp(graph,identity,AuthenticationHttpPolicy(lambda *_:False,lambda *_:True,lambda *_:False))
+        http=domain.http(AuthenticationHttpPolicy(lambda *_:False,lambda *_:True,lambda *_:False))
         http.register_security(app)
         http.register_auth(app)
         http.register_users(app)
@@ -67,7 +67,11 @@ class Composition(unittest.TestCase):
         fail=Mock(side_effect=AssertionError('constructor I/O'))
         storage=AuthenticationStorage(fail,fail,fail)
         settings=AuthenticationSettings(fail,fail,fail,fail)
-        a,b=(AuthenticationServices(storage=storage,settings=settings,identity=RequestIdentity()) for _ in range(2))
+        domains=[AuthenticationDomain(storage=storage,settings=settings) for _ in range(2)]
+        a,b=(domain.services for domain in domains)
+        self.assertIsNot(domains[0].identity,domains[1].identity)
+        self.assertIs(a.access.identity,domains[0].identity)
+        self.assertIs(b.access.identity,domains[1].identity)
         self.assertFalse(fail.called)
         for g in (a,b):
             self.assertIs(g.repository.dependencies.write_lock(),g.write_lock)
@@ -170,8 +174,20 @@ class Composition(unittest.TestCase):
         old=g.accounts.dependencies.load_store
         with patch.object(server,'load_auth_store',Mock(side_effect=AssertionError('root rebound'))):
             self.assertIs(g.accounts.dependencies.load_store,old)
+        self.assertIs(server._authentication_domain.services,g)
+        self.assertIs(server._authentication_domain.identity,server._request_user)
+        self.assertEqual(g.sessions.dependencies.runtime_repository,
+                         server._runtime_repository_owner.access.runtime_postgres_repository_or_none)
+        original_path=g.repository.dependencies.auth_path()
+        with patch.object(server,'AUTH_PATH',Path('/unused-rebound-auth')):
+            self.assertEqual(g.repository.dependencies.auth_path(),original_path)
+        with patch.object(server,'runtime_postgres_repository_or_none',Mock(side_effect=AssertionError('root repository rebound'))):
+            self.assertIsNone(g.sessions.dependencies.runtime_repository())
         original=server.AUTH_SESSION_TTL_SECONDS
         with patch.object(server,'AUTH_SESSION_TTL_SECONDS',original+1):
+            self.assertEqual(g.sessions.settings().ttl,original)
+        current=g.sessions.settings()
+        with patch.object(g.sessions,'settings',return_value=SessionSettings(current.cookie,original+1,current.persist_interval)):
             self.assertEqual(g.sessions.settings().ttl,original+1)
 
 
@@ -210,6 +226,7 @@ class HttpComposition(unittest.TestCase):
         self.assertIs(http.services,server._authentication)
         self.assertIs(http.security.identity,server._request_user)
         self.assertIs(http.documentation,server._documentation_access)
+        self.assertEqual(http.security.output_visible,server._account_projections.output_path_visible_to_user)
         self.assertEqual(http.security.same_origin,server._public_network_policy.same_origin)
         self.assertEqual(http.security.cors_origin_allowed,server._public_network_policy.cors_origin_allowed)
         from contextlib import ExitStack
@@ -233,10 +250,12 @@ def postgres_composition_contract(dsn):
     graphs=[]
     released_after_failure=[]
     def compose(dependencies):
-        graph=AuthenticationServices(
+        domain=AuthenticationDomain(
             storage=AuthenticationStorage(dependencies.data_directory,dependencies.auth_path,dependencies.runtime_repository),
             settings=AuthenticationSettings(lambda:120000,lambda:SessionSettings('fixture',500,30),
-                lambda:LoginLimitSettings(60,10,120),lambda:'legacy'),identity=RequestIdentity())
+                lambda:LoginLimitSettings(60,10,120),lambda:'legacy'))
+        graph=domain.services
+        assert graph.access.identity is domain.identity
         assert graph.repository.dependencies.write_lock() is graph.users.write_lock()
         assert graph.sessions.dependencies.runtime_repository is dependencies.runtime_repository
         original_save_login_session=graph.repository.save_login_session

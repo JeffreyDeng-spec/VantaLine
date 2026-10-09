@@ -89,13 +89,14 @@ def test_required_element_dimension_cannot_be_skipped():
 def test_local_decode_uses_source_pixels(tmp_path):
     import io
     from PIL import Image
+    from local_inspection_service.storage.artifacts.runtime import get_runtime
     from local_inspection_service.codex_compare.media import MediaStore
     from local_inspection_service.codex_compare.worker import decode
     cv2=pytest.importorskip('cv2')
     qr=cv2.QRCodeEncoder_create().encode('VantaLine-test-payload')
     buffer=io.BytesIO()
     Image.fromarray(cv2.copyMakeBorder(qr,4,4,4,4,cv2.BORDER_CONSTANT,value=255)).resize((400,400),Image.Resampling.NEAREST).save(buffer,'PNG')
-    media=MediaStore(tmp_path);task={'inputs':{'reference':media.image('a',buffer.getvalue())}}
+    media=MediaStore(tmp_path, runtime_provider=get_runtime);task={'inputs':{'reference':media.image('a',buffer.getvalue())}}
     result=decode(media,'a',task,{'source':'reference','box':[0,0,1,1]})
     assert result['values']==['VantaLine-test-payload']
     with pytest.raises(ValueError):decode(media,'a',task,{'source':'reference','box':[0,0,1,1],'values':['fake']})

@@ -1,6 +1,4 @@
 """Legacy inspection visibility, duplicate lookup and human disposition."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -9,36 +7,26 @@ from typing import Any
 from fastapi import HTTPException
 from ..schemas.text_inspection import IncomingTextReviewRequest
 from ..incoming_text_inspection import REVIEW_REQUIRED as INCOMING_TEXT_REVIEW_REQUIRED
-from .incoming_ports import IncomingAccess, IncomingInspections, IncomingTasks, IncomingMedia, IncomingWrites, IncomingJSON
+from .incoming_duplicates import lookup_duplicate
+from .incoming_ports import IncomingAccess, IncomingInspections, IncomingTasks, IncomingMedia, IncomingWrites, IncomingJSON, IncomingAssetFiles
 
 
 class IncomingReviews:
     def __init__(self, access: IncomingAccess, inspections: IncomingInspections, tasks: IncomingTasks,
                  media: IncomingMedia, writes: IncomingWrites, json: IncomingJSON,
                  decode_rows: Callable[[], Callable[[list[dict[str, Any]]], list[dict[str, Any]]]],
-                 public: Callable[[dict[str, Any]], dict[str, Any]]):
+                 public: Callable[[dict[str, Any]], dict[str, Any]], *, files: IncomingAssetFiles):
         self.access, self.inspections, self.tasks = access, inspections, tasks
         self.media, self.writes, self.json = media, writes, json
         self.decode_rows, self.public = decode_rows, public
+        if files is None:
+            raise TypeError("explicit incoming storage dependencies are required")
+        self.files = files
 
     def duplicate(self, owner_user_id: str, task_id: str, capture_id: str) -> dict[str, Any] | None:
-        repository = self.writes.repository()
-        if repository is not None:
-            row = repository.fetch_one_by_columns(
-                "incoming_text_inspections",
-                {"owner_user_id": owner_user_id, "task_id": task_id, "capture_id": capture_id},
-            )
-            values = self.decode_rows()([row]) if row else []
-            return values[0] if values else None
-        return next(
-            (
-                item
-                for item in self.inspections.all()
-                if str(item.get("owner_user_id")) == owner_user_id
-                and str(item.get("task_id")) == task_id
-                and str(item.get("capture_id")) == capture_id
-            ),
-            None,
+        return lookup_duplicate(
+            self.writes, lambda: self.decode_rows(), lambda: self.inspections.all(),
+            owner_user_id, task_id, capture_id,
         )
 
     def get_incoming_text_inspection_evidence(self, inspection_id: str, asset_kind: str) -> Path:
@@ -50,7 +38,7 @@ class IncomingReviews:
         self.access.task()(str(inspection.get("task_id")))
         key = {"source": "source_path", "corrected": "corrected_path", "annotated": "annotated_path"}.get(asset_kind)
         path = Path(str(inspection.get(key or "") or ""))
-        if not key or not _business_files.exists(path) or not self.media.under(path, self.media.root()):
+        if not key or not self.files.exists(path) or not self.media.under(path, self.media.root()):
             raise HTTPException(status_code=404, detail="检验证据文件不存在")
         return path
 

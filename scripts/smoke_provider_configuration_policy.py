@@ -4,6 +4,7 @@ from pathlib import Path
 from contextlib import ExitStack
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 class ProviderConfigurationPolicyContracts(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
@@ -120,7 +121,7 @@ class ProviderConfigurationPolicyContracts(unittest.TestCase):
   for method,name,value,recovery in cases:
    with self.subTest(method=method.__name__,name=name):
     error=RuntimeError('synthetic-first')
-    with patch.object(self.api,name,side_effect=chain([error],repeat(recovery))) as dependency:
+    with patch_provider_capability(self.api, name, side_effect=chain([error], repeat(recovery))) as dependency:
      with self.assertRaises(RuntimeError) as caught:method(value)
     self.assertIs(caught.exception,error);dependency.assert_called_once()
   error=RuntimeError('synthetic-regex')
@@ -145,7 +146,7 @@ class ProviderConfigurationPolicyContracts(unittest.TestCase):
    return defaults,validation,urls
   a,b=make('a'),make('b')
   for name in ('urlsplit','urlunsplit','bounded_text','HTTPException'):
-   self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('independent service used root')))
+   self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('independent service used root')))
   self.stack.enter_context(patch.object(self.api,'AI_SUPPORTED_PROVIDERS',set()))
   def invoke(item):
    label,services=item;defaults,validation,urls=services

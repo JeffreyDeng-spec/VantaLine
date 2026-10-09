@@ -1,13 +1,15 @@
 """Explicit photo highlight sources service without application imports."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import ExistingAgentFiles
 from typing import Any
 from .photo_highlight_ports import PhotoSourceMedia, PhotoSpriteLimits, PhotoSpriteReadiness
 from pathlib import Path
 
 
 class PhotoHighlightSources:
-    def __init__(self, media: PhotoSourceMedia, limits: PhotoSpriteLimits, sprites: PhotoSpriteReadiness) -> None:
+    def __init__(self, media: PhotoSourceMedia, limits: PhotoSpriteLimits, sprites: PhotoSpriteReadiness, *, files: ExistingAgentFiles) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self._media = media
         self._limits = limits
         self._sprites = sprites
@@ -21,7 +23,7 @@ class PhotoHighlightSources:
                 continue
             if path.stem.endswith("_rectified"):
                 continue
-            if not _business_files.exists(path):
+            if not self.files.exists(path):
                 continue
             paths.append(path)
             seen.add(path)

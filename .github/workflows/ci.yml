@@ -299,11 +299,14 @@ jobs:
       - name: Verify text inspection comparison and document contracts
         run: |
           python scripts/verify_backend_contract.py
+          python scripts/smoke_web_shell_composition.py
+          python scripts/smoke_retired_entry_tails.py
           python scripts/smoke_model_dependency_contract.py
           python scripts/verify_backend_boundaries.py
           python scripts/smoke_foundation_policies.py
           python scripts/smoke_artifact_file_policies.py
           python scripts/smoke_runtime_repository_access.py
+          python scripts/smoke_repository_composition.py --postgres
           python scripts/smoke_service_paths.py
           python scripts/smoke_read_cache_ownership.py
           python scripts/smoke_directory_lifecycle.py
@@ -312,10 +315,41 @@ jobs:
           VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_account_projections.py
           python scripts/smoke_public_network_policy.py
+          python scripts/smoke_plc_activation_policy.py
+          python scripts/smoke_plc_runtime_coordination.py
+          python scripts/smoke_plc_dispatch_records.py
+          python scripts/smoke_plc_legacy_operations.py
           python scripts/smoke_admin_documentation_composition.py
           python scripts/smoke_authentication_composition.py --postgres
+          python scripts/smoke_record_composition.py
+          python scripts/smoke_application_foundation.py
+          python scripts/smoke_http_application.py
+          python scripts/smoke_http_upload_runtime.py
+          python scripts/smoke_http_artifact_ports.py
+          python scripts/smoke_incoming_artifact_ports.py
+          python scripts/smoke_background_file_ports.py
+          python scripts/smoke_background_image_ports.py
+          python scripts/smoke_background_generation_ports.py
+          python scripts/smoke_training_file_ports.py
+          python scripts/smoke_training_image_ports.py
+          python scripts/smoke_training_resource_ports.py
+          python scripts/smoke_accessory_file_ports.py
+          python scripts/smoke_accessory_evidence_ports.py
+          python scripts/smoke_accessory_catalog_ports.py
+          python scripts/smoke_accessory_gallery_ports.py
+          python scripts/smoke_accessory_edit_ports.py
+          python scripts/smoke_accessory_preprocessor_ports.py
+          python scripts/smoke_agent_reference_ports.py
+          python scripts/smoke_agent_pose_storage_ports.py
+          python scripts/smoke_agent_photo_image_ports.py
+          python scripts/smoke_agent_background_image_ports.py
+          python scripts/smoke_artifact_runtime_provider.py
+          python scripts/smoke_web_artifact_composition.py
+          python scripts/smoke_bootstrap_locations.py
           python scripts/smoke_provider_proxy_runtime.py
           python scripts/smoke_mcp_client_runtime.py
+          python scripts/smoke_mcp_drain.py
+          python scripts/smoke_mcp_warmup_ownership.py
           python scripts/smoke_mcp_runtime_policy.py
           python scripts/smoke_image_payload_codec.py
           python scripts/smoke_detection_rule_composition.py
@@ -323,9 +357,12 @@ jobs:
           python scripts/smoke_accessory_selection_dimensions.py
           python scripts/smoke_accessory_workflow_ownership.py
           python scripts/smoke_image_worker_ownership.py
+          python scripts/smoke_image_worker_drain.py
           python scripts/smoke_pipeline_runtime_ownership.py
           python scripts/smoke_auto_optimization_runtime_ownership.py
           python scripts/smoke_auto_optimization_settings_composition.py
+          python scripts/smoke_model_configuration_composition.py
+          python scripts/smoke_plc_legacy_worker_ownership.py
           python scripts/smoke_resource_names.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
@@ -339,14 +376,17 @@ jobs:
           python scripts/smoke_label_summary_migration.py
           python scripts/smoke_service_status_requests.py
           python scripts/smoke_app_config_store.py
+          python scripts/smoke_stream_config.py
           python scripts/smoke_protected_config_ownership.py
           python scripts/smoke_local_model_config.py
           python scripts/smoke_model_tool_dispatch.py
+          python scripts/smoke_model_tools_composition.py
           python scripts/smoke_accessory_text_preparation.py
           python scripts/smoke_pose_collection_prompts.py
           python scripts/smoke_image_worker_diagnostics.py
           python scripts/smoke_pose_collection_jobs.py
           python scripts/smoke_accessory_reference_media.py
+          python scripts/smoke_accessory_image_composition.py
           python scripts/smoke_image_job_queue.py
           python scripts/smoke_training_asset_preparation.py
           python scripts/smoke_image_provider_configuration.py
@@ -376,6 +416,9 @@ jobs:
           python scripts/smoke_auto_optimization_training_scheduling.py
           python scripts/smoke_auto_optimization_label_processing.py
           python scripts/smoke_auto_optimization_shadow_evaluation.py
+          python scripts/smoke_auto_optimization_core_composition.py
+          python scripts/smoke_auto_optimization_execution_composition.py
+          python scripts/smoke_auto_optimization_workflow_composition.py
           python scripts/smoke_auto_optimization_requests.py
           python scripts/smoke_auto_optimization_sprite_publication.py
           python scripts/smoke_plc_event_projection.py
@@ -384,6 +427,7 @@ jobs:
           python scripts/smoke_plc_event_commands.py
           python scripts/smoke_plc_dispatch_mutations.py
           python scripts/smoke_plc_station_service.py
+          python scripts/smoke_plc_active_lease.py
           python scripts/smoke_plc_browser_dispatch.py
           python scripts/smoke_plc_workstation_repository.py
           python scripts/smoke_plc_request_models.py
@@ -392,6 +436,7 @@ jobs:
           python scripts/smoke_plc_capture_state.py
           python scripts/smoke_runtime_lifecycle.py --postgres
           python scripts/smoke_cost_ledger.py
+          python scripts/smoke_cost_composition.py
           python scripts/smoke_analysis_records.py --postgres
           python scripts/smoke_analysis_projections.py
           python scripts/smoke_auth_foundation.py --postgres
@@ -409,6 +454,8 @@ jobs:
           python scripts/smoke_accessory_preparation.py
           python scripts/smoke_accessory_routing.py
           python scripts/smoke_label_dependencies.py
+          python scripts/smoke_label_media_runtime_ports.py
+          python scripts/smoke_pdf_import_drain.py
           python scripts/smoke_label_worker_lifecycle.py
           python scripts/smoke_label_runtime_identity.py
           python scripts/smoke_label_runtime_bootstrap.py
@@ -419,19 +466,31 @@ jobs:
           python scripts/smoke_release_runtime_configuration.py
           python scripts/smoke_label_runtime_pause.py
           python scripts/smoke_codex_dependencies.py
+          python scripts/smoke_codex_api_runtime_port.py
+          python scripts/smoke_comparison_media_owner.py
           python scripts/smoke_history_dependencies.py
           python scripts/smoke_document_job_dependencies.py
           python scripts/smoke_agent_dependencies.py
           AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python local_inspection_service/scripts/smoke_agent_operations_postgres.py
           AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_agent_policy_read_transactions.py
           python scripts/smoke_extraction_dependencies.py
+          python scripts/smoke_text_cleanup_file_ports.py
+          python scripts/smoke_extraction_thread_drain.py
           python scripts/smoke_preparation_dependencies.py
+          python scripts/smoke_text_job_drain.py
           python scripts/smoke_comparison_dependencies.py
+          python scripts/smoke_comparison_cleanup.py
+          python scripts/smoke_comparison_thread_drain.py
           python scripts/smoke_text_record_store.py --root --postgres
           python scripts/smoke_text_media.py --root
+          python scripts/smoke_text_media_runtime_port.py
           python scripts/smoke_text_revisions.py --root
           python scripts/smoke_text_standards.py
+          python scripts/smoke_text_standard_composition.py
           python scripts/smoke_text_comparison_api.py --root
+          python scripts/smoke_text_comparison_composition.py
+          python scripts/smoke_text_storage_composition.py
+          python scripts/smoke_incoming_composition.py
           python scripts/smoke_incoming_text_store.py --root --postgres
           python scripts/smoke_incoming_text_analysis.py --root
           python scripts/smoke_incoming_text_workflows.py
@@ -439,8 +498,10 @@ jobs:
           python scripts/smoke_presence_contracts.py
           python scripts/smoke_profile_cache.py
           python scripts/smoke_detection_upload.py
+          python scripts/smoke_detection_artifact_ports.py
           python scripts/smoke_camera_detection_request.py
           python scripts/smoke_detection_media.py
+          python scripts/smoke_detection_media_ports.py
           python scripts/smoke_provider_foundations.py
           python scripts/smoke_openai_transport.py
           python scripts/smoke_provider_metering.py
@@ -493,6 +554,7 @@ jobs:
           python scripts/smoke_pipeline_recommendations.py
           python scripts/smoke_pipeline_task_snapshots.py
           python scripts/smoke_pipeline_resource_status.py
+          python scripts/smoke_pipeline_status_file_ports.py
           python scripts/smoke_pipeline_task_update.py
           python scripts/smoke_pipeline_task_create.py
           python scripts/smoke_pipeline_task_delete.py
@@ -507,12 +569,15 @@ jobs:
           python scripts/smoke_pipeline_recommendation_runtime.py
           python scripts/smoke_pipeline_auto_agent_runtime.py
           python scripts/smoke_pipeline_advance_runtime.py
+          python scripts/smoke_pipeline_thread_drain.py
+          python scripts/smoke_web_shutdown.py
           python scripts/smoke_pipeline_stage_advance.py
           python scripts/smoke_pipeline_decision_contract.py
           python -c "from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()"
           python scripts/smoke_presence_inspection.py
           python scripts/smoke_detection_analysis.py
           python scripts/smoke_ai_detection_analysis.py
+          python scripts/smoke_detection_workflows_composition.py
           python scripts/smoke_detection_annotation.py
           python scripts/smoke_presence_results.py
           python scripts/smoke_detection_failures.py
@@ -526,17 +591,31 @@ jobs:
           python scripts/smoke_local_model_runtime.py
           python scripts/smoke_local_model_selection.py
           python scripts/smoke_yolo_warmup.py
+          python scripts/smoke_yolo_warmup_drain.py
           python scripts/smoke_model_warmup_api.py
+          python scripts/smoke_model_catalog_composition.py
           python scripts/smoke_trained_model_catalog.py --postgres
           python scripts/smoke_training_record_store.py --postgres
           python scripts/smoke_training_task_lifecycle.py --postgres
+          python scripts/smoke_training_state_workflows_composition.py
+          python scripts/smoke_training_task_workflows_composition.py
           python scripts/smoke_training_executor_client.py
           python scripts/smoke_training_state_services.py
           python scripts/smoke_training_runner.py
+          python scripts/smoke_training_runner_file_port.py
+          python scripts/smoke_training_thread_drain.py
+          python scripts/smoke_codex_background_drain.py
+          python scripts/smoke_transfer_progress_drain.py
+          python scripts/smoke_auto_optimization_thread_drain.py
+          python scripts/smoke_auto_optimization_pool_scope.py
+          python scripts/smoke_auto_optimization_model_binding.py
           python scripts/smoke_training_dataset.py
           python scripts/smoke_training_runpod_flow.py
+          python scripts/smoke_runpod_transport_runtime_ports.py
           python scripts/smoke_training_artifacts.py
+          python scripts/smoke_runpod_artifact_runtime_ports.py
           python scripts/smoke_training_resource_catalog.py
+          python scripts/smoke_training_catalog_file_ports.py
           python scripts/smoke_training_resource_mutations.py --postgres
           python scripts/smoke_training_backgrounds.py
           python scripts/smoke_training_preview_layout.py

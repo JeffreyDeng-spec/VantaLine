@@ -1,6 +1,5 @@
 """Task environment background replacement using request-local arguments and narrow storage ports."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TaskBackgroundFiles
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,7 +34,10 @@ class TaskBackgroundRecords:
 class TaskBackgroundStore:
     def __init__(self, identity: TaskBackgroundIdentity, paths: TaskBackgroundPaths,
                  records: TaskBackgroundRecords, create: CreateBackgroundVariants,
-                 images: Callable[[Path], list[Path]], clock: Callable[[], float]):
+                 images: Callable[[Path], list[Path]], clock: Callable[[], float], *, files: TaskBackgroundFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.identity, self.paths, self.records = identity, paths, records
         self.create, self.images, self.clock = create, images, clock
 
@@ -43,12 +45,12 @@ class TaskBackgroundStore:
         clean_task_id = self.identity.sanitize(task_id) or self.identity.fallback(task_id)
         set_id = self.identity.safe()(f"task_env_{clean_task_id}")
         set_dir = self.paths.sets() / set_id
-        if _business_files.exists(set_dir):
-            _business_files.rmtree(set_dir, ignore_errors=True)
+        if self.files.exists(set_dir):
+            self.files.rmtree(set_dir, ignore_errors=True)
         set_dir.mkdir(parents=True, exist_ok=True)
         suffix = source_path.suffix.lower() if source_path.suffix.lower() in self.paths.suffixes() else ".jpg"
         target_path = set_dir / f"source{suffix}"
-        _business_files.copy2(source_path, target_path)
+        self.files.copy2(source_path, target_path)
         self.create(target_path, set_dir, count=5)
         image_count = len(self.images(set_dir))
         meta = self.records.update_provider()(

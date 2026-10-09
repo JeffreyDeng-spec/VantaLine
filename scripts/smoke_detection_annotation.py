@@ -364,7 +364,7 @@ class AnnotationContracts(unittest.TestCase):
             directory=Mock(return_value=output); url=Mock(side_effect=lambda path,owner=owner:owner+'/'+path.name)
             draw=Mock(side_effect=lambda *args,holder=holder:holder['service'].draw_ai_detection_boxes(*args))
             original=Mock(side_effect=lambda *args,holder=holder:holder['service'].write_ai_original_output(*args))
-            service=DetectionAnnotation(normalize,pixels,texts,images,directory,url,draw,original); holder['service']=service
+            service=DetectionAnnotation(normalize,pixels,texts,images,directory,url,draw,original, runtime_provider=lambda: None); holder['service']=service
             for port in [normalize,pixels,texts,images,directory,url,draw,original,text]: port.assert_not_called()
             services.append((owner,service,backend,output,normalize,pixels,texts,images,directory,url,draw,original,text))
         with ExitStack() as stack:
@@ -406,7 +406,7 @@ class AnnotationContracts(unittest.TestCase):
                     if count==position: raise error
                     return backend
                 images=Mock(side_effect=lookup); directory=Mock(side_effect=lambda kind:events.append('directory') or Directory()); url=Mock(return_value='url')
-                service=DetectionAnnotation(normalize_ai_box_2d,Mock(),Mock(),images,directory,url,Mock(),Mock())
+                service=DetectionAnnotation(normalize_ai_box_2d,Mock(),Mock(),images,directory,url,Mock(),Mock(), runtime_provider=lambda: None)
                 for port in [images,directory,url]: port.assert_not_called()
                 with self.assertRaises(OSError) as caught: service.write_ai_original_output(None,'id')
                 self.assertIs(caught.exception,error); self.assertEqual(count,position)
@@ -420,7 +420,7 @@ class AnnotationContracts(unittest.TestCase):
                 pixels=Mock(return_value=lambda *args:(1,2,30,40)); texts=Mock(return_value=lambda *args:'text')
                 if target=='pixels': pixels.side_effect=error
                 else: texts.side_effect=error
-                service=DetectionAnnotation(normalize_ai_box_2d,pixels,texts,lambda:backend,Mock(),Mock(),Mock(),Mock())
+                service=DetectionAnnotation(normalize_ai_box_2d,pixels,texts,lambda:backend,Mock(),Mock(),Mock(),Mock(), runtime_provider=lambda: None)
                 pixels.assert_not_called(); texts.assert_not_called()
                 with self.assertRaises(OSError) as caught: service.draw_ai_detection_boxes(np.zeros((120,200,3),dtype=np.uint8),[Detection(box_2d=[],label='X')],{})
                 self.assertIs(caught.exception,error); self.assertEqual(events,[] if target=='pixels' else ['box_2d'])
@@ -472,7 +472,7 @@ class AnnotationContracts(unittest.TestCase):
                         if len(calls)==position: raise error
                         return backend
                     url=Mock(return_value='url')
-                    service=DetectionAnnotation(normalize_ai_box_2d,lambda:lambda *args:(1,2,30,40),lambda:lambda *args:'Label',images,lambda kind:self.output,url,lambda *args:image,Mock())
+                    service=DetectionAnnotation(normalize_ai_box_2d,lambda:lambda *args:(1,2,30,40),lambda:lambda *args:'Label',images,lambda kind:self.output,url,lambda *args:image,Mock(), runtime_provider=lambda: None)
                     with self.assertRaises(BaseException) as caught:
                         if operation=='draw': service.draw_ai_detection_boxes(image,[{'box_2d':[],'label':'X'}],{})
                         else: service.write_ai_annotated_output(image,'id',[],{})

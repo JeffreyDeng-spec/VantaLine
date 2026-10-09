@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -98,7 +99,7 @@ class LabelDependencyContracts(unittest.TestCase):
         access=LabelAccess(lambda permission:state.permissions.append((permission,identity.get())),unused,lambda:(identity.get(),'fixture'))
         lifecycle=RepositoryLifecycle(open_repository,unused)
         imports=LabelImports(lambda:self.root/name,unused,unused,unused,unused)
-        api.register(app,access,lifecycle,imports,lambda:state.models,lambda:model.settings(lambda:state.models))
+        api.register(app,access,lifecycle,imports,lambda:state.models,lambda:model.settings(lambda:state.models), runtime_provider=get_runtime)
         state.client=TestClient(app,raise_server_exceptions=False)
         self.addCleanup(state.client.close)
         state.app=app
@@ -212,7 +213,7 @@ class LabelDependencyContracts(unittest.TestCase):
         with patch.object(worker,'threading',fake),patch.object(worker,'LabelRepository',side_effect=lambda raw:raw), \
              patch.object(worker,'process',side_effect=process) as invoked, \
              patch.dict(os.environ,{'VANTALINE_LABEL_INSPECTION_ENABLED':str(enabled).lower()}):
-            controller=worker.LabelWorker(RepositoryLifecycle(repository,clear),lambda:self.root,provider)
+            controller=worker.LabelWorker(RepositoryLifecycle(repository,clear),lambda:self.root,provider, runtime_provider=get_runtime)
             self.assertEqual(events,[])
             replacement=Models('replacement')
             if not legacy:replacement.legacy=None
@@ -295,7 +296,7 @@ class LabelDependencyContracts(unittest.TestCase):
                 with patch.object(pdf_import,'threading',fake),patch.object(pdf_import,'LabelRepository',side_effect=lambda raw:raw), \
                      patch.object(pdf_import,'process',side_effect=process) as invoked, \
                      patch.dict(os.environ,{'VANTALINE_LABEL_INSPECTION_ENABLED':'false'}):
-                    pdf_import.register(app,RepositoryLifecycle(repository,clear),lambda:self.root)
+                    pdf_import.register(app,RepositoryLifecycle(repository,clear),lambda:self.root, runtime_provider=get_runtime)
                     self.assertEqual(events,[])
                     for callback in app.router.on_startup:callback()
                     self.assertEqual([thread.name for thread in fake.threads],['pdf-import'])

@@ -6,6 +6,7 @@ import os
 import threading
 import logging
 import math
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from pathlib import Path
 from .dependencies import RepositoryLifecycle, ModelProvider, require_models
@@ -265,7 +266,11 @@ class LabelWorker:
     SHUTDOWN_SECONDS = 420 + 60
 
     def __init__(self, repositories: RepositoryLifecycle,
-                 data_directory: Callable[[], Path], models: ModelProvider, *, stopping: Callable[[], bool] | None = None):
+                 data_directory: Callable[[], Path], models: ModelProvider, *,
+                 runtime_provider: Callable[[], ArtifactRuntime | None], stopping: Callable[[], bool] | None = None):
+        if runtime_provider is None:
+            raise TypeError("runtime_provider is required")
+        self.runtime_provider = runtime_provider
         self.repositories = repositories
         self.data_directory = data_directory
         self.models = models
@@ -420,7 +425,7 @@ class LabelWorker:
             # A claimed run is never requeued, including model resolution failure.
             reference = run.get("profile_snapshot") or require_models(self.models).snapshot_for_record(run).get("label")
             resolved = require_models(self.models).resolve("label", reference) if reference else None
-            process(repo, MediaStore(self.data_directory() / "label_inspection" / "media"),
+            process(repo, MediaStore(self.data_directory() / "label_inspection" / "media", runtime_provider=self.runtime_provider),
                     run, resolved["api_key"] if resolved else "", resolved=resolved,
                     record_call=require_models(self.models).record_call)
             self._publish_summary(raw_repo, run)

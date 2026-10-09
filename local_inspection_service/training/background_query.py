@@ -1,12 +1,10 @@
 """Visible background media lookup and ordered catalog/default projection."""
 from collections.abc import Callable, Collection
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 from typing import Any, Protocol
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from ..storage.artifacts.http import file_response
+from ..storage.artifacts.http import ResponseFiles, file_response
 from .background_selection import BackgroundSetList
 
 Record = dict[str, Any]
@@ -17,10 +15,18 @@ class SelectBackgroundSet(Protocol):
                  target_user_id: str | None = None) -> str | None: ...
 
 
+class BackgroundFiles(ResponseFiles, Protocol):
+    def exists(self, path: Path) -> bool: ...
+
+
 class BackgroundQuery:
     def __init__(self, current: Callable[[], Record], admin: Callable[[Record], bool], safe: Callable[[str], str],
                  listing: BackgroundSetList, load: Callable[[], Any], selected: Callable[[], SelectBackgroundSet],
-                 sets: Callable[[], Path], suffixes: Callable[[], Collection[str]]):
+                 sets: Callable[[], Path], suffixes: Callable[[], Collection[str]],
+                 *, files: Callable[[], BackgroundFiles]):
+        if not callable(files):
+            raise TypeError("files must be callable")
+        self.files = files
         self.current, self.admin, self.safe = current, admin, safe
         self.list, self.load, self.selected = listing, load, selected
         self.sets, self.suffixes = sets, suffixes
@@ -32,9 +38,9 @@ class BackgroundQuery:
             raise HTTPException(status_code=404, detail="Background image not found")
         clean_name = Path(image_name).name
         path = self.sets() / clean_id / clean_name
-        if not _business_files.exists(path) or path.suffix.lower() not in self.suffixes():
+        if not self.files().exists(path) or path.suffix.lower() not in self.suffixes():
             raise HTTPException(status_code=404, detail="Background image not found")
-        return file_response(path, local_factory=FileResponse)
+        return file_response(path, local_factory=FileResponse, files=self.files())
 
     def training_background_sets(self, user_id: str | None = None) -> dict[str, Any]:
         user = self.current()

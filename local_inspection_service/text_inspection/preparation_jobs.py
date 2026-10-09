@@ -1,5 +1,7 @@
 """Account-scoped preparation jobs and immutable revision publication."""
 import copy
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
+from .job_admission import JobPermit
 import json
 import threading
 import time
@@ -15,13 +17,14 @@ from .preparation_ports import PreparationRecords, PreparationMedia, Preparation
 
 class PreparationJobs:
     def __init__(self, records: PreparationRecords, media: PreparationMedia,
-                 models: PreparationModels, clear_repository: Callable[[], None]):
+                 models: PreparationModels, clear_repository: Callable[[], None], *, runtime: TrainingThreadLifecycle | None = None):
         self.records = records
         self.media_dependencies = media
         self.models = models
         self.clear_repository = clear_repository
         self.slots = threading.BoundedSemaphore(1)
         self.ocr_lock = threading.Lock()
+        self.runtime = runtime if runtime is not None else TrainingThreadLifecycle()
 
     def mutate(self, identity, owner, fn, publish=False):
         if not self.records.owned("standards", identity, owner):
@@ -47,6 +50,9 @@ class PreparationJobs:
             raise HTTPException(409, "该订单不能准备标签标准")
 
     def start(self, identity, owner):
+        return self.runtime.submit(lambda launch: self._start(identity, owner, launch))
+
+    def _start(self, identity, owner, launch: ThreadLaunch):
         if not self.records.owned("standards", identity, owner):
             raise HTTPException(404, "标准不存在")
         if not enabled(owner):
@@ -60,35 +66,37 @@ class PreparationJobs:
             if current["job"].get("state") == "processing" or (current["items"] and all(a.get("attempt") for a in current["items"])):
                 return current
             raise HTTPException(429, "标准准备繁忙，请稍后重试；未新增模型调用")
-        job_id = uuid.uuid4().hex
-        def claim(standard, assets):
-            self.check(standard)
-            if standard.get("classification", {}).get("state") == "processing":
-                raise HTTPException(409, "请等待文档图片分类完成")
-            if standard.get("preparation_job", {}).get("state") == "processing":
-                return False
-            retained = [a for a in assets if a.get("status") == "candidate"]
-            if not retained:
-                raise HTTPException(409, "请先保留至少一张标签")
-            fresh = [a for a in retained if not a.get("preparation_attempt")]
-            if not fresh:
-                return False
-            standard["preparation_required"] = True
-            standard["preparation_job"] = dict(id=job_id, state="processing", heartbeat=time.time())
-            standard["preparation_job"]["profile_snapshot"] = {"id":settings.get("profile_id"),"version":settings.get("profile_version")}
-            for a in assets:
-                previous = next((v for v in standard.get("confirmed_assets", []) if v["id"] == a["id"]), None)
-                if previous and not a.get("active_preparation"):
-                    a["preparation_previous_snapshot"] = copy.deepcopy(previous)
-                a["preparation_required"] = True
-            return True
+        permit = JobPermit(self.slots)
         try:
+            job_id = uuid.uuid4().hex
+            def claim(standard, assets):
+                self.check(standard)
+                if standard.get("classification", {}).get("state") == "processing":
+                    raise HTTPException(409, "请等待文档图片分类完成")
+                if standard.get("preparation_job", {}).get("state") == "processing":
+                    return False
+                retained = [a for a in assets if a.get("status") == "candidate"]
+                if not retained:
+                    raise HTTPException(409, "请先保留至少一张标签")
+                fresh = [a for a in retained if not a.get("preparation_attempt")]
+                if not fresh:
+                    return False
+                standard["preparation_required"] = True
+                standard["preparation_job"] = dict(id=job_id, state="processing", heartbeat=time.time())
+                standard["preparation_job"]["profile_snapshot"] = {"id":settings.get("profile_id"),"version":settings.get("profile_version")}
+                for a in assets:
+                    previous = next((v for v in standard.get("confirmed_assets", []) if v["id"] == a["id"]), None)
+                    if previous and not a.get("active_preparation"):
+                        a["preparation_previous_snapshot"] = copy.deepcopy(previous)
+                    a["preparation_required"] = True
+                return True
             if not self.mutate(identity, owner, claim):
-                self.slots.release()
+                permit.cancel()
                 return self.view(identity, owner)
-            threading.Thread(target=self.run, args=(identity, owner, job_id, settings), daemon=True).start()
-        except Exception:
-            self.slots.release()
+            launch(lambda wrap: threading.Thread(target=permit.wrap(wrap(self.run)),
+                args=(identity, owner, job_id, settings), daemon=True), lambda thread: None)
+        except BaseException:
+            permit.cancel()
             raise
         return self.view(identity, owner)
 
@@ -228,7 +236,6 @@ class PreparationJobs:
                 self.mutate(identity, owner, finish, publish=True)
         finally:
             self.clear_repository()
-            self.slots.release()
 
     def view(self, identity, owner):
         def read(standard, assets):
@@ -330,3 +337,6 @@ class PreparationJobs:
             raise HTTPException(404, "证据不存在")
         path = self.media_dependencies.path(owner, identity, media["filename"])
         return self.media_dependencies.read_verified(str(path), owner, identity, expected_sha256=media["sha256"])
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

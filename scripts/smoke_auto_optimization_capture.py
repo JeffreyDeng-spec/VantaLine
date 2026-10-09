@@ -124,7 +124,11 @@ class CaptureContract(unittest.TestCase):
         capture()
         from local_inspection_service import server
         service=server._auto_optimization_capture
-        for field in fields(service.ports):self.assertIs(getattr(service.ports,field.name)(),getattr(server,field.name))
+        for field in fields(service.ports):
+            if field.name=='auto_optimize_detection_candidates':
+                self.assertEqual(service.ports.auto_optimize_detection_candidates(), service.auto_optimize_detection_candidates)
+            else:
+                self.assertIs(getattr(service.ports,field.name)(),getattr(server,field.name))
         for name,args in [("auto_optimize_detection_candidates",({},)),("record_auto_optimize_capture",({}, {}, "r", None))]:
             expected=object();method=Mock(return_value=expected)
             with patch.object(server,"_auto_optimization_capture",SimpleNamespace(**{name:method})):

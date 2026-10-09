@@ -6,6 +6,8 @@ from unittest.mock import Mock,AsyncMock,patch,call
 import asyncio,io,os,sys,tempfile,unittest
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from scripts.smoke_ai_detection_analysis import BindingResolver
 
 def capture_upload_window(api, Fixture, root, site, mode):
@@ -163,7 +165,7 @@ class UploadFixture:
         if self.index>=len(self.frames):return False,None
         value=self.frames[self.index];self.index+=1;return True,value
     def bind(self,api,stack):
-        for name,value in {'ensure_dirs':self.ensure,'require_analyze_model_permission':self.permission,'safe_name':self.safe,'UPLOAD_DIR':self.root,'cv2':self.cv,'analyze_bgr':self.analyze,'load_config':self.load,'model_profile_service':self.resolver}.items():stack.enter_context(patch.object(api,name,value))
+        for name,value in {'ensure_dirs':self.ensure,'require_analyze_model_permission':self.permission,'safe_name':self.safe,'UPLOAD_DIR':self.root,'cv2':self.cv,'analyze_bgr':self.analyze,'load_config':self.load,'model_profile_service':self.resolver}.items():stack.enter_context(patch_fixture_capability(api, name, value))
 
 class UploadContracts(unittest.TestCase):
     @classmethod
@@ -234,7 +236,7 @@ class UploadContracts(unittest.TestCase):
         f.analyze.side_effect=lambda *a,**k:snapshots.append(f.resolver.current_snapshot()) or f.result
         with f.resolver.scope(ambient):self.video();self.assertIs(f.resolver.current_snapshot(),ambient)
         self.assertTrue(all(s is ambient for s in snapshots));self.assertEqual(f.resolver.records,[])
-        with patch.object(self.api,'model_profile_service',None):
+        with patch_profile_service(self.api, None):
             with self.assertRaises(RuntimeError):self.video()
     def test_video_output_limits_do_not_change_summary_counts(self):
         f=self.f;f.config['video']={'sample_every_seconds':0,'max_frames':205};f.frames=[f.image]*205
@@ -308,8 +310,8 @@ class UploadContracts(unittest.TestCase):
             f=UploadFixture(self.f.root/owner);f.result={**f.result,'owner':owner};observed=[]
             def analyze(*args,f=f,observed=observed,**kwargs):observed.append(f.resolver.current_snapshot());return f.result
             access=UploadAccess(f.ensure,f.permission);paths=UploadPaths(lambda f=f:f.safe,lambda f=f:f.root)
-            image=ImageUpload(access,paths,lambda:np,lambda f=f:f.cv,analyze);summary=VideoSummary(lambda:strings)
-            video=VideoUpload(access,paths,lambda:copies,f.load,lambda f=f:f.cv,analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary))
+            image=ImageUpload(access,paths,lambda:np,lambda f=f:f.cv,analyze, files=lambda: BusinessFiles(runtime_provider=lambda: None));summary=VideoSummary(lambda:strings)
+            video=VideoUpload(access,paths,lambda:copies,f.load,lambda f=f:f.cv,analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary), files=BusinessFiles(runtime_provider=lambda: None))
             self.assertEqual(f.events,[]);self.assertEqual(list(f.root.iterdir()),[])
             invoke=pinned(lambda f=f:f.resolver)(video.analyze_video)
             services.append((f,image,invoke,observed))
@@ -404,8 +406,8 @@ class UploadContracts(unittest.TestCase):
                         return value
                     return read
                 access=UploadAccess(f.ensure,f.permission);paths=UploadPaths(getter('name',f.safe),getter('directory',f.root));summary=VideoSummary(getter('strings',self.api.string_list))
-                image=ImageUpload(access,paths,getter('arrays',np),getter('images',f.cv),f.analyze)
-                video=VideoUpload(access,paths,getter('copies',self.api.shutil),f.load,getter('videos',f.cv),f.analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary))
+                image=ImageUpload(access,paths,getter('arrays',np),getter('images',f.cv),f.analyze, files=lambda: BusinessFiles(runtime_provider=lambda: None))
+                video=VideoUpload(access,paths,getter('copies',self.api.shutil),f.load,getter('videos',f.cv),f.analyze,VideoResults(video_frame_result_payload,summary.video_ai_summary), files=BusinessFiles(runtime_provider=lambda: None))
                 self.assertEqual(seen,[0]);self.assertEqual(f.events,[])
                 with self.assertRaises(RuntimeError) as caught:
                     if mode=='summary':summary.video_ai_summary([{'ai':{'error':'x'}}])
