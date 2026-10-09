@@ -6,9 +6,12 @@ OWNERS={
  'save_pipeline_tasks':('queries.persistence',),
  'load_pipeline_tasks':('queries.persistence',),
  'load_pipeline_task':('queries.persistence','execution'),
- 'save_pipeline_task_batch_changes':('mutations',),
- 'persist_pipeline_task_progress':('mutations',),
- 'mark_pipeline_task_advancing':('mutations',),
+ # Mutation services are frozen value objects. Their owned callers select the
+ # connected forwarders, so substituting those does not mutate a frozen object
+ # or patch a class shared by another application graph.
+ 'save_pipeline_task_batch_changes':(),
+ 'persist_pipeline_task_progress':(),
+ 'mark_pipeline_task_advancing':(),
  'linked_training_job':('stages',),'sync_pipeline_task':('stages',),
  'advance_pipeline_task':('stages',),'pipeline_task_needs_auto_agent':('stages',),
  'pipeline_task_decision_signature':('stages',),'agent_mcp_append_conversation':('agent',),

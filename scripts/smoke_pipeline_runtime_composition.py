@@ -10,7 +10,7 @@ import threading
 from types import SimpleNamespace
 from typing import get_type_hints
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 POSTGRES='--postgres' in sys.argv
 if POSTGRES:sys.argv.remove('--postgres')
@@ -186,6 +186,33 @@ class RuntimeCompositionContracts(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'resolver is not configured'):f.owner.execution.run_advance('same',{'id':'a'})
         self.assertFalse(any(e[0]=='samples' for e in f.stage.events))
         self.assertEqual(f.q.persistence.load_pipeline_task('same')['stage'],'draft')
+    def test_frozen_mutation_test_seams_restore_and_preserve_other_graph(self):
+        from pipeline_runtime_test_ports import patch_pipeline_runtime
+        a,b=self.a.owner,self.b.owner
+        names=('save_pipeline_task_batch_changes','persist_pipeline_task_progress','mark_pipeline_task_advancing')
+        api=SimpleNamespace(_pipeline_workflows=a,**{name:getattr(a,name) for name in names})
+        getters={
+            'save_pipeline_task_batch_changes':a.mutations.storage.save_pipeline_task_batch_changes,
+            'persist_pipeline_task_progress':a.stages.advance.runtime.persist_progress,
+            'mark_pipeline_task_advancing':a.agent.actions._advance.mark,
+        }
+        other={
+            'save_pipeline_task_batch_changes':b.mutations.storage.save_pipeline_task_batch_changes,
+            'persist_pipeline_task_progress':b.stages.advance.runtime.persist_progress,
+            'mark_pipeline_task_advancing':b.agent.actions._advance.mark,
+        }
+        original=a.mutations
+        for name in names:
+            with self.subTest(name=name):
+                replacement=Mock(return_value='substituted')
+                with patch_pipeline_runtime(api,name,replacement):
+                    self.assertIs(getters[name](),replacement)
+                    self.assertEqual(getters[name]()('synthetic'),'substituted')
+                    replacement.assert_called_once_with('synthetic')
+                    self.assertIs(other[name]().__self__,b)
+                self.assertIs(getters[name]().__self__,a)
+                self.assertIs(getattr(api,name).__self__,a)
+                self.assertIs(a.mutations,original)
     def test_saved_owned_getter_selects_receiver_after_argument_effect(self):
         f=self.a;getter=f.owner.execution.auto.decision.decide()
         # The supplier returns a forwarder, not a captured sub-owner method.
