@@ -812,3 +812,15 @@ PipelineQueries reuses the original candidate repository and PipelinePersistence
 PostgreSQL endpoint source verification now uses the established composite replay in dependency order, rather than reversing configuration before newer owner graphs. Actual repository modules and the complete original endpoint persistence assertions are still inspected; no database behavior, SQL, permission or locking change is involved.
 
 AgentPipelineWorkflows has no connection or current-user field. Model bindings use the supplied resolver scope; persistence stays with PipelinePersistence and native execution retains thread repository scopes. Agent decision work runs outside the task guard; actual turn commit and record save run inside, followed by scheduling outside. No SQL or advisory-lock policy changes are included.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.

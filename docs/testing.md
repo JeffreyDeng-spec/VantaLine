@@ -2890,3 +2890,15 @@ followed by digest failure with a single model invocation. Original source
 oracles validate all actual owners before reversing the three immutable deltas;
 unknown roots or changed actual owners are rejected. Named owner test seams
 replace the real supplied capability rather than private component aliases.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.

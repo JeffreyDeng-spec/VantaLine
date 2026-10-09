@@ -1,5 +1,6 @@
 """Fail-closed storage/settings inspection and benchmark-only routing contracts."""
 from pathlib import Path
+import copy
 import os
 import io
 import sys
@@ -81,9 +82,7 @@ class StorageContracts(unittest.TestCase):
             with self.assertRaises(AssertionError):storage.main()
         inspect.assert_called_once()
 
-    def test_only_four_real_pg_benchmarks_route_to_second_database(self):
-        root=Path(__file__).resolve().parents[1]
-        workflow=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
+    def check_benchmark_routing(self, workflow):
         backend=workflow['jobs']['backend-plc']
         self.assertEqual(backend['env']['VANTALINE_POSTGRES_DSN'],storage.NORMAL_DSN)
         self.assertEqual(backend['env']['VANTALINE_BENCHMARK_POSTGRES_DSN'],storage.BENCHMARK_DSN)
@@ -96,7 +95,28 @@ class StorageContracts(unittest.TestCase):
             for line in step.get('run','').splitlines():
                 if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
                     self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
-        self.assertEqual(selected,['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','summary_reads','projection','run_batch']])
+        self.assertEqual(selected,['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','beta_summaries','summary_reads','projection','run_batch']])
+
+
+    def test_only_five_real_pg_benchmarks_route_to_second_database(self):
+        root=Path(__file__).resolve().parents[1]
+        workflow=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
+        self.check_benchmark_routing(workflow)
+
+    def test_beta_missing_wrong_or_duplicate_override_is_rejected(self):
+        root=Path(__file__).resolve().parents[1]
+        original=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
+        prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
+        command='python scripts/benchmark_label_beta_summaries.py'
+        for mode in ('bare','ordinary','wrong-secondary','duplicate'):
+            workflow=copy.deepcopy(original)
+            step=next(s for s in workflow['jobs']['backend-plc']['steps'] if prefix+command in s.get('run',''))
+            replacement={'bare':command, 'ordinary':prefix.replace('$VANTALINE_BENCHMARK_POSTGRES_DSN','$VANTALINE_POSTGRES_DSN')+command,
+                         'wrong-secondary':prefix.replace('AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN"','AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN"')+command,
+                         'duplicate':prefix+command+'\n'+prefix+command}[mode]
+            step['run']=step['run'].replace(prefix+command,replacement)
+            with self.subTest(mode=mode),self.assertRaises(AssertionError):
+                self.check_benchmark_routing(workflow)
 
 
 if __name__=='__main__':unittest.main()

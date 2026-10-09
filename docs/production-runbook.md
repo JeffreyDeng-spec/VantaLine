@@ -1857,3 +1857,15 @@ The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated Po
 Connected pipeline assembly starts no work during construction. Native auto/advance/recommendation execution retains its repository scope and existing close order. Never force-stop paid work to finish a release window; preserve model/call evidence and roll back the complete release with its declared topology. Full application assembly and standalone label-worker production cutover are still pending.
 
 Default Codex account/model admission remains driven by the existing process environment. API assemblers must supply their mapping explicitly; a missing mapping fails before route registration. No worker cutover or paid-call retry is introduced, and whole-release rollback preserves existing task evidence.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.

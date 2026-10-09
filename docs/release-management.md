@@ -1604,3 +1604,15 @@ The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated Po
 The connected pipeline runtime owner ships under the existing release topology. Three native execution lifecycle owners remain separate and drain auto producers before advance/recommendation consumers. A false drain result prevents proceeding to downstream shutdown. This change does not activate the standalone label worker; deployment and rollback still use one complete immutable package after required CI and release gates.
 
 The explicit Codex environment edge is schema-free and retains the existing Web/Codex/label topology. Default registration still receives the process environment. Validation covers isolated API mappings and original PostgreSQL/worker contracts; rollback restores the complete immutable package. This wiring does not activate standalone label processing.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.
