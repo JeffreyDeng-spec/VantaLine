@@ -161,8 +161,8 @@ def main() -> None:
     # Check real composition modules first, then retain the immutable old-location
     # oracle. Every persistence contract below still reads the current real module.
     sys.path.insert(0, str(ROOT / "scripts"))
-    from application_configuration_source_contract import restore_application_configuration_root
-    source = restore_application_configuration_root(source)
+    # This composite verifier checks every actual new owner before replaying
+    # configuration and business deltas once, in their reviewed dependency order.
     from application_integration_source_contract import restore_business_root
     source = restore_business_root(source)
     tree = ast.parse(source, filename=str(SERVER))

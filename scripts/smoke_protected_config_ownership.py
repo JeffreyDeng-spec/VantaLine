@@ -196,5 +196,17 @@ class ProtectedConfigContracts(unittest.TestCase):
         from local_inspection_service.scripts import smoke_postgres_endpoint_source_contract
         smoke_postgres_endpoint_source_contract.main()
 
+    @unittest.skipIf(BASELINE,'new direct owner source oracle')
+    def test_configuration_replay_rejects_unknown_query_or_lease_owner(self):
+        from application_integration_source_contract import restore_business_root
+        source=(ROOT/'local_inspection_service/server.py').read_text()
+        restore_business_root(source)
+        for old,new in (
+            ('_pipeline_candidate_flow = _pipeline_queries.candidates', '_pipeline_candidate_flow = _pipeline_queries.metadata'),
+            ('_plc_lease_acquisition = _plc_lease_diagnostic_workflows.acquisition', '_plc_lease_acquisition = None'),
+        ):
+            self.assertIn(old,source)
+            with self.assertRaises(AssertionError):restore_business_root(source.replace(old,new))
+
 
 if __name__=='__main__':unittest.main(verbosity=2)
