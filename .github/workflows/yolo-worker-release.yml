@@ -40,7 +40,7 @@ jobs:
           subprocess.run(['git','checkout','--detach',sha],check=True)
           with open(os.environ['GITHUB_ENV'],'a') as f:
               f.write('SOURCE_SHA='+sha+'\n')
-              f.write('WORKER_IMAGE=ghcr.io/'+os.environ['GITHUB_REPOSITORY'].lower()+'-yolo-train-worker:'+sha+'\n')
+              f.write('WORKER_IMAGE=ghcr.io/'+os.environ['GITHUB_REPOSITORY'].lower()+'-real-photo-yolo-worker:'+sha+'\n')
           PY
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3

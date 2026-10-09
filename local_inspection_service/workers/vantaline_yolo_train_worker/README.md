@@ -184,3 +184,5 @@ sample dataset:
 ## Released image commissioning
 
 Production images are built by `.github/workflows/yolo-worker-release.yml` from an accepted published immutable whole-release SHA. The workflow records the exact GHCR digest and release/commit labels. Configure RunPod with that digest after settling current jobs. Real-photo jobs require the held-out evaluation response; an older image is not accepted as evidence of this feature.
+
+The released worker image uses the main repository-owned `<repository>-real-photo-yolo-worker` GHCR package, separate from the historical standalone worker package. Preserve the previous endpoint digest for whole-release reconciliation and rollback.
