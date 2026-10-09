@@ -48,7 +48,8 @@ def main():
         validate_base_url=lambda v:None, legacy_sources=lambda:[])
     api_dependencies=ProfileApiDependencies(require_admin=require_admin,
         cost_from_usage=lambda m,u:(0,0,False), cursor_api_url=lambda b,p:b+p,
-        cursor_auth_headers=lambda key:{}, model_options_from_items=lambda items,**kw:items)
+        cursor_auth_headers=lambda key:{}, model_options_from_items=lambda items,**kw:items,
+        codex_compare_model=lambda:os.environ.get('VANTALINE_CODEX_COMPARE_MODEL',''))
     ai=dict(provider='gemini',model='gemini-2.5-flash',api_key='legacy-key-A',base_url=DEFAULTS['gemini'][1],enabled=True,
             api_key_candidates=[dict(provider='qwen',label='unused qwen',key='unused-key-B')])
     agent=dict(provider='openai_compatible',model='agent-model',api_key='disabled-agent-key',base_url='https://example.com/v1',enabled=False)

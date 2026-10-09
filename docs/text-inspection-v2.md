@@ -831,3 +831,10 @@ process environment, secret store and label feature settings; this change does
 not claim those default resources are isolated across complete applications.
 
 ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.
+
+The model-profile engines route receives an explicit Codex-model supplier. The
+default composition reads the existing process environment at request time;
+independent registrars can supply separate environments without importing a
+process-global environment from the HTTP module. Empty and whitespace values
+retain the original truthiness behavior, and the administrator check remains
+first. This does not establish independent construction of the full Web app.

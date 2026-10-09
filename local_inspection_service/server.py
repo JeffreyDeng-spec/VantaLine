@@ -12427,6 +12427,7 @@ _model_profile_configuration.register(app, ProfileApiDependencies(
     cursor_api_url=lambda base, path: cursor_api_url(base, path),
     cursor_auth_headers=lambda key: cursor_auth_headers(key),
     model_options_from_items=lambda items, **kwargs: agent_model_options_from_items(items, **kwargs),
+    codex_compare_model=lambda: os.environ.get('VANTALINE_CODEX_COMPARE_MODEL', ''),
 ))
 
 

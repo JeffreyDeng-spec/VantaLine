@@ -72,10 +72,9 @@ def register(app, service: Service, dependencies: ProfileApiDependencies):
     @app.get(prefix+'/engines')
     def engines():
         admin()
-        import os
         assistant = service.resolve('training_assistant')
         return {'items':[
-            {'name':'标签检查 Beta','engine':'Codex 专用引擎','status':'已配置' if os.getenv('VANTALINE_CODEX_COMPARE_MODEL') else '未配置模型','path':'/text-compare-codex'},
+            {'name':'标签检查 Beta','engine':'Codex 专用引擎','status':'已配置' if dependencies.codex_compare_model() else '未配置模型','path':'/text-compare-codex'},
             {'name':'本地 OCR / YOLO','engine':'本地模型','status':'模型与任务状态见模型库','path':'/training-library?tab=models'},
             {'name':'训练执行器','engine':'现有训练工作流','status':'任务状态见任务流水线','path':'/pipeline'},
             {'name':'训练助手','engine':assistant.get('model') or '规则逻辑','status':assistant.get('connection_status') or ('已配置，未验证连接' if assistant.get('configured') else '规则逻辑'), 'path':'/pipeline'},

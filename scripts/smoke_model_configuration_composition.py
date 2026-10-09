@@ -263,7 +263,7 @@ class Contracts(unittest.TestCase):
             app = FastAPI()
             other = Mock(side_effect=AssertionError('unexpected provider call'))
             value.register(app, ProfileApiDependencies(lambda: {'id': 'synthetic-admin'},
-                                                       other, other, other, other))
+                                                       other, other, other, other, other))
             client = TestClient(app)
             try:
                 response = client.get('/api/admin/model-profiles')
@@ -373,19 +373,53 @@ class Contracts(unittest.TestCase):
                 raise HTTPException(status, 'Synthetic admin gate')
             other = Mock(side_effect=AssertionError('denied request reached profile capability'))
             app = FastAPI()
-            value.register(app, ProfileApiDependencies(denied, other, other, other, other))
+            value.register(app, ProfileApiDependencies(denied, other, other, other, other, other))
             applications.append((app, status, poison))
         self.assertEqual([(r.path, r.methods) for r in applications[0][0].routes],
                          [(r.path, r.methods) for r in applications[1][0].routes])
         for app, status, poison in applications:
             client = TestClient(app)
             try:
-                response = client.get('/api/admin/model-profiles')
-                self.assertEqual(response.status_code, status)
-                self.assertEqual(response.json(), {'detail': 'Synthetic admin gate'})
+                for path in ('/api/admin/model-profiles', '/api/admin/model-profiles/engines'):
+                    response = client.get(path)
+                    self.assertEqual(response.status_code, status)
+                    self.assertEqual(response.json(), {'detail': 'Synthetic admin gate'})
             finally:
                 client.close()
             poison.assert_not_called()
+        self.assertEqual(events, ['A', 'A', 'B', 'B'])
+
+    def test_engines_use_each_application_capability_after_profile_resolution(self):
+        events = []
+        applications = []
+        for marker, configured in (('A', 'synthetic-model'), ('B', '')):
+            value, _, _ = configured_owner(marker)
+            other = Mock(side_effect=AssertionError('unexpected transport capability'))
+            def model(marker=marker, configured=configured):
+                events.append(marker)
+                return configured
+            app = FastAPI()
+            value.register(app, ProfileApiDependencies(lambda: {'id': 'synthetic-admin'},
+                other, other, other, other, model))
+            applications.append(app)
+        with patch.dict('os.environ', {'VANTALINE_CODEX_COMPARE_MODEL': 'process-poison'}):
+            for app, status in zip(applications, ('已配置', '未配置模型')):
+                client = TestClient(app)
+                try:
+                    response = client.get('/api/admin/model-profiles/engines')
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()['items'][0]['status'], status)
+                    self.assertNotIn('process-poison', response.text)
+                finally:
+                    client.close()
+        self.assertEqual(events, ['A', 'B'])
+        with patch.object(value.service, 'resolve', side_effect=RuntimeError('profile resolution sentinel')):
+            client = TestClient(applications[-1])
+            try:
+                with self.assertRaisesRegex(RuntimeError, 'profile resolution sentinel'):
+                    client.get('/api/admin/model-profiles/engines')
+            finally:
+                client.close()
         self.assertEqual(events, ['A', 'B'])
 
 
