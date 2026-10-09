@@ -212,6 +212,14 @@ This extraction changes no SQL, advisory-lock scope, pagination snapshot or sche
 
 **Status: Authoritative**
 
+The release runtime observer uses an explicitly read-only PostgreSQL connection,
+repeatable-read transactions and a two-second statement timeout. Control state,
+queue counts and both actual heartbeat records come from one database snapshot;
+subsequent polls begin new snapshots. It never takes the label mutation advisory
+lock, initializes tables or writes heartbeat records. The synthetic PostgreSQL
+contract interleaves a writer between reads to reject mixed-generation evidence
+and verifies that the observer's connection cannot execute a DELETE.
+
 Document review uses existing asset status and JSONB fields; no migration is
 needed. `review` transitions to `needs_confirmation` under the standard advisory
 lock and revision check, preserving `original_classification` in raw_json. On an

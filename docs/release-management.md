@@ -664,6 +664,18 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The packaged `local_inspection_service.runtime.observe_label_runtime` command
+provides a root-only database observation for an active managed release. It reads
+the captured runtime configuration without starting Web, workers or migrations.
+Each observation uses a repeatable-read, read-only transaction and checks actual
+persisted Web/label sampling timestamps, identity, process instance, PID, control
+revision, admission flags and the global concurrency limit. Both roles must
+advance within a 30-second observation deadline; fresh means at most 15 seconds.
+The command rechecks the active package and configuration before reporting success.
+Ready/drained while fenced is evidence of periodic progress, not restored admission.
+This command is not yet an installer gate; automatic installation still uses the
+existing controller verification until normal and recovery rollback paths are tested.
+
 The source-safety CI job runs the offline COS evacuation smoke. The operational
 tool does not run during release installation and does not enable COS in the
 application. Merging its tooling alone cannot authorize source-file removal or

@@ -743,6 +743,18 @@ releases use the existing complete-release deployment and rollback procedure.
 
 **Status: Authoritative**
 
+For a managed active release, root may run its packaged Python with
+`-m local_inspection_service.runtime.observe_label_runtime --commit <full-sha> --release <release-id>`
+from that release directory. This is a bounded read-only database observation,
+not a worker startup or migration. The fixed output includes generation, admission
+flags, queue/active counts and actual sampled timestamps for each process; it
+never prints configuration, connection strings, media or exception details.
+Both Web and label periodic samples must progress while process identity and
+control revision remain unchanged. Fenced ready/drained is valid before admission
+restoration and must not be described as normal consumption. The probe is presently
+an explicit observation command; installer integration and final release evidence
+remain separate acceptance work.
+
 ## COS evacuation tooling
 
 `scripts/cos_migrate.py` provides operator-run inventory, upload, independent

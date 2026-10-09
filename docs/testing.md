@@ -1342,6 +1342,14 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+Run `scripts/smoke_label_runtime_observation.py` for per-role periodic progress,
+deadline, process/admission changes and fixed-error redaction. With an isolated
+`VANTALINE_POSTGRES_DSN`, also run `scripts/smoke_label_runtime_observation_postgres.py`
+for actual driver read-only/repeatable-read settings, concurrent snapshot stability,
+missing/stale/future/wrong-generation heartbeats and unlocked monitoring. These
+checks start no application or paid inference and do not prove production health
+or installer rollback integration.
+
 COS evacuation: `python scripts/smoke_cos_migrate.py` runs offline synthetic checks
 for interrupted inventories, source mutation before/during upload, same-length
 remote corruption, deduplicated resume, secret/symlink exclusion and path escape.
