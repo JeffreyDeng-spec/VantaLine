@@ -54,6 +54,11 @@ verify_application() {
   elif [[ -f "$target/RUNTIME_TOPOLOGY.json" ]]; then
     return 1
   fi
+  # Old immutable packages have no observer. New artifacts require both modules.
+  # Run from the candidate package; success is still before accept/commit.
+  if [[ -f "$target/local_inspection_service/runtime/observe_label_runtime.py" ]]; then
+    (cd "$target" && exec "$target/.venv/bin/python" -m local_inspection_service.runtime.observe_label_runtime --commit "$commit" --release "$release")
+  fi
 }
 promote_installer() {
   install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"

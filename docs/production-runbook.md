@@ -757,9 +757,13 @@ flags, queue/active counts and actual sampled timestamps for each process; it
 never prints configuration, connection strings, media or exception details.
 Both Web and label periodic samples must progress while process identity and
 control revision remain unchanged. Fenced ready/drained is valid before admission
-restoration and must not be described as normal consumption. The probe is presently
-an explicit observation command; installer integration and final release evidence
-remain separate acceptance work.
+restoration and must not be described as normal consumption. New packages run the
+same observation automatically from the candidate directory before installation
+accept/recover and commit. Normal and journal recovery failures use joint rollback;
+an already installed retry without a journal fails without stopping/restarting
+its current processes or changing admission, and keeps the archive for inspection.
+Older packages without the observer keep their original gate. Final release
+evidence must still distinguish pre-accept periodic progress from restored admission.
 
 ## COS evacuation tooling
 

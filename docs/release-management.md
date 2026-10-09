@@ -679,8 +679,16 @@ revision, admission flags and the global concurrency limit. Both roles must
 advance within a 30-second observation deadline; fresh means at most 15 seconds.
 The command rechecks the active package and configuration before reporting success.
 Ready/drained while fenced is evidence of periodic progress, not restored admission.
-This command is not yet an installer gate; automatic installation still uses the
-existing controller verification until normal and recovery rollback paths are tested.
+For a package containing the observer, the installer runs that package's Python
+from its own directory after public HTTP checks and before accept/recover and the
+deployment commit. Failed observations follow the existing journal-bound joint
+rollback. A retry of an already installed package without a journal leaves its
+current processes/admission intact and retains the archive when observation fails.
+Older immutable packages lacking the observer retain their original health gate;
+new artifact builds and CI require both observer modules and checksum entries.
+Pre-accept samples establish fenced periodic progress. Admission restoration is
+still checked by the existing controller; these samples do not observe a later
+resumed consumer or establish final production commissioning.
 
 The source-safety CI job runs the offline COS evacuation smoke. The operational
 tool does not run during release installation and does not enable COS in the
