@@ -1860,6 +1860,8 @@ Pipeline resource availability still uses the configured BusinessFiles capabilit
 
 The training source-oracle ordering repair changes no configuration defaults or providers. Actual application configuration remains verified by the central integrated replay before the historical training contract is inspected; duplicated premature configuration replay is removed only from the test helper.
 
+The Agent reference-reader source contract also verifies actual Pose and path composition before its historical constructor assertion. PoseExecutionWorkflows receives explicit file readers; this test-location repair adds no storage fallback, configuration key or model call. Required-reader and falsey-input checks remain unchanged.
+
 
 Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
 (state, tool-call records and render configuration), `PosePlanningWorkflows`
