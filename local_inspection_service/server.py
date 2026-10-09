@@ -1154,7 +1154,7 @@ view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(ta
 defaults=lambda: DEFAULT_CONFIG['training'],
 legacy_owner=lambda: LEGACY_OWNER_ID,
 access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
-configuration=TrainingConfiguration(load=lambda: load_config(), save=lambda config: save_config(config)),
+configuration=TrainingConfiguration(load=lambda: _app_configuration.load_config(), save=lambda config: _app_configuration.save_config(config)),
 sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))
 _training_user_state = _training_account_state.users
 _training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
@@ -1882,7 +1882,6 @@ _service_directories = ServiceDirectories(
 ensure_dirs = _service_directories.ensure
 
 
-_config_io_lock = threading.RLock()
 PLC_CONTROL_GENERATION_KEY = "plc_control_generation"
 PLC_RUNTIME_COORDINATION_KEY = "plc_runtime_coordination"
 PLC_CAPTURE_RESULTS_KEY = "plc_capture_results"
@@ -1902,9 +1901,6 @@ from .plc.persisted_validation import (
     build_plc_v1_dispatch_plan,
     normalize_plc_v1_snapshot,
     verify_persisted_plc_dispatch,
-)
-_plc_namespace_write_authorized: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "plc_namespace_write_authorized", default=False
 )
 
 
@@ -2264,18 +2260,14 @@ def plc_web_serial_record_receipt(
     return _plc_browser_dispatch.plc_web_serial_record_receipt(station_id, dispatch_id, request)
 
 
-from .config.app_store import AppConfigStore
-from .config.app_store_ports import AppConfigFiles, AppConfigRows, AppConfigPolicy
+from .config.application_composition import ApplicationConfiguration, ConfigurationFiles, ConfigurationPolicy
+from .config.app_store_ports import AppConfigRows
 
-_app_config_store = AppConfigStore(
-    files=AppConfigFiles(
-        _business_files=lambda: _business_files,
-        CONFIG_PATH=lambda: CONFIG_PATH,
-        CONFIG_BACKUP_PATH=lambda: CONFIG_BACKUP_PATH,
-        DATA_DIR=lambda: DATA_DIR,
-        _config_io_lock=lambda: _config_io_lock,
-        ensure_dirs=lambda: ensure_dirs,
-        _read_config_file=lambda: _read_config_file,
+_app_configuration = ApplicationConfiguration(
+    files=ConfigurationFiles(
+        files=lambda: _business_files, primary=lambda: CONFIG_PATH,
+        backup=lambda: CONFIG_BACKUP_PATH, directory=lambda: DATA_DIR,
+        ensure=lambda: ensure_dirs,
     ),
     rows=AppConfigRows(
         runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
@@ -2283,29 +2275,30 @@ _app_config_store = AppConfigStore(
         app_config_rows=lambda: app_config_rows,
         accessory_rows=lambda: accessory_rows,
     ),
-    policy=AppConfigPolicy(
-        DEFAULT_CONFIG=lambda: DEFAULT_CONFIG,
-        PLC_PROTECTED_CONFIG_KEYS=lambda: PLC_PROTECTED_CONFIG_KEYS,
-        _plc_namespace_write_authorized=lambda: _plc_namespace_write_authorized,
-        public_path_sanitized=lambda: public_path_sanitized,
+    policy=ConfigurationPolicy(
+        defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS,
+        sanitize=lambda: public_path_sanitized,
     ),
 )
+_app_config_store = _app_configuration.store
+_config_io_lock = _app_configuration.lock
+
 
 
 def _read_config_file() -> dict[str, Any] | None:
     'Read config.json, retrying briefly on transient partial/empty reads.\n\n    Returns the parsed dict, an empty dict when the file legitimately does not\n    exist, or ``None`` when the file is present but could not be parsed cleanly\n    (e.g. mid-write). Callers must NOT treat ``None`` as "no accessories" — doing\n    so would silently drop every persisted record whenever a concurrent writer\n    is in the middle of replacing the file.\n    '
-    return _app_config_store._read_config_file()
+    return _app_configuration._read_config_file()
 
 
 def load_config() -> dict[str, Any]:
-    return _app_config_store.load_config()
+    return _app_configuration.load_config()
 
 
 def save_config(config: dict[str, Any]) -> None:
-    return _app_config_store.save_config(config)
+    return _app_configuration.save_config(config)
 
 
-save_app_config = _app_config_store.save_app_config
+save_app_config = _app_configuration.save_app_config
 
 
 # Presentation-only window. Durable idempotency/state authority is never trimmed by this value.
@@ -2590,7 +2583,7 @@ plc_config_audit_snapshot = _legacy_plc_records.plc_config_audit_snapshot
 plc_dispatch_existing = _legacy_plc_records.plc_dispatch_existing
 
 
-mutate_app_config_atomically = _app_config_store.mutate_app_config_atomically
+mutate_app_config_atomically = _app_configuration.mutate_app_config_atomically
 
 
 from .plc.errors import PlcDispatchStateConflict

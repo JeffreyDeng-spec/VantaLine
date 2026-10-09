@@ -192,7 +192,7 @@ class ProtectedConfigContracts(unittest.TestCase):
         tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text())
         for name in NAMES:
             node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id==name for t in n.targets))
-            self.assertEqual(ast.unparse(node.value),'_app_config_store.'+name)
+            self.assertEqual(ast.unparse(node.value),'_app_configuration.'+name)
         from local_inspection_service.scripts import smoke_postgres_endpoint_source_contract
         smoke_postgres_endpoint_source_contract.main()
 

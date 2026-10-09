@@ -741,3 +741,17 @@ the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
 Earlier manifest counts describe their separate checkpoints. Both real-photo
 and derived-summary incremental schemas are retained; whole-head CI, complete
 application assembly and managed release/worker acceptance remain pending.
+
+
+Application configuration is now composed by config/application_composition.py.
+Each owner allocates its own reentrant guard and protected-write ContextVar;
+training configuration selects that same owner lazily. Construction performs no
+file or repository access. PostgreSQL protected writes retain their existing
+transaction/advisory-lock behavior. Two real PostgreSQL owner fixtures cover
+concurrent protected writes, training-state persistence and rollback after a
+partial write. Run scripts/smoke_application_configuration_composition.py with
+VANTALINE_POSTGRES_DSN to execute all six cases. JSON-only mode skips that one
+PostgreSQL case. PostgreSQL fixture markers use JSON objects because the existing
+record decoder treats strings as serialized JSON; this increment does not change
+the decoder or rewrite stored configuration. Full application factory, PLC and
+pipeline ownership and hosted/release gates remain open.

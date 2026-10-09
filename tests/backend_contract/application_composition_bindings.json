@@ -1,0 +1,31 @@
+{
+  "base": "8daa09b",
+  "canonical_ast_sha256": {
+    "local_inspection_service/accessories/image_composition.py": "fa18c4e94191e403b83ce84ebf109e64431d95c36e5c75bdb8195a1d76bc747c",
+    "local_inspection_service/analytics/analysis_composition.py": "b4c2279d23cd67c06ac9dca5dca50c82cebfb229a73b77e81d46d89b10b8af72",
+    "local_inspection_service/analytics/cost_composition.py": "02ecea5a1c0677a6017b7ff6bdaafb7ff118cbc0efa447046ec97a0dcf5e441e",
+    "local_inspection_service/auth/composition.py": "7e202510d39c869ba2099b554f7f2145b8d63ad8f80eedbdb6c31edf525e6145",
+    "local_inspection_service/auth/http_composition.py": "f15d2a0de2dfe6922b4c6902a986e2c813e09e79b0c3cb894eb551881384f6a0",
+    "local_inspection_service/detection/workflow_composition.py": "0c22c21913b08832f773f3b9e47b3e250277d4e48c273026ee62bfb43e47ba8a",
+    "local_inspection_service/model_profiles/composition.py": "643839002f2cf419f5ef40c5fa7fed226ff71a44dc9ac3cabf06fa9a6f92fa3f",
+    "local_inspection_service/model_providers/configuration_composition.py": "ff542400311ca828ee43656d42e732748f29c87058b1f99f8ccbd2ef4633e0bd",
+    "local_inspection_service/model_providers/tool_composition.py": "686e8e38132373a4f850d7837316664610d901b5a641a9627b33d3734511bfe3",
+    "local_inspection_service/records/composition.py": "143cdcb55737bce1bfce71d87ebf149af7de496d607cd1156db9ac2aff780342",
+    "local_inspection_service/runtime/repository_composition.py": "2b781822aaa5b174d0a379564e32f1518f04d1d1a99f824fb76ba28e2c63cbd1",
+    "local_inspection_service/text_inspection/comparison_composition.py": "bf4c17eb3ff068638d417cffda87cdd210154cd8ae014b8f12abd2707ec5707e",
+    "local_inspection_service/text_inspection/incoming_composition.py": "149d0b962fe13648df7015eec0242517542db4058b5392f60e9f5473f694c236",
+    "local_inspection_service/text_inspection/standard_composition.py": "40336946fc62a2a129ddbbcf6c69bb6e1253b8473dbac3cd7369473e1c4878ae",
+    "local_inspection_service/text_inspection/storage_composition.py": "e9fba49357edd99435446f40ce064278b8d783d9f42f876d46fd40533c1ad5a1",
+    "local_inspection_service/training/account_state_composition.py": "b874df8b280050c0223560413fcd3dcff0724729939120ecf0b07ea1aa14c5e4",
+    "local_inspection_service/training/catalog_composition.py": "ebf275daa870e2d58e7bc7ef597efbb2c9ccaeb2349ffc62323b1250dce5a4c5",
+    "local_inspection_service/training/core_composition.py": "5a1bff2e87acd3e06ab6a538265d1695408124e7050de188ac714ae57affd4cd",
+    "local_inspection_service/training/execution_composition.py": "0ddee046b19b20b44e501d01b4de4f3b695e0331f24d5f3eabf3427c434435ea",
+    "local_inspection_service/training/native_execution_composition.py": "3ea6ec7900736c0aa4749bba8e31f3dfd731404eaa38bf38c6f698ffa3705691",
+    "local_inspection_service/training/state_composition.py": "ccde1c15702bf156f96be1f494e725b60652a781e3b9b3d021727732c94b5f63",
+    "local_inspection_service/training/task_composition.py": "165674de2d1ea6bcf6a5f66d0f4141daf6a8e497c34b077258dde328e0505dda",
+    "local_inspection_service/training/workflow_composition.py": "fc8b5e5df9f4f9701f333379c6cca92cc8547866143eb97640b349890e21c755",
+    "local_inspection_service/storage/artifacts/composition.py": "6c8f8d90744c67bcb72821d28fe43de460179a2470cbea9d1a85609106e61c49",
+    "local_inspection_service/runtime/application_foundation.py": "dd0f8535d581823e759cfbf5d89c5b54f1db85afb6e8fa9457a319218c1eff0c",
+    "local_inspection_service/auth/application.py": "9c15746cd16da6861187b4906f71f1834c4eec647c70f498bcb2e60286d2b6bd"
+  }
+}

@@ -158,6 +158,13 @@ def require(condition: bool, message: str) -> None:
 
 def main() -> None:
     source = SERVER.read_text(encoding="utf-8")
+    # Check real composition modules first, then retain the immutable old-location
+    # oracle. Every persistence contract below still reads the current real module.
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from application_configuration_source_contract import restore_application_configuration_root
+    source = restore_application_configuration_root(source)
+    from application_integration_source_contract import restore_business_root
+    source = restore_business_root(source)
     tree = ast.parse(source, filename=str(SERVER))
     contract = SourceContract()
     contract.visit(tree)
@@ -629,7 +636,7 @@ def main() -> None:
     # Legacy workflows retain five real repository entries after extraction.
     for filename, expected in {
         "incoming_catalog.py": {"update_incoming_text_reference_rules"},
-        "incoming_reviews.py": {"duplicate", "review_incoming_text_inspection", "list_incoming_text_inspections"},
+        "incoming_reviews.py": {"review_incoming_text_inspection", "list_incoming_text_inspections"},
         "incoming_retention.py": {"purge"},
     }.items():
         path = text_path.with_name(filename)
@@ -642,6 +649,22 @@ def main() -> None:
         for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
                           "functions_with_runtime_repository_entry"):
             getattr(contract, attribute).update(getattr(workflow, attribute))
+    duplicate_path = text_path.with_name("incoming_duplicates.py")
+    duplicate = SourceContract(injected_repository=True, repository_expression="writes.repository")
+    duplicate.visit(ast.parse(duplicate_path.read_text(encoding="utf-8")))
+    require(duplicate.runtime_repository_entry_call_count == 1
+            and duplicate.functions_with_runtime_repository_entry == {"lookup_duplicate"},
+            "actual duplicate helper must retain its lazy repository selection")
+    reviews_tree = ast.parse(text_path.with_name("incoming_reviews.py").read_text(encoding="utf-8"))
+    duplicate_forward = next(node for node in ast.walk(reviews_tree)
+                             if isinstance(node, ast.FunctionDef) and node.name == "duplicate")
+    require(any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "lookup_duplicate" for node in ast.walk(duplicate_forward)),
+            "review duplicate lookup must use the actual extracted helper")
+    contract.runtime_repository_entry_call_count += duplicate.runtime_repository_entry_call_count
+    for attribute in ("imported_names", "called_attributes", "string_literals", "function_names",
+                      "functions_with_runtime_repository_entry"):
+        getattr(contract, attribute).update(getattr(duplicate, attribute))
     compositions = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Name) and node.func.id == "IncomingWrites"]
     require(len(compositions) == 1, "expected one shared incoming write-capability composition")

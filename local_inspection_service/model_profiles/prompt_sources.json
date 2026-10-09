@@ -1,5 +1,5 @@
 {
-  "version": 254,
+  "version": 255,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -560,6 +560,7 @@
     "model_providers/configuration_composition.py",
     "storage/label_beta_summary.py",
     "storage/legacy_projection_schema.py",
-    "storage/legacy_list_projection.py"
+    "storage/legacy_list_projection.py",
+    "config/application_composition.py"
   ]
 }
