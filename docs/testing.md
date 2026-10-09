@@ -2630,3 +2630,8 @@ release acceptance are separate remaining gates.
 Frozen label-list API tests bind both historical worker adapter locations to the
 fixture runtime explicitly. The accepted `register` body remains unchanged;
 list comparisons do not enter an application lifespan or start a worker.
+
+The legacy-index CI control is pinned to accepted main `0b22d32` and its
+verified API blob. It does not use `HEAD^`, which means different code in a PR
+merge checkout and a manual branch run. Both event types replay the same control;
+baseline updates require explicit source and contract review.
