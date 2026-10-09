@@ -63,7 +63,8 @@ def annotate(image, classes, settings, read_reference, transport=invoke):
     if len(json.dumps(payload).encode()) > 48*1024*1024:
         raise ValueError('model input exceeds aggregate byte bound')
     receipt = {'model': MODEL, 'prompt_version': VERSION, 'prompt_sha256': digest(PROMPT),
-               'input': meta, 'references': references, 'usage': {}}
+               'input': meta, 'references': references, 'usage': {},
+               'input_policy_version': 'bounded-first-frame-v1'}
     try:
         status, raw = transport(payload, settings)
         receipt['response_sha256'] = digest(raw.encode())
