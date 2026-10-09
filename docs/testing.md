@@ -2736,3 +2736,12 @@ deltas restore the older assembly for its retained assertions; they do not
 represent current source locations. Positive and adverse checks cover changed
 repository timing/owner/import, missing or reordered nodes, route/shutdown order
 and corrupted delta regions. This is test adaptation, with no production change.
+
+
+The Beta smoke follows the actual TextComparisonWorkflows submission and route
+registration in text_inspection/comparison_composition.py, verifies its reviewed
+constructor capability graph, and checks the root forwarding aliases. Original
+comparison decisions, revisions, read-only history and frontend diagnostics
+assertions remain. A moved constructor must not be asserted at its former root
+location. The older foundation hosted run failed this source-location assertion;
+that failure is retained as evidence and is not a performance result.
