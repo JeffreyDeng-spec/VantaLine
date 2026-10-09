@@ -281,19 +281,22 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             if cursor:
                 return repo.page(owner, [], filters, limit, cursor)
             current = repo.list(owner, "task")
-            standards, records = legacy_data(repo, owner)
-            extended = {x.get("legacy_id") for x in current}
-            ids = set(standards) | {
-                x.get("standard_id") or "orphan-" + x["id"] for x in records
-            }
+            legacy_summary = repo.list_legacy_summary(owner, current) if isinstance(repo, LabelRepository) else None
             legacy_records = {}
-            for record in records:
-                sid = record.get("standard_id") or "orphan-" + record["id"]
-                legacy_records.setdefault(sid, []).append(record)
-            indexed = standards, records, legacy_records
-            current += [
-                legacy_task(repo, owner, "legacy:" + sid, indexed) for sid in ids - extended
-            ]
+            if legacy_summary is None:
+                standards, records = legacy_data(repo, owner)
+                extended = {x.get("legacy_id") for x in current}
+                ids = set(standards) | {
+                    x.get("standard_id") or "orphan-" + x["id"] for x in records
+                }
+                legacy_records = {}
+                for record in records:
+                    sid = record.get("standard_id") or "orphan-" + record["id"]
+                    legacy_records.setdefault(sid, []).append(record)
+                indexed = standards, records, legacy_records
+                current += [
+                    legacy_task(repo, owner, "legacy:" + sid, indexed) for sid in ids - extended
+                ]
             rows = []
             for offset in range(0, len(current), RUN_BATCH_SIZE):
                 batch = current[offset : offset + RUN_BATCH_SIZE]
@@ -330,7 +333,8 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         }
                     )
                 del native_runs
-            for task in manual_history.rows(repo, owner, indexed=True):
+            rows.extend(legacy_summary or [])
+            for task in (manual_history.rows(repo, owner, indexed=True) if legacy_summary is None else []):
                 history = task["manual_history"]
                 records = history["pages"]
                 latest = max(records, key=lambda v: v.get("created_at", 0), default={})

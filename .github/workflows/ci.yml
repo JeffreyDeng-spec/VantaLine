@@ -307,6 +307,7 @@ jobs:
           python scripts/smoke_label_history_benchmark.py
           python scripts/smoke_label_history_statistics.py
           python scripts/smoke_manual_history_baseline.py --postgres
+          python scripts/smoke_legacy_list_projection.py
           python scripts/smoke_label_beta_summaries.py
           python scripts/smoke_label_beta_benchmark.py
           VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
@@ -776,11 +777,15 @@ jobs:
       - run: python scripts/smoke_manual_history_protocol.py
       - run: python scripts/smoke_manual_history_index.py --postgres
       - run: python scripts/smoke_manual_history_baseline.py --postgres
+      - name: Verify ready legacy projection performance
+        run: python scripts/benchmark_manual_history.py --projection --report "$RUNNER_TEMP/legacy-projection.json"
       - name: Verify fixed manual-history first-page performance
         run: python scripts/benchmark_manual_history.py --report "$RUNNER_TEMP/manual-history.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: manual-history-performance
-          path: ${{ runner.temp }}/manual-history.json
+          path: |
+            ${{ runner.temp }}/manual-history.json
+            ${{ runner.temp }}/legacy-projection.json
           if-no-files-found: warn

@@ -483,6 +483,20 @@ class LabelRepository:
                 values.append(BetaHistoryRead(value, reference_count, label_count))
             return values
 
+    def list_legacy_summary(self, owner, current):
+        # Existing observations and extended native tasks must use the original
+        # cached sources, not sample a different derived generation.
+        if self._legacy_cache or any(type(task) is not dict or task.get("legacy_id") is not None for task in current):
+            return None
+        from .legacy_list_projection import LegacyListProjection
+        projection = LegacyListProjection(self.repository)
+        with self.read_tx() as cursor:
+            cursor.execute("SELECT to_regclass(%s) AS epoch,to_regclass(%s) AS ready,to_regclass(%s) AS rows",
+                           (projection.epoch, projection.ready, projection.rows))
+            if not all(self.repository._row_to_dict(cursor, cursor.fetchone()).values()):
+                return None
+            return projection.read(cursor, owner)
+
     def legacy(self, owner, kind):
         if (owner, kind) in self._legacy_cache:
             return self._legacy_cache[(owner, kind)]

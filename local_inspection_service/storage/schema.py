@@ -124,6 +124,12 @@ class TableSchema:
 
 
 TABLES = (
+    TableSchema("legacy_projection_epoch", ("owner_user_id", "sequence"),
+        "CREATE TABLE IF NOT EXISTS legacy_projection_epoch (owner_user_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL)"),
+    TableSchema("legacy_projection_ready", ("owner_user_id", "sequence", "projection_version"),
+        "CREATE TABLE IF NOT EXISTS legacy_projection_ready (owner_user_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL, projection_version INTEGER NOT NULL)"),
+    TableSchema("legacy_projection_rows", ("owner_user_id", "group_id", "kind", "ordinal", "raw_json"),
+        "CREATE TABLE IF NOT EXISTS legacy_projection_rows (owner_user_id TEXT NOT NULL, group_id TEXT NOT NULL, kind TEXT NOT NULL, ordinal INTEGER NOT NULL, raw_json TEXT NOT NULL, PRIMARY KEY(owner_user_id,group_id,kind,ordinal))"),
     TableSchema(
         "label_run_projection", ("id", "projection_version", "raw_json"),
         "CREATE TABLE IF NOT EXISTS label_run_projection (id TEXT PRIMARY KEY, projection_version INTEGER NOT NULL, raw_json TEXT NOT NULL)",

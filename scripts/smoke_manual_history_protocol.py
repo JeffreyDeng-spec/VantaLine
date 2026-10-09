@@ -38,7 +38,7 @@ class MeasuredFixture:
     def page(self, variant):
         self.calls.append(variant)
         cursor = benchmark.PostgresRuntimeRepository._cursor(self.reader)
-        for _ in range(self.queries): cursor.execute('SELECT synthetic')
+        for _ in range(self.queries if variant else (7 if benchmark.PUBLISH_DERIVED else 12)): cursor.execute('SELECT synthetic')
         return {'items':self.traverse()}
 
 

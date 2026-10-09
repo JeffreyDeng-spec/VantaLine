@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from .legacy_projection_schema import derived_ddl
 from .label_summary_schema import invalidation_ddl
 from .schema import SCHEMA_VERSION, TABLES, TableSchema
 
@@ -27,6 +28,9 @@ BOOLEAN_COLUMNS = frozenset({"active", "path_exists", "profile_verified", "passe
 INTEGER_COLUMNS = frozenset({"projection_version", "sequence", "config_generation", "lease_epoch", "ordinal", "revision_number"})
 
 PRIMARY_KEY_COLUMNS = {
+    "legacy_projection_epoch": ("owner_user_id",),
+    "legacy_projection_ready": ("owner_user_id",),
+    "legacy_projection_rows": ("owner_user_id", "group_id", "kind", "ordinal"),
     "label_run_projection": ("id",),
     "label_runtime_state": ("id",),
     "model_profile_objects": ("id",),
@@ -139,6 +143,7 @@ def postgres_ddl(schema_name: str = "vantaline") -> str:
         statements.append(create_table_statement(table))
         statements.extend(index_statement(index) for index in table.indexes)
     statements.append(invalidation_ddl(schema_name))
+    statements.append(derived_ddl(schema_name))
     statements.extend(
         [
             "INSERT INTO schema_migrations (version, applied_at, metadata_json)",

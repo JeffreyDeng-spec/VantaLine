@@ -10,10 +10,12 @@ from unittest.mock import patch
 from smoke_manual_history_baseline import ManualFixture, parent_register, BASELINE_SHA256, ROOT
 from benchmark_label_summary_reads import CountingCursor, p95
 from local_inspection_service.storage.postgres_runtime_repository import PostgresRuntimeRepository
+from local_inspection_service.storage.legacy_list_projection import LegacyListProjection
 from label_benchmark_evidence import snapshot, difference, preserve_primary
 
 TASKS_SHA256 = 'ce5b2beaacf9b6d16957ed22470b2cec36da30596ad1fccab6f60cd4bf2bb086'
 COMPARISON = 'manual full first page versus frozen tasks and complete manual helper'
+PUBLISH_DERIVED = False
 
 
 def arm(mode, variant):
@@ -35,6 +37,8 @@ def measure(mode, repetition, size, reports):
             assert f.writer.connection.execute(f'SELECT count(*) FROM {table} WHERE owner_user_id=%s', ('alice',)).fetchone()[0] == size
             f.writer.connection.execute(f'ANALYZE {table}')
         f.writer.connection.commit()
+        if PUBLISH_DERIVED:
+            assert LegacyListProjection(f.other).publish(f.owner), "manual cohort not proven"
         expected = f.traverse(True)
         assert len(expected) == size and f.traverse() == expected
         assert [r['id'] for r in expected] == [f'legacy-manual:manual_{i:05}' for i in range(size-1, -1, -1)]
@@ -59,7 +63,8 @@ def measure(mode, repetition, size, reports):
                 if trace: tracemalloc.stop()
             observed = difference(before, snapshot())
             assert page['items'] == expected[:100]
-            assert len(calls) == 10, (size, len(calls))
+            expected_queries = 10 if arm(mode, variant) else (7 if PUBLISH_DERIVED else 12)
+            assert len(calls) == expected_queries, (size, expected_queries, len(calls))
             cleanup_pages()
             return elapsed, peak, observed
         for _ in range(4): run(True); run(False)
@@ -78,7 +83,7 @@ def measure(mode, repetition, size, reports):
             populations={name:size for name in ('standards','sessions','pages','assets')}, samples=31,
             old_seconds=times[True], new_seconds=times[False], old_p95_seconds=old, new_p95_seconds=new,
             old_peak_samples=peaks[True], new_peak_samples=peaks[False], old_peak_bytes=old_peak, new_peak_bytes=new_peak,
-            old_queries=10, new_queries=10, counting_scope='reader execute calls, including snapshot SQL; excludes setup/writer/commit/internal server work',
+            old_queries=10, new_queries=(10 if mode == "AA" else (7 if PUBLISH_DERIVED else 12)), derived_published=PUBLISH_DERIVED, counting_scope='reader execute calls, including snapshot SQL; excludes setup/writer/commit/internal server work',
             latency_limit=max(old*1.25, old+.01), memory_limit=max(old_peak*1.25, old_peak+1024*1024),
             old_observations=observations[True], new_observations=observations[False])
         reports.append(report)
@@ -108,7 +113,9 @@ def execute_manual_protocol(measure, reports):
 
 
 def main():
-    parser = argparse.ArgumentParser(); parser.add_argument('--report'); args = parser.parse_args(); reports = []
+    global PUBLISH_DERIVED
+    parser = argparse.ArgumentParser(); parser.add_argument('--report'); parser.add_argument('--projection', action='store_true'); args = parser.parse_args(); reports = []
+    PUBLISH_DERIVED = args.projection
     try:
         parent_register()
         assert hashlib.sha256((ROOT/'tests/backend_contract/label_history_tasks_baseline.py').read_bytes().replace(b'\r\n',b'\n')).hexdigest() == TASKS_SHA256
