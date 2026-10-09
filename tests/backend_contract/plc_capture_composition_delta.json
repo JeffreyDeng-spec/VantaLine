@@ -1,0 +1,34 @@
+{
+  "parent_sha": "bed0e46195ef74bfdeb4279a7422c55039b4ae3f",
+  "parent_ast_sha256": "63e2b704055fd5d9926eec113088eeda0460fff44c9d5bfe6ad9b64020ef64a7",
+  "integrated_ast_sha256": "b5a4aa4e96086cbbd52a6e2c70ade196fd3de2d94195c0dea17461ce9cfabcf6",
+  "regions": [
+    {
+      "start": 625,
+      "end": 628,
+      "expected": [
+        "from .plc.capture_composition import PlcCaptureWorkflows, CaptureStorage, CapturePolicy",
+        "_legacy_capture_workflows = PlcCaptureWorkflows(storage=CaptureStorage(repository=lambda: runtime_postgres_repository_or_none, mutate_config=lambda: mutate_app_config_atomically, load_config=lambda: load_config, start_heartbeat=lambda: plc_start_owner_heartbeat), coordination_policy=LegacyCoordinationPolicy(runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY, receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY, process_id=lambda: _plc_process_owner_id, lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS, quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS, clock=lambda: time.time), capture_policy=CapturePolicy(_plc_canonical=lambda: _plc_canonical, PlcConfigError=lambda: PlcConfigError, PLC_CAPTURE_EVENT_TTL_SECONDS=lambda: PLC_CAPTURE_EVENT_TTL_SECONDS, PLC_CAPTURE_PROCESSING_TTL_SECONDS=lambda: PLC_CAPTURE_PROCESSING_TTL_SECONDS, PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY, PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY, PLC_RUNTIME_COORDINATION_KEY=lambda: PLC_RUNTIME_COORDINATION_KEY, PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS))",
+        "_legacy_plc_coordination = _legacy_capture_workflows.coordination"
+      ],
+      "original": [
+        "_legacy_plc_coordination = LegacyRuntimeCoordination(storage=LegacyCoordinationStorage(repository=lambda: runtime_postgres_repository_or_none, mutate_config=lambda: mutate_app_config_atomically, load_config=lambda: load_config, mutate_rows=lambda: _mutate_plc_runtime_rows, mutate_runtime=lambda: mutate_plc_runtime_coordination, start_heartbeat=lambda: plc_start_owner_heartbeat), policy=LegacyCoordinationPolicy(runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY, receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY, process_id=lambda: _plc_process_owner_id, lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS, quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS, clock=lambda: time.time))"
+      ]
+    },
+    {
+      "start": 636,
+      "end": 637,
+      "expected": [
+        "_plc_capture_state = _legacy_capture_workflows.capture"
+      ],
+      "original": [
+        "_plc_capture_state = PlcCaptureState(transactions=CaptureStateTransactions(load_config=lambda: load_config, mutate_app_config_atomically=lambda: mutate_app_config_atomically, mutate_plc_runtime_coordination=lambda: mutate_plc_runtime_coordination, plc_completed_capture_receipt=lambda: plc_completed_capture_receipt), policy=CaptureStatePolicy(_plc_capture_runtime=lambda: _plc_capture_runtime, _plc_expire_capture_state=lambda: _plc_expire_capture_state, _plc_canonical=lambda: _plc_canonical, PlcConfigError=lambda: PlcConfigError, PLC_CAPTURE_EVENT_TTL_SECONDS=lambda: PLC_CAPTURE_EVENT_TTL_SECONDS, PLC_CAPTURE_PROCESSING_TTL_SECONDS=lambda: PLC_CAPTURE_PROCESSING_TTL_SECONDS, PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY, PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY, PLC_RUNTIME_COORDINATION_KEY=lambda: PLC_RUNTIME_COORDINATION_KEY, PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "a05843da0e368482d0356da911dd720ebdbf254b21618e86bd582020ff4781a2",
+  "unchanged_business_sha256": {
+    "local_inspection_service/plc/legacy_coordination.py": "0645b598e179db1e13ba0be2d40b1f1daa7f84ac665f588e4ec71be292709a4b",
+    "local_inspection_service/plc/plc_capture_state.py": "2f3ed86221302a7163599e4a476080053e97c7b95a86d95fc39c3e14f6378695"
+  }
+}

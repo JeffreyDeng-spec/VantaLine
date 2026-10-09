@@ -188,7 +188,8 @@ class CaptureContract(unittest.TestCase):
     @unittest.skipIf(BASELINE, 'candidate composition only')
     def test_assembly_and_instance_isolation(self):
         from local_inspection_service.plc.plc_capture_state_ports import CaptureStateTransactions, CaptureStatePolicy
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        from application_integration_source_contract import restore_plc_domain_root
+        tree = ast.parse(restore_plc_domain_root((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8')))
         assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_plc_capture_state' for t in n.targets))
         for group, cls in zip(assignment.value.keywords, (CaptureStateTransactions, CaptureStatePolicy)):
             self.assertEqual({k.arg for k in group.value.keywords}, {f.name for f in fields(cls)})

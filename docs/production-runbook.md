@@ -1837,3 +1837,5 @@ application assembly and current-head hosted/release gates remain pending.
 The workstation domain owner retains the current browser-only serial topology and existing lease/ACK behavior. Its CI graph checks do not authorize device commissioning or worker cutover. Roll back this assembly change only by restoring the previous complete immutable release; no workstation record, call evidence or model snapshot is rewritten for rollback.
 
 Lease/diagnostic composition retains the existing station transaction, browser I/O and shutdown topology. Diagnostic frame failures roll back; late receipts retain uncertain-outcome evidence. Recover through a previous complete immutable release with its matching worker topology, preserving lease and call records.
+
+Capture state composition is inert on startup. The capture endpoints retain their disabled 410 responses, and start_plc_runtime_workers remains a no-op. Never activate the retained forever-loop legacy workers during a factory migration or rollback.

@@ -2332,24 +2332,14 @@ plc_activation_errors = _legacy_plc_activation.plc_activation_errors
 
 from .plc.legacy_coordination import LegacyRuntimeCoordination, LegacyCoordinationStorage, LegacyCoordinationPolicy
 
-_legacy_plc_coordination = LegacyRuntimeCoordination(
-    storage=LegacyCoordinationStorage(
-        repository=lambda: runtime_postgres_repository_or_none,
-        mutate_config=lambda: mutate_app_config_atomically,
-        load_config=lambda: load_config,
-        mutate_rows=lambda: _mutate_plc_runtime_rows,
-        mutate_runtime=lambda: mutate_plc_runtime_coordination,
-        start_heartbeat=lambda: plc_start_owner_heartbeat,
-    ),
-    policy=LegacyCoordinationPolicy(
-        runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY,
-        receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY,
-        process_id=lambda: _plc_process_owner_id,
-        lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS,
-        quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS,
-        clock=lambda: time.time,
-    ),
+from .plc.capture_composition import PlcCaptureWorkflows, CaptureStorage, CapturePolicy
+
+_legacy_capture_workflows = PlcCaptureWorkflows(
+    storage=CaptureStorage(repository=lambda: runtime_postgres_repository_or_none, mutate_config=lambda: mutate_app_config_atomically, load_config=lambda: load_config, start_heartbeat=lambda: plc_start_owner_heartbeat),
+    coordination_policy=LegacyCoordinationPolicy(runtime_key=lambda: PLC_RUNTIME_COORDINATION_KEY, receipts_key=lambda: PLC_CAPTURE_RESULTS_KEY, process_id=lambda: _plc_process_owner_id, lease_seconds=lambda: PLC_IO_OWNER_LEASE_SECONDS, quarantine_seconds=lambda: PLC_IO_OWNER_TAKEOVER_QUARANTINE_SECONDS, clock=lambda: time.time),
+    capture_policy=CapturePolicy(_plc_canonical=lambda: _plc_canonical, PlcConfigError=lambda: PlcConfigError, PLC_CAPTURE_EVENT_TTL_SECONDS=lambda: PLC_CAPTURE_EVENT_TTL_SECONDS, PLC_CAPTURE_PROCESSING_TTL_SECONDS=lambda: PLC_CAPTURE_PROCESSING_TTL_SECONDS, PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY, PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY, PLC_RUNTIME_COORDINATION_KEY=lambda: PLC_RUNTIME_COORDINATION_KEY, PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS),
 )
+_legacy_plc_coordination = _legacy_capture_workflows.coordination
 
 
 mutate_plc_runtime_coordination = _legacy_plc_coordination.mutate_plc_runtime_coordination
@@ -2373,26 +2363,7 @@ plc_current_process_owns_io = _legacy_plc_coordination.plc_current_process_owns_
 from .plc.plc_capture_state import PlcCaptureState
 from .plc.plc_capture_state_ports import CaptureStateTransactions, CaptureStatePolicy
 
-_plc_capture_state = PlcCaptureState(
-    transactions=CaptureStateTransactions(
-        load_config=lambda: load_config,
-        mutate_app_config_atomically=lambda: mutate_app_config_atomically,
-        mutate_plc_runtime_coordination=lambda: mutate_plc_runtime_coordination,
-        plc_completed_capture_receipt=lambda: plc_completed_capture_receipt,
-    ),
-    policy=CaptureStatePolicy(
-        _plc_capture_runtime=lambda: _plc_capture_runtime,
-        _plc_expire_capture_state=lambda: _plc_expire_capture_state,
-        _plc_canonical=lambda: _plc_canonical,
-        PlcConfigError=lambda: PlcConfigError,
-        PLC_CAPTURE_EVENT_TTL_SECONDS=lambda: PLC_CAPTURE_EVENT_TTL_SECONDS,
-        PLC_CAPTURE_PROCESSING_TTL_SECONDS=lambda: PLC_CAPTURE_PROCESSING_TTL_SECONDS,
-        PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY,
-        PLC_CONTROL_GENERATION_KEY=lambda: PLC_CONTROL_GENERATION_KEY,
-        PLC_RUNTIME_COORDINATION_KEY=lambda: PLC_RUNTIME_COORDINATION_KEY,
-        PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: PLC_WORKER_TOTAL_TIMEOUT_SECONDS,
-    ),
-)
+_plc_capture_state = _legacy_capture_workflows.capture
 
 
 def _plc_capture_runtime(state: dict[str, Any]) -> dict[str, Any]:

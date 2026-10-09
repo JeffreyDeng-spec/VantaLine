@@ -1586,3 +1586,5 @@ application assembly and current-head hosted/release gates remain pending.
 Workstation composition acceptance includes `smoke_plc_workstation_composition.py --postgres` in the existing backend job. This check uses two isolated schemas and synthetic browser evidence; it does not change release topology or activate the independent label worker. Require current-head CI and independent acceptance before merging the complete immutable package.
 
 The backend job additionally runs `smoke_plc_lease_diagnostic_composition.py --postgres`. This is a synthetic graph/transaction gate, not device commissioning or label-worker activation. Preserve failed performance evidence and require complete current-head CI before immutable-release acceptance.
+
+The retained capture state graph does not change the deployment topology. It must not activate server-side PLC workers as part of application assembly. Full application factory, hosted performance acceptance and label worker production cutover remain separate unfinished checks.

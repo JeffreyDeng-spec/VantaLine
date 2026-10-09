@@ -442,6 +442,7 @@ jobs:
           python scripts/smoke_plc_legacy_dispatch.py
           python scripts/smoke_plc_dispatch_runtime_state.py
           python scripts/smoke_plc_capture_state.py
+          python scripts/smoke_plc_capture_composition.py --postgres
           python scripts/smoke_runtime_lifecycle.py --postgres
           python scripts/smoke_cost_ledger.py
           python scripts/smoke_cost_composition.py

@@ -125,3 +125,5 @@ release acceptance are separate remaining gates.
 `plc/workstation_composition.py` owns the existing repository/station/browser graph through explicit external ports. Ordinary internal edges use named forwarding methods; the active-lease member binds the initial station once. Preserve both selection rules. Construction performs no I/O or capability selection. Capture collaborators, pipeline and complete app lifecycle still require final assembly.
 
 `plc/lease_diagnostic_composition.py` groups lease acquisition/maintenance and diagnostics around the supplied workstation owner. Keep ordinary storage/token edges on named methods and active-lease checks bound once to the initial station. Construction selects no identity, clock, storage or permission capability; no new worker or protocol is added.
+
+Retained PLC capture state composition is in plc/capture_composition.py; coordinate its state and receipt capabilities through named owners. Do not join its generation/owner-epoch protocol to browser workstation leases or enable legacy poll/reconcile workers.
