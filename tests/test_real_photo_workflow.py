@@ -11,9 +11,9 @@ def finish(repo,kind,result):
     return repo.finish(job['id'],token,result(job),lambda s,j,c:apply_result(repo,s,j,c))
 
 
-def ready(database):
+def ready(database,approved_target=20):
     repo=database();repo.enable('a','task',classes(),{})
-    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':20,'reason':'first real cohort'})
+    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':approved_target,'reason':'first real cohort'})
     state=state_fixture()
     for sample in state['samples']:
         sample=copy.deepcopy(sample);sample.pop('review')
@@ -131,3 +131,19 @@ def test_explicit_annotation_version_rechecks_without_new_photo_or_duplicate_wak
     state=repo.get('a','task')
     assert len(state['samples'])==20 and state['review_trigger']==25 and not state['recheck_sample_ids']
     assert 'round' not in state and len(repo.jobs('a','task'))==before
+
+
+def test_assessment_receives_initial_and_current_thresholds_before_lowering(database):
+    repo=ready(database,approved_target=30);schedule(repo,'a','task')
+    for _ in range(2):
+        finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
+            'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
+    schedule(repo,'a','task')
+    assess=next(j for j in repo.jobs('a','task') if j['kind']=='assess')
+    assert assess['inputs']['initialization']['approved_real_target']==30
+    assert assess['inputs']['approved_real_target']==30 and assess['inputs']['review_trigger']==20
+    finish(repo,'assess',lambda j:{'action':'train','approved_real_target':20,'next_increment':10,
+        'reason':'lower target after completed quality screening','gaps':[]})
+    state=repo.get('a','task')
+    assert state['approved_real_target']==20 and state['initialization']['approved_real_target']==30
+    assert len([j for j in repo.jobs('a','task') if j['kind']=='train'])==1

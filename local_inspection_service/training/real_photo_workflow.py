@@ -71,7 +71,10 @@ def schedule(repo, owner, task):
         if any(j['status']!='completed' for j in jobs):return
         if not current.get('assessment_job'):
             inputs={'classes':state['classes'],'summary':summary(state),'round_id':current['id'],
-                    'new_decisions':[j['result'] for j in jobs], 'previous_assessment':state.get('assessment')}
+                    'new_decisions':[j['result'] for j in jobs], 'previous_assessment':state.get('assessment'),
+                    'initialization':copy.deepcopy(state['initialization']),
+                    'approved_real_target':state['approved_real_target'],
+                    'review_trigger':state['review_trigger']}
             current['assessment_job']=repo.enqueue(c,state,'assess','assess:'+current['id'],inputs)['id']
     return repo.mutate(owner,task,update)
 

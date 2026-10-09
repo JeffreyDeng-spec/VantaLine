@@ -1776,3 +1776,5 @@ The accepted-real-photo dispatcher exports group-disjoint original-only YOLO dat
 Camera inspection without a PLC lease may use the ordinary image endpoint with bounded `capture_session_id` metadata, grouping its real-photo feedback by the browser capture session. This metadata grants no camera dispatch or PLC capability; the leased dedicated camera endpoint retains its existing physical contract.
 
 Real-photo scheduling freezes source IDs at the cumulative review trigger while labels are still pending. Later arrivals cannot starve the cohort; ready review and assessment jobs have queue precedence. Explicit changed annotation versions may be rechecked without new originals, preserving the real-photo count and prior cumulative cutoff. Incomplete annotation preparation is archived before pausing; failed review or assessment pauses the controller.
+
+Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
