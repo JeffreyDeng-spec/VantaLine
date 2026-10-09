@@ -64,6 +64,9 @@ jobs:
           context: local_inspection_service/workers/vantaline_yolo_train_worker
           file: local_inspection_service/workers/vantaline_yolo_train_worker/Dockerfile
           platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=ghcr.io/jeffreydeng-spec/vantaline-yolo-train-worker@sha256:001b40ca66148beef5cf8f76b75897ecd7207337335d0a7feb978d041096d9fc
+            BASE_MODEL_SHA256=646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b
           push: true
           tags: ${{ env.WORKER_IMAGE }}
           labels: |
