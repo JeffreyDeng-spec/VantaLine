@@ -115,9 +115,9 @@ class PipelineCompositionContracts(unittest.TestCase):
             self.assertEqual(trace,[]);self.assertFalse(f.data.exists())
 
     def test_root_inverse_and_actual_owner_reject_wrong_bindings(self):
-        from application_integration_source_contract import ROOT,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,digest,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_QUERIES,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,digest,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(source,PIPELINE_EXECUTION),PIPELINE_PERSISTENCE))),PIPELINE_PERSISTENCE['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(source,PIPELINE_QUERIES),PIPELINE_EXECUTION),PIPELINE_PERSISTENCE))),PIPELINE_PERSISTENCE['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in [('_pipeline_runtime = _pipeline_persistence.runtime','_pipeline_runtime = None'),
             ('_pipeline_training_sync = _pipeline_persistence.training','_pipeline_training_sync = _pipeline_persistence.state')]:

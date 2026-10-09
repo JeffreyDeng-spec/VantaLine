@@ -131,3 +131,5 @@ Retained PLC capture state composition is in plc/capture_composition.py; coordin
 Pipeline persistence, state guards and terminal training synchronization are composed in pipeline/persistence_composition.py. Its TaskStore remains lock-free internally because the caller may already hold the non-reentrant task guard. Pipeline native execution and application-wide lifecycle assembly remain separate work.
 
 Native pipeline auto-agent, advance and recommendation composition is in pipeline/execution_composition.py. Preserve separate lifecycles, the captured resolver provider, single pin inside thread repository scope, identity restoration and producer-first shutdown. A pin failure before runtime.run keeps the old in-flight evidence; do not hide it with automatic retries or registry cleanup.
+
+Pipeline candidate and task read/projection abilities are owned by pipeline/query_composition.py. Treat this graph as capable of protected writes: candidate refresh may save and optimization links may stop capture/save. Private server aliases are compatibility entry points; replace the real owner in tests. No new native worker is owned here.

@@ -1828,3 +1828,5 @@ Capture composition adds no configuration or environment switch. The two retaine
 PipelinePersistence introduces no new business configuration. Model resolver suppliers retain both callable layers and save_pipeline_task freezes before encoding or repository selection. Manifest v262 includes the actual pipeline/persistence_composition.py source without rewriting task snapshots. Task/state path suppliers keep their existing operation-time selection.
 
 PipelineExecution adds no model or worker configuration. It retains the original ResolverProvider object and native task ID/stage/user signatures. Existing task model_profiles takes precedence when binding; missing resolver fails explicitly before the runtime body. Manifest v263 includes pipeline/execution_composition.py; task snapshots and prompts are unchanged.
+
+PipelineQueries adds no setting. Model snapshots remain unchanged; prompt source manifest v264 records pipeline/query_composition.py. Public responses retain model_profiles removal, original normalization/defaults, account visibility and preloaded resource semantics.

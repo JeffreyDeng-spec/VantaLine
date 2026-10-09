@@ -236,9 +236,9 @@ class PipelineExecutionContracts(unittest.TestCase):
             finally:graph.active_scope.reset(token)
             self.assertEqual(calls,[('same',{'id':'a'})]);self.assertEqual(graph.pin_calls,1)
     def test_exact_root_inverse_and_actual_execution_guards(self):
-        from application_integration_source_contract import ROOT,PIPELINE_EXECUTION,digest,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_QUERIES,PIPELINE_EXECUTION,digest,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(source,PIPELINE_EXECUTION))),PIPELINE_EXECUTION['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(source,PIPELINE_QUERIES),PIPELINE_EXECUTION))),PIPELINE_EXECUTION['parent_ast_sha256'])
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace('_pipeline_advance_runtime = _pipeline_execution.advance','_pipeline_advance_runtime = _pipeline_execution.auto'))
 

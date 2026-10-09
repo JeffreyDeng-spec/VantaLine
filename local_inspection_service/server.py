@@ -4587,20 +4587,37 @@ def auto_optimize_linked_pipeline_model_id(state: dict[str, Any]) -> str:
 from .pipeline.task_metadata import PipelineTaskMetadata
 from .pipeline.task_metadata_ports import MetadataPolicy, MetadataSnapshots
 
-_pipeline_task_metadata = PipelineTaskMetadata(
-    policy=MetadataPolicy(
-        PIPELINE_DETECTION_METHODS=lambda: PIPELINE_DETECTION_METHODS,
-        PIPELINE_TRAINING_METHODS=lambda: PIPELINE_TRAINING_METHODS,
-        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-    ),
-    snapshots=MetadataSnapshots(
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        pipeline_task_label_snapshot=lambda: pipeline_task_label_snapshot,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        record_owner_username=lambda: record_owner_username,
-        accessory_id_aliases=lambda: accessory_id_aliases,
-    ),
+from .pipeline.query_composition import (
+    PipelineQueries,
+    QueryMetadataPolicyInputs,
+    QueryMetadataSnapshotsInputs,
+    QueryCandidateStorageInputs,
+    QueryCandidateProgressInputs,
+    QueryCandidateProjectionInputs,
+    QueryPipelineTaskSnapshotLinksInputs,
+    QueryPipelineResourceStatusLinksInputs,
+    QueryLinkStateInputs,
+    QueryLinkProjectionInputs,
+    QueryProjectionMetadataInputs,
+    QueryProjectionResourcesInputs
 )
+
+_pipeline_queries = PipelineQueries(
+    persistence=_pipeline_persistence,
+    files=_business_files,
+    metadata_policy=QueryMetadataPolicyInputs(PIPELINE_DETECTION_METHODS=lambda: PIPELINE_DETECTION_METHODS, PIPELINE_TRAINING_METHODS=lambda: PIPELINE_TRAINING_METHODS),
+    metadata_snapshots=QueryMetadataSnapshotsInputs(accessory_lookup_by_id=lambda: accessory_lookup_by_id, LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID, record_owner_username=lambda: record_owner_username, accessory_id_aliases=lambda: accessory_id_aliases),
+    candidates_storage=QueryCandidateStorageInputs(ACCESSORY_CANDIDATES_DIR=lambda: ACCESSORY_CANDIDATES_DIR, _candidate_store_lock=lambda: _candidate_store_lock, runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, load_accessory_candidate=lambda: load_accessory_candidate, HTTPException=lambda: HTTPException, _business_files=lambda: _business_files, save_accessory_candidate=lambda: save_accessory_candidate, load_config=lambda: load_config),
+    candidates_progress=QueryCandidateProgressInputs(candidate_image_jobs=lambda: candidate_image_jobs, IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES, ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids, refresh_codex_image_job=lambda: refresh_codex_image_job, store_candidate_image_job=lambda: store_candidate_image_job),
+    candidates_projection=QueryCandidateProjectionInputs(resolve_accessory_id=lambda: resolve_accessory_id, enrich_record_audit_fields=lambda: enrich_record_audit_fields, accessory_material_type=lambda: accessory_material_type, LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID, record_owner_username=lambda: record_owner_username, accessory_lookup_by_id=lambda: accessory_lookup_by_id, record_visible_to_user=lambda: record_visible_to_user, serialize_accessory=lambda: serialize_accessory),
+    snapshots_0=QueryPipelineTaskSnapshotLinksInputs(load_ai_tasks=lambda: load_ai_detection_tasks, accessory_lookup=lambda: accessory_lookup_by_id),
+    resources_0=QueryPipelineResourceStatusLinksInputs(find_dataset=lambda: find_dataset_resource, load_ai_tasks=lambda: load_ai_detection_tasks, list_trained_specs=lambda: list_trained_model_specs),
+    optimization_state=QueryLinkStateInputs(sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id, _auto_optimize_lock=lambda: _auto_optimize_lock, load_auto_optimize_state=lambda: load_auto_optimize_state, auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id, auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked, save_auto_optimize_state=lambda: save_auto_optimize_state, list_auto_optimize_states=lambda: list_auto_optimize_states),
+    optimization_projection=QueryLinkProjectionInputs(auto_optimize_phase_name=lambda: auto_optimize_phase_name, ai_detection_task_model_id=lambda: ai_detection_task_model_id),
+    projection_metadata=QueryProjectionMetadataInputs(accessory_lookup_by_id=lambda: accessory_lookup_by_id, enrich_record_audit_fields=lambda: enrich_record_audit_fields, resolve_accessory_id=lambda: resolve_accessory_id, accessory_material_type=lambda: accessory_material_type),
+    projection_resources=QueryProjectionResourcesInputs(public_path_sanitized=lambda: public_path_sanitized)
+)
+_pipeline_task_metadata = _pipeline_queries.metadata
 
 
 def pipeline_task_model_id(task: dict[str, Any]) -> str:
@@ -10185,42 +10202,7 @@ def pipeline_method_uses_training(method: str | None) -> bool:
 from .pipeline.candidate_flow import PipelineCandidateFlow
 from .pipeline.candidate_flow_ports import CandidateStorage, CandidateProgress, CandidateProjection
 
-_pipeline_candidate_flow = PipelineCandidateFlow(
-    storage=CandidateStorage(
-        ACCESSORY_CANDIDATES_DIR=lambda: ACCESSORY_CANDIDATES_DIR,
-        _candidate_store_lock=lambda: _candidate_store_lock,
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        load_accessory_candidate=lambda: load_accessory_candidate,
-        HTTPException=lambda: HTTPException,
-        _business_files=lambda: _business_files,
-        save_accessory_candidate=lambda: save_accessory_candidate,
-        load_config=lambda: load_config,
-        load_pipeline_state=lambda: load_pipeline_state,
-        update_pipeline_state=lambda: update_pipeline_state,
-    ),
-    progress=CandidateProgress(
-        candidate_image_jobs=lambda: candidate_image_jobs,
-        IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES,
-        candidate_confirmed_accessory_id=lambda: candidate_confirmed_accessory_id,
-        ensure_candidate_image_job_task_ids=lambda: ensure_candidate_image_job_task_ids,
-        refresh_codex_image_job=lambda: refresh_codex_image_job,
-        store_candidate_image_job=lambda: store_candidate_image_job,
-        refresh_pipeline_candidate=lambda: refresh_pipeline_candidate,
-    ),
-    projection=CandidateProjection(
-        resolve_accessory_id=lambda: resolve_accessory_id,
-        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
-        pipeline_candidate_job_status=lambda: pipeline_candidate_job_status,
-        accessory_material_type=lambda: accessory_material_type,
-        LEGACY_OWNER_ID=lambda: LEGACY_OWNER_ID,
-        record_owner_username=lambda: record_owner_username,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        record_visible_to_user=lambda: record_visible_to_user,
-        pipeline_candidate_public=lambda: pipeline_candidate_public,
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        serialize_accessory=lambda: serialize_accessory,
-    ),
-)
+_pipeline_candidate_flow = _pipeline_queries.candidates
 
 
 def canonical_pipeline_accessory_ids(config: dict[str, Any], raw_ids: list[str]) -> list[str]:
@@ -10288,13 +10270,7 @@ def pipeline_accessories_payload(
 from .pipeline.task_snapshots import PipelineTaskSnapshots as _PipelineTaskSnapshots
 from .pipeline.task_snapshot_ports import PipelineTaskSnapshotLinks as _PipelineTaskSnapshotLinks
 
-_pipeline_task_snapshots = _PipelineTaskSnapshots(
-    _PipelineTaskSnapshotLinks(
-        load_ai_tasks=lambda: load_ai_detection_tasks,
-        accessory_lookup=lambda: accessory_lookup_by_id,
-        label_snapshot=lambda: pipeline_task_label_snapshot,
-    )
-)
+_pipeline_task_snapshots = _pipeline_queries.snapshots
 
 
 def pipeline_task_label_snapshot(task: dict[str, Any]) -> dict[str, str]:
@@ -10312,13 +10288,7 @@ def ensure_pipeline_task_accessory_objects(config: dict[str, Any], tasks: list[d
 from .pipeline.resource_status import PipelineResourceStatus as _PipelineResourceStatus
 from .pipeline.resource_status_ports import PipelineResourceStatusLinks as _PipelineResourceStatusLinks
 
-_pipeline_resource_status = _PipelineResourceStatus(
-    _PipelineResourceStatusLinks(
-        find_dataset=lambda: find_dataset_resource,
-        load_ai_tasks=lambda: load_ai_detection_tasks,
-        list_trained_specs=lambda: list_trained_model_specs,
-    ), files=_business_files
-)
+_pipeline_resource_status = _pipeline_queries.resources
 
 
 def pipeline_task_dataset_status(task: dict[str, Any]) -> str:
@@ -10339,28 +10309,7 @@ def pipeline_task_model_status(
 from .pipeline.auto_optimization_links import PipelineAutoOptimizationLinks
 from .pipeline.auto_optimization_links_ports import LinkState, LinkProjection, LinkMatching
 
-_auto_optimization_links = PipelineAutoOptimizationLinks(
-    state=LinkState(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        _auto_optimize_lock=lambda: _auto_optimize_lock,
-        load_auto_optimize_state=lambda: load_auto_optimize_state,
-        auto_optimize_completed_model_id=lambda: auto_optimize_completed_model_id,
-        auto_optimize_stop_capture_for_model_locked=lambda: auto_optimize_stop_capture_for_model_locked,
-        save_auto_optimize_state=lambda: save_auto_optimize_state,
-        fast_completed_auto_optimize_model_id=lambda: fast_completed_auto_optimize_model_id,
-        list_auto_optimize_states=lambda: list_auto_optimize_states,
-        auto_optimize_states_by_task_id=lambda: auto_optimize_states_by_task_id,
-    ),
-    projection=LinkProjection(
-        auto_optimize_phase_name=lambda: auto_optimize_phase_name,
-        ai_detection_task_model_id=lambda: ai_detection_task_model_id,
-        public_auto_optimize_link_for_task_id=lambda: public_auto_optimize_link_for_task_id,
-    ),
-    matching=LinkMatching(
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-    ),
-)
+_auto_optimization_links = _pipeline_queries.optimization
 
 
 def fast_completed_auto_optimize_model_id(state: dict[str, Any]) -> str:
@@ -10388,24 +10337,7 @@ def pipeline_task_auto_optimize_link(
 from .pipeline.task_projection import PipelineTaskProjection
 from .pipeline.task_projection_ports import ProjectionMetadata, ProjectionResources
 
-_task_projection = PipelineTaskProjection(
-    metadata=ProjectionMetadata(
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        enrich_record_audit_fields=lambda: enrich_record_audit_fields,
-        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-        pipeline_method_uses_training=lambda: pipeline_method_uses_training,
-        resolve_accessory_id=lambda: resolve_accessory_id,
-        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-        pipeline_task_accessory_snapshot=lambda: pipeline_task_accessory_snapshot,
-        accessory_material_type=lambda: accessory_material_type,
-    ),
-    resources=ProjectionResources(
-        pipeline_task_dataset_status=lambda: pipeline_task_dataset_status,
-        pipeline_task_model_status=lambda: pipeline_task_model_status,
-        pipeline_task_auto_optimize_link=lambda: pipeline_task_auto_optimize_link,
-        public_path_sanitized=lambda: public_path_sanitized,
-    ),
-)
+_task_projection = _pipeline_queries.projection
 
 
 def pipeline_task_public(

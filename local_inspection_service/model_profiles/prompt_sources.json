@@ -1,5 +1,5 @@
 {
-  "version": 263,
+  "version": 264,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -573,6 +573,7 @@
     "plc/lease_diagnostic_composition.py",
     "plc/capture_composition.py",
     "pipeline/persistence_composition.py",
-    "pipeline/execution_composition.py"
+    "pipeline/execution_composition.py",
+    "pipeline/query_composition.py"
   ]
 }

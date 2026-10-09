@@ -40,7 +40,8 @@ class PipelineTaskSnapshotContracts(unittest.TestCase):
         self.replace("accessory_lookup_by_id", return_value={})
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        from pipeline_query_test_ports import patch_pipeline_query
+        return self.stack.enter_context(patch_pipeline_query(self.api, name, **kwargs))
 
     def test_task_labels_stringify_and_filter_without_stripping_output(self):
         self.task["accessory_labels"] = {1: 2, " ": "drop", "blank": "  ", " a ": " A "}
@@ -161,7 +162,7 @@ class PipelineTaskSnapshotContracts(unittest.TestCase):
             def current_label(task):
                 accessories["a"]["name"] = "updated"
                 return labels
-            self.api.pipeline_task_label_snapshot = current_label
+            self.api._pipeline_queries.pipeline_task_label_snapshot = current_label
             return accessories
         self.replace("accessory_lookup_by_id", side_effect=lookup)
         actual_labels, names = self.api.pipeline_task_accessory_snapshot(self.config, self.task, ["a"])

@@ -176,3 +176,5 @@ Retained capture state uses PlcCaptureWorkflows for coordination, expiry and dur
 Pipeline persistence assembly leaves capture 410 routes, browser workstation ownership, PLC plan/ACK contracts, and the no-op server PLC startup unchanged. The capture and workstation state machines retain separate owners.
 
 The pipeline native runtime graph does not enable capture routes, server serial workers or PLC transport factories. Only leased browser dispatch retains physical I/O authority; ordinary pipeline/image tasks do not gain PLC write permissions.
+
+The PipelineQueries assembly retains existing auto-optimization stop-capture capabilities and does not change browser ownership, workstation leases, diagnostic receipts, actual ACK or uncertain-write rules. It starts no legacy PLC polling worker.

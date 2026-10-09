@@ -74,7 +74,12 @@ class ProjectionContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._task_projection
         for group in (service.metadata,service.resources):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            from pipeline_query_test_ports import QUERY_METHODS
+            for f in fields(group):
+                actual=getattr(group,f.name)(); expected=getattr(server._pipeline_queries if f.name in QUERY_METHODS else server,f.name)
+                if f.name in QUERY_METHODS:
+                    self.assertIs(actual.__self__,expected.__self__);self.assertIs(actual.__func__,expected.__func__)
+                else:self.assertIs(actual,expected)
         task={};config={};kw={'ai_task_ids':set(),'trained_model_specs':[],'auto_optimize_states':[],'auto_optimize_states_by_id':{},'sanitize':False};mock=Mock(return_value=object())
         with patch.object(server,'_task_projection',SimpleNamespace(pipeline_task_public=mock)):self.assertIs(server.pipeline_task_public(task,config,**kw),mock.return_value)
         mock.assert_called_once_with(task,config,**kw)
