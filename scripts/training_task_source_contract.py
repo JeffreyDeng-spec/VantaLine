@@ -26,6 +26,8 @@ def ast_sha256(node):
 
 
 def restore_training_task_root(source):
+    from application_integration_source_contract import restore_integrated_root
+    source = restore_integrated_root(source)
     tree = ast.parse(source)
     imports = [ast.unparse(node) for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
     assert imports == FIXTURE['expected_imports'], 'Task-domain imports or bindings changed'

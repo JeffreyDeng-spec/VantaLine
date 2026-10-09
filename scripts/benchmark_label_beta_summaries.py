@@ -22,6 +22,23 @@ PLAN=[('AA',0,1000,'large')]+[
 BASELINE='ce5b2beaacf9b6d16957ed22470b2cec36da30596ad1fccab6f60cd4bf2bb086'
 
 
+def legacy_probe_counts(calls):
+    return dict(catalog=sum('to_regclass' in query for query in calls),
+                eligibility=sum('legacy_projection_ready' in query for query in calls))
+
+
+def verify_query_counts(mode, old, new, old_probes, new_probes):
+    """Require the two explicit fixed probes, not arbitrary query growth."""
+    expected = {'catalog': 0, 'eligibility': 0}
+    assert all(probes == expected for probes in old_probes), 'Frozen Beta reader gained legacy probes'
+    expected_new = expected if mode == 'AA' else {'catalog': 1, 'eligibility': 1}
+    assert all(probes == expected_new for probes in new_probes), 'Legacy readiness probe count changed'
+    increment = 0 if mode == 'AA' else 2
+    assert len(set(old)) == len(set(new)) == 1, 'Beta query counts are not fixed'
+    assert set(new) == {count + increment for count in old}, 'Beta non-probe query count changed'
+    assert max(new) <= 12, 'Beta first-page query bound exceeded'
+
+
 def measure(mode,repetition,size,shape,reports):
     with StatisticsFixture() as f:
         def rows():
@@ -63,25 +80,26 @@ def measure(mode,repetition,size,shape,reports):
             assert len(calls)<=12,(len(calls),size)
             assert len([q for q in calls if 'codex_comparison_tasks' in q])==1
             cleanup()
-            return elapsed,peak,len(calls),observation
+            return elapsed,peak,len(calls),observation,legacy_probe_counts(calls)
         for _ in range(4):run(True);run(False)
-        samples={True:[],False:[]};queries={True:[],False:[]};observations={True:[],False:[]};peaks={True:[],False:[]}
+        samples={True:[],False:[]};queries={True:[],False:[]};observations={True:[],False:[]};peaks={True:[],False:[]};probes={True:[],False:[]}
         for iteration in range(31):
             for baseline in ((True,False) if iteration%2==0 else (False,True)):
-                elapsed,_,count,obs=run(baseline);samples[baseline].append(elapsed);queries[baseline].append(count);observations[baseline].append(obs)
+                elapsed,_,count,obs,probe=run(baseline);samples[baseline].append(elapsed);queries[baseline].append(count);observations[baseline].append(obs);probes[baseline].append(probe)
         for iteration in range(3):
             for baseline in ((True,False) if iteration%2==0 else (False,True)):
-                _,peak,_,_=run(baseline,True);peaks[baseline].append(peak)
+                _,peak,_,_,_=run(baseline,True);peaks[baseline].append(peak)
         old,new=p95(samples[True]),p95(samples[False]);old_peak,new_peak=max(peaks[True]),max(peaks[False])
         record=dict(mode=mode,repetition=repetition,tasks=size,shape=shape,compacted_rows=compacted,projection_contract=3,baseline_sha256=BASELINE,
             samples=31,old_seconds=samples[True],new_seconds=samples[False],old_p95_seconds=old,new_p95_seconds=new,
             old_peak_samples=peaks[True],new_peak_samples=peaks[False],old_peak_bytes=old_peak,new_peak_bytes=new_peak,
             old_queries=queries[True],new_queries=queries[False],old_observations=observations[True],new_observations=observations[False],
+            old_legacy_probes=probes[True],new_legacy_probes=probes[False],
             latency_limit=max(old*1.25,old+.01),memory_limit=max(old_peak*1.25,old_peak+1024*1024))
         reports.append(record);print(json.dumps(record),flush=True)
         assert new<=record['latency_limit'],'Beta first-page P95 regression'
         assert new_peak<=record['memory_limit'],'Beta first-page peak-memory regression'
-        assert set(queries[True])==set(queries[False]),'Beta query count increased'
+        verify_query_counts(mode,queries[True],queries[False],probes[True],probes[False])
 
 
 def execute_protocol(measure,reports):
