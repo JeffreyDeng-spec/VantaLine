@@ -1824,3 +1824,5 @@ Workstation composition adds no operator setting or default change. Its explicit
 Lease/diagnostic composition introduces no configuration flag, model setting or account default. It retains call-time suppliers for identity, release consistency, permissions and clocks. Prompt-source manifest v260 adds `plc/lease_diagnostic_composition.py` for new fingerprints without rewriting historical snapshots.
 
 Capture composition adds no configuration or environment switch. The two retained capture state owners use existing configuration, generation, receipt and runtime keys through operation-time suppliers. Historical model snapshots are untouched; prompt source manifest v261 includes the actual new capture_composition.py module.
+
+PipelinePersistence introduces no new business configuration. Model resolver suppliers retain both callable layers and save_pipeline_task freezes before encoding or repository selection. Manifest v262 includes the actual pipeline/persistence_composition.py source without rewriting task snapshots. Task/state path suppliers keep their existing operation-time selection.

@@ -1588,3 +1588,5 @@ Workstation composition acceptance includes `smoke_plc_workstation_composition.p
 The backend job additionally runs `smoke_plc_lease_diagnostic_composition.py --postgres`. This is a synthetic graph/transaction gate, not device commissioning or label-worker activation. Preserve failed performance evidence and require complete current-head CI before immutable-release acceptance.
 
 The retained capture state graph does not change the deployment topology. It must not activate server-side PLC workers as part of application assembly. Full application factory, hosted performance acceptance and label worker production cutover remain separate unfinished checks.
+
+The pipeline persistence checkpoint is compatible with the existing single Web process topology and requires no migration or worker activation. Preserve the full immutable release for rollback; task snapshots are not rewritten. Its CI adds an isolated PostgreSQL graph regression. Hosted list performance acceptance, full application factory and production label-worker cutover remain unfinished gates.

@@ -1839,3 +1839,5 @@ The workstation domain owner retains the current browser-only serial topology an
 Lease/diagnostic composition retains the existing station transaction, browser I/O and shutdown topology. Diagnostic frame failures roll back; late receipts retain uncertain-outcome evidence. Recover through a previous complete immutable release with its matching worker topology, preserving lease and call records.
 
 Capture state composition is inert on startup. The capture endpoints retain their disabled 410 responses, and start_plc_runtime_workers remains a no-op. Never activate the retained forever-loop legacy workers during a factory migration or rollback.
+
+Pipeline task/state owners share one explicitly owned runtime per constructed graph, with distinct task and state guards. This does not alter production worker modes or start server PLC workers. If pipeline assembly validation fails, retain the current immutable release and inspect the graph/connection checks before proceeding; do not deploy individual files or reinterpret local graph tests as hosted performance acceptance.

@@ -1,5 +1,5 @@
 {
-  "version": 261,
+  "version": 262,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -571,6 +571,7 @@
     "training/dispatcher_runtime.py",
     "plc/workstation_composition.py",
     "plc/lease_diagnostic_composition.py",
-    "plc/capture_composition.py"
+    "plc/capture_composition.py",
+    "pipeline/persistence_composition.py"
   ]
 }

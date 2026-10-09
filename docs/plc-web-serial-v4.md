@@ -172,3 +172,5 @@ Workstation persistence, station policy and browser dispatch now compose through
 Lease and diagnostic composition selects the same supplied workstation graph. Diagnostic confirmation and model rebind use its initial bound active-lease member. A disconnect with an in-flight diagnostic keeps the original draining lease, and a late diagnostic receipt clears evidence without manufacturing an ACK or extending expiry. Frame construction and row serialization failures still roll back the station transaction. No server serial port, retry or new runtime topology is introduced.
 
 Retained capture state uses PlcCaptureWorkflows for coordination, expiry and durable receipts. This does not enable legacy capture routes (410), change the no-op start_plc_runtime_workers hook, or start a server serial poller. Browser-only PLC I/O, uncertain-write non-retry and distinct lease epochs remain required.
+
+Pipeline persistence assembly leaves capture 410 routes, browser workstation ownership, PLC plan/ACK contracts, and the no-op server PLC startup unchanged. The capture and workstation state machines retain separate owners.

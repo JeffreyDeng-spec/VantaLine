@@ -802,3 +802,5 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+
+PipelinePersistence supplies the existing operation-time PostgreSQL repository to TaskStore and StateStore. Model snapshots still freeze before a task write, and state-key updates keep their original transactional commit behavior. The state RLock and task Lock remain distinct; no schema migration, database lock removal or additional task-store lock is included. Actual graph validation uses two disposable schemas with simultaneous state updates, terminal synchronization and exception-before-write checks.

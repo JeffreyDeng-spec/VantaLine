@@ -1158,13 +1158,23 @@ configuration=TrainingConfiguration(load=lambda: _app_configuration.load_config(
 sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))
 _training_user_state = _training_account_state.users
 _training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
-_pipeline_training_sync = PipelineTrainingSync(
-    guard=lambda: _pipeline_tasks_lock,
-    records=PipelineTrainingRecords(load=lambda task_id: load_pipeline_task(task_id), save=lambda task: save_pipeline_task(task)),
-    models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)),
-    normalize_method=lambda: normalize_pipeline_detection_method, clean_id=lambda: sanitize_ai_detection_task_id,
+from .pipeline.persistence_composition import PipelinePersistence
+from .pipeline.task_store import PipelineTaskPaths, PipelineTaskRows
+from .pipeline.state_store import PipelineStatePaths, PipelineStateRows
+
+_pipeline_persistence = PipelinePersistence(
+    repository=lambda: runtime_postgres_repository_or_none(),
+    task_paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
+    task_rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
+    resolver=lambda: resolve_model_profiles,
+    state_paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
+    state_rows=PipelineStateRows(encode=lambda: pipeline_state_rows, decode=lambda: pipeline_state_from_rows),
+    training_models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)),
+    normalize_method=lambda: normalize_pipeline_detection_method,
+    clean_id=lambda: sanitize_ai_detection_task_id,
     sync_candidate=lambda task, **kwargs: sync_auto_optimize_training_candidate_from_task(task, **kwargs),
 )
+_pipeline_training_sync = _pipeline_persistence.training
 _training_candidate_sync = TrainingCandidateSync(
     guard=lambda: _auto_optimize_lock,
     records=CandidateTrainingRecords(load=lambda task_id: load_auto_optimize_state(task_id), save=lambda state: save_auto_optimize_state(state)),
@@ -8830,12 +8840,7 @@ PIPELINE_TASKS_PATH = DATA_DIR / "pipeline_tasks.json"
 
 from .pipeline.task_store import PipelineTaskStore, PipelineTaskPaths, PipelineTaskRows
 
-_pipeline_task_store = PipelineTaskStore(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
-    rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
-    resolver=lambda: resolve_model_profiles,
-)
+_pipeline_task_store = _pipeline_persistence.tasks
 
 
 _cost_paths = CostPaths(DATA_DIR, DATA_ANALYSIS_RECORDS_PATH, AI_DETECTION_TASKS_PATH,
@@ -9841,7 +9846,7 @@ training_preview = _training_preview_routes.training_preview
 AGENT_LOCAL_CONFIG_PATH = DATA_DIR / "agent_config.local.json"
 PIPELINE_STATE_PATH = DATA_DIR / "pipeline_state.json"
 from .pipeline.runtime_state import PipelineRuntimeState
-_pipeline_runtime = PipelineRuntimeState()
+_pipeline_runtime = _pipeline_persistence.runtime
 _pipeline_tasks_lock = _pipeline_runtime.task_lock
 _pipeline_state_lock = _pipeline_runtime.state_lock
 
@@ -10130,13 +10135,7 @@ def agent_recommend(request: AgentRecommendRequest) -> dict[str, Any]:
 from .pipeline.state_policy import normalize_pipeline_state
 from .pipeline.state_store import PipelineStateStore, PipelineStatePaths, PipelineStateRows
 
-_pipeline_state_store = PipelineStateStore(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
-    rows=PipelineStateRows(encode=lambda: pipeline_state_rows,
-                           decode=lambda: pipeline_state_from_rows),
-    guard=lambda: _pipeline_state_lock,
-)
+_pipeline_state_store = _pipeline_persistence.state
 
 
 def load_pipeline_tasks() -> list[dict[str, Any]]:

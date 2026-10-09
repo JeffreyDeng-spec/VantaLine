@@ -1,0 +1,58 @@
+{
+  "parent_sha": "f69a9544a51c5e1b775b46c58edcd9f749b0a330",
+  "parent_ast_sha256": "b5a4aa4e96086cbbd52a6e2c70ade196fd3de2d94195c0dea17461ce9cfabcf6",
+  "integrated_ast_sha256": "68c34d35ca2a88015ee8b80f2666453f06dc6da7daf4e06583f48eb45b8764ca",
+  "regions": [
+    {
+      "start": 346,
+      "end": 351,
+      "expected": [
+        "from .pipeline.persistence_composition import PipelinePersistence",
+        "from .pipeline.task_store import PipelineTaskPaths, PipelineTaskRows",
+        "from .pipeline.state_store import PipelineStatePaths, PipelineStateRows",
+        "_pipeline_persistence = PipelinePersistence(repository=lambda: runtime_postgres_repository_or_none(), task_paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH), task_rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list), resolver=lambda: resolve_model_profiles, state_paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH), state_rows=PipelineStateRows(encode=lambda: pipeline_state_rows, decode=lambda: pipeline_state_from_rows), training_models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)), normalize_method=lambda: normalize_pipeline_detection_method, clean_id=lambda: sanitize_ai_detection_task_id, sync_candidate=lambda task, **kwargs: sync_auto_optimize_training_candidate_from_task(task, **kwargs))",
+        "_pipeline_training_sync = _pipeline_persistence.training"
+      ],
+      "original": [
+        "_pipeline_training_sync = PipelineTrainingSync(guard=lambda: _pipeline_tasks_lock, records=PipelineTrainingRecords(load=lambda task_id: load_pipeline_task(task_id), save=lambda task: save_pipeline_task(task)), models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)), normalize_method=lambda: normalize_pipeline_detection_method, clean_id=lambda: sanitize_ai_detection_task_id, sync_candidate=lambda task, **kwargs: sync_auto_optimize_training_candidate_from_task(task, **kwargs))"
+      ]
+    },
+    {
+      "start": 1989,
+      "end": 1990,
+      "expected": [
+        "_pipeline_task_store = _pipeline_persistence.tasks"
+      ],
+      "original": [
+        "_pipeline_task_store = PipelineTaskStore(repository=lambda: runtime_postgres_repository_or_none(), paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH), rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list), resolver=lambda: resolve_model_profiles)"
+      ]
+    },
+    {
+      "start": 2217,
+      "end": 2218,
+      "expected": [
+        "_pipeline_runtime = _pipeline_persistence.runtime"
+      ],
+      "original": [
+        "_pipeline_runtime = PipelineRuntimeState()"
+      ]
+    },
+    {
+      "start": 2311,
+      "end": 2312,
+      "expected": [
+        "_pipeline_state_store = _pipeline_persistence.state"
+      ],
+      "original": [
+        "_pipeline_state_store = PipelineStateStore(repository=lambda: runtime_postgres_repository_or_none(), paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH), rows=PipelineStateRows(encode=lambda: pipeline_state_rows, decode=lambda: pipeline_state_from_rows), guard=lambda: _pipeline_state_lock)"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "fd821a54b261324316790e43d3b0c8881dfc72eb7c28126bb63262c8cba5228f",
+  "unchanged_business_sha256": {
+    "local_inspection_service/pipeline/task_store.py": "efae85046fd6759d6df2c2e0ab641999303a8ede77371a4f9a1da45f7646935e",
+    "local_inspection_service/pipeline/state_store.py": "9619ede1e8cb9583904a3d687c743f5fd206ab4b19853fe807bcbb1fe3dabaa1",
+    "local_inspection_service/pipeline/training_sync.py": "7348377843b470a53929b02b0c93be4a7bf0e36d6f1fcb261ca99ac8a790da46",
+    "local_inspection_service/pipeline/runtime_state.py": "d15d7725a9f6a7842cbf71838ebcd6fe20f10100ee88eb28df75ec87508acd9e"
+  }
+}

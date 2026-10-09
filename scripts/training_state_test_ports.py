@@ -23,6 +23,13 @@ EXECUTION_METHODS = frozenset({'run_training_task', 'enqueue_training_task'})
 
 
 def training_port_target(api, name):
+    if hasattr(api, '_app_configuration') and name in {'load_config', 'save_config'}:
+        return api._app_configuration, name
+    if hasattr(api, '_pipeline_persistence'):
+        if name == '_pipeline_tasks_lock':
+            return api._pipeline_persistence.runtime, 'task_lock'
+        if name in {'load_pipeline_task', 'save_pipeline_task'}:
+            return api._pipeline_persistence, name
     if hasattr(api, '_training_state_workflows'):
         if name in RUNTIME_FIELDS:
             return api._training_state_workflows.runtime, RUNTIME_FIELDS[name]

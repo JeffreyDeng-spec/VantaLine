@@ -45,9 +45,10 @@ class Fixture:
     def seed(self,path,value):self.data.mkdir(exist_ok=True);path.write_text(json.dumps(value),encoding='utf-8')
     def bind(self,api,stack):
         values={'DATA_DIR':self.data,'PIPELINE_TASKS_PATH':self.tasks,'PIPELINE_STATE_PATH':self.state,
-                '_pipeline_state_lock':self.guard,'runtime_postgres_repository_or_none':self.repository,
+'runtime_postgres_repository_or_none':self.repository,
                 'resolve_model_profiles':self.provider}
         for name,value in values.items():stack.enter_context(patch.object(api,name,value))
+        stack.enter_context(patch.object(api._pipeline_persistence.runtime,"state_lock",self.guard))
 
 
 class PipelineStoreContracts(unittest.TestCase):
