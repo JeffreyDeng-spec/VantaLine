@@ -74,7 +74,7 @@ class IntegrationContracts(unittest.TestCase):
                 contract.restore_infrastructure_root(self.source)
 
     def test_exact_partial_replays_remain_guarded_at_every_checkpoint(self):
-        fixtures = (contract.TRAINING_PERSISTENCE_GRAPH, contract.INFRASTRUCTURE, contract.PATH_CONFIGURATION, contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
+        fixtures = (contract.ACCOUNT_VISIBILITY, contract.TRAINING_PERSISTENCE_GRAPH, contract.INFRASTRUCTURE, contract.PATH_CONFIGURATION, contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
                     contract.PIPELINE_TASKS, contract.PIPELINE_STAGES,
                     contract.AGENT_PIPELINE, contract.PIPELINE_QUERIES,
                     contract.PIPELINE_EXECUTION, contract.PIPELINE_PERSISTENCE,
@@ -107,6 +107,23 @@ class IntegrationContracts(unittest.TestCase):
             with self.subTest(mode=mode),patch.object(contract,'TRAINING_PERSISTENCE_GRAPH',altered),self.assertRaises(AssertionError):
                 contract.restore_infrastructure_root(self.source)
 
+    def test_account_visibility_actual_owner_and_delta_are_guarded(self):
+        original_read=Path.read_text
+        for relative in contract.ACCOUNT_VISIBILITY['actual_owner_ast_sha256']:
+            target=(contract.ROOT/relative).resolve()
+            def read(path,*args,**kwargs):
+                value=original_read(path,*args,**kwargs)
+                return value+'\nunreviewed_visibility = None\n' if path.resolve()==target else value
+            with patch.object(Path,'read_text',read),self.assertRaises(AssertionError):
+                contract.restore_infrastructure_root(self.source)
+        for mode in ('edit','delete','duplicate','order'):
+            altered=copy.deepcopy(contract.ACCOUNT_VISIBILITY)
+            if mode=='edit': altered['regions'][0]['expected'][0]='unreviewed_visibility = None'
+            elif mode=='delete': altered['regions'].pop()
+            elif mode=='duplicate': altered['regions'].append(copy.deepcopy(altered['regions'][-1]))
+            else: altered['regions'].reverse()
+            with self.subTest(mode=mode),patch.object(contract,'ACCOUNT_VISIBILITY',altered),self.assertRaises(AssertionError):
+                contract.restore_infrastructure_root(self.source)
     def test_partial_replay_still_checks_the_actual_native_owner(self):
         source = contract.restore_delta(contract.restore_delta(contract.restore_pose_domain_root(self.source),
                     contract.CODEX_ENVIRONMENT), contract.PIPELINE_RUNTIME)

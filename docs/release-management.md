@@ -1,3 +1,5 @@
+The default account visibility graph adds no schema, release topology or rollout setting. Existing authentication HTTP registration and SPA ordering remain unchanged. Its local permission/source checks are scoped evidence and do not replace final CI, performance or whole-release acceptance.
+
 The focused training completion graph is assembled by the default Web entry and adds no release topology or migration. Configuration/pipeline/candidate partial commit boundaries are retained; rollback continues to replace the whole immutable release. Local graph checks do not establish final hosted CI or production acceptance.
 
 Codex comparison list/event read-transaction separation is a schema-free, Web-compatible release. It changes no worker topology, model binding, paid-call retry or database write fence. Existing `get` and the HTTP events ownership lookup still serialize. CI requires isolated PostgreSQL visibility and lock-wait checks; restore only the previous complete immutable release on failure.

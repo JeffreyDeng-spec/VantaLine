@@ -1,3 +1,5 @@
+Account visibility now composes through `auth/visibility_composition.py`. Keep its public-network and account-projection self-calls on named graph forwarders; do not eagerly capture receiver methods or reorder selected-model/configuration reads. Authentication HTTP registration and complete application factory/lifecycle work remain separate.
+
 Training completion wiring lives in `training/persistence_graph.py`: provide only its narrow typed account/pipeline/candidate inputs and model-spec supplier. Do not route its internal completion callbacks through `server` or merge the existing persistence boundaries. Full Web factory/lifecycle consolidation and final release acceptance remain pending.
 
 # Agent overview

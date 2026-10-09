@@ -1,3 +1,5 @@
+Account visibility graph wiring retains the existing private configuration projection and media permissions. PLC route ordering, workstation leases, browser-only I/O, actual ACK and uncertain-write handling remain unchanged.
+
 Training completion graph assembly does not change PLC I/O, lease ownership, ACK settlement or uncertain-write handling. Its synthetic graph verification does not contact a serial port or PLC.
 
 Diagnostic receipt/finalization now delegates to `plc/diagnostic_state.py` inside the existing station mutation transaction. It accepts an active or draining owner lease even after lease or diagnostic deadline expiry, so a late browser result can clear the in-flight diagnostic ID, deadline and token hash. It does not alter state, expiry or heartbeat, record an ACK, retry a physical write, or open a serial port. A repeated receipt fails because the diagnostic is no longer in flight.

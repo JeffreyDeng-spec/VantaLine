@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+ACCOUNT_VISIBILITY = json.loads((ROOT / "tests/backend_contract/account_visibility_delta.json").read_text())
 TRAINING_PERSISTENCE_GRAPH = json.loads((ROOT / "tests/backend_contract/training_persistence_graph_delta.json").read_text())
 INFRASTRUCTURE = json.loads((ROOT / "tests/backend_contract/infrastructure_composition_delta.json").read_text())
 PATH_CONFIGURATION = json.loads((ROOT / "tests/backend_contract/path_configuration_composition_delta.json").read_text())
@@ -142,8 +143,21 @@ def restore_pose_domain_root(source):
     return source
 
 
+def restore_account_visibility_root(source):
+    """Verify the real visibility graph before replaying its fixed entry delta."""
+    fixture = ACCOUNT_VISIBILITY
+    for path, expected in fixture["actual_owner_ast_sha256"].items():
+        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+    for path, expected in fixture["unchanged_business_sha256"].items():
+        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+        return restore_delta(source, fixture)
+    return source
+
+
 def restore_training_persistence_graph_root(source):
     """Verify actual completion owners before folding this fixed entry delta."""
+    source = restore_account_visibility_root(source)
     fixture = TRAINING_PERSISTENCE_GRAPH
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path

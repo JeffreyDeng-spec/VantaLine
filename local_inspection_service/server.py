@@ -928,21 +928,23 @@ CORS_ORIGIN_REGEX = _http_application.cors_origin_regex
 from .auth.public_network import PublicNetworkPolicy
 from .auth.public_network_ports import OriginPolicy, PublicEndpointPolicy, RuntimeDetailAccess
 
-_public_network_policy = PublicNetworkPolicy(
-    origins=OriginPolicy(
-        normalize_origin=lambda: normalize_origin,
-        CORS_ORIGINS=lambda: CORS_ORIGINS,
-        CORS_ORIGIN_REGEX=lambda: CORS_ORIGIN_REGEX,
-    ),
-    endpoints=PublicEndpointPolicy(
-        is_private_or_local_host=lambda: is_private_or_local_host,
-        masked_url_for_status=lambda: _provider_configuration.masked_url_for_status,
-    ),
-    access=RuntimeDetailAccess(
+from .auth.visibility_composition import (AccountVisibility, VisibilityAccess,
+    VisibilityConfiguration, VisibilityOrigins)
+from .auth.account_projection_ports import AccountModels, AccountMedia
+_account_visibility = AccountVisibility(
+    access=VisibilityAccess(        current_auth_user=lambda: current_auth_user,
         user_is_admin=lambda: user_is_admin,
         user_has_permission=lambda: user_has_permission,
-    ),
-)
+        record_mutable_by_user=lambda: record_mutable_by_user,
+        record_visible_to_user=lambda: record_visible_to_user),
+    configuration=VisibilityConfiguration(        accessory_uid=lambda: accessory_uid,
+        training_state_for_user=lambda: training_state_for_user,
+        PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY,
+        load_config=lambda: load_config),
+    models=AccountModels(selected_model_spec=lambda: selected_model_spec, public_ai_detection_status_for_user=lambda: public_ai_detection_status_for_user), media=AccountMedia(OUTPUT_DIR=lambda: OUTPUT_DIR),
+    origins=VisibilityOrigins(values=lambda: CORS_ORIGINS, regex=lambda: CORS_ORIGIN_REGEX),
+    masked_url=lambda: _provider_configuration.masked_url_for_status)
+_public_network_policy = _account_visibility.network
 
 
 def normalize_origin(value: str) -> str:
@@ -1302,30 +1304,7 @@ def sync_pipeline_training_state_from_task(task: dict[str, Any]) -> None:
 from .auth.account_projections import AccountProjections
 from .auth.account_projection_ports import AccountAccess, AccountConfig, AccountModels, AccountMedia
 
-_account_projections = AccountProjections(
-    access=AccountAccess(
-        current_auth_user=lambda: current_auth_user,
-        user_is_admin=lambda: user_is_admin,
-        user_has_permission=lambda: user_has_permission,
-        include_internal_runtime_details=lambda: include_internal_runtime_details,
-        record_mutable_by_user=lambda: record_mutable_by_user,
-        record_visible_to_user=lambda: record_visible_to_user,
-    ),
-    config=AccountConfig(
-        accessory_uid=lambda: accessory_uid,
-        training_state_for_user=lambda: training_state_for_user,
-        PLC_CAPTURE_RESULTS_KEY=lambda: PLC_CAPTURE_RESULTS_KEY,
-        scope_config_for_user=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-    ),
-    models=AccountModels(
-        selected_model_spec=lambda: selected_model_spec,
-        public_ai_detection_status_for_user=lambda: public_ai_detection_status_for_user,
-    ),
-    media=AccountMedia(
-        OUTPUT_DIR=lambda: OUTPUT_DIR,
-    ),
-)
+_account_projections = _account_visibility.projections
 
 
 def merge_scoped_accessory_updates(full_config: dict[str, Any], scoped_config: dict[str, Any], user: dict[str, Any]) -> None:

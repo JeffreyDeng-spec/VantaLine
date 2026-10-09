@@ -98,7 +98,7 @@ class TrainingPersistenceContracts(unittest.TestCase):
         import ast
         import application_integration_source_contract as contract
         source=(contract.ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(contract.digest(ast.parse(source)),
+        self.assertEqual(contract.digest(ast.parse(contract.restore_account_visibility_root(source))),
             contract.TRAINING_PERSISTENCE_GRAPH['integrated_ast_sha256'])
         inverse=contract.restore_training_persistence_graph_root(source)
         self.assertEqual(contract.digest(ast.parse(inverse)),

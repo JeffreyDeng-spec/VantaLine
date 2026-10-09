@@ -56,7 +56,8 @@ class Contracts(unittest.TestCase):
   self.b['user_has_permission']=Mock(side_effect=AssertionError('admin bypass'));self.assertTrue(self.s.include_internal_runtime_details({'admin':True}));self.b['user_has_permission']=lambda u,p:p in u.get('permissions',[]);self.assertTrue(self.s.include_internal_runtime_details({'permissions':['system_settings']}));self.assertFalse(self.s.include_internal_runtime_details(None))
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
+  from application_integration_source_contract import restore_account_visibility_root
+  tree=ast.parse(restore_account_visibility_root((ROOT/'local_inspection_service/server.py').read_text()));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
   from application_integration_source_contract import verify_actual_compositions
   verify_actual_compositions()
   self.assertEqual(len(binding.keywords),3)

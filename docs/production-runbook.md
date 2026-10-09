@@ -1,3 +1,5 @@
+Account visibility graph wiring preserves origin admission, model permission and output-media ownership checks. It adds no production switch or recovery action; deploy and roll back the complete immutable package through the existing joint topology gates.
+
 Training completion retains configuration save before pipeline synchronization and candidate synchronization after the pipeline task guard is released. The focused graph adds no retry on a partially completed chain, and operators must continue inspecting the existing task evidence. No runtime setting or worker switch is introduced by this wiring.
 
 The Codex comparison list/event repository read change needs no migration, setting or worker switch. It preserves the existing Web restart and full-package rollback; keep task/event evidence and prior releases intact. A successful repository read bypasses the comparison advisory lock, while detail and all writes still wait for it. The HTTP events route retains its preliminary locked ownership lookup.

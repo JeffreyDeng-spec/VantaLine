@@ -1,3 +1,5 @@
+Account visibility composition adds no setting. CORS origins/regex, authentication/access checks, output directory, model catalog, configuration and masked URL supplier retain their existing operation-time selection. Manifest v274 contains 588 actual source files; new fingerprints include the graph without rewriting historical task snapshots.
+
 `TrainingPersistenceGraph` adds no environment setting or user configuration. Existing model-spec suppliers, resolver providers, account configuration, paths and repositories remain operation-time inputs. Training completion does not gain a combined transaction, retry or global guard. New task source fingerprints use manifest v273 with 587 actual sources, including the new graph; historical model snapshots and fingerprints are not rewritten.
 
 Legacy label-list indexing adds no setting, provider, model or permission change. Source manifest v133 retains 341 actual sources and fingerprints the changed `label_inspection/api.py` for new tasks; historical task snapshots and secret references are not rewritten.
