@@ -1844,3 +1844,5 @@ Codex account/model settings retain their exact default Web values and live-read
 The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.
 
 The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.

@@ -145,3 +145,5 @@ For connected pipeline native dependencies, read `pipeline/runtime_composition.p
 When replacing connected pipeline mutation capabilities for tests, use `scripts/pipeline_runtime_test_ports.py`. It preserves frozen mutation instances and per-graph isolation; the eleven synthetic connected tests and original recommendation-runtime regression cover these boundaries.
 
 Codex API environment configuration is an explicit registration input. The source-contract replay first validates the actual Codex API/worker and restores its single reviewed root call before earlier pipeline/PLC inverses. This test adaptation changes no pipeline or PLC business owner.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.

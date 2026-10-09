@@ -19,6 +19,33 @@ class IntegrationContracts(unittest.TestCase):
         older = contract.restore_business_root(self.source)
         self.assertEqual(contract.digest(ast.parse(older)), contract.BUSINESS["parent_ast_sha256"])
 
+    def test_exact_partial_replays_remain_guarded_at_every_checkpoint(self):
+        fixtures = (contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
+                    contract.PIPELINE_TASKS, contract.PIPELINE_STAGES,
+                    contract.AGENT_PIPELINE, contract.PIPELINE_QUERIES,
+                    contract.PIPELINE_EXECUTION, contract.PIPELINE_PERSISTENCE,
+                    contract.PLC_CAPTURE, contract.PLC_OPERATIONS, contract.PLC_WORKSTATION)
+        source = self.source
+        for index, fixture in enumerate(fixtures):
+            with self.subTest(checkpoint=index):
+                restored = contract.restore_plc_domain_root(source)
+                self.assertEqual(contract.digest(ast.parse(restored)),
+                                 contract.PLC_WORKSTATION["parent_ast_sha256"])
+                with self.assertRaises(AssertionError):
+                    contract.restore_plc_domain_root(source + "\nunreviewed_owner = None\n")
+            source = contract.restore_delta(source, fixture)
+
+    def test_partial_replay_still_checks_the_actual_native_owner(self):
+        source = contract.restore_delta(contract.restore_delta(self.source,
+                    contract.CODEX_ENVIRONMENT), contract.PIPELINE_RUNTIME)
+        target = (contract.ROOT / "local_inspection_service/pipeline/runtime_composition.py").resolve()
+        original_read = Path.read_text
+        def read(path, *args, **kwargs):
+            value = original_read(path, *args, **kwargs)
+            return value + "\nunreviewed_owner = None\n" if path.resolve() == target else value
+        with patch.object(Path, "read_text", read), self.assertRaisesRegex(AssertionError, "Actual pipeline runtime"):
+            contract.restore_plc_domain_root(source)
+
     def test_new_missing_duplicate_reordered_and_changed_root_nodes_fail(self):
         for mode in ("new", "missing", "duplicate", "reorder", "wrong-import", "wrong-owner"):
             tree = ast.parse(self.source)

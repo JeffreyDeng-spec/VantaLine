@@ -94,5 +94,17 @@ def restore_business_root(source):
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
     verify_actual_compositions()
-    source = restore_delta(source, CODEX_ENVIRONMENT)
-    return restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source, PIPELINE_RUNTIME), PIPELINE_TASKS), PIPELINE_STAGES), AGENT_PIPELINE), PIPELINE_QUERIES), PIPELINE_EXECUTION), PIPELINE_PERSISTENCE), PLC_CAPTURE), PLC_OPERATIONS), PLC_WORKSTATION)
+    fixtures = (CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
+                AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
+                PIPELINE_PERSISTENCE, PLC_CAPTURE, PLC_OPERATIONS, PLC_WORKSTATION)
+    for index, fixture in enumerate(fixtures):
+        # Some unchanged historical oracles already replayed several outer
+        # deltas. Only exact immutable descendants may skip those deltas.
+        remaining = fixtures[index + 1:]
+        accepted_descendants = {item[key] for item in remaining
+                                for key in ("integrated_ast_sha256", "parent_ast_sha256")}
+        if digest(ast.parse(source)) in accepted_descendants:
+            continue
+        source = restore_delta(source, fixture)
+    assert digest(ast.parse(source)) == PLC_WORKSTATION["parent_ast_sha256"]
+    return source

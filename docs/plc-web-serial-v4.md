@@ -190,3 +190,5 @@ PipelineRuntimeWorkflows composes native pipeline transitions without creating a
 The explicit Codex environment mapping changes no PLC authorization, workstation lease, browser serial I/O or ACK/uncertain-write handling. Its regression uses synthetic accounts and performs no PLC or paid model operation.
 
 The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
