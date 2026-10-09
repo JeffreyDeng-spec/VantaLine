@@ -2800,3 +2800,8 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+RunPod storage-provider smoke verifies the one current root flow and both actual
+training/task_composition.py constructors, including required owned runtime
+providers and exact root forwarding aliases. Independent upload/download/unknown
+submission behavior cases remain; relocated constructors are not counted in the
+entry file. Actual composition AST bindings protect the owner capability edges.

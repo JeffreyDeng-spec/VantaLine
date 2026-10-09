@@ -74,8 +74,18 @@ class RunPodTransportRuntimeTests(unittest.TestCase):
             with self.assertRaises(TypeError):cls(**kwargs,runtime_provider=None)
             self.assertIs(cls(**kwargs,runtime_provider=provider).runtime_provider,provider)
         tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('RunPodFlow','RunPodTrainingTransfer','RunPodUploadStore')]
-        self.assertEqual(len(calls),3)
-        for call in calls:self.assertEqual(ast.dump(next(k.value for k in call.keywords if k.arg=='runtime_provider')),ast.dump(ast.parse('_business_files.runtime_provider',mode='eval').body))
+        from application_integration_source_contract import verify_actual_compositions
+        verify_actual_compositions()
+        calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='RunPodFlow']
+        self.assertEqual(len(calls),1)
+        self.assertEqual(ast.dump(next(k.value for k in calls[0].keywords if k.arg=='runtime_provider')),ast.dump(ast.parse('_business_files.runtime_provider',mode='eval').body))
+        owner=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/training/task_composition.py').read_text(encoding='utf-8'))
+        owned=[n for n in ast.walk(owner) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('RunPodTrainingTransfer','RunPodUploadStore')]
+        self.assertEqual(sorted(call.func.id for call in owned),['RunPodTrainingTransfer','RunPodUploadStore'])
+        for call in owned:self.assertEqual(ast.dump(next(k.value for k in call.keywords if k.arg=='runtime_provider')),ast.dump(ast.parse('files.runtime_provider',mode='eval').body))
+        assignments={target.id:node.value for node in tree.body if isinstance(node,ast.Assign) for target in node.targets if isinstance(target,ast.Name)}
+        self.assertEqual(ast.dump(next(k.value for k in assignments['_training_task_workflows'].keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
+        for name,field in [('_training_upload_store','upload_store'),('_training_transfer','transfer')]:
+            self.assertEqual(ast.dump(assignments[name]),ast.dump(ast.parse('_training_task_workflows.'+field,mode='eval').body))
 
 if __name__=='__main__':unittest.main()
