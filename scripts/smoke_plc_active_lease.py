@@ -21,9 +21,8 @@ def load_target():
     nodes = []
     raw = source.read_text(encoding="utf-8-sig")
     if not BASELINE:
-        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION
-        verify_actual_compositions()
-        raw = restore_delta(raw, PLC_WORKSTATION)
+        from application_integration_source_contract import restore_plc_domain_root
+        raw = restore_plc_domain_root(raw)
     for node in ast.parse(raw).body:
         if isinstance(node, ast.FunctionDef) and node.name == NAME:
             nodes.append(node)

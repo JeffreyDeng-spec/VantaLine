@@ -1835,3 +1835,5 @@ independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
 
 The workstation domain owner retains the current browser-only serial topology and existing lease/ACK behavior. Its CI graph checks do not authorize device commissioning or worker cutover. Roll back this assembly change only by restoring the previous complete immutable release; no workstation record, call evidence or model snapshot is rewritten for rollback.
+
+Lease/diagnostic composition retains the existing station transaction, browser I/O and shutdown topology. Diagnostic frame failures roll back; late receipts retain uncertain-outcome evidence. Recover through a previous complete immutable release with its matching worker topology, preserving lease and call records.

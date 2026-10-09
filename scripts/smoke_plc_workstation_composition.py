@@ -196,14 +196,14 @@ class WorkstationCompositionContracts(unittest.TestCase):
             self.assertEqual(owner.plc_web_serial_station_from_request(SimpleNamespace(cookies={'station': 'same-cookie'}))['name'], label)
 
     def test_root_inverse_actual_owner_and_business_identity(self):
-        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION, digest
+        from application_integration_source_contract import verify_actual_compositions, restore_plc_domain_root, PLC_WORKSTATION, digest
         verify_actual_compositions()
         source = (ROOT/'local_inspection_service/server.py').read_text()
-        restored = restore_delta(source, PLC_WORKSTATION)
+        restored = restore_plc_domain_root(source)
         self.assertEqual(digest(ast.parse(restored)), PLC_WORKSTATION['parent_ast_sha256'])
         for old, new in [('_plc_workstation_workflows.repository', '_plc_workstation_workflows.station'),
                          ('runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none', 'runtime_postgres_repository_or_none=lambda: None')]:
-            with self.assertRaises(AssertionError): restore_delta(source.replace(old, new, 1), PLC_WORKSTATION)
+            with self.assertRaises(AssertionError): restore_plc_domain_root(source.replace(old, new, 1))
 
 if '--postgres' in sys.argv:
     sys.argv.remove('--postgres')

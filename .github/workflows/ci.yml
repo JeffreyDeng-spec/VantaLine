@@ -432,6 +432,7 @@ jobs:
           python scripts/smoke_plc_persisted_validation.py
           python scripts/smoke_plc_event_commands.py
           python scripts/smoke_plc_dispatch_mutations.py
+          python scripts/smoke_plc_lease_diagnostic_composition.py --postgres
           python scripts/smoke_plc_workstation_composition.py --postgres
           python scripts/smoke_plc_station_service.py
           python scripts/smoke_plc_active_lease.py

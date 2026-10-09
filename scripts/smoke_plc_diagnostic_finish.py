@@ -369,7 +369,8 @@ class CandidateFinish(FinishContract, unittest.TestCase):
         from local_inspection_service.plc.diagnostic_state import DiagnosticState
         from local_inspection_service.plc.diagnostic_state_ports import DiagnosticStatePorts
         path = Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
-        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        from application_integration_source_contract import restore_plc_domain_root
+        tree = ast.parse(restore_plc_domain_root(path.read_text(encoding="utf-8-sig")))
         nodes = [node for node in tree.body if (
             isinstance(node, ast.Assign) and any(
                 isinstance(item, ast.Name) and item.id == "_plc_diagnostic_state"

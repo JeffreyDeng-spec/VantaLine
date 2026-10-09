@@ -122,4 +122,6 @@ remain present. Manifest v253 contains 557 actual sources at this checkpoint;
 historical task snapshots are not rewritten. Full factory, combined CI and
 release acceptance are separate remaining gates.
 
-`plc/workstation_composition.py` owns the existing repository/station/browser graph through explicit external ports. Ordinary internal edges use named forwarding methods; the active-lease member binds the initial station once. Preserve both selection rules. Construction performs no I/O or capability selection. Lease/capture collaborators, pipeline and complete app lifecycle still require final assembly.
+`plc/workstation_composition.py` owns the existing repository/station/browser graph through explicit external ports. Ordinary internal edges use named forwarding methods; the active-lease member binds the initial station once. Preserve both selection rules. Construction performs no I/O or capability selection. Capture collaborators, pipeline and complete app lifecycle still require final assembly.
+
+`plc/lease_diagnostic_composition.py` groups lease acquisition/maintenance and diagnostics around the supplied workstation owner. Keep ordinary storage/token edges on named methods and active-lease checks bound once to the initial station. Construction selects no identity, clock, storage or permission capability; no new worker or protocol is added.

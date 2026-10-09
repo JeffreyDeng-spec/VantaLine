@@ -2064,24 +2064,42 @@ def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, An
 from .plc.lease_acquisition import LeaseAcquisition as _LeaseAcquisition
 from .plc.lease_acquisition_ports import LeaseAcquisitionPorts as _LeaseAcquisitionPorts
 
-_plc_lease_acquisition = _LeaseAcquisition(
-    _LeaseAcquisitionPorts(
+from .plc.lease_diagnostic_composition import (PlcLeaseDiagnosticWorkflows, LeaseAdmission, LeaseMaintenancePolicy, DiagnosticPolicy)
+
+_plc_lease_diagnostic_workflows = PlcLeaseDiagnosticWorkflows(
+    workstation=_plc_workstation_workflows,
+    admission=LeaseAdmission(
         current_user=lambda: current_auth_user,
         release_version=lambda: current_release_version,
         fullmatch=lambda: re.fullmatch,
         protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
         require_model_permission=lambda: require_analyze_model_permission,
-        mutate=lambda: _plc_web_serial_mutate,
-        record=lambda: _plc_web_serial_record,
         migrate_config=lambda: migrate_web_serial_config,
         clock=lambda: time.time,
         uuid4=lambda: uuid.uuid4,
         connecting_ttl=lambda: WEB_SERIAL_CONNECTING_LEASE_SECONDS,
         active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
-        lease_row=lambda: _plc_workstation_lease_row,
         config_error=lambda: PlcConfigError,
-    )
+    ),
+    maintenance_policy=LeaseMaintenancePolicy(
+        current_user=lambda: current_auth_user,
+        clock=lambda: time.time,
+        active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
+        config_error=lambda: PlcConfigError,
+    ),
+    diagnostic_policy=DiagnosticPolicy(
+        token_hex=lambda: secrets.token_hex,
+        token_urlsafe=lambda: secrets.token_urlsafe,
+        config_error=lambda: PlcConfigError,
+        clock=lambda: time.time,
+        ceil=lambda: math.ceil,
+        protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        frames=lambda: build_web_serial_diagnostic_plan,
+        compare_digest=lambda: hmac.compare_digest,
+        current_user=lambda: current_auth_user,
+    ),
 )
+_plc_lease_acquisition = _plc_lease_diagnostic_workflows.acquisition
 
 
 def plc_web_serial_claim_connecting_lease(station_id: str, request: PlcWorkstationLeaseRequest) -> dict[str, Any]:
@@ -2095,18 +2113,7 @@ def plc_web_serial_activate_lease(station_id: str, request: PlcWorkstationLeaseA
 from .plc.lease_maintenance import LeaseMaintenance as _LeaseMaintenance
 from .plc.lease_maintenance_ports import LeaseMaintenancePorts as _LeaseMaintenancePorts
 
-_plc_lease_maintenance = _LeaseMaintenance(
-    _LeaseMaintenancePorts(
-        mutate=lambda: _plc_web_serial_mutate,
-        record=lambda: _plc_web_serial_record,
-        lease_row=lambda: _plc_workstation_lease_row,
-        current_user=lambda: current_auth_user,
-        clock=lambda: time.time,
-        active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
-        config_error=lambda: PlcConfigError,
-        require_active_lease=lambda: _plc_web_serial_require_active_lease,
-    )
-)
+_plc_lease_maintenance = _plc_lease_diagnostic_workflows.maintenance
 
 
 def plc_web_serial_heartbeat(station_id: str, request: PlcWorkstationLeaseHeartbeatRequest) -> dict[str, Any]:
@@ -2127,24 +2134,7 @@ _plc_web_serial_require_active_lease = _plc_station_service._plc_web_serial_requ
 from .plc.diagnostic_state import DiagnosticState as _PlcDiagnosticState
 from .plc.diagnostic_state_ports import DiagnosticStatePorts as _PlcDiagnosticStatePorts
 
-_plc_diagnostic_state = _PlcDiagnosticState(
-    _PlcDiagnosticStatePorts(
-        token_hex=lambda: secrets.token_hex,
-        token_urlsafe=lambda: secrets.token_urlsafe,
-        active_lease=lambda: _plc_web_serial_require_active_lease,
-        config_error=lambda: PlcConfigError,
-        clock=lambda: time.time,
-        ceil=lambda: math.ceil,
-        token_hash=lambda: _plc_web_serial_token_hash,
-        lease_row=lambda: _plc_workstation_lease_row,
-        protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION,
-        frames=lambda: build_web_serial_diagnostic_plan,
-        mutate=lambda: _plc_web_serial_mutate,
-        compare_digest=lambda: hmac.compare_digest,
-        record=lambda: _plc_web_serial_record,
-        current_user=lambda: current_auth_user,
-    )
-)
+_plc_diagnostic_state = _plc_lease_diagnostic_workflows.diagnostics
 
 
 def plc_web_serial_diagnostic_plan(

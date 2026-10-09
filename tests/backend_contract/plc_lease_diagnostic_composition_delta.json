@@ -1,0 +1,45 @@
+{
+  "parent": "0ec85d629e1e34edd4c4c8e2ac047d6fdbc50fb8",
+  "parent_ast_sha256": "30c7b7040849a07df68750bee6bf097dfd6aed71288e25bc424857e217d2b0a7",
+  "integrated_ast_sha256": "63e2b704055fd5d9926eec113088eeda0460fff44c9d5bfe6ad9b64020ef64a7",
+  "regions": [
+    {
+      "start": 561,
+      "end": 564,
+      "expected": [
+        "from .plc.lease_diagnostic_composition import PlcLeaseDiagnosticWorkflows, LeaseAdmission, LeaseMaintenancePolicy, DiagnosticPolicy",
+        "_plc_lease_diagnostic_workflows = PlcLeaseDiagnosticWorkflows(workstation=_plc_workstation_workflows, admission=LeaseAdmission(current_user=lambda: current_auth_user, release_version=lambda: current_release_version, fullmatch=lambda: re.fullmatch, protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION, require_model_permission=lambda: require_analyze_model_permission, migrate_config=lambda: migrate_web_serial_config, clock=lambda: time.time, uuid4=lambda: uuid.uuid4, connecting_ttl=lambda: WEB_SERIAL_CONNECTING_LEASE_SECONDS, active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS, config_error=lambda: PlcConfigError), maintenance_policy=LeaseMaintenancePolicy(current_user=lambda: current_auth_user, clock=lambda: time.time, active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS, config_error=lambda: PlcConfigError), diagnostic_policy=DiagnosticPolicy(token_hex=lambda: secrets.token_hex, token_urlsafe=lambda: secrets.token_urlsafe, config_error=lambda: PlcConfigError, clock=lambda: time.time, ceil=lambda: math.ceil, protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION, frames=lambda: build_web_serial_diagnostic_plan, compare_digest=lambda: hmac.compare_digest, current_user=lambda: current_auth_user))",
+        "_plc_lease_acquisition = _plc_lease_diagnostic_workflows.acquisition"
+      ],
+      "original": [
+        "_plc_lease_acquisition = _LeaseAcquisition(_LeaseAcquisitionPorts(current_user=lambda: current_auth_user, release_version=lambda: current_release_version, fullmatch=lambda: re.fullmatch, protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION, require_model_permission=lambda: require_analyze_model_permission, mutate=lambda: _plc_web_serial_mutate, record=lambda: _plc_web_serial_record, migrate_config=lambda: migrate_web_serial_config, clock=lambda: time.time, uuid4=lambda: uuid.uuid4, connecting_ttl=lambda: WEB_SERIAL_CONNECTING_LEASE_SECONDS, active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS, lease_row=lambda: _plc_workstation_lease_row, config_error=lambda: PlcConfigError))"
+      ]
+    },
+    {
+      "start": 568,
+      "end": 569,
+      "expected": [
+        "_plc_lease_maintenance = _plc_lease_diagnostic_workflows.maintenance"
+      ],
+      "original": [
+        "_plc_lease_maintenance = _LeaseMaintenance(_LeaseMaintenancePorts(mutate=lambda: _plc_web_serial_mutate, record=lambda: _plc_web_serial_record, lease_row=lambda: _plc_workstation_lease_row, current_user=lambda: current_auth_user, clock=lambda: time.time, active_ttl=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS, config_error=lambda: PlcConfigError, require_active_lease=lambda: _plc_web_serial_require_active_lease))"
+      ]
+    },
+    {
+      "start": 575,
+      "end": 576,
+      "expected": [
+        "_plc_diagnostic_state = _plc_lease_diagnostic_workflows.diagnostics"
+      ],
+      "original": [
+        "_plc_diagnostic_state = _PlcDiagnosticState(_PlcDiagnosticStatePorts(token_hex=lambda: secrets.token_hex, token_urlsafe=lambda: secrets.token_urlsafe, active_lease=lambda: _plc_web_serial_require_active_lease, config_error=lambda: PlcConfigError, clock=lambda: time.time, ceil=lambda: math.ceil, token_hash=lambda: _plc_web_serial_token_hash, lease_row=lambda: _plc_workstation_lease_row, protocol_version=lambda: WEB_SERIAL_PROTOCOL_VERSION, frames=lambda: build_web_serial_diagnostic_plan, mutate=lambda: _plc_web_serial_mutate, compare_digest=lambda: hmac.compare_digest, record=lambda: _plc_web_serial_record, current_user=lambda: current_auth_user))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "6a9e04fb4e3392d92147f32aa1fc03bfcd009dbeaf710b432fd54b8584935fc4",
+  "unchanged_business_sha256": {
+    "local_inspection_service/plc/lease_acquisition.py": "91c5ef02b7ca1b9d11193af4e43c15115588a3f962a28cb12a9e1d2fee431fd1",
+    "local_inspection_service/plc/lease_maintenance.py": "ac6958bd99c572bd526d92b2b530bd2b68aa9f9e882218a1b8228aa91518956a",
+    "local_inspection_service/plc/diagnostic_state.py": "984637157183777427e6913c7bf114d4892f15a7337ea3c2746d1a72335c9f3a"
+  }
+}

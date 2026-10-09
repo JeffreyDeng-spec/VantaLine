@@ -1820,3 +1820,5 @@ and exact StandardMediaStorage provider. Required/None/falsey and all media
 behavior tests remain; source guards reject unexpected owner edges.
 
 Workstation composition adds no operator setting or default change. Its explicit ports retain the existing request-time account, repository and policy suppliers. Prompt-source manifest v259 includes `plc/workstation_composition.py` for newly created task fingerprints; stored model/configuration/secret bindings and historical task snapshots remain unchanged.
+
+Lease/diagnostic composition introduces no configuration flag, model setting or account default. It retains call-time suppliers for identity, release consistency, permissions and clocks. Prompt-source manifest v260 adds `plc/lease_diagnostic_composition.py` for new fingerprints without rewriting historical snapshots.

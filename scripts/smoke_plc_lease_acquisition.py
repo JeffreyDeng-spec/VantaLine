@@ -21,7 +21,11 @@ class ConfigError(Exception):
 
 
 def load_target(source):
-    tree = ast.parse(source.read_text(encoding="utf-8-sig"))
+    raw = source.read_text(encoding="utf-8-sig")
+    if '_plc_lease_diagnostic_workflows = ' in raw:
+        from application_integration_source_contract import restore_plc_domain_root
+        raw = restore_plc_domain_root(raw)
+    tree = ast.parse(raw)
     nodes = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
