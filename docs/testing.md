@@ -2774,3 +2774,10 @@ introduced as new behavior by the composition refactor. Current manifest v256
 contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
 source oracle records the exact two-region main root delta and the exact updated
 runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+RunPod storage-provider smoke verifies the one current root flow and both actual
+training/task_composition.py constructors, including required owned runtime
+providers and exact root forwarding aliases. Independent upload/download/unknown
+submission behavior cases remain; relocated constructors are not counted in the
+entry file. Actual composition AST bindings protect the owner capability edges.
