@@ -188,3 +188,5 @@ PLC source-oracle checks also validate the outer PipelineTaskWorkflows assembly 
 PipelineRuntimeWorkflows composes native pipeline transitions without creating a PLC executor or changing browser-owned lease, dispatch, ACK or uncertain-write behavior. Legacy PLC shutdown and dormant worker state retain their original lifecycle.
 
 The explicit Codex environment mapping changes no PLC authorization, workstation lease, browser serial I/O or ACK/uncertain-write handling. Its regression uses synthetic accounts and performs no PLC or paid model operation.
+
+The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.

@@ -1842,3 +1842,5 @@ Pipeline runtime composition adds no business setting or topology flag. New task
 Codex account/model settings retain their exact default Web values and live-read behavior; its registrar now requires the environment mapping explicitly. Empty supplied mappings do not fall back to process settings. Model whitespace is still stripped for readiness and preserved verbatim in capabilities. New task source provenance is manifest v269 with 580 sources including the changed Codex API and worker; historical snapshots are not rewritten.
 
 The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.
+
+The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
