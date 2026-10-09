@@ -129,7 +129,9 @@ def list_client(register, repo, root, expected_status=200):
     # Frozen pre-lifecycle API sources import the old Web adapter location.
     # Adapt only that dependency while replaying the unchanged accepted list
     # function; no lifespan is entered and the production consumer stays Web-free.
-    with patch.object(worker, "register", functools.partial(worker_api.register, runtime_provider=get_runtime), create=True), \
+    fixture_worker = functools.partial(worker_api.register, runtime_provider=get_runtime)
+    with patch.object(worker, "register", fixture_worker, create=True), \
+         patch.object(worker_api, "register", fixture_worker), \
          patch.object(api.pdf_import, "register", lambda *_, runtime_provider=None: None), \
          patch.dict(register.__globals__, {
              "LabelRepository": lambda raw: raw,

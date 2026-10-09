@@ -2534,3 +2534,7 @@ the shared application lifespan for each permission probe. These probes retain
 all anonymous, member, over-granted member and administrator checks. Application
 startup and ordered shutdown are verified separately by `smoke_web_shutdown.py`;
 a runtime that has closed cannot be restarted by a later test client.
+
+Frozen label-list API tests bind both historical worker adapter locations to the
+fixture runtime explicitly. The accepted `register` body remains unchanged;
+list comparisons do not enter an application lifespan or start a worker.
