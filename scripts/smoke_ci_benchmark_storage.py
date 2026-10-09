@@ -89,13 +89,19 @@ class StorageContracts(unittest.TestCase):
         ordinary=backend['services']['postgres'];self.assertEqual(ordinary['ports'],['5432:5432'])
         self.assertNotIn('--tmpfs',ordinary['options'])
         selected=[]
+        actual_invocations=[]
+        commands=['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','beta_summaries','summary_reads','projection','run_batch']]
         prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
         for step in backend['steps']:
             self.assertNotIn('VANTALINE_POSTGRES_DSN',step.get('env',{}))
             for line in step.get('run','').splitlines():
+                if any(command in line for command in commands):
+                    self.assertIn(line,[prefix+command for command in commands])
+                    actual_invocations.append(line[len(prefix):])
                 if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
                     self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
-        self.assertEqual(selected,['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','beta_summaries','summary_reads','projection','run_batch']])
+        self.assertEqual(selected,commands)
+        self.assertEqual(actual_invocations,commands)
 
 
     def test_only_five_real_pg_benchmarks_route_to_second_database(self):
@@ -108,12 +114,13 @@ class StorageContracts(unittest.TestCase):
         original=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
         prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
         command='python scripts/benchmark_label_beta_summaries.py'
-        for mode in ('bare','ordinary','wrong-secondary','duplicate'):
+        for mode in ('bare','ordinary','wrong-secondary','duplicate','bare-extra'):
             workflow=copy.deepcopy(original)
             step=next(s for s in workflow['jobs']['backend-plc']['steps'] if prefix+command in s.get('run',''))
             replacement={'bare':command, 'ordinary':prefix.replace('$VANTALINE_BENCHMARK_POSTGRES_DSN','$VANTALINE_POSTGRES_DSN')+command,
                          'wrong-secondary':prefix.replace('AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN"','AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN"')+command,
-                         'duplicate':prefix+command+'\n'+prefix+command}[mode]
+                         'duplicate':prefix+command+'\n'+prefix+command,
+                         'bare-extra':command+'\n'+prefix+command}[mode]
             step['run']=step['run'].replace(prefix+command,replacement)
             with self.subTest(mode=mode),self.assertRaises(AssertionError):
                 self.check_benchmark_routing(workflow)
