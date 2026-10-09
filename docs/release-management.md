@@ -1110,3 +1110,5 @@ CI benchmark storage isolation is an infrastructure-only candidate: product code
 ## Real-photo feedback staging
 
 The feedback foundation ships disabled by an empty account allowlist. Its CI includes disposable PostgreSQL owner/claim competition tests. Subsequent review-worker and dataset-training batches require independent commissioning and immutable release evidence; green fixture checks alone do not authorize declaring visual accuracy or enabling automatic training. Use the production-change PR template and whole-release rollback.
+
+The second feedback PR adds the independent training review service and alternative bubblewrap tool mounts. Keep account admission off until the service account, pinned runtime and real private-data session are verified. Archive terminal receipts and settle current sessions before restarting/rolling back both Web and the separate worker from one immutable release.

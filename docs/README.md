@@ -49,3 +49,5 @@ This is the single index for current project knowledge. Documents marked **Autho
 The Codex batch runner contract also includes [batch prompt](../local_inspection_service/codex_compare/batch_prompt.md) and [batch CLI](../local_inspection_service/codex_compare/skills/vantaline-label-inspection/references/batch.md). Both are authoritative release-bundled instructions.
 
 - [Real-photo feedback](real-photo-feedback.md) — staged VLM feedback, review and training admission boundaries
+
+- [Training review skill](../local_inspection_service/training_review/skills/vantaline-training-review/SKILL.md) — constrained whole-image review instructions and CLI protocol

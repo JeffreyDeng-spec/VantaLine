@@ -68,3 +68,5 @@ Service path and output placement policy is owned by `runtime/service_paths.py`;
 Account configuration/media/response projections are owned by `auth/account_projections.py`; resource-name normalization and owner-scoped catalog checks are owned by `records/resource_names.py`. Their typed interfaces contain only relevant capabilities, with request identity resolved for each call.
 
 Real-photo detection feedback is introduced behind an owner allowlist in `training/real_photo_*` and `storage/real_photo_feedback.py`. Its data contracts are independent from initial generated-image pretraining; follow [real-photo feedback](real-photo-feedback.md) for staged implementation and commissioning gates.
+
+`training_review/` owns the dedicated Codex screening service, local crop tools and report-only broker. It does not import the Web application or share the label comparison queue. Inspect `docs/real-photo-feedback.md` and its versioned skill before changing screening behavior.

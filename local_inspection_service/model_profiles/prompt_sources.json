@@ -1,5 +1,5 @@
 {
-  "version": 177,
+  "version": 178,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -511,6 +511,11 @@
     "training/real_photo_annotation.py",
     "training/real_photo_contracts.py",
     "training/real_photo_api.py",
-    "training/real_photo_provenance.py"
+    "training/real_photo_provenance.py",
+    "training/real_photo_workflow.py",
+    "training_review/worker.py",
+    "training_review/cli.py",
+    "training_review/image_tools.py",
+    "training_review/skills/vantaline-training-review/SKILL.md"
   ]
 }

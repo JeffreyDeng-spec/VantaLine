@@ -1,0 +1,28 @@
+[Unit]
+Description=VantaLine independent real-photo training reviewer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vantaline-training-review
+Group=vantaline
+WorkingDirectory=/opt/vantaline/current
+EnvironmentFile=/opt/vantaline/shared/training-review.env
+ExecStart=/opt/vantaline/current/.venv/bin/python -m local_inspection_service.training_review.worker
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=10
+UMask=0077
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/vantaline/shared/training-review /opt/vantaline/shared/data/codex_comparisons
+NoNewPrivileges=true
+MemoryMax=2G
+TasksMax=96
+CPUQuota=150%
+
+[Install]
+WantedBy=multi-user.target

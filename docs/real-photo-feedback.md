@@ -12,9 +12,16 @@ Original source bytes are frozen separately from annotated previews. Exact sourc
 
 The owner-only `/api/ai/tasks/{id}/real-photo` API exposes counters, private canonical image previews, source groups, history, restart and versioned relabel requests. Queued annotation/review jobs require the later independent worker. The foundation does not run automatic training. Masks requested through the new endpoint are queued supplemental artifacts and cannot change boxes, review keys or training admission.
 
-## Subsequent batches — Proposal
+## Independent review worker
 
-1. Ship an independent Linux Codex review worker with its own service account, queue, private authentication, pinned native runtime and allowlisted task report tools. Actual image review must be commissioned on private business samples; process completion and fixture reports alone do not prove correctness.
+The second batch ships `training_review.worker`, its own systemd unit, immutable report socket and the versioned training review skill. It reuses the bubblewrap launcher with separate tool/skill mounts; existing label comparison defaults remain unchanged. The serial worker claims initialize/annotation/review/assessment jobs with owner allowlisting, 600-second CLI deadlines, heartbeat fencing and per-version reports. At most ten originals enter one review invocation. Failed CLI exit, cancellation, expired tokens, missing reports or partial rounds block admission. A failed VLM localization can only be excluded/uncertain, never converted to a negative. Parent-only late receipts preserve usage/evidence without reopening a job.
+
+Initialization independently sets review trigger and approved target to 20–50. A full round freezes its membership, preserves already completed decisions, and produces a training proposal or next 1–50 increment. At least twenty approved distinct originals, a positive and three valid source groups are enforced independently of class coverage. Missing classes are recorded without an extra per-class minimum. New arrivals wait for the next round. This batch freezes proposed train jobs but does not execute YOLO.
+
+Real CLI business acceptance is still an operations gate. The dedicated login, pinned native runtime, cache/scratch mounts, read-only original/reference access, report-only tools and model connection must be verified before activation. Fixture reports and clean CLI exit are not visual-quality evidence.
+
+## Subsequent training batch — Proposal
+
 2. Enable accepted-original dataset publication, held-out YOLO evaluation, continuous feedback and manual candidate selection only after worker and executor validation. Preserve complete task classes and mark missing real/test support as unavailable metrics. Do not auto-promote models or revive old synthetic feedback on rollback.
 
 ## Verification and rollback
