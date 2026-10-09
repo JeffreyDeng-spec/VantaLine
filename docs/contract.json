@@ -34,6 +34,7 @@
     "local_inspection_service/frontend/docs/migration-parity-checklist.md": "docs/testing.md"
   },
   "impact_rules": [
+    {"name": "Codex API environment assembly", "paths": ["scripts/smoke_codex_environment.py", "tests/backend_contract/codex_environment_delta.json"], "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/codex-text-compare.md", "docs/configuration-reference.md"]},
     {"name": "Connected pipeline runtime assembly", "paths": ["local_inspection_service/pipeline/runtime_composition.py", "scripts/smoke_pipeline_runtime_composition.py", "scripts/pipeline_runtime_test_ports.py", "tests/backend_contract/pipeline_runtime_composition_delta.json"], "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/agent-platform.md", "docs/agent-overview.md"]},
     {"name": "Pipeline task and HTTP assembly", "paths": ["local_inspection_service/pipeline/task_composition.py", "scripts/smoke_pipeline_task_composition.py", "scripts/pipeline_task_test_ports.py", "tests/backend_contract/pipeline_task_composition_delta.json"], "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/agent-platform.md", "docs/agent-overview.md"]},
     {"name": "Pipeline stage graph assembly", "paths": ["local_inspection_service/pipeline/stage_composition.py", "scripts/smoke_pipeline_stage_composition.py", "scripts/pipeline_stage_test_ports.py", "tests/backend_contract/pipeline_stage_composition_delta.json"], "required_docs": ["docs/architecture.md", "docs/testing.md", "docs/agent-platform.md", "docs/agent-overview.md"]},

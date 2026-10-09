@@ -1838,3 +1838,7 @@ Pipeline stage composition adds no configuration key or model fallback. The exis
 Task/HTTP composition adds no business configuration or permission. Each task workflow resolves user, scoped configuration and request identity when called. Prompt provenance manifest version 267 adds `pipeline/task_composition.py` (577 files); historic model snapshots and fingerprints remain immutable. A missing/mismatched domain owner is an assembly failure, not an implicit model fallback.
 
 Pipeline runtime composition adds no business setting or topology flag. New task provenance uses source manifest v268 with 578 entries including `pipeline/runtime_composition.py`; historical snapshots and secret references are unchanged. Native entry scope, captured resolver selection, model pin and account identity retain their original order.
+
+Codex account/model settings retain their exact default Web values and live-read behavior; its registrar now requires the environment mapping explicitly. Empty supplied mappings do not fall back to process settings. Model whitespace is still stripped for readiness and preserved verbatim in capabilities. New task source provenance is manifest v269 with 580 sources including the changed Codex API and worker; historical snapshots are not rewritten.
+
+The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.

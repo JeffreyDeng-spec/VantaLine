@@ -186,3 +186,5 @@ The PLC lease composition source-contract smoke now replays the validated outer 
 PLC source-oracle checks also validate the outer PipelineTaskWorkflows assembly delta before restoring original coordination and lease constructors. This changes the test location adapter only; actual PLC ownership, at-most-once browser writes and ACK/uncertainty rules remain unchanged.
 
 PipelineRuntimeWorkflows composes native pipeline transitions without creating a PLC executor or changing browser-owned lease, dispatch, ACK or uncertain-write behavior. Legacy PLC shutdown and dormant worker state retain their original lifecycle.
+
+The explicit Codex environment mapping changes no PLC authorization, workstation lease, browser serial I/O or ACK/uncertain-write handling. Its regression uses synthetic accounts and performs no PLC or paid model operation.

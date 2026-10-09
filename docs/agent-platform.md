@@ -420,3 +420,5 @@ PipelineTaskWorkflows in `pipeline/task_composition.py` composes the eight task-
 The actual PipelineRuntimeWorkflows now supplies Agent decisions/commits to native auto execution, stage synchronization/advancement to native execution, and mutation progress to stages. Pending advances still commit under the task guard and schedule after releasing it. Provider failures retain original fallback and unknown-call evidence; this assembly introduces no new model invocation or retry policy.
 
 Agent advancement tests replace the connected mark forwarder rather than mutating the frozen mutation instance. Restoration is checked through the actual Agent caller and a separate graph; production action ordering is unchanged.
+
+The Codex environment edge adds no Agent decision or native lifecycle behavior. Existing pipeline graph source oracles verify the Codex registration delta before restoring their fixed parent; all original assertions remain.

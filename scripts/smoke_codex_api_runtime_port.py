@@ -36,7 +36,7 @@ class CodexRuntimeTests(unittest.TestCase):
         api.register(app,ComparisonAccess(permission,lambda:(state.owner,'user')),
             lambda:repository if state.available else None,StandardLibrary(Mock(),Mock(),Mock()),
             ComparisonMedia(lambda:self.root,Mock(),Mock(),Mock()),DocumentImports(Mock(),Mock()),
-            runtime_provider=state.provider)
+            runtime_provider=state.provider,environment={})
         state.client=TestClient(app,raise_server_exceptions=False);self.addCleanup(state.client.close)
         state.app=app;return state
     def put(self,index):
@@ -83,6 +83,8 @@ class CodexRuntimeTests(unittest.TestCase):
         args=(app,Mock(),Mock(),Mock(),Mock(),Mock())
         with self.assertRaises(TypeError):api.register(*args)
         with self.assertRaises(TypeError):api.register(*args,runtime_provider=None)
+        with self.assertRaisesRegex(TypeError,'runtime_provider is required'):api.register(*args,runtime_provider=None,environment={})
+        with self.assertRaisesRegex(TypeError,'environment is required'):api.register(*args,runtime_provider=lambda:None,environment=None)
         self.assertEqual(len(app.routes),before)
         root=Path(__file__).resolve().parents[1]
         tree=ast.parse((root/'local_inspection_service/server.py').read_text(encoding='utf-8'))

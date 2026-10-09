@@ -1602,3 +1602,5 @@ CI adds the focused PipelineStages actual-graph smoke to the existing backend ch
 The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated PostgreSQL composition check. Worker topology, maintenance gating and immutable release rollout are unchanged; this focused check does not authorize bypassing required CI or count as standalone-worker commissioning.
 
 The connected pipeline runtime owner ships under the existing release topology. Three native execution lifecycle owners remain separate and drain auto producers before advance/recommendation consumers. A false drain result prevents proceeding to downstream shutdown. This change does not activate the standalone label worker; deployment and rollback still use one complete immutable package after required CI and release gates.
+
+The explicit Codex environment edge is schema-free and retains the existing Web/Codex/label topology. Default registration still receives the process environment. Validation covers isolated API mappings and original PostgreSQL/worker contracts; rollback restores the complete immutable package. This wiring does not activate standalone label processing.

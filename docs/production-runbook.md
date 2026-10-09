@@ -1855,3 +1855,5 @@ CI adds the focused PipelineStages actual-graph smoke to the existing backend ch
 The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated PostgreSQL composition check. Worker topology, maintenance gating and immutable release rollout are unchanged; this focused check does not authorize bypassing required CI or count as standalone-worker commissioning.
 
 Connected pipeline assembly starts no work during construction. Native auto/advance/recommendation execution retains its repository scope and existing close order. Never force-stop paid work to finish a release window; preserve model/call evidence and roll back the complete release with its declared topology. Full application assembly and standalone label-worker production cutover are still pending.
+
+Default Codex account/model admission remains driven by the existing process environment. API assemblers must supply their mapping explicitly; a missing mapping fails before route registration. No worker cutover or paid-call retry is introduced, and whole-release rollback preserves existing task evidence.

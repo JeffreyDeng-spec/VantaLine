@@ -1,0 +1,25 @@
+{
+  "parent": "7063e8c17c016a7bb1478607015d8e444e114d33",
+  "parent_ast_sha256": "92e627ce9c39c88adba5cecddfd99894d1451a1720ff60744342ba0c4ad1e25a",
+  "integrated_ast_sha256": "18d55c3ae0574f106c76f936712929e12d0bbc31e97202fb27fccf7a18bbc82d",
+  "regions": [
+    {
+      "start": 2711,
+      "end": 2712,
+      "original": [
+        "register_codex_compare(app, ComparisonAccess(require_permission=lambda permission: require_permission(permission), owner=lambda: _text_v2_owner()), repository_factory=lambda: runtime_postgres_repository_or_none(), standards=_codex_standard_library, media_dependencies=_codex_media, documents=DocumentImports(docx=lambda data: extract_docx_candidates(data), doc=lambda data: extract_doc_images(data)), runtime_provider=_business_files.runtime_provider)"
+      ],
+      "expected": [
+        "register_codex_compare(app, ComparisonAccess(require_permission=lambda permission: require_permission(permission), owner=lambda: _text_v2_owner()), repository_factory=lambda: runtime_postgres_repository_or_none(), standards=_codex_standard_library, media_dependencies=_codex_media, documents=DocumentImports(docx=lambda data: extract_docx_candidates(data), doc=lambda data: extract_doc_images(data)), runtime_provider=_business_files.runtime_provider, environment=os.environ)"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "12871eb63f9d119dbe73400ea6bd4a1b6f7f30391f476d21087237fe65750b37",
+  "actual_worker_ast_sha256": "9e1d55826bdec5f5fc730023a216d3c2ec4b98a3e60ed01cdd35a737b03250a7",
+  "unchanged_business_sha256": {
+    "local_inspection_service/codex_compare/batch_api.py": "2fa0f2b328c56ff67cdfaae773465d4392a3f4bb7d66b5e82f87e82bbeed2ad1",
+    "local_inspection_service/codex_compare/media.py": "def49ecf91b1ca9161ec14d183a23427bd3b6241983c47be00cf18dac81ff39b",
+    "local_inspection_service/codex_compare/contracts.py": "bc4fe0942b699645630c185f4982bf550e45b844b4376192593473f1a16add17",
+    "local_inspection_service/codex_compare/dependencies.py": "09b96bdebb48338c5c268deab603b1ae202ce15c131cc732c471be11ec770d10"
+  }
+}

@@ -143,3 +143,5 @@ PipelineTaskWorkflows in `pipeline/task_composition.py` composes the eight task-
 For connected pipeline native dependencies, read `pipeline/runtime_composition.py` and its actual graph smoke. Replace the actual owner capability for tests; changing a root compatibility alias does not redirect an owned edge. Task routes still register in original order. Full application/environment and pose assembly, hosted acceptance and production topology activation remain separate completion gates.
 
 When replacing connected pipeline mutation capabilities for tests, use `scripts/pipeline_runtime_test_ports.py`. It preserves frozen mutation instances and per-graph isolation; the eleven synthetic connected tests and original recommendation-runtime regression cover these boundaries.
+
+Codex API environment configuration is an explicit registration input. The source-contract replay first validates the actual Codex API/worker and restores its single reviewed root call before earlier pipeline/PLC inverses. This test adaptation changes no pipeline or PLC business owner.

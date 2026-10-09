@@ -109,7 +109,7 @@ def test_api_isolation_snapshot_and_media(storage,tmp_path,monkeypatch):
     def unused(*args, **kwargs):raise AssertionError('single-image fixture must not use batch import capabilities')
     api.register(app,ComparisonAccess(permission,lambda:(current['owner'],'test')),
                  lambda:storage().repository,StandardLibrary(owned,unused,unused),
-                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused), runtime_provider=get_runtime)
+                 ComparisonMedia(lambda:tmp_path,lambda *_:data,unused,unused),DocumentImports(unused,unused), runtime_provider=get_runtime,environment=os.environ)
     client=TestClient(app)
     form={'standard_asset_id':'asset','request_id':'request-123','expected_revision':'rev-1'}
     def create():return client.post(api.PREFIX+'/tasks',data=form,files={'captured_file':('a.png',data,'image/png')})

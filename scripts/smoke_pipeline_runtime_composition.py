@@ -225,8 +225,8 @@ class RuntimeCompositionContracts(unittest.TestCase):
         self.assertFalse(any(e[0]=='chat' for e in f.agent.events))
     def test_runtime_type_hints_and_strict_original_source_inverse(self):
         get_type_hints(module.PipelineRuntimeWorkflows.advance_pipeline_task)
-        from application_integration_source_contract import ROOT,PIPELINE_RUNTIME,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text()
+        from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,digest,restore_delta,restore_plc_domain_root
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT)
         self.assertEqual(digest(ast.parse(restore_delta(source,PIPELINE_RUNTIME))),PIPELINE_RUNTIME['parent_ast_sha256'])
         restore_plc_domain_root(source)
 

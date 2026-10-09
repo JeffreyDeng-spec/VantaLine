@@ -502,7 +502,7 @@ def main():
         try:
             with_repo(lambda r: r.recover())
             cleanup_finished(config)
-            claimed = with_repo(lambda r: r.claim(enabled_owners(), config['model'], version))
+            claimed = with_repo(lambda r: r.claim(enabled_owners(os.environ), config['model'], version))
             if claimed:
                 execute(*claimed, config, media)
             else:

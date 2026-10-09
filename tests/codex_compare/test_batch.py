@@ -81,7 +81,7 @@ def test_api_import_draft_freeze_and_owner(storage,tmp_path,monkeypatch):
                  StandardLibrary(owned,lambda kind:list(records[kind].values()),save),
                  ComparisonMedia(lambda:tmp_path,lambda a,o:Path(a['media_path']).read_bytes(),
                                  lambda owner,std,name:tmp_path/owner/std/name,write),
-                 DocumentImports(extract,extract), runtime_provider=get_runtime)
+                 DocumentImports(extract,extract), runtime_provider=get_runtime,environment=os.environ)
     c=TestClient(app);root=api.PREFIX+'/batches'
     response=c.post(root,json={'request_id':'create-batch'});assert response.status_code==200,response.text
     bid=response.json()['id'];url=root+'/'+bid

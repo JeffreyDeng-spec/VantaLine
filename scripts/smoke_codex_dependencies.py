@@ -69,7 +69,7 @@ class CodexDependencyContracts(unittest.TestCase):
         def unused(*args,**kwargs):raise AssertionError('unexpected document write or extraction')
         api.register(app,ComparisonAccess(permission,lambda:(identity.get(),'fixture-'+name)),repository,
                      StandardLibrary(owned,unused,unused),
-                     ComparisonMedia(lambda:self.root/name,asset_bytes,unused,unused),DocumentImports(unused,unused),runtime_provider=get_runtime)
+                     ComparisonMedia(lambda:self.root/name,asset_bytes,unused,unused),DocumentImports(unused,unused),runtime_provider=get_runtime,environment=os.environ)
         self.assertEqual(state.events,[])
         state.client=TestClient(app,raise_server_exceptions=False)
         self.addCleanup(state.client.close);state.app=app

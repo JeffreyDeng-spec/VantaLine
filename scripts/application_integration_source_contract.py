@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / "tests/backend_contract/application_integration_delta.json").read_text())
 BUSINESS = json.loads((ROOT / "tests/backend_contract/application_business_delta.json").read_text())
 MAIN_FEEDBACK = json.loads((ROOT / "tests/backend_contract/application_main_feedback_delta.json").read_text())
+CODEX_ENVIRONMENT = json.loads((ROOT / "tests/backend_contract/codex_environment_delta.json").read_text())
 PIPELINE_RUNTIME = json.loads((ROOT / "tests/backend_contract/pipeline_runtime_composition_delta.json").read_text())
 PIPELINE_TASKS = json.loads((ROOT / "tests/backend_contract/pipeline_task_composition_delta.json").read_text())
 PIPELINE_STAGES = json.loads((ROOT / "tests/backend_contract/pipeline_stage_composition_delta.json").read_text())
@@ -61,6 +62,8 @@ def verify_actual_compositions():
     """Validate real owned constructor edges before using an old-location oracle."""
     assert digest(ast.parse((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text())) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/workstation_composition.py").read_text())) == PLC_WORKSTATION["actual_owner_ast_sha256"], "Actual PLC workstation composition changed"
+    assert digest(ast.parse((ROOT / "local_inspection_service/codex_compare/api.py").read_text())) == CODEX_ENVIRONMENT["actual_owner_ast_sha256"], "Actual Codex environment binding changed"
+    assert digest(ast.parse((ROOT / "local_inspection_service/codex_compare/worker.py").read_text())) == CODEX_ENVIRONMENT["actual_worker_ast_sha256"], "Actual Codex worker environment binding changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/runtime_composition.py").read_text())) == PIPELINE_RUNTIME["actual_owner_ast_sha256"], "Actual pipeline runtime composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/task_composition.py").read_text())) == PIPELINE_TASKS["actual_owner_ast_sha256"], "Actual pipeline task composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/stage_composition.py").read_text())) == PIPELINE_STAGES["actual_owner_ast_sha256"], "Actual pipeline stage composition changed"
@@ -70,7 +73,7 @@ def verify_actual_compositions():
     assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/persistence_composition.py").read_text())) == PIPELINE_PERSISTENCE["actual_owner_ast_sha256"], "Actual pipeline persistence composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/capture_composition.py").read_text())) == PLC_CAPTURE["actual_owner_ast_sha256"], "Actual PLC capture composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/lease_diagnostic_composition.py").read_text())) == PLC_OPERATIONS["actual_owner_ast_sha256"], "Actual PLC lease/diagnostic composition changed"
-    for path, expected in {**PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"]}.items():
+    for path, expected in {**PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"], **CODEX_ENVIRONMENT["unchanged_business_sha256"]}.items():
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
@@ -91,4 +94,5 @@ def restore_business_root(source):
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
     verify_actual_compositions()
+    source = restore_delta(source, CODEX_ENVIRONMENT)
     return restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source, PIPELINE_RUNTIME), PIPELINE_TASKS), PIPELINE_STAGES), AGENT_PIPELINE), PIPELINE_QUERIES), PIPELINE_EXECUTION), PIPELINE_PERSISTENCE), PLC_CAPTURE), PLC_OPERATIONS), PLC_WORKSTATION)
