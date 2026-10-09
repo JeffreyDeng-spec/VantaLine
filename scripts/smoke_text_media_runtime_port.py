@@ -69,7 +69,17 @@ class TextMediaRuntimeTests(unittest.TestCase):
         provider=Falsey();self.assertIs(TextMedia(*args,runtime_provider=provider).runtime_provider,provider)
         tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
         assign=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_text_media' for t in n.targets))
-        value=next(k.value for k in assign.value.keywords if k.arg=='runtime_provider')
+        from application_integration_source_contract import verify_actual_compositions
+        verify_actual_compositions()
+        self.assertEqual(ast.dump(assign.value),ast.dump(ast.parse('_text_standards.media',mode='eval').body))
+        standards=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_text_standards' for t in n.targets))
+        media=next(k.value for k in standards.keywords if k.arg=='media')
+        self.assertEqual(ast.unparse(media.func),'StandardMediaStorage')
+        value=next(k.value for k in media.keywords if k.arg=='runtime_provider')
         self.assertEqual(ast.dump(value),ast.dump(ast.parse('_business_files.runtime_provider',mode='eval').body))
+        owner=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/text_inspection/standard_composition.py').read_text())
+        calls=[n for n in ast.walk(owner) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='TextMedia']
+        self.assertEqual(len(calls),1)
+        self.assertEqual(ast.dump(next(k.value for k in calls[0].keywords if k.arg=='runtime_provider')),ast.dump(ast.parse('media.runtime_provider',mode='eval').body))
 
 if __name__=='__main__':unittest.main()

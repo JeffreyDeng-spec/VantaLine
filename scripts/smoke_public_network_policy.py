@@ -57,7 +57,14 @@ class Contracts(unittest.TestCase):
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
   tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
+  from application_integration_source_contract import verify_actual_compositions
+  verify_actual_compositions()
+  self.assertEqual(len(binding.keywords),3)
   for group in binding.keywords:
-   for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
+   for kw in group.value.keywords:
+    self.assertIsInstance(kw.value,ast.Lambda)
+    expected='_provider_configuration.masked_url_for_status' if kw.arg=='masked_url_for_status' else kw.arg
+    self.assertEqual(ast.dump(kw.value.body),ast.dump(ast.parse(expected,mode='eval').body))
+    self.assertFalse(kw.value.args.args);count+=1
   self.assertEqual(count,7)
 if __name__=='__main__':unittest.main()

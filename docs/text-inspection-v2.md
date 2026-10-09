@@ -973,3 +973,10 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+
+
+TextMedia regression checks locate its actual constructor in the standard
+workflow owner and verify the exact runtime provider supplied through
+StandardMediaStorage. Root _text_media remains a forwarding alias. Required
+provider and media authorization, remote integrity, hybrid fallback and failure
+ordering cases remain; the composition refactor changes no media API behavior.

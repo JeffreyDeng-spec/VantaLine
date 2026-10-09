@@ -1804,3 +1804,17 @@ provider and accessory image metadata files through their current owners. They
 retain constructor counts, exact forwarding aliases, required/None/falsey checks
 and all upload/storage behavior assertions. The current 26 composition AST
 bindings protect actual constructor edges before these source checks.
+
+
+The image-provider configuration source check retains the exact three typed port
+groups and every zero-argument supplier. The three reviewed model-option, provider and masked URL suppliers
+select their exact ProviderConfiguration methods; all other getters still
+select their original named capabilities. Actual composition AST bindings and
+existing redaction, failure ordering and instance-isolation cases remain.
+
+
+Public network policy still checks all seven original suppliers and exact
+zero-argument getters, with the reviewed masked URL method on its provider owner.
+TextMedia runtime checks follow the actual standard owner, its one constructor
+and exact StandardMediaStorage provider. Required/None/falsey and all media
+behavior tests remain; source guards reject unexpected owner edges.
