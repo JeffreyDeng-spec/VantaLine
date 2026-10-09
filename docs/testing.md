@@ -2805,3 +2805,10 @@ training/task_composition.py constructors, including required owned runtime
 providers and exact root forwarding aliases. Independent upload/download/unknown
 submission behavior cases remain; relocated constructors are not counted in the
 entry file. Actual composition AST bindings protect the owner capability edges.
+
+
+Artifact port regression checks follow the actual detection workflow runtime
+provider and accessory image metadata files through their current owners. They
+retain constructor counts, exact forwarding aliases, required/None/falsey checks
+and all upload/storage behavior assertions. The current 26 composition AST
+bindings protect actual constructor edges before these source checks.

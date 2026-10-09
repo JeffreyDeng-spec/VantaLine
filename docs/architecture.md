@@ -2269,3 +2269,10 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+
+
+Artifact port regression checks follow the actual detection workflow runtime
+provider and accessory image metadata files through their current owners. They
+retain constructor counts, exact forwarding aliases, required/None/falsey checks
+and all upload/storage behavior assertions. The current 26 composition AST
+bindings protect actual constructor edges before these source checks.

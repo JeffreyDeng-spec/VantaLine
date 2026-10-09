@@ -223,10 +223,21 @@ class DetectionArtifactPortsTests(unittest.TestCase):
     def test_actual_entry_suppliers_are_explicit_and_late_bound(self):
         root = Path(__file__).resolve().parents[1]
         tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        from application_integration_source_contract import verify_actual_compositions
+        verify_actual_compositions()
+        assignments = {target.id:node.value for node in tree.body if isinstance(node,ast.Assign)
+                       for target in node.targets if isinstance(target,ast.Name)}
+        self.assertEqual(ast.dump(assignments['_detection_analysis']),ast.dump(ast.parse('_detection_workflows.detection',mode='eval').body))
+        owner_tree = ast.parse((root/'local_inspection_service/detection/workflow_composition.py').read_text())
+        actual = [node for node in ast.walk(owner_tree) if isinstance(node,ast.Call)
+                  and isinstance(node.func,ast.Name) and node.func.id=='DetectionAnalysis']
+        self.assertEqual(len(actual),1)
+        self.assertEqual(ast.dump(next(kw.value for kw in actual[0].keywords if kw.arg=='runtime_provider')),
+                         ast.dump(ast.parse('runtime_provider',mode='eval').body))
         for name, keyword, expected in [
             ('_image_upload', 'files', 'lambda: _business_files'),
             ('_detection_annotation', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
-            ('_detection_analysis', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
+            ('_detection_workflows', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
         ]:
             nodes = [node.value for node in tree.body if isinstance(node, ast.Assign)
                      and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)]

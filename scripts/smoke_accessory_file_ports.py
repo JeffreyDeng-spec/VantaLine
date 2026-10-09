@@ -125,7 +125,16 @@ class AccessoryFilePortsTests(unittest.TestCase):
                     self.assertNotIn('files', [kw.arg for kw in node.keywords]); continue
                 values = [kw.value for kw in node.keywords if kw.arg == 'files']; self.assertEqual(len(values), 1)
                 self.assertEqual(ast.dump(values[0]), ast.dump(ast.parse('_business_files', mode='eval').body)); found.append(node.func.id)
-        self.assertCountEqual(found, ['AccessoryCreation', 'ImageJobMetadata', '_SpriteRenderMetadata'])
+        self.assertCountEqual(found, ['AccessoryCreation', '_SpriteRenderMetadata'])
+        from application_integration_source_contract import verify_actual_compositions
+        verify_actual_compositions()
+        owner=ast.parse((root/'local_inspection_service/accessories/image_composition.py').read_text())
+        calls=[node for node in ast.walk(owner) if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id=='ImageJobMetadata']
+        self.assertEqual(len(calls),1)
+        self.assertEqual(ast.dump(next(kw.value for kw in calls[0].keywords if kw.arg=='files')),ast.dump(ast.parse('files',mode='eval').body))
+        assignments={target.id:node.value for node in tree.body if isinstance(node,ast.Assign) for target in node.targets if isinstance(target,ast.Name)}
+        self.assertEqual(ast.dump(assignments['_image_job_metadata']),ast.dump(ast.parse('_image_jobs.metadata',mode='eval').body))
+        self.assertEqual(ast.dump(next(kw.value for kw in assignments['_image_jobs'].keywords if kw.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
 
 
 if __name__ == '__main__': unittest.main()

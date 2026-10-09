@@ -218,3 +218,12 @@ TrainingAccountState, TrainingExecution and TrainingTaskWorkflows compose the ex
 
 
 For `real_photo_vlm`, the frozen dataset includes train/val/test, class IDs and test support counts; base SHA256 is mandatory. The compatible worker performs an unaugmented held-out test evaluation after training and returns `training.real_photo_test_metrics`; missing real support/test instances are unavailable, not zero. Mock training is rejected for this strategy. The Web executor rejects completed responses without those metrics. Rebuild/pin the worker image and verify a real GPU job before enabling the training account flag. Legacy pretraining payloads retain their behavior.
+
+
+Backend RunPod regression coverage now checks required artifact runtime providers
+at the actual TrainingTaskWorkflows upload/transfer constructors and the root
+RunPodFlow, including their exact files/forwarding bindings. Dispatcher producers
+drain before training dependencies close. These composition and test changes do
+not change the RunPod wire payload, frozen real-photo model configuration, remote
+training evaluation or artifact format; failures keep unknown submission evidence
+and do not retry an uncertain start.
