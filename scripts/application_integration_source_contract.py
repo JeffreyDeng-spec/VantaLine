@@ -55,9 +55,11 @@ def verify_actual_compositions():
 
 def restore_integrated_root(source):
     verify_actual_compositions()
-    return restore_delta(source, FIXTURE)
+    from application_configuration_source_contract import restore_application_configuration_root
+    return restore_delta(restore_application_configuration_root(source), FIXTURE)
 
 
 def restore_business_root(source):
     verify_actual_compositions()
-    return restore_delta(restore_delta(source, FIXTURE), BUSINESS)
+    from application_configuration_source_contract import restore_application_configuration_root
+    return restore_delta(restore_delta(restore_application_configuration_root(source), FIXTURE), BUSINESS)
