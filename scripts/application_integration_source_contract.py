@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REAL_PHOTO_WORKFLOWS = json.loads((ROOT / "tests/backend_contract/real_photo_workflows_delta.json").read_text())
+PROVIDER_TRANSPORTS = json.loads((ROOT / "tests/backend_contract/provider_transports_delta.json").read_text())
 ACCOUNT_VISIBILITY = json.loads((ROOT / "tests/backend_contract/account_visibility_delta.json").read_text())
 TRAINING_PERSISTENCE_GRAPH = json.loads((ROOT / "tests/backend_contract/training_persistence_graph_delta.json").read_text())
 INFRASTRUCTURE = json.loads((ROOT / "tests/backend_contract/infrastructure_composition_delta.json").read_text())
@@ -143,8 +145,34 @@ def restore_pose_domain_root(source):
     return source
 
 
+def restore_real_photo_workflows_root(source):
+    """Validate the actual feedback bridge and replay only its reviewed delta."""
+    fixture = REAL_PHOTO_WORKFLOWS
+    for path, expected in fixture["actual_owner_ast_sha256"].items():
+        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+    for path, expected in fixture["unchanged_business_sha256"].items():
+        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+        return restore_delta(source, fixture)
+    return source
+
+
+def restore_provider_transports_root(source):
+    """Check actual app-owned provider types before folding their fixed delta."""
+    source = restore_real_photo_workflows_root(source)
+    fixture = PROVIDER_TRANSPORTS
+    for path, expected in fixture["actual_owner_ast_sha256"].items():
+        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+    for path, expected in fixture["unchanged_business_sha256"].items():
+        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+        return restore_delta(source, fixture)
+    return source
+
+
 def restore_account_visibility_root(source):
     """Verify the real visibility graph before replaying its fixed entry delta."""
+    source = restore_provider_transports_root(source)
     fixture = ACCOUNT_VISIBILITY
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path

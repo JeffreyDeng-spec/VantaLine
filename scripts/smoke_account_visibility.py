@@ -19,7 +19,7 @@ class VisibilityContracts(unittest.TestCase):
     def test_default_aliases_and_actual_parent_contract(self):
         import application_integration_source_contract as contract
         source=(contract.ROOT/'local_inspection_service/server.py').read_text()
-        current=ast.parse(source)
+        current=ast.parse(contract.restore_provider_transports_root(source))
         self.assertEqual(contract.digest(current),contract.ACCOUNT_VISIBILITY['integrated_ast_sha256'])
         parent=ast.parse(contract.restore_account_visibility_root(source))
         self.assertEqual(contract.digest(parent),contract.ACCOUNT_VISIBILITY['parent_ast_sha256'])

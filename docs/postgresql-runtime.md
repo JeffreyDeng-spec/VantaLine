@@ -832,3 +832,5 @@ remains valid evidence; corrected wiring does not diagnose that failure or prove
 production physical-storage latency. A new complete fixed-environment result and
 required CI are still necessary. No PostgreSQL write durability setting or
 production topology changes.
+
+Real-photo assembly routes repository acquisition and dispatcher thread scopes through explicit supplied capabilities. Graph allocation does not acquire a connection. Feedback repository operations retain their original `finally` close, and dispatcher algorithms and database fencing/transactions are unchanged. The bridge resolves the training account per operation and restores the request identity on every exit. This assembly change adds no schema migration or new database lock behavior.

@@ -1,5 +1,5 @@
 {
-  "version": 274,
+  "version": 276,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -588,6 +588,8 @@
     "runtime/infrastructure.py",
     "model_providers/configuration_inputs.py",
     "training/persistence_graph.py",
-    "auth/visibility_composition.py"
+    "auth/visibility_composition.py",
+    "model_providers/transport_composition.py",
+    "training/real_photo_composition.py"
   ]
 }

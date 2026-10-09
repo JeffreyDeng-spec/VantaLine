@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: storage_fixture
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -247,7 +247,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       postgres_benchmark:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -335,6 +335,8 @@ jobs:
           python scripts/smoke_infrastructure.py
           python scripts/smoke_training_persistence_graph.py
           python scripts/smoke_account_visibility.py
+          python scripts/smoke_provider_transports_composition.py
+          python scripts/smoke_real_photo_composition.py
           python scripts/smoke_http_application.py
           python scripts/smoke_http_upload_runtime.py
           python scripts/smoke_http_artifact_ports.py
@@ -764,7 +766,7 @@ jobs:
     runs-on: ubuntu-22.04
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -788,7 +790,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci

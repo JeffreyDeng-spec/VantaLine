@@ -166,3 +166,5 @@ signatures and route/lifecycle order remain unchanged; no algorithm or prompt
 change is included. This closes these domain edges, not complete application
 factory assembly. New tasks use manifest v270 with 583 actual source entries;
 historical task snapshots and secret references are unchanged.
+
+Provider constructors now live in `model_providers/transport_composition.py`. Supply narrow transport inputs and the app's resolver callable; do not pass default-entry Provider classes into another application. `training/real_photo_composition.py` owns the original feedback/training bridge and dispatch lifecycle. Its internal callbacks select the owned bridge. These close domain wiring gaps; the complete application factory and final release acceptance still require verification.

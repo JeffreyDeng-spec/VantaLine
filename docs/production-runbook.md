@@ -1903,3 +1903,7 @@ This internal change requires no new production setting, service or data move.
 The CI infrastructure smoke is synthetic and does not certify complete repeated
 Web lifecycle or release acceptance; retain those final gates and whole-package
 rollback.
+
+Real-photo feedback graph construction is inert. Existing startup allowlist and training-enabled checks start the graph's actual mask/training dispatchers. Shutdown retains stop-before-drain and the same `real-photo-dispatch` native close step; do not release dependencies before that drain succeeds. Provider/feedback composition changes require a complete immutable release and the existing joint topology rollback; they do not authorize partial file deployment or imply complete factory/release acceptance.
+
+The PostgreSQL ECR mirror pin is used only by isolated GitHub CI services. Production PostgreSQL and runtime storage are unchanged; no new registry credential or server operation is required.

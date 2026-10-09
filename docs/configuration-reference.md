@@ -1880,3 +1880,7 @@ signatures and route/lifecycle order remain unchanged; no algorithm or prompt
 change is included. This closes these domain edges, not complete application
 factory assembly. New tasks use manifest v270 with 583 actual source entries;
 historical task snapshots and secret references are unchanged.
+
+The provider transport builder receives an explicit cache TTL and app-owned transport/resolver inputs. No environment key or API default changes. Image sizes are selected at operation time; Gemini cache TTL retains the original composition-time default and explicit per-call override. Missing model resolvers still fail before a bound paid transport call.
+
+The real-photo composition preserves `VANTALINE_REAL_PHOTO_ACCOUNTS` and `VANTALINE_REAL_PHOTO_TRAINING_ENABLED`. Constructing this graph does not read the allowlist, acquire a database connection or start a dispatcher. Existing process-environment allowlist policy is retained; the complete Web app factory remains pending.

@@ -273,7 +273,7 @@ class AgentInvocationContracts(unittest.TestCase):
         before=copy.deepcopy(config)
         record=Mock(side_effect=RuntimeError('synthetic ledger unavailable'))
         body={'choices':[{'finish_reason':'stop','message':{'content':'{"answer":"synthetic"}'}}],'usage':{'total_tokens':9}}
-        with patch.object(self.api,'ai_settings_match_runtime',return_value=False),patch_provider_capability(self.api, 'ai_urlopen', return_value=self.response(body)) as send,patch.object(self.api,'_openai_profile_resolver',return_value=SimpleNamespace(record_call=record)),patch.object(self.api,'load_agent_config',side_effect=AssertionError('snapshot reload')),self.assertLogs('local_inspection_service.model_profiles.audit',level='WARNING'):
+        with patch.object(self.api,'ai_settings_match_runtime',return_value=False),patch_provider_capability(self.api, 'ai_urlopen', return_value=self.response(body)) as send,patch_provider_capability(self.api,'_openai_profile_resolver',return_value=SimpleNamespace(record_call=record)),patch.object(self.api,'load_agent_config',side_effect=AssertionError('snapshot reload')),self.assertLogs('local_inspection_service.model_profiles.audit',level='WARNING'):
             self.assertEqual(json.loads(self.api.agent_chat_completion([{'role':'user','content':'synthetic'}],config)),{'answer':'synthetic'})
         send.assert_called_once();record.assert_called_once()
         settings,elapsed,ok,usage=record.call_args.args

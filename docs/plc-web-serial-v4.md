@@ -218,3 +218,5 @@ assertions. HTTP route order, Web lifecycle positions, browser lease/ACK and
 uncertain-write non-retry behavior remain unchanged. Source manifest v272
 includes the real infrastructure modules for new tasks only; historical model
 snapshots are not rewritten. This change introduces no physical PLC IO.
+
+Provider/real-photo graph assembly does not change workstation ownership, lease/epoch, ACK or uncertainty policy. The feedback bridge's training submission remains separate from browser PLC dispatch. Its native startup and shutdown perform no server serial I/O. Preserve the complete PLC and HTTP contracts when accepting the consolidated backend composition batch.

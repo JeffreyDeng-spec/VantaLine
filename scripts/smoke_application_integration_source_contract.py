@@ -74,7 +74,7 @@ class IntegrationContracts(unittest.TestCase):
                 contract.restore_infrastructure_root(self.source)
 
     def test_exact_partial_replays_remain_guarded_at_every_checkpoint(self):
-        fixtures = (contract.ACCOUNT_VISIBILITY, contract.TRAINING_PERSISTENCE_GRAPH, contract.INFRASTRUCTURE, contract.PATH_CONFIGURATION, contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
+        fixtures = (contract.REAL_PHOTO_WORKFLOWS, contract.PROVIDER_TRANSPORTS, contract.ACCOUNT_VISIBILITY, contract.TRAINING_PERSISTENCE_GRAPH, contract.INFRASTRUCTURE, contract.PATH_CONFIGURATION, contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
                     contract.PIPELINE_TASKS, contract.PIPELINE_STAGES,
                     contract.AGENT_PIPELINE, contract.PIPELINE_QUERIES,
                     contract.PIPELINE_EXECUTION, contract.PIPELINE_PERSISTENCE,
@@ -124,6 +124,31 @@ class IntegrationContracts(unittest.TestCase):
             else: altered['regions'].reverse()
             with self.subTest(mode=mode),patch.object(contract,'ACCOUNT_VISIBILITY',altered),self.assertRaises(AssertionError):
                 contract.restore_infrastructure_root(self.source)
+    def test_provider_transports_actual_owner_and_delta_are_guarded(self):
+        self.check_new_factory_boundary('PROVIDER_TRANSPORTS')
+
+    def test_real_photo_workflows_actual_owner_and_delta_are_guarded(self):
+        self.check_new_factory_boundary('REAL_PHOTO_WORKFLOWS')
+
+    def check_new_factory_boundary(self, name):
+        fixture=getattr(contract,name)
+        original_read=Path.read_text
+        for relative in fixture['actual_owner_ast_sha256']:
+            target=(contract.ROOT/relative).resolve()
+            def read(path,*args,**kwargs):
+                value=original_read(path,*args,**kwargs)
+                return value+'\nunreviewed_factory = None\n' if path.resolve()==target else value
+            with patch.object(Path,'read_text',read),self.assertRaises(AssertionError):
+                contract.restore_infrastructure_root(self.source)
+        for mode in ('edit','delete','duplicate','order'):
+            altered=copy.deepcopy(fixture)
+            if mode=='edit':altered['regions'][0]['expected'][0]='unreviewed_factory = None'
+            elif mode=='delete':altered['regions'].pop()
+            elif mode=='duplicate':altered['regions'].append(copy.deepcopy(altered['regions'][-1]))
+            else:altered['regions'].reverse()
+            with self.subTest(fixture=name,mode=mode),patch.object(contract,name,altered),self.assertRaises(AssertionError):
+                contract.restore_infrastructure_root(self.source)
+
     def test_partial_replay_still_checks_the_actual_native_owner(self):
         source = contract.restore_delta(contract.restore_delta(contract.restore_pose_domain_root(self.source),
                     contract.CODEX_ENVIRONMENT), contract.PIPELINE_RUNTIME)

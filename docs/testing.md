@@ -2930,3 +2930,9 @@ remains valid evidence; corrected wiring does not diagnose that failure or prove
 production physical-storage latency. A new complete fixed-environment result and
 required CI are still necessary. No PostgreSQL write durability setting or
 production topology changes.
+
+Run `python scripts/smoke_provider_transports_composition.py` and `python scripts/smoke_real_photo_composition.py` for the owned transport and feedback graph. These use synthetic provider responses, separate ledgers and request identities, temporary media, and the actual bounded dispatcher thread lifetime. They cover distinct per-type resolver/error/size wiring, missing resolvers, captured cache defaults, frozen metadata, rejection before enqueue, exception identity restoration, immutable originals, busy legacy rejection, fresh endpoint registration and independent drain. They do not certify the complete Web factory or performance/release Go.
+
+Retain native provider, Agent invocation, real-photo dispatcher, model dependency and HTTP contracts. The strict source contract validates both actual new modules and unchanged business files before folding their fixed deltas; all prior checks and replay checkpoints remain.
+
+CI PostgreSQL service images use the Docker Official Images ECR public mirror, pinned to the verified PostgreSQL 16 manifest `sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d`. The Docker Hub and ECR index, Linux amd64 manifest, config and layer digests were compared before switching after repeated Hub pull failures. All database versions, ports, ordinary disk versus bounded tmpfs allocation, durable settings, benchmark sizes and thresholds remain unchanged.

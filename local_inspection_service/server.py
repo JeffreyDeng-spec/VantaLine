@@ -5097,11 +5097,23 @@ _openai_transport_errors = OpenAITransportErrors(
 # Preserve the existing decorator's composition-time resolver selection.
 _openai_profile_resolver = resolve_model_profiles
 
-class OpenAICompatibleAiProvider(_OpenAICompatibleAiProvider):
-    def __init__(self, settings: dict[str, Any]):
-        super().__init__(
-            settings, _openai_transport_io, _openai_transport_errors, _openai_profile_resolver,
-        )
+from .model_providers.transport_composition import ProviderTransports, TransportInputs
+_provider_transports = ProviderTransports(
+    TransportInputs(
+        openai_io=lambda: _openai_transport_io,
+        openai_errors=lambda: _openai_transport_errors,
+        gemini_io=lambda: _gemini_transport_io,
+        gemini_errors=lambda: _gemini_transport_errors,
+        image_io=lambda: _image_transport_io,
+        image_errors=lambda: _image_transport_errors,
+        agnes_image_size=lambda: os.environ.get("VANTALINE_AGNES_IMAGE_SIZE", "1024x1024"),
+        qwen_image_size=lambda: os.environ.get("VANTALINE_QWEN_IMAGE_SIZE", "1024*1024"),
+        image_candidates=lambda: cursor_image2_response_candidates,
+    ),
+    resolve_model_profiles,
+    cache_ttl_seconds=AI_PROFILE_CACHE_TTL_SECONDS,
+)
+OpenAICompatibleAiProvider = _provider_transports.openai
 
 
 def data_url_payload(data_url: str) -> tuple[str, str]:
@@ -5132,23 +5144,7 @@ _gemini_transport_errors = GeminiTransportErrors(
 )
 _gemini_profile_resolver = resolve_model_profiles
 
-class GeminiAiProvider(_GeminiAiProvider):
-    def __init__(self, settings: dict[str, Any]):
-        super().__init__(
-            settings, _gemini_transport_io, _gemini_transport_errors, _gemini_profile_resolver,
-        )
-
-    def create_cached_content(
-        self,
-        system_prompt: str,
-        user_content: list[dict[str, Any]],
-        *,
-        display_name: str,
-        ttl_seconds: int = AI_PROFILE_CACHE_TTL_SECONDS,
-    ) -> dict[str, Any]:
-        return super().create_cached_content(
-            system_prompt, user_content, display_name=display_name, ttl_seconds=ttl_seconds,
-        )
+GeminiAiProvider = _provider_transports.gemini
 
 
 from .model_providers.image_ports import ImageTransportIO, ImageTransportErrors
@@ -5172,22 +5168,11 @@ _image_transport_errors = ImageTransportErrors(
 )
 _agnes_profile_resolver = resolve_model_profiles
 
-class AgnesImageProvider(_AgnesImageProvider):
-    def __init__(self, settings: dict[str, Any]):
-        super().__init__(
-            settings, _image_transport_io, _image_transport_errors, _agnes_profile_resolver,
-            lambda: os.environ.get("VANTALINE_AGNES_IMAGE_SIZE", "1024x1024"),
-            lambda: cursor_image2_response_candidates,
-        )
+AgnesImageProvider = _provider_transports.agnes
 
 _qwen_image_profile_resolver = resolve_model_profiles
 
-class QwenImageProvider(_QwenImageProvider):
-    def __init__(self, settings: dict[str, Any]):
-        super().__init__(
-            settings, _image_transport_io, _image_transport_errors, _qwen_image_profile_resolver,
-            lambda: os.environ.get("VANTALINE_QWEN_IMAGE_SIZE", "1024*1024"),
-        )
+QwenImageProvider = _provider_transports.qwen
 
 
 from .model_providers.orchestration_ports import (
@@ -9171,88 +9156,71 @@ def _real_photo_repository():
     selection = build_runtime_repository(postgres_connector=RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS)
     return selection.repository if selection.store == "postgres" else None
 
-_real_photo_feedback = compose_real_photo(app, FeedbackService(FeedbackPorts(
-    repository=_real_photo_repository,
-    user=lambda: current_auth_user(),
-    tasks=lambda: load_ai_detection_tasks(),
-    authorize=lambda record, user, **kw: require_record_access(record, user, **kw),
-    config=lambda user: scope_config_for_user(load_config(), user),
-    references=lambda item: ai_profile_reference_paths(item) or [first_source_ai_reference_path(item)] if first_source_ai_reference_path(item) else ai_profile_reference_paths(item),
-    read=lambda path: _business_files.read_bytes(resolve_service_path(path)),
-    profiles=lambda: resolve_model_profiles(),
-    legacy_state=lambda task: load_auto_optimize_state(task),
-    freeze=lambda user,data,sha: _freeze_real_photo_original(user,data,sha),
-    legacy_disable=lambda task: _disable_legacy_feedback_for_real_photo(task),
-    model_task=lambda model_id,user: real_photo_associated_task(model_id,user,list_trained_model_specs(scope_config_for_user(load_config(),user)),load_pipeline_tasks()),
-)))
+from .training.real_photo_composition import (
+    RealPhotoWorkflows, FeedbackInputs, TrainingInputs, FeedbackArtifacts, LegacyFeedback,
+)
+from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
+from .training import real_photo_api as _real_photo_api
+_real_photo_workflows = RealPhotoWorkflows(
+    feedback=FeedbackInputs(
+        repository=_real_photo_repository,
+        user=lambda: current_auth_user(),
+        tasks=lambda: load_ai_detection_tasks(),
+        authorize=lambda record, user, **kw: require_record_access(record, user, **kw),
+        config=lambda user: scope_config_for_user(load_config(), user),
+        references=lambda item: ai_profile_reference_paths(item) or [first_source_ai_reference_path(item)] if first_source_ai_reference_path(item) else ai_profile_reference_paths(item),
+        read=lambda path: _business_files.read_bytes(resolve_service_path(path)),
+        profiles=lambda: resolve_model_profiles(),
+        legacy_state=lambda task: load_auto_optimize_state(task),
+        model_task=lambda model_id, user: real_photo_associated_task(model_id, user, list_trained_model_specs(scope_config_for_user(load_config(), user)), load_pipeline_tasks())),
+    training=TrainingInputs(
+        auth_store=lambda: load_auth_store(), find_user=lambda: find_user,
+        identity=_request_user, load_config=lambda: load_config(),
+        scope_config=lambda: scope_config_for_user,
+        selected_accessories=lambda: selected_accessories,
+        request_type=lambda: TrainingStartRequest, enqueue=lambda: enqueue_training_task,
+    ),
+    artifacts=FeedbackArtifacts(files=lambda: _business_files, output=lambda: output_write_dir_for_owner),
+    legacy=LegacyFeedback(guard=lambda: _auto_optimize_lock,
+        load=lambda: load_auto_optimize_state, save=lambda: save_auto_optimize_state),
+    training_record=lambda identifier: load_training_task(identifier),
+    configuration=lambda: freeze_real_photo_training_configuration(
+        training_executor_mode(), detect_base_model, yolo_inference_device, os.environ),
+    image_provider=lambda settings: image_generation_provider_from_settings(settings),
+    scope=lambda: _runtime_repositories.thread_scope(),
+    accounts=lambda: _real_photo_api.accounts(),
+    training_enabled=lambda: os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED', '') == '1',
+)
+_real_photo_feedback = _real_photo_workflows.register(app)
 
 def _freeze_real_photo_original(user, data, sha):
-    path=output_write_dir_for_owner('real_photo_feedback', user['id']) / (sha+'.source')
-    if not _business_files.is_file(path):_business_files.write_bytes(path,data)
-    elif _business_files.read_bytes(path)!=data:raise ValueError('immutable real photo conflict')
-    return str(path)
+    return _real_photo_workflows.freeze_original(user, data, sha)
 
 def _disable_legacy_feedback_for_real_photo(task_id):
-    with _auto_optimize_lock:
-        state=load_auto_optimize_state(task_id)
-        if any(s.get('label_status') in {'labeling','rendering'} for s in state.get('samples',[])):
-            raise HTTPException(409,'历史标注正在执行，请等待当前调用结算后切换实拍回流')
-        state['settings']={**(state.get('settings') or {}),'enabled':False,'auto_promote':False}
-        save_auto_optimize_state(state)
+    return _real_photo_workflows.disable_legacy(task_id)
 
 from .training.real_photo_dispatch import Dispatcher, DispatchPorts
 from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
 
 def _real_photo_training_metadata(job):
-    owner=find_user(load_auth_store(),job['owner_user_id'])
-    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
-    token=_request_user.set(owner)
-    try:
-        _,task=_real_photo_feedback.task(job['task_id'])
-        if _real_photo_feedback.classes(task,owner)!=job['inputs']['classes']:
-            raise ValueError('frozen task category/reference version changed')
-        counts=task.get('required_accessory_counts') or {}
-        return {'feedback_task_id':job['task_id'],'required_accessory_counts':{
-            c['class_id']:max(0,int(counts.get(c['class_id'],1))) for c in job['inputs']['classes']}}
-    finally:_request_user.reset(token)
+    return _real_photo_workflows.training_metadata(job)
 
-def _submit_real_photo_training(job,dataset):
-    owner=find_user(load_auth_store(),job['owner_user_id'])
-    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
-    token=_request_user.set(owner)
-    try:
-        if _real_photo_training_metadata(job)!=dataset['training_metadata']:
-            raise ValueError('frozen task rule snapshot changed')
-        config=scope_config_for_user(load_config(),owner)
-        selected=selected_accessories(config,dataset['selected_accessory_ids'])
-        if {s['id'] for s in selected}!=set(dataset['selected_accessory_ids']):
-            raise ValueError('frozen task classes no longer available')
-        by_id={s['id']:s for s in selected}
-        selected=[by_id[cid] for cid in dataset['selected_accessory_ids']]
-        request=TrainingStartRequest(selected_accessory_ids=dataset['selected_accessory_ids'],
-                                     sample_count=dataset['sample_count'],train_mode='yolo',dataset_id=dataset['id'])
-        return enqueue_training_task(request,selected,'train_model',dataset)
-    finally:_request_user.reset(token)
+def _submit_real_photo_training(job, dataset):
+    return _real_photo_workflows.submit_training(job, dataset)
 
-_real_photo_dispatcher=Dispatcher(DispatchPorts(repository=_real_photo_repository,files=lambda:_business_files,
-    output=lambda owner:output_write_dir_for_owner('real_photo_datasets',owner),submit=_submit_real_photo_training,training=lambda identifier:load_training_task(identifier),
-    configuration=lambda:freeze_real_photo_training_configuration(
-        training_executor_mode(),detect_base_model,yolo_inference_device,os.environ),metadata=_real_photo_training_metadata))
+_real_photo_dispatcher = _real_photo_workflows.dispatcher
 from .training.real_photo_masks import MaskDispatcher
-_real_photo_mask_dispatcher=MaskDispatcher(_real_photo_dispatcher.ports,lambda:resolve_model_profiles(),lambda settings:image_generation_provider_from_settings(settings))
+_real_photo_mask_dispatcher = _real_photo_workflows.mask_dispatcher
 from .training.dispatcher_runtime import DispatcherRuntime
-_real_photo_dispatch_runtime = DispatcherRuntime(scope=lambda: _runtime_repositories.thread_scope())
+_real_photo_dispatch_runtime = _real_photo_workflows.runtime
 
 @app.on_event('startup')
 def start_real_photo_training_dispatcher():
-    from .training.real_photo_api import accounts
-    if not accounts():return
-    _real_photo_dispatch_runtime.start(
-        _real_photo_mask_dispatcher.tick,
-        _real_photo_dispatcher.tick if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED','')=='1' else None)
+    _real_photo_workflows.start()
 
 @app.on_event('shutdown')
-def stop_real_photo_training_dispatcher():_real_photo_dispatch_runtime.stop()
+def stop_real_photo_training_dispatcher():
+    _real_photo_workflows.stop()
 
 from .detection.rule_api import compose_detection_rule_api
 from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess

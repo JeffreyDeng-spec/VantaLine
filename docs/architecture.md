@@ -2359,3 +2359,7 @@ signatures and route/lifecycle order remain unchanged; no algorithm or prompt
 change is included. This closes these domain edges, not complete application
 factory assembly. New tasks use manifest v270 with 583 actual source entries;
 historical task snapshots and secret references are unchanged.
+
+Provider types are constructed by `model_providers/transport_composition.py` for each composition. Each type retains its app's transport ports and captured resolver callable; transport capabilities and image sizes remain operation-time inputs. Gemini's cache TTL default is captured for that composition. The native transport algorithms and usage accounting are unchanged. This domain builder does not establish the complete independent Web application factory.
+
+`training/real_photo_composition.py` owns feedback, its training bridge, dispatchers and native runtime. Feedback registration remains at the same position in the default entry. The bridge restores the supplied request identity after nested metadata checks or submission errors, preserves task-class/rule snapshots and accessory ordering, and refuses immutable source conflicts and active legacy labeling. Startup and stop retain the existing lifecycle hooks and native dispatcher close step. Business modules do not import the application entry.

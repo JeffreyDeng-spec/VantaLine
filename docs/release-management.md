@@ -1653,3 +1653,7 @@ connections and artifact stores without deployment, paid inference or PLC IO.
 Passing this check does not replace the complete Web factory, performance,
 exact-head CI or whole-release runtime acceptance gates. Manifest v272 records
 the two real construction sources; historical snapshots are unchanged.
+
+The consolidated transport/feedback composition batch changes Python source ownership and versioned prompt-source inventory. New tasks fingerprint the actual new modules; historical snapshots are not rewritten. Package and deploy the complete release after required CI and independent review; local synthetic graph acceptance does not replace final application-factory, benchmark or deployment gates.
+
+The CI-only PostgreSQL image source is the official ECR mirror with an explicit content digest. This does not change production dependencies, database deployment or installer topology. A failed container initialization is not a passing database or benchmark result; required CI still must execute successfully.

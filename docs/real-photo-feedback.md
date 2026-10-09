@@ -78,3 +78,5 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+
+The default entry now registers `RealPhotoWorkflows.feedback` from `training/real_photo_composition.py` at the original route position. Its bridge owns original-media freezing, legacy disable, owner-scoped training metadata and submission. Identity restoration, frozen class/reference/rule validation, sample counts and class order are unchanged. Dispatcher algorithms, repository transactions, allowlist policy and training/model topology are unchanged.
