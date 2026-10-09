@@ -11,6 +11,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class TracedLock:
@@ -68,7 +69,7 @@ def main():
             def scope_config(config, user):
                 events.append("config.scope")
                 if rebind_lock:
-                    server._pipeline_tasks_lock = alternate_lock
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate_lock)
                 return config
 
             def public(item, config):
@@ -121,7 +122,7 @@ def main():
             }
             with ExitStack() as stack:
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = server.update_pipeline_task("task-1", PipelineTaskUpdateRequest(**payload))
                     error = None

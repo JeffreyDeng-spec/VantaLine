@@ -11,6 +11,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class Lock:
@@ -164,7 +165,7 @@ def main():
             def public(value, scoped):
                 mark("public", value is task, scoped is config)
                 if rebind_schedule:
-                    server.schedule_pipeline_advance = lambda identifier, actor: events.append(("schedule.rebound", identifier, lock.held))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda identifier, actor: events.append(('schedule.rebound', identifier, lock.held)))
                 return value
 
             def schedule(identifier, actor):
@@ -196,7 +197,7 @@ def main():
             }
             with ExitStack() as stack:
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     request = PipelineAgentFeedbackRequest(
                         action=action, decision=decision, message=message, updated_plan=updated_plan,

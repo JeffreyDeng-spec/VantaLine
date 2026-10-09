@@ -22,7 +22,7 @@ from local_inspection_service.pipeline import execution_composition as module
 from local_inspection_service.runtime.training_tasks import TrainingRuntimeClosed
 
 class Graph:
-    def __init__(self, root, label, *, repository=None, repository_scope=None):
+    def __init__(self, root, label, *, repository=None, repository_scope=None, persistence_owner=None):
         self.label=label;self.identity=ContextVar('pipeline-user-'+label,default=None)
         self.active_scope=ContextVar('pipeline-repository-'+label,default=False)
         self.snapshot=ContextVar('pipeline-model-'+label,default=None)
@@ -30,7 +30,7 @@ class Graph:
         self.events=[];self.errors=[];self.runtime_errors=[];self.provider_calls=0;self.pin_calls=0
         self.block_exit=None;self.exit_entered=threading.Event()
         self.decide_entered=threading.Event();self.decide_release=None
-        self.fixture=Fixture(root);self.persistence=persistence(self.fixture,repository=repository)
+        self.fixture=Fixture(root);self.persistence=persistence_owner if persistence_owner is not None else persistence(self.fixture,repository=repository)
         self.task_held=ContextVar('pipeline-task-held-'+label,default=False)
         mutex=self.persistence.runtime.task_lock
         graph=self
@@ -236,9 +236,9 @@ class PipelineExecutionContracts(unittest.TestCase):
             finally:graph.active_scope.reset(token)
             self.assertEqual(calls,[('same',{'id':'a'})]);self.assertEqual(graph.pin_calls,1)
     def test_exact_root_inverse_and_actual_execution_guards(self):
-        from application_integration_source_contract import ROOT,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,digest,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,digest,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION))),PIPELINE_EXECUTION['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION))),PIPELINE_EXECUTION['parent_ast_sha256'])
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace('_pipeline_advance_runtime = _pipeline_execution.advance','_pipeline_advance_runtime = _pipeline_execution.auto'))
 

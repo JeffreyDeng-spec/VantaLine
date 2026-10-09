@@ -11,6 +11,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 def main():
@@ -77,7 +78,7 @@ def main():
                 mark("add", identifier)
                 added.append(identifier)
                 if rebind_payload_on_mutation:
-                    server.pipeline_accessories_payload = lambda scoped, actor: (events.append(("projection.rebound", scoped is config, actor is user, len(added))) or {"from_rebound": True})
+                    set_pipeline_task_test_port(server, 'pipeline_accessories_payload', lambda scoped, actor: events.append(('projection.rebound', scoped is config, actor is user, len(added))) or {'from_rebound': True})
 
             def alias_items(value):
                 mark("aliases", value is item)
@@ -91,16 +92,16 @@ def main():
                 mark("remove", identifier)
                 removed.append(identifier)
                 if rebind_payload_on_mutation and len(removed) == len(aliases):
-                    server.pipeline_accessories_payload = lambda scoped, actor: (events.append(("projection.rebound", scoped is config, actor is user, len(removed))) or {"from_rebound": True})
+                    set_pipeline_task_test_port(server, 'pipeline_accessories_payload', lambda scoped, actor: events.append(('projection.rebound', scoped is config, actor is user, len(removed))) or {'from_rebound': True})
                 if fail_second_remove and len(removed) == 2:
                     raise error
                 if rebind_remove and len(removed) == 1:
-                    server.remove_pipeline_accessory_id = lambda alias: events.append(("remove.rebound", alias))
+                    set_pipeline_task_test_port(server, 'remove_pipeline_accessory_id', lambda alias: events.append(('remove.rebound', alias)))
 
             def projection(value, actor):
                 mark("projection", value is config, actor is user)
                 if rebind_projection:
-                    server.pipeline_accessories_payload = lambda config, user: (_ for _ in ()).throw(AssertionError("projection rebound"))
+                    set_pipeline_task_test_port(server, 'pipeline_accessories_payload', lambda config, user: (_ for _ in ()).throw(AssertionError('projection rebound')))
                 if nonmapping_payload:
                     return None
                 return {"status": "from-payload", "accessory_id": "from-payload", "items": ["visible"]} if override_payload else {"items": ["visible"]}
@@ -118,7 +119,7 @@ def main():
             }
             with ExitStack() as stack:
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     function = server.add_pipeline_accessory if method == "add" else server.remove_pipeline_accessory
                     result = function("alias-input")

@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class TracedLock:
@@ -71,7 +72,7 @@ def main():
             def cancel(task_id):
                 events.append(("cancel", task_id))
                 if rebind_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 if fail == "cancel":
                     raise failure
                 return True
@@ -126,7 +127,7 @@ def main():
             }
             with ExitStack() as stack:
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = server.delete_pipeline_task("pipe-1")
                     error = None

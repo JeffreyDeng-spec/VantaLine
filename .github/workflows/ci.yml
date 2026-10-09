@@ -580,6 +580,7 @@ jobs:
           python scripts/smoke_pipeline_query_composition.py --postgres
           python scripts/smoke_agent_pipeline_composition.py
           python scripts/smoke_pipeline_stage_composition.py
+          python scripts/smoke_pipeline_task_composition.py --postgres
           python scripts/smoke_pipeline_auto_agent_runtime.py
           python scripts/smoke_pipeline_advance_runtime.py
           python scripts/smoke_pipeline_thread_drain.py

@@ -1851,3 +1851,5 @@ A relocated source-oracle failure in hosted backend CI must be fixed through the
 The pipeline Agent graph adds no process, startup action or paid retry. Existing model/task snapshots and production topology remain; rule fallback does not catch a missing model resolver or pre-provider context failure. The consolidated PR still requires whole-application isolation, current-head hosted CI, historical performance closure and separate release/label-worker cutover acceptance.
 
 CI adds the focused PipelineStages actual-graph smoke to the existing backend check. This is synthetic composition validation only; it does not activate the standalone label worker, alter deployment topology, bypass hosted performance gates or constitute production commissioning. Continue to deploy and roll back complete immutable releases under the existing drain/version/heartbeat requirements.
+
+The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated PostgreSQL composition check. Worker topology, maintenance gating and immutable release rollout are unchanged; this focused check does not authorize bypassing required CI or count as standalone-worker commissioning.

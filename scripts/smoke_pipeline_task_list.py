@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class Lock:
@@ -167,13 +168,13 @@ def main():
                 if mutate_on_schedule:
                     supplied_tasks[0]["after_schedule"] = True
                 if rebind:
-                    server.schedule_pipeline_advance = lambda item, actor: mark("advance.rebound", item)
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda item, actor: mark('advance.rebound', item))
 
             def schedule_advance(item, actor):
                 mark("advance.schedule", item, actor is user)
                 scheduled.append(item)
                 if rebind_after_first_advance and scheduled.count(item) == 1:
-                    server.schedule_pipeline_advance = lambda task_id, actor: events.append(("advance.next", task_id, lock.held))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda task_id, actor: events.append(('advance.next', task_id, lock.held)))
                 if fail_second_advance and scheduled.count(item) == 2:
                     raise error
 
@@ -248,7 +249,7 @@ def main():
             with ExitStack() as stack:
                 stack.enter_context(patch.object(clock_owner, clock_attribute, last, create=clock_owner is server))
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = server.get_pipeline_tasks(user_id)
                     if repeat:

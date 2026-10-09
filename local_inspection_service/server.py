@@ -11319,47 +11319,58 @@ from .pipeline.task_list_ports import (
     TaskListReconciliation as _TaskListReconciliation,
     TaskListPresentation as _TaskListPresentation,
 )
-_pipeline_task_list = _PipelineTaskList(
-    _TaskListAccess(
-        current_user=lambda: current_auth_user,
-        is_admin=lambda: user_is_admin,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        load_ai_tasks=lambda: load_ai_detection_tasks,
-        visible=lambda: record_visible_to_user,
-        incoming_allowed=lambda: incoming_text_task_access_allowed,
-        has_permission=lambda: user_has_permission,
-    ),
-    _TaskListReconciliation(
-        task_lock=lambda: _pipeline_tasks_lock,
-        load_tasks=lambda: load_pipeline_tasks,
-        monotonic=lambda: time.monotonic,
-        last_sync_at=lambda: _pipeline_runtime.last_sync_at,
-        set_last_sync_at=lambda value: _set_pipeline_tasks_sync_last_at(value),
-        min_interval=lambda: PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS,
-        ensure_accessories=lambda: ensure_pipeline_task_accessory_objects,
-        save_config=lambda: save_config,
-        sync_ai_tasks=lambda: sync_pipeline_ai_detection_tasks,
-        sync_ready_ai_tasks=lambda: sync_ready_pipeline_ai_detection_tasks,
-        normalize_auto_defaults=lambda: normalize_pipeline_task_auto_advance_defaults,
-        sync_and_advance=lambda: sync_and_auto_advance_pipeline,
-        save_tasks=lambda: save_pipeline_tasks,
-        collect_pregen=lambda: collect_pipeline_recommendation_pregen,
-    ),
-    _TaskListPresentation(
-        schedule_agent=lambda: schedule_pipeline_auto_agent,
-        schedule_advance=lambda: schedule_pipeline_advance,
-        schedule_pregen=lambda: schedule_pipeline_recommendation_pregen,
-        trained_specs=lambda: list_trained_model_specs,
-        optimize_states=lambda: list_auto_optimize_states,
-        optimize_by_id=lambda: auto_optimize_states_by_task_id,
-        public_task=lambda: pipeline_task_public,
-        public_agent_config=lambda: public_agent_config,
-        accessories_payload=lambda: pipeline_accessories_payload,
-        sanitize=lambda: public_path_sanitized,
-    ),
+from .pipeline.task_composition import (
+    PipelineTaskWorkflows,
+    TaskListAccessInputs,
+    TaskListReconciliationInputs,
+    TaskListPresentationInputs,
+    TaskCreateAccessInputs,
+    TaskCreatePolicyInputs,
+    TaskCreateRuntimeInputs,
+    TaskUpdateAccessInputs,
+    TaskUpdatePolicyInputs,
+    TaskUpdateRuntimeInputs,
+    PipelineAccessoryAccessInputs,
+    PipelineAccessoryCatalogInputs,
+    TaskDeleteAccessInputs,
+    TaskDeleteCleanupInputs,
+    AgentFeedbackAccessInputs,
+    AgentFeedbackPolicyInputs,
+    AgentFeedbackRuntimeInputs,
+    AgentChatAccessInputs,
+    AgentChatRuntimeInputs,
+    AdvanceControlAccessInputs,
+    AdvanceControlRuntimeInputs
 )
-get_pipeline_tasks = register_pipeline_task_list_api(app, _pipeline_task_list)
+
+_pipeline_tasks = PipelineTaskWorkflows(
+    queries=_pipeline_queries,
+    stages=_pipeline_stages,
+    execution=_pipeline_execution,
+    agent=_agent_pipeline_workflows,
+    task_list_access=TaskListAccessInputs(current_user=lambda: current_auth_user, is_admin=lambda: user_is_admin, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, load_ai_tasks=lambda: load_ai_detection_tasks, visible=lambda: record_visible_to_user, incoming_allowed=lambda: incoming_text_task_access_allowed, has_permission=lambda: user_has_permission),
+    task_list_reconciliation=TaskListReconciliationInputs(monotonic=lambda: time.monotonic, min_interval=lambda: PIPELINE_TASKS_SYNC_MIN_INTERVAL_SECONDS, save_config=lambda: save_config, sync_ready_ai_tasks=lambda: sync_ready_pipeline_ai_detection_tasks),
+    task_list_presentation=TaskListPresentationInputs(trained_specs=lambda: list_trained_model_specs, optimize_states=lambda: list_auto_optimize_states, public_agent_config=lambda: public_agent_config, sanitize=lambda: public_path_sanitized),
+    task_create_access=TaskCreateAccessInputs(current_user=lambda: current_auth_user, require_permission=lambda: require_permission, http_error=lambda: HTTPException, is_admin=lambda: user_is_admin, owner_fields=lambda: owner_fields_for_new_record, fallback_owner=lambda: resource_owner_id_for_new_record, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, accessory_lookup=lambda: accessory_lookup_by_id, load_agent_config=lambda: load_agent_config),
+    task_create_policy=TaskCreatePolicyInputs(normalize_expected_count=lambda: normalize_expected_production_count, assert_unique_name=lambda: assert_unique_task_name),
+    task_create_runtime=TaskCreateRuntimeInputs(uuid4=lambda: uuid.uuid4, now=lambda: time.time, initialize_auto_optimize=lambda: initialize_auto_optimize_for_pipeline_task, request_user=lambda: _request_user),
+    task_update_access=TaskUpdateAccessInputs(current_user=lambda: current_auth_user, http_error=lambda: HTTPException, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, require_record_access=lambda: require_record_access, require_permission=lambda: require_permission, assert_unique_name=lambda: assert_unique_task_name, record_owner_id=lambda: record_owner_id),
+    task_update_policy=TaskUpdatePolicyInputs(detection_methods=lambda: PIPELINE_DETECTION_METHODS, normalize_expected_count=lambda: normalize_expected_production_count),
+    task_update_runtime=TaskUpdateRuntimeInputs(now=lambda: time.time),
+    pipeline_accessory_access=PipelineAccessoryAccessInputs(current_user=lambda: current_auth_user, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, http_error=lambda: HTTPException),
+    pipeline_accessory_catalog=PipelineAccessoryCatalogInputs(resolve=lambda: resolve_accessory_id, aliases=lambda: accessory_id_aliases),
+    task_delete_access=TaskDeleteAccessInputs(current_user=lambda: current_auth_user, require_record_access=lambda: require_record_access, http_error=lambda: HTTPException),
+    task_delete_cleanup=TaskDeleteCleanupInputs(delete_dataset=lambda: delete_training_dataset_resource, delete_model=lambda: delete_training_model_resource, delete_training_job=lambda: delete_training_task_record, delete_ai_task=lambda: delete_ai_detection_task_record),
+    agent_feedback_access=AgentFeedbackAccessInputs(current_user=lambda: current_auth_user, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, require_record_access=lambda: require_record_access, http_error=lambda: HTTPException),
+    agent_feedback_policy=AgentFeedbackPolicyInputs(sprite_flow=lambda: pipeline_uses_photo_highlight_sprite_flow),
+    agent_feedback_runtime=AgentFeedbackRuntimeInputs(ensure_plan=lambda: ensure_agent_mcp_pose_plan, now=lambda: agent_mcp_now, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, mark_advancing=lambda: mark_pipeline_task_advancing, pose_calls=lambda: ensure_agent_mcp_pose_tool_calls, image_config=lambda: agent_mcp_gemini_image_config, execute_calls=lambda: execute_agent_mcp_pose_tool_calls, pause_task=lambda: pause_agent_mcp_task),
+    agent_chat_access=AgentChatAccessInputs(current_user=lambda: current_auth_user, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, bounded_text=lambda: bounded_text, require_record_access=lambda: require_record_access, http_error=lambda: HTTPException),
+    agent_chat_runtime=AgentChatRuntimeInputs(deepcopy=lambda: copy.deepcopy),
+    advance_control_access=AdvanceControlAccessInputs(current_user=lambda: current_auth_user, load_config=lambda: load_config, scope_config=lambda: scope_config_for_user, require_record_access=lambda: require_record_access, http_error=lambda: HTTPException),
+    advance_control_runtime=AdvanceControlRuntimeInputs(now=lambda: time.time)
+)
+_pipeline_task_list = _pipeline_tasks.listing
+get_pipeline_tasks = _pipeline_tasks.register_task_list(app)
 
 from .pipeline.task_create import PipelineTaskCreator as _PipelineTaskCreator
 from .pipeline.task_create_api import register_pipeline_task_create_api
@@ -11369,42 +11380,8 @@ from .pipeline.task_create_ports import (
     TaskCreateRuntime as _TaskCreateRuntime,
 )
 
-_pipeline_task_creator = _PipelineTaskCreator(
-    _TaskCreateAccess(
-        current_user=lambda: current_auth_user,
-        require_permission=lambda: require_permission,
-        http_error=lambda: HTTPException,
-        is_admin=lambda: user_is_admin,
-        owner_fields=lambda: owner_fields_for_new_record,
-        fallback_owner=lambda: resource_owner_id_for_new_record,
-        scope_config=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        accessory_lookup=lambda: accessory_lookup_by_id,
-        load_agent_config=lambda: load_agent_config,
-    ),
-    _TaskCreatePolicy(
-        canonical_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        normalize_detection_method=lambda: normalize_pipeline_detection_method,
-        normalize_expected_count=lambda: normalize_expected_production_count,
-        method_uses_training=lambda: pipeline_method_uses_training,
-        normalize_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-        assert_unique_name=lambda: assert_unique_task_name,
-        next_recommendation_stage=lambda: pipeline_next_recommendation_stage,
-    ),
-    _TaskCreateRuntime(
-        uuid4=lambda: uuid.uuid4,
-        now=lambda: time.time,
-        lock=lambda: _pipeline_tasks_lock,
-        activate_ai_task=lambda: activate_pipeline_ai_detection_task,
-        save_task=lambda: save_pipeline_task,
-        initialize_auto_optimize=lambda: initialize_auto_optimize_for_pipeline_task,
-        load_task=lambda: load_pipeline_task,
-        schedule_pregen=lambda: schedule_pipeline_recommendation_pregen,
-        request_user=lambda: _request_user,
-        public_task=lambda: pipeline_task_public,
-    ),
-)
-create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)
+_pipeline_task_creator = _pipeline_tasks.creator
+create_pipeline_task = _pipeline_tasks.register_task_create(app)
 
 from .pipeline.task_update import PipelineTaskUpdater as _PipelineTaskUpdater
 from .pipeline.task_update_api import register_pipeline_task_update_api
@@ -11414,35 +11391,8 @@ from .pipeline.task_update_ports import (
     TaskUpdateRuntime as _TaskUpdateRuntime,
 )
 
-_pipeline_task_updater = _PipelineTaskUpdater(
-    _TaskUpdateAccess(
-        current_user=lambda: current_auth_user,
-        http_error=lambda: HTTPException,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        load_task=lambda: load_pipeline_task,
-        require_record_access=lambda: require_record_access,
-        require_permission=lambda: require_permission,
-        assert_unique_name=lambda: assert_unique_task_name,
-        record_owner_id=lambda: record_owner_id,
-    ),
-    _TaskUpdatePolicy(
-        canonical_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        normalize_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-        accessory_snapshot=lambda: pipeline_task_accessory_snapshot,
-        normalize_detection_method=lambda: normalize_pipeline_detection_method,
-        method_uses_training=lambda: pipeline_method_uses_training,
-        detection_methods=lambda: PIPELINE_DETECTION_METHODS,
-        normalize_expected_count=lambda: normalize_expected_production_count,
-    ),
-    _TaskUpdateRuntime(
-        lock=lambda: _pipeline_tasks_lock,
-        now=lambda: time.time,
-        save_task=lambda: save_pipeline_task,
-        public_task=lambda: pipeline_task_public,
-    ),
-)
-update_pipeline_task = register_pipeline_task_update_api(app, _pipeline_task_updater)
+_pipeline_task_updater = _pipeline_tasks.updater
+update_pipeline_task = _pipeline_tasks.register_task_update(app)
 
 from .pipeline.accessory_routes import PipelineAccessoryRoutes as _PipelineAccessoryRoutes
 from .pipeline.accessory_routes_api import register_pipeline_accessory_routes_api
@@ -11450,24 +11400,8 @@ from .pipeline.accessory_routes_ports import (
     PipelineAccessoryAccess as _PipelineAccessoryAccess,
     PipelineAccessoryCatalog as _PipelineAccessoryCatalog,
 )
-_pipeline_accessory_routes = _PipelineAccessoryRoutes(
-    _PipelineAccessoryAccess(
-        current_user=lambda: current_auth_user,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        http_error=lambda: HTTPException,
-    ),
-    _PipelineAccessoryCatalog(
-        resolve=lambda: resolve_accessory_id,
-        add_id=lambda: add_pipeline_accessory_id,
-        aliases=lambda: accessory_id_aliases,
-        remove_id=lambda: remove_pipeline_accessory_id,
-        public_payload=lambda: pipeline_accessories_payload,
-    ),
-)
-add_pipeline_accessory, remove_pipeline_accessory = register_pipeline_accessory_routes_api(
-    app, _pipeline_accessory_routes,
-)
+_pipeline_accessory_routes = _pipeline_tasks.accessories
+add_pipeline_accessory, remove_pipeline_accessory = _pipeline_tasks.register_accessory_routes(app)
 
 from .pipeline.task_delete import PipelineTaskDeleter as _PipelineTaskDeleter
 from .pipeline.task_delete_api import register_pipeline_task_delete_api
@@ -11476,26 +11410,8 @@ from .pipeline.task_delete_ports import (
     TaskDeleteRuntime as _TaskDeleteRuntime,
     TaskDeleteCleanup as _TaskDeleteCleanup,
 )
-_pipeline_task_deleter = _PipelineTaskDeleter(
-    _TaskDeleteAccess(
-        current_user=lambda: current_auth_user,
-        load_task=lambda: load_pipeline_task,
-        require_record_access=lambda: require_record_access,
-        http_error=lambda: HTTPException,
-    ),
-    _TaskDeleteRuntime(
-        cancel_advance=lambda: cancel_pipeline_advance,
-        lock=lambda: _pipeline_tasks_lock,
-        delete_task_row=lambda: delete_pipeline_task_row,
-    ),
-    _TaskDeleteCleanup(
-        delete_dataset=lambda: delete_training_dataset_resource,
-        delete_model=lambda: delete_training_model_resource,
-        delete_training_job=lambda: delete_training_task_record,
-        delete_ai_task=lambda: delete_ai_detection_task_record,
-    ),
-)
-delete_pipeline_task = register_pipeline_task_delete_api(app, _pipeline_task_deleter)
+_pipeline_task_deleter = _pipeline_tasks.deleter
+delete_pipeline_task = _pipeline_tasks.register_task_delete(app)
 
 from .pipeline.agent_feedback import PipelineAgentFeedback as _PipelineAgentFeedback
 from .pipeline.agent_feedback_api import register_pipeline_agent_feedback_api
@@ -11504,64 +11420,15 @@ from .pipeline.agent_feedback_ports import (
     AgentFeedbackPolicy as _AgentFeedbackPolicy,
     AgentFeedbackRuntime as _AgentFeedbackRuntime,
 )
-_pipeline_agent_feedback = _PipelineAgentFeedback(
-    _AgentFeedbackAccess(
-        current_user=lambda: current_auth_user,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        load_task=lambda: load_pipeline_task,
-        require_record_access=lambda: require_record_access,
-        http_error=lambda: HTTPException,
-    ),
-    _AgentFeedbackPolicy(
-        normalize_method=lambda: normalize_pipeline_detection_method,
-        uses_training=lambda: pipeline_method_uses_training,
-        sprite_flow=lambda: pipeline_uses_photo_highlight_sprite_flow,
-    ),
-    _AgentFeedbackRuntime(
-        task_lock=lambda: _pipeline_tasks_lock,
-        ensure_plan=lambda: ensure_agent_mcp_pose_plan,
-        now=lambda: agent_mcp_now,
-        skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight,
-        mark_advancing=lambda: mark_pipeline_task_advancing,
-        pose_calls=lambda: ensure_agent_mcp_pose_tool_calls,
-        image_config=lambda: agent_mcp_gemini_image_config,
-        execute_calls=lambda: execute_agent_mcp_pose_tool_calls,
-        pause_task=lambda: pause_agent_mcp_task,
-        save_task=lambda: save_pipeline_task,
-        public_task=lambda: pipeline_task_public,
-        schedule_advance=lambda: schedule_pipeline_advance,
-    ),
-)
-pipeline_agent_feedback = register_pipeline_agent_feedback_api(app, _pipeline_agent_feedback)
+_pipeline_agent_feedback = _pipeline_tasks.feedback
+pipeline_agent_feedback = _pipeline_tasks.register_agent_feedback(app)
 
 from .pipeline.agent_chat import PipelineAgentChat as _PipelineAgentChat
 from .pipeline.agent_chat_api import register_pipeline_agent_chat_api
 from .pipeline.agent_chat_ports import AgentChatAccess as _AgentChatAccess, AgentChatRuntime as _AgentChatRuntime
 
-_pipeline_agent_chat = _PipelineAgentChat(
-    _AgentChatAccess(
-        current_user=lambda: current_auth_user,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        bounded_text=lambda: bounded_text,
-        load_task=lambda: load_pipeline_task,
-        require_record_access=lambda: require_record_access,
-        http_error=lambda: HTTPException,
-    ),
-    _AgentChatRuntime(
-        task_lock=lambda: _pipeline_tasks_lock,
-        normalize_method=lambda: normalize_pipeline_detection_method,
-        uses_training=lambda: pipeline_method_uses_training,
-        deepcopy=lambda: copy.deepcopy,
-        decide=lambda: agent_pipeline_decide,
-        commit_turn=lambda: commit_pipeline_agent_turn,
-        save_task=lambda: save_pipeline_task,
-        public_task=lambda: pipeline_task_public,
-        schedule_advance=lambda: schedule_pipeline_advance,
-    ),
-)
-pipeline_agent_chat = register_pipeline_agent_chat_api(app, _pipeline_agent_chat)
+_pipeline_agent_chat = _pipeline_tasks.chat
+pipeline_agent_chat = _pipeline_tasks.register_agent_chat(app)
 
 from .pipeline.advance_control import PipelineAdvanceController as _PipelineAdvanceController
 from .pipeline.advance_control_api import register_pipeline_advance_control_api
@@ -11569,30 +11436,8 @@ from .pipeline.advance_control_ports import (
     AdvanceControlAccess as _AdvanceControlAccess,
     AdvanceControlRuntime as _AdvanceControlRuntime,
 )
-_pipeline_advance_controller = _PipelineAdvanceController(
-    _AdvanceControlAccess(
-        current_user=lambda: current_auth_user,
-        load_config=lambda: load_config,
-        scope_config=lambda: scope_config_for_user,
-        load_task=lambda: load_pipeline_task,
-        require_record_access=lambda: require_record_access,
-        http_error=lambda: HTTPException,
-    ),
-    _AdvanceControlRuntime(
-        task_lock=lambda: _pipeline_tasks_lock,
-        registry_lock=lambda: _pipeline_advance_registry_lock,
-        inflight=lambda: _pipeline_advance_inflight,
-        sync_task=lambda: sync_pipeline_task,
-        now=lambda: time.time,
-        save_task=lambda: save_pipeline_task,
-        public_task=lambda: pipeline_task_public,
-        schedule_advance=lambda: schedule_pipeline_advance,
-        cancel_advance=lambda: cancel_pipeline_advance,
-    ),
-)
-advance_pipeline_task_endpoint, cancel_pipeline_advance_endpoint = register_pipeline_advance_control_api(
-    app, _pipeline_advance_controller,
-)
+_pipeline_advance_controller = _pipeline_tasks.control
+advance_pipeline_task_endpoint, cancel_pipeline_advance_endpoint = _pipeline_tasks.register_advance_control(app)
 
 # ---------------------------------------------------------------------------
 # Account-scoped text inspection v2 (independent from the legacy task flow).

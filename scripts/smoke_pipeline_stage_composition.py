@@ -28,8 +28,8 @@ def compose(queries,runtime,bindings):
     return module.PipelineStages(queries=queries,runtime=runtime,**{
         name:cls(**{f.name:lambda key=f.name:bindings[key] for f in fields(cls)}) for name,cls in GROUPS.items()})
 
-def build(root,account):
-    q=query_graph(root,account);events=[];records={};jobs={}
+def build(root,account,*,queries=None):
+    q=queries if queries is not None else query_graph(root,account);events=[];records={};jobs={}
     def forbidden(*args,**kwargs):raise AssertionError('unplanned paid/process operation')
     def save(row,**kwargs):events.append(('save',row['id']));records[row['id']]=copy.deepcopy(row)
     def public(row,config):events.append(('public',row['id']));return dict(row,model_id='ai:'+row['id'])
@@ -153,9 +153,9 @@ class StageCompositionContracts(unittest.TestCase):
         self.assertEqual(f.owner.pipeline_recommendation_signature(task,'samples'),'samples|a|0')
         self.assertEqual(f.owner.pipeline_recommendation_signature({},'samples'),'late')
     def test_source_inverse_preserves_all_business_and_root_functions(self):
-        from application_integration_source_contract import ROOT,PIPELINE_STAGES,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_TASKS,PIPELINE_STAGES,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        restored=restore_delta(source,PIPELINE_STAGES)
+        restored=restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES)
         self.assertNotIn('_pipeline_stages = PipelineStages',restored)
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace('runtime=_pipeline_runtime,','runtime=None,',1))

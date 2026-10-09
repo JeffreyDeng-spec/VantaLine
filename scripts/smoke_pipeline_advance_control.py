@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class TracedLock:
@@ -110,7 +111,7 @@ def main():
             def scope(value, actor):
                 events.append(("config.scope", value is config, actor is user))
                 if rebind_first_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 if fail == "scope":
                     raise failure
                 return value
@@ -133,7 +134,7 @@ def main():
             def sync(value):
                 events.append(("sync", task_lock.held, alternate.held))
                 if rebind_inflight:
-                    server._pipeline_advance_inflight = {"pipe-1"}
+                    set_pipeline_task_test_port(server, '_pipeline_advance_inflight', {'pipe-1'})
                 if fail == "sync":
                     raise failure
 
@@ -151,14 +152,14 @@ def main():
                 events.append(("save", reads, task_lock.held, alternate.held))
                 saves.append(dict(value))
                 if rebind_public:
-                    server.pipeline_task_public = lambda task, config: (events.append("public.rebound") or task)
+                    set_pipeline_task_test_port(server, 'pipeline_task_public', lambda task, config: events.append('public.rebound') or task)
                 if fail == "save":
                     raise failure
 
             def public(value, scoped):
                 events.append(("public", reads, task_lock.held, alternate.held))
                 if rebind_schedule:
-                    server.schedule_pipeline_advance = lambda *args: events.append(("schedule.rebound", args[0]))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda *args: events.append(('schedule.rebound', args[0])))
                 if fail == "public":
                     raise failure
                 return value if public_alias else dict(value)
@@ -172,7 +173,7 @@ def main():
             def cancel(task_id):
                 events.append(("cancel", task_id, task_lock.held, alternate.held))
                 if rebind_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 if cancel_mutation is not None and second is not None:
                     second.update(cancel_mutation)
                 if fail == "cancel":
@@ -203,7 +204,7 @@ def main():
             }
             with ExitStack() as stack:
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = (server.advance_pipeline_task_endpoint if mode == "advance" else server.cancel_pipeline_advance_endpoint)("pipe-1")
                     error = None

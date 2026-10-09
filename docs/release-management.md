@@ -1598,3 +1598,5 @@ PipelineQueries is an inert assembly change within the consolidated backend PR. 
 AgentPipelineWorkflows ships within the existing immutable Web package. Its new prompt provenance records the real assembly file without changing prompt content or historical snapshots. Run the actual graph, original Agent and native-caller contracts; roll back the complete package. No production worker activation is part of this composition change.
 
 CI adds the focused PipelineStages actual-graph smoke to the existing backend check. This is synthetic composition validation only; it does not activate the standalone label worker, alter deployment topology, bypass hosted performance gates or constitute production commissioning. Continue to deploy and roll back complete immutable releases under the existing drain/version/heartbeat requirements.
+
+The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated PostgreSQL composition check. Worker topology, maintenance gating and immutable release rollout are unchanged; this focused check does not authorize bypassing required CI or count as standalone-worker commissioning.
