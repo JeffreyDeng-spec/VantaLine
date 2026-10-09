@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / "tests/backend_contract/application_integration_delta.json").read_text())
 BUSINESS = json.loads((ROOT / "tests/backend_contract/application_business_delta.json").read_text())
 MAIN_FEEDBACK = json.loads((ROOT / "tests/backend_contract/application_main_feedback_delta.json").read_text())
+PLC_WORKSTATION = json.loads((ROOT / "tests/backend_contract/plc_workstation_composition_delta.json").read_text())
 COMPOSITIONS = json.loads((ROOT / "tests/backend_contract/application_composition_bindings.json").read_text())
 
 
@@ -50,6 +51,10 @@ def restore_delta(source, fixture):
 def verify_actual_compositions():
     """Validate real owned constructor edges before using an old-location oracle."""
     assert digest(ast.parse((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text())) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
+    assert digest(ast.parse((ROOT / "local_inspection_service/plc/workstation_composition.py").read_text())) == PLC_WORKSTATION["actual_owner_ast_sha256"], "Actual PLC workstation composition changed"
+    for path, expected in PLC_WORKSTATION["unchanged_business_sha256"].items():
+        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text(encoding="utf-8"))) == expected, \
             "Actual composition capability changed: " + path
@@ -58,10 +63,10 @@ def verify_actual_compositions():
 def restore_integrated_root(source):
     verify_actual_compositions()
     from application_configuration_source_contract import restore_application_configuration_root
-    return restore_delta(restore_delta(restore_application_configuration_root(source), MAIN_FEEDBACK), FIXTURE)
+    return restore_delta(restore_delta(restore_application_configuration_root(restore_delta(source, PLC_WORKSTATION)), MAIN_FEEDBACK), FIXTURE)
 
 
 def restore_business_root(source):
     verify_actual_compositions()
     from application_configuration_source_contract import restore_application_configuration_root
-    return restore_delta(restore_delta(restore_delta(restore_application_configuration_root(source), MAIN_FEEDBACK), FIXTURE), BUSINESS)
+    return restore_delta(restore_delta(restore_delta(restore_application_configuration_root(restore_delta(source, PLC_WORKSTATION)), MAIN_FEEDBACK), FIXTURE), BUSINESS)

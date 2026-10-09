@@ -21,7 +21,12 @@ class ConfigError(Exception):
 
 
 def load_target(source, baseline):
-    tree = ast.parse(source.read_text(encoding="utf-8-sig"))
+    raw = source.read_text(encoding="utf-8-sig")
+    if not baseline:
+        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION
+        verify_actual_compositions()
+        raw = restore_delta(raw, PLC_WORKSTATION)
+    tree = ast.parse(raw)
     names = {
         "plc_web_serial_confirm_diagnostic",
         "_plc_web_serial_require_active_lease",

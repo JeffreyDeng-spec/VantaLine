@@ -33,7 +33,12 @@ class HttpError(Exception):
 
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
-    tree = ast.parse(source.read_text(encoding="utf-8-sig"))
+    raw = source.read_text(encoding="utf-8-sig")
+    if not BASELINE:
+        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION
+        verify_actual_compositions()
+        raw = restore_delta(raw, PLC_WORKSTATION)
+    tree = ast.parse(raw)
     nodes = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:

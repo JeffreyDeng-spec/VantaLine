@@ -1,5 +1,5 @@
 {
-  "version": 258,
+  "version": 259,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -568,6 +568,7 @@
     "training/real_photo_training_config.py",
     "training/runpod_model_settings.py",
     "config/application_composition.py",
-    "training/dispatcher_runtime.py"
+    "training/dispatcher_runtime.py",
+    "plc/workstation_composition.py"
   ]
 }

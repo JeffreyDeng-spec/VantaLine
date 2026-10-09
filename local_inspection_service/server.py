@@ -1907,25 +1907,65 @@ from .plc.persisted_validation import (
 from .plc.workstation_repository import PlcWorkstationRepository
 from .plc.workstation_repository_ports import WorkstationRepositoryFiles, WorkstationRepositoryPolicy, WorkstationRepositoryStorage
 
-_plc_workstation_repository = PlcWorkstationRepository(
+from .plc.station_ports import StationStorage, StationIdentity, StationPolicy, StationProjection
+from .plc.browser_dispatch_ports import BrowserDispatchStorage, BrowserDispatchIdentity, BrowserDispatchPolicy, BrowserDispatchProjection
+from .plc.workstation_composition import PlcWorkstationWorkflows, WorkstationAccess, WorkstationIdentity, WorkstationProjection
+
+_plc_workstation_workflows = PlcWorkstationWorkflows(
     files=WorkstationRepositoryFiles(
         _business_files=lambda: _business_files,
         DATA_DIR=lambda: DATA_DIR,
         PLC_WEB_SERIAL_STATE_PATH=lambda: PLC_WEB_SERIAL_STATE_PATH,
     ),
-    policy=WorkstationRepositoryPolicy(
+    repository_policy=WorkstationRepositoryPolicy(
         PLC_WEB_SERIAL_JSON_TEST_ENV=lambda: PLC_WEB_SERIAL_JSON_TEST_ENV,
         PlcConfigError=lambda: PlcConfigError,
         SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
     ),
-    storage=WorkstationRepositoryStorage(
+    storage=WorkstationAccess(
         runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
         _config_io_lock=lambda: _config_io_lock,
-        _plc_web_serial_empty_state=lambda: _plc_web_serial_empty_state,
-        _plc_web_serial_load_local=lambda: _plc_web_serial_load_local,
-        _plc_web_serial_save_local=lambda: _plc_web_serial_save_local,
+    ),
+    identity=WorkstationIdentity(
+        PLC_WORKSTATION_COOKIE=lambda: PLC_WORKSTATION_COOKIE,
+        PLC_WORKSTATION_COOKIE_TTL_SECONDS=lambda: PLC_WORKSTATION_COOKIE_TTL_SECONDS,
+        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
+        current_auth_user=lambda: current_auth_user,
+        request_is_https=lambda: request_is_https,
+    ),
+    station_policy=StationPolicy(
+        clock=lambda: time.time,
+        PlcConfigError=lambda: PlcConfigError,
+        HTTPException=lambda: HTTPException,
+        DEFAULT_WEB_SERIAL_CONFIG=lambda: DEFAULT_WEB_SERIAL_CONFIG,
+        WEB_SERIAL_ACTIVE_LEASE_SECONDS=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
+        WEB_SERIAL_HEARTBEAT_SECONDS=lambda: WEB_SERIAL_HEARTBEAT_SECONDS,
+        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        migrate_web_serial_config=lambda: migrate_web_serial_config,
+        normalize_web_serial_config=lambda: normalize_web_serial_config,
+        web_serial_profile_fingerprint=lambda: web_serial_profile_fingerprint,
+    ),
+    projection=WorkstationProjection(
+        current_release_version=lambda: current_release_version,
+        build_web_serial_capture_read_plan=lambda: build_web_serial_capture_read_plan,
+        web_serial_resolved_addresses=lambda: web_serial_resolved_addresses,
+    ),
+    dispatch_policy=BrowserDispatchPolicy(
+        PlcConfigError=lambda: PlcConfigError,
+        LEGACY_WEB_SERIAL_PROTOCOL_VERSION=lambda: LEGACY_WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
+        WEB_SERIAL_PLAN_DEADLINE_SECONDS=lambda: WEB_SERIAL_PLAN_DEADLINE_SECONDS,
+        PLC_PROTOCOL_ID=lambda: PLC_PROTOCOL_ID,
+        build_legacy_web_serial_plan=lambda: build_legacy_web_serial_plan,
+        build_web_serial_plan=lambda: build_web_serial_plan,
+        normalize_legacy_web_serial_config=lambda: normalize_legacy_web_serial_config,
+        normalize_web_serial_config=lambda: normalize_web_serial_config,
+        migrate_web_serial_config=lambda: migrate_web_serial_config,
+        legacy_web_serial_config_fingerprint=lambda: legacy_web_serial_config_fingerprint,
+        web_serial_config_fingerprint=lambda: web_serial_config_fingerprint,
     ),
 )
+_plc_workstation_repository = _plc_workstation_workflows.repository
 
 
 def _plc_web_serial_empty_state() -> dict[str, dict[str, Any]]:
@@ -1969,51 +2009,8 @@ def _plc_web_serial_mutate(
 
 
 from .plc.station_service import PlcStationService
-from .plc.station_ports import StationStorage, StationIdentity, StationPolicy, StationProjection
 
-_plc_station_service = PlcStationService(
-    storage=StationStorage(
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        _config_io_lock=lambda: _config_io_lock,
-        _plc_web_serial_load_local=lambda: _plc_web_serial_load_local,
-        _plc_web_serial_record=lambda: _plc_web_serial_record,
-        _plc_web_serial_mutate=lambda: _plc_web_serial_mutate,
-        _plc_web_serial_upsert_row=lambda: _plc_web_serial_upsert_row,
-        _plc_workstation_row=lambda: _plc_workstation_row,
-        _plc_workstation_lease_row=lambda: _plc_workstation_lease_row,
-        _plc_web_serial_dispatch_row=lambda: _plc_web_serial_dispatch_row,
-    ),
-    identity=StationIdentity(
-        PLC_WORKSTATION_COOKIE=lambda: PLC_WORKSTATION_COOKIE,
-        PLC_WORKSTATION_COOKIE_TTL_SECONDS=lambda: PLC_WORKSTATION_COOKIE_TTL_SECONDS,
-        SYSTEM_OWNER_ID=lambda: SYSTEM_OWNER_ID,
-        _plc_web_serial_token_hash=lambda: _plc_web_serial_token_hash,
-        current_auth_user=lambda: current_auth_user,
-        request_is_https=lambda: request_is_https,
-        plc_web_serial_station_from_request=lambda: plc_web_serial_station_from_request,
-    ),
-    policy=StationPolicy(
-        clock=lambda: time.time,
-        PlcConfigError=lambda: PlcConfigError,
-        HTTPException=lambda: HTTPException,
-        DEFAULT_WEB_SERIAL_CONFIG=lambda: DEFAULT_WEB_SERIAL_CONFIG,
-        WEB_SERIAL_ACTIVE_LEASE_SECONDS=lambda: WEB_SERIAL_ACTIVE_LEASE_SECONDS,
-        WEB_SERIAL_HEARTBEAT_SECONDS=lambda: WEB_SERIAL_HEARTBEAT_SECONDS,
-        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
-        migrate_web_serial_config=lambda: migrate_web_serial_config,
-        normalize_web_serial_config=lambda: normalize_web_serial_config,
-        web_serial_profile_fingerprint=lambda: web_serial_profile_fingerprint,
-    ),
-    projection=StationProjection(
-        current_release_version=lambda: current_release_version,
-        build_web_serial_capture_read_plan=lambda: build_web_serial_capture_read_plan,
-        web_serial_resolved_addresses=lambda: web_serial_resolved_addresses,
-        plc_web_serial_current_lease=lambda: plc_web_serial_current_lease,
-        plc_web_serial_recent_dispatches=lambda: plc_web_serial_recent_dispatches,
-        plc_web_serial_ensure_current_station_contract=lambda: plc_web_serial_ensure_current_station_contract,
-        plc_web_serial_station_payload=lambda: plc_web_serial_station_payload,
-    ),
-)
+_plc_station_service = _plc_workstation_workflows.station
 
 
 def _plc_web_serial_token_hash(token: str) -> str:
@@ -2171,39 +2168,8 @@ def plc_web_serial_finish_diagnostic(
 
 
 from .plc.browser_dispatch import PlcBrowserDispatchService
-from .plc.browser_dispatch_ports import BrowserDispatchStorage, BrowserDispatchIdentity, BrowserDispatchPolicy, BrowserDispatchProjection
 
-_plc_browser_dispatch = PlcBrowserDispatchService(
-    storage=BrowserDispatchStorage(
-        _plc_web_serial_record=lambda: _plc_web_serial_record,
-        _plc_web_serial_mutate=lambda: _plc_web_serial_mutate,
-        _plc_web_serial_dispatch_row=lambda: _plc_web_serial_dispatch_row,
-        _plc_workstation_lease_row=lambda: _plc_workstation_lease_row,
-    ),
-    identity=BrowserDispatchIdentity(
-        _plc_web_serial_require_active_lease=lambda: _plc_web_serial_require_active_lease,
-        _plc_web_serial_token_hash=lambda: _plc_web_serial_token_hash,
-    ),
-    policy=BrowserDispatchPolicy(
-        PlcConfigError=lambda: PlcConfigError,
-        LEGACY_WEB_SERIAL_PROTOCOL_VERSION=lambda: LEGACY_WEB_SERIAL_PROTOCOL_VERSION,
-        WEB_SERIAL_PROTOCOL_VERSION=lambda: WEB_SERIAL_PROTOCOL_VERSION,
-        WEB_SERIAL_PLAN_DEADLINE_SECONDS=lambda: WEB_SERIAL_PLAN_DEADLINE_SECONDS,
-        PLC_PROTOCOL_ID=lambda: PLC_PROTOCOL_ID,
-        build_legacy_web_serial_plan=lambda: build_legacy_web_serial_plan,
-        build_web_serial_plan=lambda: build_web_serial_plan,
-        normalize_legacy_web_serial_config=lambda: normalize_legacy_web_serial_config,
-        normalize_web_serial_config=lambda: normalize_web_serial_config,
-        migrate_web_serial_config=lambda: migrate_web_serial_config,
-        legacy_web_serial_config_fingerprint=lambda: legacy_web_serial_config_fingerprint,
-        web_serial_config_fingerprint=lambda: web_serial_config_fingerprint,
-    ),
-    projection=BrowserDispatchProjection(
-        verify_plc_web_serial_dispatch=lambda: verify_plc_web_serial_dispatch,
-        _plc_web_serial_receipt_outcome=lambda: _plc_web_serial_receipt_outcome,
-        plc_web_serial_dispatch_public=lambda: plc_web_serial_dispatch_public,
-    ),
-)
+_plc_browser_dispatch = _plc_workstation_workflows.browser
 
 
 def plc_web_serial_begin_camera_detection(

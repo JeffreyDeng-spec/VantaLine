@@ -2826,3 +2826,7 @@ zero-argument getters, with the reviewed masked URL method on its provider owner
 TextMedia runtime checks follow the actual standard owner, its one constructor
 and exact StandardMediaStorage provider. Required/None/falsey and all media
 behavior tests remain; source guards reject unexpected owner edges.
+
+### Workstation composition verification
+
+Run `python scripts/smoke_plc_workstation_composition.py --postgres` with an isolated `VANTALINE_POSTGRES_DSN`. It exercises the actual composed graph, including two isolated PostgreSQL schemas, duplicate task admission and connection release. The original station, repository, browser-dispatch and active-lease smoke assertions remain unchanged; their source adapters verify the actual owner plus the entire root delta before loading the frozen constructor oracle. Run those smokes, HTTP contracts, backend boundaries and the PLC frontend/release contracts as well. These checks use synthetic stores and do not access a physical PLC or inference provider.

@@ -121,3 +121,5 @@ The real-photo routes, purpose bindings, incremental tables and review worker
 remain present. Manifest v253 contains 557 actual sources at this checkpoint;
 historical task snapshots are not rewritten. Full factory, combined CI and
 release acceptance are separate remaining gates.
+
+`plc/workstation_composition.py` owns the existing repository/station/browser graph through explicit external ports. Ordinary internal edges use named forwarding methods; the active-lease member binds the initial station once. Preserve both selection rules. Construction performs no I/O or capability selection. Lease/capture collaborators, pipeline and complete app lifecycle still require final assembly.

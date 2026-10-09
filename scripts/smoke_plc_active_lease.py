@@ -19,7 +19,12 @@ class ConfigError(Exception):
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    for node in ast.parse(source.read_text(encoding="utf-8-sig")).body:
+    raw = source.read_text(encoding="utf-8-sig")
+    if not BASELINE:
+        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION
+        verify_actual_compositions()
+        raw = restore_delta(raw, PLC_WORKSTATION)
+    for node in ast.parse(raw).body:
         if isinstance(node, ast.FunctionDef) and node.name == NAME:
             nodes.append(node)
         elif not BASELINE and isinstance(node, ast.ImportFrom) and node.module in {"plc.station_service", "plc.station_ports"}:

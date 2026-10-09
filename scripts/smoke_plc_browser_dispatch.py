@@ -29,7 +29,12 @@ BASELINE = os.environ.get("VANTALINE_PLC_BROWSER_DISPATCH_BASELINE_SOURCE")
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    for n in ast.parse(source.read_text(encoding="utf-8-sig")).body:
+    raw = source.read_text(encoding="utf-8-sig")
+    if not BASELINE:
+        from application_integration_source_contract import verify_actual_compositions, restore_delta, PLC_WORKSTATION
+        verify_actual_compositions()
+        raw = restore_delta(raw, PLC_WORKSTATION)
+    for n in ast.parse(raw).body:
         if isinstance(n, ast.FunctionDef) and n.name in NAMES:
             nodes.append(n)
         elif not BASELINE and isinstance(n, ast.ImportFrom) and n.module in {"plc.browser_dispatch", "plc.browser_dispatch_ports"}:

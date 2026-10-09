@@ -164,3 +164,7 @@ evidence or the prohibition on retrying uncertain physical writes.
 Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.
 
 An ordinary upload's optional capture-session identifier is feedback grouping metadata only. It never asserts a PLC camera request, station lease or dispatch. Non-PLC camera frames can therefore remain in one dataset source group while using ordinary image detection.
+
+## Workstation composition boundary
+
+Workstation persistence, station policy and browser dispatch now compose through `PlcWorkstationWorkflows`. Internal service callbacks select their domain owner after arguments are evaluated; active-lease validation retains its fixed station binding. Pairing, generation upgrades, expiry settlement, declaration persistence, lease fencing and ACK validation remain in their existing business modules and transactions. Recent dispatch and station projection may write and must not be treated as cached reads. No physical serial operation, uncertain-write replay or new worker is introduced. Full PLC/application lifecycle assembly remains a separate gate.

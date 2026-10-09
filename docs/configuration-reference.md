@@ -1818,3 +1818,5 @@ zero-argument getters, with the reviewed masked URL method on its provider owner
 TextMedia runtime checks follow the actual standard owner, its one constructor
 and exact StandardMediaStorage provider. Required/None/falsey and all media
 behavior tests remain; source guards reject unexpected owner edges.
+
+Workstation composition adds no operator setting or default change. Its explicit ports retain the existing request-time account, repository and policy suppliers. Prompt-source manifest v259 includes `plc/workstation_composition.py` for newly created task fingerprints; stored model/configuration/secret bindings and historical task snapshots remain unchanged.

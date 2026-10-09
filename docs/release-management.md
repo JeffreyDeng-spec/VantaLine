@@ -1582,3 +1582,5 @@ rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
 tick, blocked scope exit, startup/close races, partial/uncertain starts and two
 independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
+
+Workstation composition acceptance includes `smoke_plc_workstation_composition.py --postgres` in the existing backend job. This check uses two isolated schemas and synthetic browser evidence; it does not change release topology or activate the independent label worker. Require current-head CI and independent acceptance before merging the complete immutable package.

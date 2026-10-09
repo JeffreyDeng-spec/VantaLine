@@ -2290,3 +2290,9 @@ zero-argument getters, with the reviewed masked URL method on its provider owner
 TextMedia runtime checks follow the actual standard owner, its one constructor
 and exact StandardMediaStorage provider. Required/None/falsey and all media
 behavior tests remain; source guards reject unexpected owner edges.
+
+## Workstation domain composition
+
+`plc/workstation_composition.py` owns the existing workstation repository, station service and browser dispatch service. Seven typed external capability groups supply storage, identity and policy without selecting a connection, user, clock or file during construction. Internal calls use named methods that select the owned component after argument evaluation. The active-lease callback instead retains its original one-time station binding. Compatibility exports and route positions remain unchanged; assigning private entry aliases does not redirect owned internal edges.
+
+The original three business implementations remain byte-identical. Source contracts verify the actual owner and complete ordered root before replaying the narrowly recorded constructor relocation; original protocol assertions remain. The new actual-owner tests cover independent graphs with identical IDs, request-time identity, duplicate admission, persisted declaration before projection failure, uncertain timeout settlement and callback rollback. Manifest v259 adds the actual owner source for new task fingerprints; historical snapshots remain unchanged. This closes the three-service workstation graph, while lease/capture collaborators, pipeline and complete application lifecycle assembly remain pending.
