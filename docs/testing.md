@@ -2298,3 +2298,5 @@ The real-photo dataset CI fixture explicitly installs PyYAML. Shared RunPod base
 Definition-change tests cover one new initialization, revoked old tokens, and no reference-image rereads during unchanged status polling. Training submission also rechecks frozen class/reference content before enqueue.
 
 Dispatch fixtures assert task quantity rules (including zero requirements) remain frozen through dataset publication. Frontend validation covers explicit completed-candidate inclusion; actual model switching/continued feedback is part of pilot commissioning, not established by a typecheck.
+
+Real PostgreSQL workflow regressions now cover freezing before labels settle, late pending/failed originals outside the cohort, review/assessment precedence over older queued annotations, archived incomplete preparation, failed assessment stopping further paid admission, and explicit version rechecks without new photos or duplicate wakeups. These deterministic contracts do not establish private-business visual quality.

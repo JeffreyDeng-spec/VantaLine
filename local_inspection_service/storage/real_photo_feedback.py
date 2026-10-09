@@ -199,7 +199,8 @@ class RealPhotoRepository:
                 AND s.raw_json->>'enabled'='true' AND j.raw_json->>'epoch'=s.raw_json->>'epoch'
                 AND (j.kind='initialize' OR j.kind='mask' OR j.raw_json->'inputs'->>'explicit'='true'
                      OR (s.raw_json->'initialization' IS NOT NULL AND COALESCE(s.raw_json->>'pause_reason','')=''))
-                ORDER BY CASE WHEN j.kind='initialize' THEN 0 ELSE 1 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
+                ORDER BY CASE WHEN j.kind='initialize' THEN 0
+                    WHEN j.kind IN ('review','assess') THEN 1 ELSE 2 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
             rows = self.rows(c)
             if not rows:
                 return None

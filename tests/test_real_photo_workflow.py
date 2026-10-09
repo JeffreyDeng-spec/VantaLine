@@ -1,5 +1,6 @@
 """Review orchestration tests with deterministic reports, not visual accuracy claims."""
 import copy
+import pytest
 from test_real_photo_feedback import database,classes,state_fixture
 from local_inspection_service.training.real_photo_workflow import schedule,apply_result
 from local_inspection_service.training.real_photo_contracts import review_key
@@ -43,3 +44,90 @@ def test_failed_chunk_blocks_round_admission_and_never_replayed(database):
     schedule(repo,'a','task')
     assert repo.get('a','task')['pause_reason']
     assert not any(j['kind']=='train' for j in repo.jobs('a','task'))
+
+
+@pytest.mark.parametrize('future_failed',[False,True])
+def test_pending_cohort_freezes_before_late_unannotated_or_failed_arrival(database,future_failed):
+    repo=database();repo.enable('a','task',classes(),{})
+    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':20,'reason':'bounded first cohort'})
+    template=state_fixture()['samples']
+    for i,row in enumerate(template):
+        sample=copy.deepcopy(row);sample.pop('review')
+        if i==19:sample.pop('annotation')
+        repo.capture('a','task',sample)
+    schedule(repo,'a','task')
+    current=repo.get('a','task')['round']
+    assert current['candidate_count']==20 and len(current['sample_ids'])==20 and not current['review_jobs']
+    extra=copy.deepcopy(template[0]);extra.update(sample_id='late',image_sha256='late')
+    extra.pop('review');extra.pop('annotation');repo.capture('a','task',extra)
+    finish(repo,'annotate',lambda j:{'status':'completed','objects':template[19]['annotation']['objects'],'receipt':{}})
+    if future_failed:
+        job,token=repo.claim({'a'},{'annotate'},'model','fixture')
+        repo.finish(job['id'],token,{'error_type':'future fixture'},lambda *a:None,success=False)
+    schedule(repo,'a','task')
+    state=repo.get('a','task');current=state['round']
+    assert current['candidate_count']==20 and not state.get('pause_reason')
+    jobs=[repo.read_job(repo.repository._cursor(),jid) for jid in current['review_jobs']]
+    assert {s['sample_id'] for j in jobs for s in j['inputs']['samples']}=={str(i) for i in range(20)}
+    # The late annotation predates ready reviews; FIFO must not starve screening.
+    claimed=repo.claim({'a'},{'annotate','review'},'model','fixture')
+    assert claimed[0]['kind']=='review'
+
+
+def test_failed_cohort_annotation_archives_scope_and_allows_explicit_recovery(database):
+    repo=database();repo.enable('a','task',classes(),{})
+    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':20,'reason':'bounded cohort'})
+    for i,row in enumerate(state_fixture()['samples']):
+        sample=copy.deepcopy(row);sample.pop('review')
+        if i==19:sample.pop('annotation')
+        repo.capture('a','task',sample)
+    schedule(repo,'a','task')
+    job,token=repo.claim({'a'},{'annotate'},'model','fixture')
+    repo.finish(job['id'],token,{'error_type':'uncertain fixture'},lambda *a:None,success=False)
+    schedule(repo,'a','task');state=repo.get('a','task')
+    assert state['pause_reason'] and 'round' not in state
+    assert state['rounds'][-1]['status']=='annotation_incomplete'
+    assert len(state['rounds'][-1]['sample_ids'])==20
+    assert not any(j['kind'] in {'review','train'} for j in repo.jobs('a','task'))
+
+
+def test_failed_assessment_blocks_future_paid_annotation(database):
+    repo=ready(database);schedule(repo,'a','task')
+    for _ in range(2):
+        finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
+            'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
+    extra=copy.deepcopy(state_fixture()['samples'][0]);extra.update(sample_id='late',image_sha256='late')
+    extra.pop('review');extra.pop('annotation');repo.capture('a','task',extra)
+    schedule(repo,'a','task')
+    job,token=repo.claim({'a'},{'annotate','assess'},'model','fixture')
+    assert job['kind']=='assess'
+    repo.finish(job['id'],token,{'error_type':'failed fixture'},lambda *a:None,success=False)
+    schedule(repo,'a','task')
+    assert repo.get('a','task')['pause_reason'] and repo.claim({'a'},{'annotate'},'model','fixture') is None
+
+
+def test_explicit_annotation_version_rechecks_without_new_photo_or_duplicate_wakeup(database):
+    repo=ready(database);schedule(repo,'a','task')
+    for _ in range(2):
+        finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
+            'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
+    schedule(repo,'a','task')
+    finish(repo,'assess',lambda j:{'action':'collect','approved_real_target':20,'next_increment':5,
+                                 'reason':'additional scene variation','gaps':['more capture scenes']})
+    assert repo.get('a','task')['review_trigger']==25
+    def relabel(state,c):
+        sample=state['samples'][0];sample.setdefault('annotation_history',[]).append(sample.pop('annotation'))
+        repo.enqueue(c,state,'annotate','explicit-fixture',{'sample':sample,'classes':state['classes'],'profiles':{},'version':2,'explicit':True})
+    repo.mutate('a','task',relabel)
+    finish(repo,'annotate',lambda j:{'status':'completed','objects':[{'class_id':'a','bbox':[0,0,10,10]}],'receipt':{}})
+    schedule(repo,'a','task');current=repo.get('a','task')['round']
+    assert current['sample_ids']==['0'] and current['candidate_count']==20
+    finish(repo,'review',lambda j:{'decisions':[{'sample_id':'0','review_key':j['inputs']['samples'][0]['review_key'],
+        'decision':'accept_positive','reason':'new version checked'}]})
+    schedule(repo,'a','task')
+    finish(repo,'assess',lambda j:{'action':'collect','approved_real_target':20,'next_increment':5,
+                                 'reason':'additional scene variation','gaps':['more capture scenes']})
+    before=len(repo.jobs('a','task'));schedule(repo,'a','task');schedule(repo,'a','task')
+    state=repo.get('a','task')
+    assert len(state['samples'])==20 and state['review_trigger']==25 and not state['recheck_sample_ids']
+    assert 'round' not in state and len(repo.jobs('a','task'))==before

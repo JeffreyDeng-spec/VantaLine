@@ -582,3 +582,5 @@ Review scheduling serializes claims across workers, prioritizes initialization, 
 
 
 Accepted-real-photo training reservation uses the same durable PostgreSQL fence as screening. Dataset members, split assignments, base configuration and deterministic training identity are persisted before submission. A restarted Web process observes an existing training record without paid resubmission; absent/uncertain records pause for reconciliation. Changing class/profile definitions revokes queued/running old-epoch work rather than leaving it silently queued.
+
+Real-photo raw JSON adds frozen round sample_ids, reviewed_candidate_count and recheck_sample_ids without rewriting old records or changing the schema. Transactional claiming prioritizes ready review/assessment ahead of queued annotations. Old completed round records remain compatible. Annotation-incomplete cohort membership is retained in round history while admission pauses; no uncertain attempt is requeued.
