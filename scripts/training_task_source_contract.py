@@ -26,8 +26,6 @@ def ast_sha256(node):
 
 
 def restore_training_task_root(source):
-    from application_configuration_source_contract import restore_application_configuration_root
-    source = restore_application_configuration_root(source)
     from application_integration_source_contract import restore_integrated_root
     source = restore_integrated_root(source)
     tree = ast.parse(source)

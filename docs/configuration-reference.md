@@ -1850,3 +1850,5 @@ The composition source guard accepts partially replayed roots only when their en
 Provider dependency-capture tests substitute secret-key identification on the actual ProviderConfiguration instance. The same original A/B/C argument-time mutation and missing-callable assertions remain; other provider capabilities retain their existing locations. The temporary mock is restored on exit and changes no model call, key selection or retry algorithm.
 
 Pipeline resource availability still uses the configured BusinessFiles capability supplied to PipelineQueries. The test-only historical constructor oracle now verifies the actual owner before strict replay; no storage configuration, environment variable, runtime fallback or public API default changes.
+
+The training source-oracle ordering repair changes no configuration defaults or providers. Actual application configuration remains verified by the central integrated replay before the historical training contract is inspected; duplicated premature configuration replay is removed only from the test helper.
