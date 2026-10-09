@@ -180,3 +180,5 @@ The pipeline native runtime graph does not enable capture routes, server serial 
 The PipelineQueries assembly retains existing auto-optimization stop-capture capabilities and does not change browser ownership, workstation leases, diagnostic receipts, actual ACK or uncertain-write rules. It starts no legacy PLC polling worker.
 
 Pipeline Agent conversation/action composition preserves the existing supplied pause and pose execution capabilities. It changes no workstation/browser ownership, lease or actual ACK rules, and starts no PLC poller or worker.
+
+The PLC lease composition source-contract smoke now replays the validated outer PipelineStages delta before the existing domain deltas. PLC business code, browser lease/ACK behavior and physical I/O are unchanged; the original assertions remain and unknown outer wiring changes fail replay.

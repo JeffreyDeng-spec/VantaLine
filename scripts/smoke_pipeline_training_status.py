@@ -52,7 +52,8 @@ class PipelineTrainingStatusContracts(unittest.TestCase):
         self.addCleanup(self.stack.close)
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True))
+        from pipeline_stage_test_ports import patch_pipeline_stage
+        self.stack.enter_context(patch_pipeline_stage(self.api, name, value, create=True))
         return value
 
     def test_linked_early_return_avoids_all_calls(self):

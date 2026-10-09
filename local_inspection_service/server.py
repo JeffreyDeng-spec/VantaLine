@@ -10844,24 +10844,43 @@ def agent_mcp_training_quality_gate(task: dict[str, Any]) -> bool:
 from .pipeline.ai_activation import PipelineAiActivation
 from .pipeline.ai_activation_ports import ActivationPolicy, ActivationStorage
 
-_pipeline_ai_activation = PipelineAiActivation(
-    policy=ActivationPolicy(
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        HTTPException=lambda: HTTPException,
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-        clean_ai_detection_task_name=lambda: clean_ai_detection_task_name,
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        normalize_pipeline_detection_method=lambda: normalize_pipeline_detection_method,
-    ),
-    storage=ActivationStorage(
-        current_owner_fields=lambda: current_owner_fields,
-        find_ai_detection_task=lambda: find_ai_detection_task,
-        save_ai_detection_task=lambda: save_ai_detection_task,
-        serialize_ai_detection_task=lambda: serialize_ai_detection_task,
-        upsert_pipeline_ai_detection_task=lambda: upsert_pipeline_ai_detection_task,
-    ),
+from .pipeline.stage_composition import (
+    PipelineStages,
+    ActivationPolicyInputs,
+    ActivationStorageInputs,
+    PipelineAiIdentityInputs,
+    PipelineAiAccessoriesInputs,
+    PipelineAiAccessInputs,
+    PipelineAiProjectionInputs,
+    TrainingJobLookupInputs,
+    TrainingStatusEffectsInputs,
+    StageAdvancePolicyInputs,
+    StageAdvanceAssetsInputs,
+    StageAdvanceJobsInputs,
+    StageAdvanceRuntimeInputs,
+    ReconciliationRegistryInputs,
+    ReconciliationCallsInputs
 )
+
+_pipeline_stages = PipelineStages(
+    queries=_pipeline_queries,
+    runtime=_pipeline_runtime,
+    activation_policy=ActivationPolicyInputs(HTTPException=lambda: HTTPException, accessory_lookup_by_id=lambda: accessory_lookup_by_id, clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id),
+    activation_storage=ActivationStorageInputs(current_owner_fields=lambda: current_owner_fields, find_ai_detection_task=lambda: find_ai_detection_task, save_ai_detection_task=lambda: save_ai_detection_task, serialize_ai_detection_task=lambda: serialize_ai_detection_task),
+    pipeline_ai_identity=PipelineAiIdentityInputs(safe_record_id=lambda: safe_record_id, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id, ai_detection_task_model_id=lambda: ai_detection_task_model_id),
+    pipeline_ai_accessories=PipelineAiAccessoriesInputs(accessory_lookup_by_id=lambda: accessory_lookup_by_id, accessory_material_type=lambda: accessory_material_type),
+    pipeline_ai_access=PipelineAiAccessInputs(source=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE, record_visible_to_user=lambda: record_visible_to_user, load_ai_detection_tasks=lambda: load_ai_detection_tasks),
+    pipeline_ai_projection=PipelineAiProjectionInputs(clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, now=lambda: time.time),
+    training_job_lookup=TrainingJobLookupInputs(load=lambda: load_training_task, path=lambda: training_task_path, public=lambda: public_refreshed_training_task),
+    training_status_effects=TrainingStatusEffectsInputs(orchestration=lambda: agent_mcp_orchestration, set_stage=lambda: set_agent_mcp_stage),
+    stage_advance_policy=StageAdvancePolicyInputs(recommend=lambda: agent_recommendation, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, training_quality=lambda: agent_mcp_training_quality_gate, link_model=lambda: link_pipeline_trained_model, http_error=lambda: HTTPException, cancelled_error=lambda: PipelineAdvanceCancelled),
+    stage_advance_assets=StageAdvanceAssetsInputs(load_config=lambda: load_config, save_config=lambda: save_config, prepare=lambda: prepare_agent_mcp_before_sample_generation, materialize=lambda: materialize_agent_mcp_pose_assets, normalize=lambda: ensure_training_normalized_assets_for_selection),
+    stage_advance_jobs=StageAdvanceJobsInputs(request_type=lambda: TrainingStartRequest, sample_generation=lambda: request_sample_generation, training=lambda: request_training, task_name=lambda: task_record_name, log_samples=lambda: log_agent_mcp_sample_tool_call, log_training=lambda: log_agent_mcp_training_tool_call),
+    stage_advance_runtime=StageAdvanceRuntimeInputs(persist_progress=lambda: persist_pipeline_task_progress, monotonic=lambda: time.monotonic, clock=lambda: time.time, print=lambda: print),
+    reconciliation_registry=ReconciliationRegistryInputs(timeout=lambda: PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S, now=lambda: time.time),
+    reconciliation_calls=ReconciliationCallsInputs(load_agent_config=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, training_finder=lambda: training_task_finder, orchestration=lambda: agent_mcp_orchestration)
+)
+_pipeline_ai_activation = _pipeline_stages.activation
 
 
 def upsert_pipeline_ai_detection_task(task: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -10889,30 +10908,7 @@ from .pipeline.ai_task_sync_ports import (
     PipelineAiProjection as _PipelineAiProjection,
 )
 
-_pipeline_ai_task_sync = _PipelineAiTaskSync(
-    _PipelineAiIdentity(
-        safe_record_id=lambda: safe_record_id,
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        ai_detection_task_model_id=lambda: ai_detection_task_model_id,
-    ),
-    _PipelineAiAccessories(
-        accessory_lookup_by_id=lambda: accessory_lookup_by_id,
-        canonical_pipeline_accessory_ids=lambda: canonical_pipeline_accessory_ids,
-        accessory_material_type=lambda: accessory_material_type,
-        normalize_pipeline_accessory_counts=lambda: normalize_pipeline_accessory_counts,
-    ),
-    _PipelineAiAccess(
-        source=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE,
-        record_visible_to_user=lambda: record_visible_to_user,
-        load_ai_detection_tasks=lambda: load_ai_detection_tasks,
-    ),
-    _PipelineAiProjection(
-        clean_ai_detection_task_name=lambda: clean_ai_detection_task_name,
-        training_route=lambda: pipeline_ai_task_training_route,
-        task_id=lambda: pipeline_ai_task_id,
-        now=lambda: time.time,
-    ),
-)
+_pipeline_ai_task_sync = _pipeline_stages.ai_sync
 
 
 def pipeline_ai_task_id(ai_task_id: str) -> str:
@@ -10951,18 +10947,7 @@ from .pipeline.training_status_ports import (
     TrainingJobLookup as _TrainingJobLookup,
     TrainingStatusEffects as _TrainingStatusEffects,
 )
-_pipeline_training_status = _PipelineTrainingStatus(
-    _TrainingJobLookup(
-        load=lambda: load_training_task,
-        path=lambda: training_task_path,
-        public=lambda: public_refreshed_training_task,
-        linked=lambda: linked_training_job,
-    ),
-    _TrainingStatusEffects(
-        orchestration=lambda: agent_mcp_orchestration,
-        set_stage=lambda: set_agent_mcp_stage,
-    ),
-)
+_pipeline_training_status = _pipeline_stages.training
 
 
 def linked_training_job(
@@ -10996,42 +10981,7 @@ from .pipeline.stage_advance_ports import (
     StageAdvanceRuntime as _StageAdvanceRuntime,
 )
 
-_pipeline_stage_advancer = _PipelineStageAdvancer(
-    _StageAdvancePolicy(
-        detection_method=lambda: normalize_pipeline_detection_method,
-        consume_recommendation=lambda: consume_pipeline_recommendation,
-        recommend=lambda: agent_recommendation,
-        canonical_accessories=lambda: canonical_pipeline_accessory_ids,
-        orchestration=lambda: agent_mcp_orchestration,
-        pause=lambda: pause_agent_mcp_task,
-        training_quality=lambda: agent_mcp_training_quality_gate,
-        link_model=lambda: link_pipeline_trained_model,
-        http_error=lambda: HTTPException,
-        cancelled_error=lambda: PipelineAdvanceCancelled,
-    ),
-    _StageAdvanceAssets(
-        load_config=lambda: load_config,
-        save_config=lambda: save_config,
-        activate_ai=lambda: activate_pipeline_ai_detection_task,
-        prepare=lambda: prepare_agent_mcp_before_sample_generation,
-        materialize=lambda: materialize_agent_mcp_pose_assets,
-        normalize=lambda: ensure_training_normalized_assets_for_selection,
-    ),
-    _StageAdvanceJobs(
-        request_type=lambda: TrainingStartRequest,
-        sample_generation=lambda: request_sample_generation,
-        training=lambda: request_training,
-        task_name=lambda: task_record_name,
-        log_samples=lambda: log_agent_mcp_sample_tool_call,
-        log_training=lambda: log_agent_mcp_training_tool_call,
-    ),
-    _StageAdvanceRuntime(
-        persist_progress=lambda: persist_pipeline_task_progress,
-        monotonic=lambda: time.monotonic,
-        clock=lambda: time.time,
-        print=lambda: print,
-    ),
-)
+_pipeline_stage_advancer = _pipeline_stages.advance
 
 
 def advance_pipeline_task(task: dict[str, Any], cancel_event: "threading.Event | None" = None) -> None:
@@ -11195,28 +11145,7 @@ from .pipeline.reconciliation_ports import (
     ReconciliationRegistry as _ReconciliationRegistry,
     ReconciliationCalls as _ReconciliationCalls,
 )
-_pipeline_reconciliation = _PipelineReconciliation(
-    _ReconciliationPolicy(
-        normalize=lambda: normalize_pipeline_detection_method,
-        uses_training=lambda: pipeline_method_uses_training,
-    ),
-    _ReconciliationRegistry(
-        lock=lambda: _pipeline_advance_registry_lock,
-        inflight=lambda: _pipeline_advance_inflight,
-        timeout=lambda: PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S,
-        now=lambda: time.time,
-    ),
-    _ReconciliationCalls(
-        load_agent_config=lambda: load_agent_config,
-        supported=lambda: agent_recommendation_supported,
-        training_finder=lambda: training_task_finder,
-        reap=lambda: reap_pipeline_advance_zombie,
-        sync=lambda: sync_pipeline_task,
-        needs_auto_agent=lambda: pipeline_task_needs_auto_agent,
-        orchestration=lambda: agent_mcp_orchestration,
-        signature=lambda: pipeline_task_decision_signature,
-    ),
-)
+_pipeline_reconciliation = _pipeline_stages.reconciliation
 
 
 def pipeline_task_decision_signature(task: dict[str, Any]) -> str:
@@ -11319,17 +11248,7 @@ from .pipeline.recommendation_ports import (
     PipelineRecommendationMethodPolicy as _PipelineRecommendationMethodPolicy,
 )
 
-_pipeline_recommendations = _PipelineRecommendations(
-    _PipelineRecommendationMethodPolicy(
-        normalize=lambda: normalize_pipeline_detection_method,
-        uses_training=lambda: pipeline_method_uses_training,
-    ),
-    _PipelineRecommendationLinks(
-        signature=lambda: pipeline_recommendation_signature,
-        next_stage=lambda: pipeline_next_recommendation_stage,
-        ready=lambda: pipeline_recommendation_ready,
-    ),
-)
+_pipeline_recommendations = _pipeline_stages.recommendations
 
 
 def pipeline_recommendation_signature(task: dict[str, Any], stage: str) -> str:

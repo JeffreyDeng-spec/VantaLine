@@ -90,7 +90,8 @@ class StageAdvanceContract(unittest.TestCase):
         self.replace("link_pipeline_trained_model", lambda task: events.append("link-model"))
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True))
+        from pipeline_stage_test_ports import patch_pipeline_stage
+        self.stack.enter_context(patch_pipeline_stage(self.api, name, value, create=True))
 
     def run_advance(self):
         self.api.advance_pipeline_task(self.task, self.cancel)

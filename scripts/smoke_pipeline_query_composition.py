@@ -209,9 +209,9 @@ class QueryCompositionContracts(unittest.TestCase):
         self.assertEqual(f.owner.pipeline_task_dataset_status({'dataset_id':'same'}),'available')
 
     def test_source_inverse_rejects_wrong_owned_targets(self):
-        from application_integration_source_contract import ROOT,AGENT_PIPELINE,PIPELINE_QUERIES,digest,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,digest,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(source,AGENT_PIPELINE),PIPELINE_QUERIES))),PIPELINE_QUERIES['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(source,PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES))),PIPELINE_QUERIES['parent_ast_sha256'])
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):
             restore_plc_domain_root(source.replace('_pipeline_candidate_flow = _pipeline_queries.candidates',

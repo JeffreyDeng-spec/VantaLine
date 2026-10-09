@@ -22,7 +22,11 @@ NAMES = {'mutate_plc_runtime_coordination', 'plc_completed_capture_receipt',
 def build():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
-    for node in ast.parse(source.read_text(encoding='utf-8-sig')).body:
+    text = source.read_text(encoding='utf-8-sig')
+    if not BASELINE:
+        from application_integration_source_contract import restore_plc_domain_root
+        text = restore_plc_domain_root(text)
+    for node in ast.parse(text).body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
             nodes.append(node)
         elif not BASELINE and isinstance(node, ast.ImportFrom) and node.module == 'plc.legacy_coordination':

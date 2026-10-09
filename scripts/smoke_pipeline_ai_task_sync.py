@@ -59,7 +59,8 @@ class PipelineAiTaskSyncContracts(unittest.TestCase):
         self.stack.enter_context(patch.object(self.api.time, "time", return_value=77.9))
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        from pipeline_stage_test_ports import patch_pipeline_stage
+        return self.stack.enter_context(patch_pipeline_stage(self.api, name, **kwargs))
 
     def sync(self, tasks=None, ai_tasks=None, use_default=False):
         tasks = [] if tasks is None else tasks
@@ -318,7 +319,7 @@ class PipelineAiTaskSyncContracts(unittest.TestCase):
         class SelectedId:
             def __str__(inner):
                 events.append(("stringify",))
-                self.api.canonical_pipeline_accessory_ids = replacement
+                self.api._pipeline_stages.canonical_pipeline_accessory_ids = replacement
                 return "part"
         self.ai["selected_accessory_ids"] = [SelectedId()]
         self.assertEqual(self.api.pipeline_ai_task_training_route(self.ai, self.config), "yolo")
@@ -330,11 +331,11 @@ class PipelineAiTaskSyncContracts(unittest.TestCase):
         id_calls = []
         def first_route(record, config):
             route_calls.append(record["id"])
-            self.api.pipeline_ai_task_training_route = lambda record, config: "late-route"
+            self.api._pipeline_stages.pipeline_ai_task_training_route = lambda record, config: "late-route"
             return "first-route"
         def first_id(value):
             id_calls.append(value)
-            self.api.pipeline_ai_task_id = lambda value: "late-" + value
+            self.api._pipeline_stages.pipeline_ai_task_id = lambda value: "late-" + value
             return "first-" + value
         self.replace("pipeline_ai_task_training_route", new=first_route)
         self.replace("pipeline_ai_task_id", new=first_id)

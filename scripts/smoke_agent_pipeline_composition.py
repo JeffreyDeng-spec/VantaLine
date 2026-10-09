@@ -229,9 +229,9 @@ class AgentCompositionContracts(unittest.TestCase):
         self.assertEqual(result['accessory_count'],1);self.assertEqual(selected,[['a']]);self.assertEqual(late,[])
 
     def test_strict_source_inverse_rejects_owner_or_provider_mutation(self):
-        from application_integration_source_contract import ROOT,AGENT_PIPELINE,digest,restore_delta,restore_plc_domain_root
+        from application_integration_source_contract import ROOT,PIPELINE_STAGES,AGENT_PIPELINE,digest,restore_delta,restore_plc_domain_root
         source=(ROOT/'local_inspection_service/server.py').read_text()
-        self.assertEqual(digest(ast.parse(restore_delta(source,AGENT_PIPELINE))),AGENT_PIPELINE['parent_ast_sha256'])
+        self.assertEqual(digest(ast.parse(restore_delta(restore_delta(source,PIPELINE_STAGES),AGENT_PIPELINE))),AGENT_PIPELINE['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in (('_agent_decision_flow = _agent_pipeline_workflows.decision','_agent_decision_flow = _agent_pipeline_workflows.policy'),
             ('model_resolver=resolve_model_profiles,','model_resolver=lambda: resolve_model_profiles,')):
