@@ -1826,3 +1826,5 @@ Lease/diagnostic composition introduces no configuration flag, model setting or 
 Capture composition adds no configuration or environment switch. The two retained capture state owners use existing configuration, generation, receipt and runtime keys through operation-time suppliers. Historical model snapshots are untouched; prompt source manifest v261 includes the actual new capture_composition.py module.
 
 PipelinePersistence introduces no new business configuration. Model resolver suppliers retain both callable layers and save_pipeline_task freezes before encoding or repository selection. Manifest v262 includes the actual pipeline/persistence_composition.py source without rewriting task snapshots. Task/state path suppliers keep their existing operation-time selection.
+
+PipelineExecution adds no model or worker configuration. It retains the original ResolverProvider object and native task ID/stage/user signatures. Existing task model_profiles takes precedence when binding; missing resolver fails explicitly before the runtime body. Manifest v263 includes pipeline/execution_composition.py; task snapshots and prompts are unchanged.

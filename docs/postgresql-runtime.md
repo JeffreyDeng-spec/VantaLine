@@ -804,3 +804,5 @@ independent owners. Current manifest v258 contains 568 actual sources. Complete
 application assembly and current-head hosted/release gates remain pending.
 
 PipelinePersistence supplies the existing operation-time PostgreSQL repository to TaskStore and StateStore. Model snapshots still freeze before a task write, and state-key updates keep their original transactional commit behavior. The state RLock and task Lock remain distinct; no schema migration, database lock removal or additional task-store lock is included. Actual graph validation uses two disposable schemas with simultaneous state updates, terminal synchronization and exception-before-write checks.
+
+PipelineExecution retains ThreadRepositoryFactory scope around every actual native thread, including the model-binding loader before runtime.run and scope exit after identity/model restoration. Two-schema tests exercise all three runtime types and auto-to-advance handoff with identical IDs and independent account snapshots, and verify every created connection closes. No schema or advisory-lock changes are introduced.

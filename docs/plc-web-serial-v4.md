@@ -174,3 +174,5 @@ Lease and diagnostic composition selects the same supplied workstation graph. Di
 Retained capture state uses PlcCaptureWorkflows for coordination, expiry and durable receipts. This does not enable legacy capture routes (410), change the no-op start_plc_runtime_workers hook, or start a server serial poller. Browser-only PLC I/O, uncertain-write non-retry and distinct lease epochs remain required.
 
 Pipeline persistence assembly leaves capture 410 routes, browser workstation ownership, PLC plan/ACK contracts, and the no-op server PLC startup unchanged. The capture and workstation state machines retain separate owners.
+
+The pipeline native runtime graph does not enable capture routes, server serial workers or PLC transport factories. Only leased browser dispatch retains physical I/O authority; ordinary pipeline/image tasks do not gain PLC write permissions.

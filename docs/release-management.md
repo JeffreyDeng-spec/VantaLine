@@ -1590,3 +1590,5 @@ The backend job additionally runs `smoke_plc_lease_diagnostic_composition.py --p
 The retained capture state graph does not change the deployment topology. It must not activate server-side PLC workers as part of application assembly. Full application factory, hosted performance acceptance and label worker production cutover remain separate unfinished checks.
 
 The pipeline persistence checkpoint is compatible with the existing single Web process topology and requires no migration or worker activation. Preserve the full immutable release for rollback; task snapshots are not rewritten. Its CI adds an isolated PostgreSQL graph regression. Hosted list performance acceptance, full application factory and production label-worker cutover remain unfinished gates.
+
+The three pipeline runtime lifecycle owners retain their existing order: close auto-agent producers before advance and recommendation consumers. A false drain result must keep following dependencies available; blocked repository scope exit and uncertain thread start are not reported as drained. This assembly checkpoint leaves deployment topology and standalone label-worker activation unchanged.

@@ -11293,40 +11293,38 @@ from .pipeline.auto_agent_runtime_ports import (
     AutoAgentScheduling as _AutoAgentScheduling,
     AutoAgentTasks as _AutoAgentTasks,
 )
-_pipeline_auto_agent_runtime = _PipelineAutoAgentRuntime(
-    _AutoAgentTasks(
-        lock=lambda: _pipeline_tasks_lock,
-        load=lambda: load_pipeline_task,
-        needs_agent=lambda: pipeline_task_needs_auto_agent,
-        orchestration=lambda: agent_mcp_orchestration,
-        signature=lambda: pipeline_task_decision_signature,
-        max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS,
-        pause=lambda: pause_agent_mcp_task,
-        append_conversation=lambda: agent_mcp_append_conversation,
-        save=lambda: save_pipeline_task,
-        deepcopy=lambda: copy.deepcopy,
-    ),
-    _AutoAgentDecision(
-        scope_config=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        decide=lambda: agent_pipeline_decide,
-        commit=lambda: commit_pipeline_agent_turn,
-        now=lambda: agent_mcp_now,
-        schedule_advance=lambda: schedule_pipeline_advance,
-    ),
-    _AutoAgentExecution(
-        identity=lambda: _request_user,
-        traceback=lambda: traceback.print_exc,
-        stderr=lambda: sys.stderr,
-    ),
-    _AutoAgentScheduling(
-        lock=lambda: _pipeline_auto_agent_lock,
-        inflight=lambda: _pipeline_auto_agent_inflight,
-        thread=lambda: threading.Thread,
-        runner=lambda: _run_pipeline_auto_agent_step,
-    ),
-    scope=_runtime_repositories.thread_scope,
+from .pipeline.execution_composition import (
+    PipelineExecution,
+    PipelineAutoAgentTasksInputs,
+    PipelineAutoAgentDecisionInputs,
+    PipelineAutoAgentExecutionInputs,
+    PipelineAutoAgentSchedulingInputs,
+    PipelineAdvanceTasksInputs,
+    PipelineAdvancePolicyInputs,
+    PipelineAdvanceExecutionInputs,
+    PipelineAdvanceSchedulingInputs,
+    PipelineRecommendationTasksInputs,
+    PipelineRecommendationExecutionInputs,
+    PipelineRecommendationSchedulingInputs
 )
+
+_pipeline_execution = PipelineExecution(
+    persistence=_pipeline_persistence,
+    model_resolver=resolve_model_profiles,
+    scope=_runtime_repositories.thread_scope,
+    auto_tasks=PipelineAutoAgentTasksInputs(needs_agent=lambda: pipeline_task_needs_auto_agent, orchestration=lambda: agent_mcp_orchestration, signature=lambda: pipeline_task_decision_signature, max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS, pause=lambda: pause_agent_mcp_task, append_conversation=lambda: agent_mcp_append_conversation, deepcopy=lambda: copy.deepcopy),
+    auto_decision=PipelineAutoAgentDecisionInputs(scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, decide=lambda: agent_pipeline_decide, commit=lambda: commit_pipeline_agent_turn, now=lambda: agent_mcp_now),
+    auto_execution=PipelineAutoAgentExecutionInputs(identity=lambda: _request_user, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
+    auto_scheduling=PipelineAutoAgentSchedulingInputs(thread=lambda: threading.Thread),
+    advance_tasks=PipelineAdvanceTasksInputs(sync=lambda: sync_pipeline_task, deepcopy=lambda: copy.deepcopy),
+    advance_policy=PipelineAdvancePolicyInputs(advance=lambda: advance_pipeline_task, cancelled_error=lambda: PipelineAdvanceCancelled, http_error=lambda: HTTPException, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, bounded_text=lambda: bounded_text),
+    advance_execution=PipelineAdvanceExecutionInputs(identity=lambda: _request_user, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr, print=lambda: print),
+    advance_scheduling=PipelineAdvanceSchedulingInputs(event=lambda: threading.Event, thread=lambda: threading.Thread),
+    recommendation_tasks=PipelineRecommendationTasksInputs(next_stage=lambda: pipeline_next_recommendation_stage, ready=lambda: pipeline_recommendation_ready, signature=lambda: pipeline_recommendation_signature),
+    recommendation_execution=PipelineRecommendationExecutionInputs(identity=lambda: _request_user, recommend=lambda: agent_recommendation, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
+    recommendation_scheduling=PipelineRecommendationSchedulingInputs(thread=lambda: threading.Thread)
+)
+_pipeline_auto_agent_runtime = _pipeline_execution.auto
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))
@@ -11345,42 +11343,7 @@ from .pipeline.advance_runtime_ports import (
     AdvanceScheduling as _AdvanceScheduling,
     AdvanceTasks as _AdvanceTasks,
 )
-_pipeline_advance_runtime = _PipelineAdvanceRuntime(
-    _AdvanceTasks(
-        lock=lambda: _pipeline_tasks_lock,
-        load=lambda: load_pipeline_task,
-        sync=lambda: sync_pipeline_task,
-        save=lambda: save_pipeline_task,
-        deepcopy=lambda: copy.deepcopy,
-    ),
-    _AdvancePolicy(
-        advance=lambda: advance_pipeline_task,
-        guarded=lambda: advance_pipeline_task_guarded,
-        cancelled_error=lambda: PipelineAdvanceCancelled,
-        http_error=lambda: HTTPException,
-        orchestration=lambda: agent_mcp_orchestration,
-        pause=lambda: pause_agent_mcp_task,
-        bounded_text=lambda: bounded_text,
-    ),
-    _AdvanceExecution(
-        identity=lambda: _request_user,
-        scope_config=lambda: scope_config_for_user,
-        load_config=lambda: load_config,
-        clock=lambda: time.time,
-        traceback=lambda: traceback.print_exc,
-        stderr=lambda: sys.stderr,
-        print=lambda: print,
-    ),
-    _AdvanceScheduling(
-        registry_lock=lambda: _pipeline_advance_registry_lock,
-        inflight=lambda: _pipeline_advance_inflight,
-        cancel_events=lambda: _pipeline_advance_cancel,
-        event=lambda: threading.Event,
-        thread=lambda: threading.Thread,
-        runner=lambda: _run_pipeline_advance,
-    ),
-    scope=_runtime_repositories.thread_scope,
-)
+_pipeline_advance_runtime = _pipeline_execution.advance
 
 
 def advance_pipeline_task_guarded(
@@ -11452,30 +11415,7 @@ from .pipeline.recommendation_runtime_ports import (
     RecommendationScheduling as _RecommendationScheduling,
     RecommendationTasks as _RecommendationTasks,
 )
-_pipeline_recommendation_runtime = _PipelineRecommendationRuntime(
-    _RecommendationTasks(
-        lock=lambda: _pipeline_tasks_lock,
-        load=lambda: load_pipeline_task,
-        next_stage=lambda: pipeline_next_recommendation_stage,
-        ready=lambda: pipeline_recommendation_ready,
-        signature=lambda: pipeline_recommendation_signature,
-        save=lambda: save_pipeline_task,
-    ),
-    _RecommendationExecution(
-        identity=lambda: _request_user,
-        recommend=lambda: agent_recommendation,
-        clock=lambda: time.time,
-        traceback=lambda: traceback.print_exc,
-        stderr=lambda: sys.stderr,
-    ),
-    _RecommendationScheduling(
-        lock=lambda: _pipeline_recommendation_lock,
-        inflight=lambda: _pipeline_recommendation_inflight,
-        thread=lambda: threading.Thread,
-        runner=lambda: _run_pipeline_recommendation_pregen,
-    ),
-    scope=_runtime_repositories.thread_scope,
-)
+_pipeline_recommendation_runtime = _pipeline_execution.recommendation
 
 
 @pinned_model_profiles(resolve_model_profiles, lambda identity: load_pipeline_task(identity))

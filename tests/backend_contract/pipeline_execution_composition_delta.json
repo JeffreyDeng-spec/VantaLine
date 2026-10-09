@@ -1,0 +1,45 @@
+{
+  "parent_sha": "eeb3657b348189e07b7efb17575e4c032af62b6a",
+  "parent_ast_sha256": "68c34d35ca2a88015ee8b80f2666453f06dc6da7daf4e06583f48eb45b8764ca",
+  "integrated_ast_sha256": "73f28a35435c5afa3764742a316faf5a2552fe3d03713234dbc2d548c3a5a83a",
+  "regions": [
+    {
+      "start": 2545,
+      "end": 2548,
+      "expected": [
+        "from .pipeline.execution_composition import PipelineExecution, PipelineAutoAgentTasksInputs, PipelineAutoAgentDecisionInputs, PipelineAutoAgentExecutionInputs, PipelineAutoAgentSchedulingInputs, PipelineAdvanceTasksInputs, PipelineAdvancePolicyInputs, PipelineAdvanceExecutionInputs, PipelineAdvanceSchedulingInputs, PipelineRecommendationTasksInputs, PipelineRecommendationExecutionInputs, PipelineRecommendationSchedulingInputs",
+        "_pipeline_execution = PipelineExecution(persistence=_pipeline_persistence, model_resolver=resolve_model_profiles, scope=_runtime_repositories.thread_scope, auto_tasks=PipelineAutoAgentTasksInputs(needs_agent=lambda: pipeline_task_needs_auto_agent, orchestration=lambda: agent_mcp_orchestration, signature=lambda: pipeline_task_decision_signature, max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS, pause=lambda: pause_agent_mcp_task, append_conversation=lambda: agent_mcp_append_conversation, deepcopy=lambda: copy.deepcopy), auto_decision=PipelineAutoAgentDecisionInputs(scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, decide=lambda: agent_pipeline_decide, commit=lambda: commit_pipeline_agent_turn, now=lambda: agent_mcp_now), auto_execution=PipelineAutoAgentExecutionInputs(identity=lambda: _request_user, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr), auto_scheduling=PipelineAutoAgentSchedulingInputs(thread=lambda: threading.Thread), advance_tasks=PipelineAdvanceTasksInputs(sync=lambda: sync_pipeline_task, deepcopy=lambda: copy.deepcopy), advance_policy=PipelineAdvancePolicyInputs(advance=lambda: advance_pipeline_task, cancelled_error=lambda: PipelineAdvanceCancelled, http_error=lambda: HTTPException, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, bounded_text=lambda: bounded_text), advance_execution=PipelineAdvanceExecutionInputs(identity=lambda: _request_user, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr, print=lambda: print), advance_scheduling=PipelineAdvanceSchedulingInputs(event=lambda: threading.Event, thread=lambda: threading.Thread), recommendation_tasks=PipelineRecommendationTasksInputs(next_stage=lambda: pipeline_next_recommendation_stage, ready=lambda: pipeline_recommendation_ready, signature=lambda: pipeline_recommendation_signature), recommendation_execution=PipelineRecommendationExecutionInputs(identity=lambda: _request_user, recommend=lambda: agent_recommendation, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr), recommendation_scheduling=PipelineRecommendationSchedulingInputs(thread=lambda: threading.Thread))",
+        "_pipeline_auto_agent_runtime = _pipeline_execution.auto"
+      ],
+      "original": [
+        "_pipeline_auto_agent_runtime = _PipelineAutoAgentRuntime(_AutoAgentTasks(lock=lambda: _pipeline_tasks_lock, load=lambda: load_pipeline_task, needs_agent=lambda: pipeline_task_needs_auto_agent, orchestration=lambda: agent_mcp_orchestration, signature=lambda: pipeline_task_decision_signature, max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS, pause=lambda: pause_agent_mcp_task, append_conversation=lambda: agent_mcp_append_conversation, save=lambda: save_pipeline_task, deepcopy=lambda: copy.deepcopy), _AutoAgentDecision(scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, decide=lambda: agent_pipeline_decide, commit=lambda: commit_pipeline_agent_turn, now=lambda: agent_mcp_now, schedule_advance=lambda: schedule_pipeline_advance), _AutoAgentExecution(identity=lambda: _request_user, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr), _AutoAgentScheduling(lock=lambda: _pipeline_auto_agent_lock, inflight=lambda: _pipeline_auto_agent_inflight, thread=lambda: threading.Thread, runner=lambda: _run_pipeline_auto_agent_step), scope=_runtime_repositories.thread_scope)"
+      ]
+    },
+    {
+      "start": 2552,
+      "end": 2553,
+      "expected": [
+        "_pipeline_advance_runtime = _pipeline_execution.advance"
+      ],
+      "original": [
+        "_pipeline_advance_runtime = _PipelineAdvanceRuntime(_AdvanceTasks(lock=lambda: _pipeline_tasks_lock, load=lambda: load_pipeline_task, sync=lambda: sync_pipeline_task, save=lambda: save_pipeline_task, deepcopy=lambda: copy.deepcopy), _AdvancePolicy(advance=lambda: advance_pipeline_task, guarded=lambda: advance_pipeline_task_guarded, cancelled_error=lambda: PipelineAdvanceCancelled, http_error=lambda: HTTPException, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, bounded_text=lambda: bounded_text), _AdvanceExecution(identity=lambda: _request_user, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr, print=lambda: print), _AdvanceScheduling(registry_lock=lambda: _pipeline_advance_registry_lock, inflight=lambda: _pipeline_advance_inflight, cancel_events=lambda: _pipeline_advance_cancel, event=lambda: threading.Event, thread=lambda: threading.Thread, runner=lambda: _run_pipeline_advance), scope=_runtime_repositories.thread_scope)"
+      ]
+    },
+    {
+      "start": 2566,
+      "end": 2567,
+      "expected": [
+        "_pipeline_recommendation_runtime = _pipeline_execution.recommendation"
+      ],
+      "original": [
+        "_pipeline_recommendation_runtime = _PipelineRecommendationRuntime(_RecommendationTasks(lock=lambda: _pipeline_tasks_lock, load=lambda: load_pipeline_task, next_stage=lambda: pipeline_next_recommendation_stage, ready=lambda: pipeline_recommendation_ready, signature=lambda: pipeline_recommendation_signature, save=lambda: save_pipeline_task), _RecommendationExecution(identity=lambda: _request_user, recommend=lambda: agent_recommendation, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr), _RecommendationScheduling(lock=lambda: _pipeline_recommendation_lock, inflight=lambda: _pipeline_recommendation_inflight, thread=lambda: threading.Thread, runner=lambda: _run_pipeline_recommendation_pregen), scope=_runtime_repositories.thread_scope)"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "ec1ad23a23c9d70ef0ea599d348401efb17f2402363702ad11145e45e6aa56c0",
+  "unchanged_business_sha256": {
+    "local_inspection_service/pipeline/auto_agent_runtime.py": "aaf299f889d64657ed804b1aa5099730732daa1ee34e5535e5271a3c279809f9",
+    "local_inspection_service/pipeline/advance_runtime.py": "a4974301f8eadcb5d85bea9ddde1bc3b53301c753c8b4d29eff99d56407a5a1d",
+    "local_inspection_service/pipeline/recommendation_runtime.py": "075623bf367311948428e8436cc00ec73f29e2900bbe365fb4ed781e25180e75"
+  }
+}
