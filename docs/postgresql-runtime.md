@@ -588,3 +588,6 @@ Real-photo raw JSON adds frozen round sample_ids, reviewed_candidate_count and r
 Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
+
+
+Migration 2026_10_10_artifact_prefix_index is additive and idempotent. idx_artifact_prefix_c indexes logical_path under explicit C collation and descending generation. Literal descendants use the byte interval [prefix + slash, prefix + zero); latest-generation state is resolved before ready filtering. Directory reads return distinct first relative components only when a descendant slash exists, without decoding all artifact rows. Historical versions and tombstones remain intact. Existing per-operation transactions and CAS/advisory writer fencing are unchanged.

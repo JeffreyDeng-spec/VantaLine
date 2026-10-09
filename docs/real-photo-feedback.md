@@ -53,3 +53,6 @@ Review membership is frozen at the cumulative candidate trigger before annotatio
 Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
+
+
+VLM 图片输入先限制长边：类别参考图 1024 像素、实拍原图 2048 像素，只等比缩放，不裁剪或隐式旋转。回执同时记录原图尺寸、输入尺寸、原图哈希、输入哈希及原图到输入的缩放矩阵；归一化框仍换算到原图像素坐标。准备阶段失败结算为失败标注版本，显示固定阶段代码，不记成已发生的付费调用；必须由用户主动重标，不自动重放。

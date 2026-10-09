@@ -23,6 +23,16 @@ class ArtifactStore:
     def list(self, prefix: str):
         return self.locations.list(logical_path(prefix))
 
+    def directories(self, prefix: str):
+        prefix = logical_path(prefix)
+        projection = getattr(self.locations, "directories", None)
+        if projection is not None:
+            return projection(prefix)
+        # In-memory/local adapters retain the same semantics.
+        base = prefix + "/"
+        return sorted({row.path[len(base):].split("/", 1)[0]
+                       for row in self.list(prefix) if "/" in row.path[len(base):]})
+
     def put_bytes(self, path: str, data: bytes, *, expected_generation: int) -> Artifact:
         path = logical_path(path)
         before = self.locations.get(path)

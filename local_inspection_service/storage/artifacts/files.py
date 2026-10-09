@@ -242,10 +242,7 @@ class BusinessFiles:
                 names.update(item.name for item in path.iterdir() if item.is_dir())
         if runtime is not None:
             prefix = runtime.key(path)
-            for row in runtime.store.list(prefix):
-                relative = Path(row.path).relative_to(prefix)
-                if len(relative.parts) > 1:
-                    names.add(relative.parts[0])
+            names.update(runtime.store.directories(prefix))
         return [path / name for name in sorted(names)]
 
     def read_bytes(self, path, *, max_bytes=120*1024*1024):

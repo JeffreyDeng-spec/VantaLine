@@ -1322,3 +1322,6 @@ The real-photo review trigger is a cumulative original ordinal, independent of t
 Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
+
+
+Real-photo localization applies fixed longest-edge limits of 1024 for class references and 2048 for the actual original before lossless PNG encoding. Source byte/pixel limits and the 48 MiB serialized request limit still apply. This introduces no environment option or alternate model; original dimensions, first-frame orientation and scale evidence remain frozen. Preparation-stage failures display only fixed stage codes and exception types, never secret-bearing exception messages.
