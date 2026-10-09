@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
+from local_inspection_service.storage.legacy_projection_schema import migration_sql as manual_migration_sql
 from local_inspection_service.storage.label_summary_schema import migration_sql
 
 migrations=sorted((root/"local_inspection_service/storage/migrations").glob("*.sql"))
@@ -15,7 +16,7 @@ def validate_sql(sql: str, label: str) -> None:
     # Do not strip a matching block: a copy inside a string/comment must not
     # grant an exception to surrounding executable SQL. Any mutation falls
     # through to the unchanged fail-closed additive guard.
-    if sql == migration_sql():
+    if sql in (migration_sql(), manual_migration_sql()):
         return
     compact=sql.strip().upper()
     executable=re.sub(r"--[^\n]*", "", sql)

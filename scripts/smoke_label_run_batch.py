@@ -85,6 +85,9 @@ class FakeRepository:
     def list_run_history_for_tasks(self, owner, task_ids, *, summary_task_ids):
         return self.list_run_payloads_for_tasks(owner, task_ids)
 
+    def list_beta_history(self, owner):
+        return self.legacy(owner, "beta")
+
     def legacy(self, owner, kind):
         self.calls.append(("legacy", owner, kind))
         return copy.deepcopy(self.legacy_rows[kind]) if owner == self.owner else []

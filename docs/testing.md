@@ -2586,6 +2586,40 @@ Run `python scripts/smoke_training_state_workflows_composition.py` using synthet
 
 Run `python scripts/smoke_training_task_workflows_composition.py` with synthetic local media and model substitutes. Eight combined cases check the immutable parent inverse and all fifteen unchanged business services, wrong-owner/import/route mutations, inert early construction/failure, concurrent member/admin/denied ASGI request identity, actual account isolation and transfer publication failure, identical-ID native model binding and independent drain, launch-save failure retaining one admitted task, and real UserState config/pipeline first-failure second-sync behavior without re-execution. Existing tests keep permission/error/call-order assertions and replace actual owner capabilities. Jobs classification replacement targets jobs_query.training.uses_worker; arbitrary root-helper rebinding is no longer its extension point. Getter timing checks replace the actual named wrapper selected before arguments; additional graph tests verify component selection after argument effects. Run one final combined domain matrix and isolated PostgreSQL regressions at the final head, then HTTP, dependency, shipped fingerprint, docs and frontend checks. Internal checkpoints do not require separate PRs or repeated unchanged full matrices.
 
+Run scripts/smoke_label_beta_summaries.py against isolated PostgreSQL for original public list/detail, owner, missing/null/falsey inputs, safe and unsafe mixed label entries, unchanged unknown fields, pre-filter errors, mapping rows and old cursors. The fixed16 benchmark keeps its original populations/order,31 alternating samples,4 warmups,3 memory passes, original P95/memory/query limits and frozen endpoint. Its internal projection contract2 checks compacted evidence rather than a removed BetaListSummary tag; timings and acceptance guards are unchanged. Both earlier failed full-projection candidates remain NoGo. Original19 reader and28 history cases remain required. Timing includes page snapshot persistence but excludes HTTP and real providers.
+
+smoke_label_beta_summaries.py additionally compares SQL object/array counts with the decoded records, checks zero without len fallback, preserves two explicit-null TypeErrors, nonbatch scalar behavior and encoded raw fallback. The fixed 16-case timing plan and original 19/28 protocols remain unchanged; only the preflight wrapper access and report projection_contract become 3.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Run scripts/smoke_manual_history_baseline.py --postgres before changing manual history reads. The exact original helper from030af6e is frozen at tests/backend_contract/manual_history_baseline.py with SHA25652b31c4afe4ba42d2bd0ee9a5b1111fe3b5390b3e528848ce557e795c0d4227e and loaded into the original endpoint namespace. Candidate-helper poisoning must break the candidate while leaving both frozen helper and frozen endpoint usable. Cases preserve duplicate session IDs, dual page membership, orphan groups, page-before-record order, asset ordering/media flags, malformed-data errors, owner/filter behavior and old cursor continuation through writes. This supplements existing reader/history/Beta fixed benchmarks; none of their guards or baseline bytes are changed. No performance improvement is claimed by the baseline.
+
+scripts/benchmark_manual_history.py fixes seven cases before optimization: A/A1000 then three A/B repetitions of1000/10000 groups. Each fresh PostgreSQL fixture proves actual standard/session/page/asset row counts, compares complete ordered results outside samples, then runs four warmup pairs,31 alternating wall-time pairs and three separate peak-memory pairs. Every call requires exactly10 reader cursor execute commands, including normal snapshot SQL; writer setup, commit and PostgreSQL internal work are outside that count. P95 must be at most max(old*1.25,old+0.01s), peak at most max(old*1.25,old+1MiB). CPU/GC observations stay outside timing. Every result pins ManualFixture and both frozen source hashes; failures stop the protocol and preserve not_run groups. scripts/smoke_manual_history_protocol.py attacks wrong bindings, missing/duplicate/reordered cases, arm selection and evidence-output failures. A separate CI job runs this protocol to avoid sharing its runner with other benchmark jobs. No pooled percentiles, guard relaxation or unchanged reruns are allowed.
+
+Protocol fault tests also execute the actual measure function with an inert fake fixture: all76 warmup/wall/memory arm selections,31 wall samples and three memory samples per arm are asserted. Both latency and memory regressions retain their primary assertion if raw-record output also fails; output failure after a successful measurement still fails acceptance. This closes the initial protocol76 test gaps without changing populations, sample counts or thresholds.
+
+scripts/smoke_manual_history_index.py compares160 seeded duplicate/orphan/overlap/order fixtures with the frozen helper, preserves malformed-data precedence, proves empty/default/detail paths skip indexing, checks asset access order/failure and arbitrary-size integer handling without float conversion. The realPG manual endpoint and inherited history-statistics contracts remain required. Run the frozen seven-case benchmark and inherited63 cases unchanged; current implementation is not accepted for publication until those performance gates and independent review pass.
+
+The indexed smoke runs with --postgres in CI. Its tracked multi-group case spies on the real LabelRepository fast path and covers duplicate raw session IDs across two groups, a page also belonging to its fallback group, page-before-record timestamp ties, distinct SQL ordinals with tied raw ordinals, exact detail order and old cursor continuation.
+
+Manual indexed-history PostgreSQL tie expectations follow the actual cached source order because the legacy query has no ORDER BY. A separate in-memory case checks both forward and reversed equal-ordinal source orders. No source, benchmark protocol or performance threshold changes accompany this fixture hardening.
+
+
+The initial read-batch integration at v252 combined the guarded manual index and Beta SQL consumer on business composition 2b6e9ce. The current guarded legacy cohort is described below; independent application construction remains unfinished.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
 The authentication HTTP smoke uses independent client cookie jars without entering
 the shared application lifespan for each permission probe. These probes retain
 all anonymous, member, over-granted member and administrator checks. Application
@@ -2635,3 +2669,56 @@ The legacy-index CI control is pinned to accepted main `0b22d32` and its
 verified API blob. It does not use `HEAD^`, which means different code in a PR
 merge checkout and a manual branch run. Both event types replay the same control;
 baseline updates require explicit source and contract review.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.

@@ -2121,3 +2121,88 @@ The real-photo routes, purpose bindings, incremental tables and review worker
 remain present. Manifest v253 contains 557 actual sources at this checkpoint;
 historical task snapshots are not rewritten. Full factory, combined CI and
 release acceptance are separate remaining gates.
+
+Beta list reads compact only label entries that are flat objects with string, boolean or null values, replacing each safe value-object with an empty object while retaining every label key. Numeric, nested and non-object entries and all unknown top-level fields stay intact. The original Python public projection still computes every list field; no tagged SQL row bypass remains. This avoids transferring safe unused evidence without hiding integer/depth decoding errors. Detail reads keep the complete persisted payload.
+
+Beta list reads return an internal BetaHistoryRead containing the decoded compacted payload plus nullable reference/label counts from the same owner-bound SELECT. SQL counts only object keys and array elements. The HTTP projection still evaluates original fields in original order; missing/null/scalar or encoded JSON uses the original len fallback. This type is not persisted and detail reads are unchanged.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Historical baseline-only prerequisite: manual history read optimization was not active in that commit. Its original helper is frozen independently for tests: the baseline endpoint receives a separately loaded module containing the complete original rows/resolve implementation, so later candidate helper changes cannot silently change the oracle. Production grouping, detail materialization and database reads are unchanged.
+
+The manual-history benchmark measures the complete first-page endpoint with original fixed snapshots against separately frozen tasks and manual-helper sources. That protocol-only prerequisite did not alter production grouping or activate an index. Its performance claim is limited to synthetic manual populations; existing reader/history/Beta protocols remain independent requirements.
+
+Manual history list projection now opts into request-local indexes for multiple groups with proven ordinary decoded rows. Original key discovery/set iteration and full row projection stay unchanged. Session IDs map to every selected group even when duplicate IDs make the separate discovery map last-wins; each page is appended once to both matching-session groups and its fallback group in original page-before-record order. Unsupported references, timestamps or assets use the original scans and error behavior. Default rows/resolve detail calls keep the original path. This is an intermediate in-memory read optimization, not SQL aggregation.
+
+The indexed path still scales with actual memberships: many duplicate session IDs can attach each page to many groups. It does not promise globally linear output size or universal memory bounds; homogeneous performance cases are complemented by explicit overlap/fallback tests.
+
+The manual-history index retains equal-ordinal assets in their input order. PostgreSQL fixtures derive that order from the actual cached repository source; separate synthetic fixtures verify both forward and reversed ties. This test hardening changes no production, sorting or benchmark policy.
+
+
+The initial read-batch integration at v252 combined the guarded manual index and Beta SQL consumer on business composition 2b6e9ce. The current guarded legacy cohort is described below; independent application construction remains unfinished.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.

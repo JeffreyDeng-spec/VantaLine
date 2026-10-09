@@ -312,6 +312,10 @@ jobs:
           python scripts/smoke_directory_lifecycle.py
           python scripts/smoke_label_history_benchmark.py
           python scripts/smoke_label_history_statistics.py
+          python scripts/smoke_manual_history_baseline.py --postgres
+          python scripts/smoke_legacy_list_projection.py
+          python scripts/smoke_label_beta_summaries.py
+          python scripts/smoke_label_beta_benchmark.py
           VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
           python scripts/smoke_account_projections.py
           python scripts/smoke_public_network_policy.py
@@ -364,6 +368,7 @@ jobs:
           python scripts/smoke_model_configuration_composition.py
           python scripts/smoke_plc_legacy_worker_ownership.py
           python scripts/smoke_resource_names.py
+          python scripts/benchmark_label_beta_summaries.py
           python scripts/smoke_label_summary_reads.py
           python scripts/smoke_label_reader_readiness.py
           python scripts/smoke_label_benchmark_evidence.py
@@ -750,3 +755,46 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart httpx pytest
       - run: python -m pytest tests/codex_compare -q
+
+  manual-history-performance:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vantaline"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
+      - run: python scripts/smoke_manual_history_protocol.py
+      - run: python scripts/smoke_manual_history_index.py --postgres
+      - run: python scripts/smoke_manual_history_baseline.py --postgres
+      - name: Verify ready legacy projection performance
+        run: python scripts/benchmark_manual_history.py --projection --report "$RUNNER_TEMP/legacy-projection.json"
+      - name: Verify fixed manual-history first-page performance
+        run: python scripts/benchmark_manual_history.py --report "$RUNNER_TEMP/manual-history.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: manual-history-performance
+          path: |
+            ${{ runner.temp }}/manual-history.json
+            ${{ runner.temp }}/legacy-projection.json
+          if-no-files-found: warn
