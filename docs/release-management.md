@@ -1544,3 +1544,15 @@ The `Build released YOLO worker` workflow accepts only a published, non-prerelea
 The released worker image uses the main repository-owned `<repository>-real-photo-yolo-worker` GHCR package, separate from the historical standalone worker package. Preserve the previous endpoint digest for whole-release reconciliation and rollback.
 
 The released real-photo GPU image inherits the existing public training runtime by immutable digest `sha256:001b40ca66148beef5cf8f76b75897ecd7207337335d0a7feb978d041096d9fc`, retaining its native libraries and controlled `/models/vantaline-yolo-base.pt` checkpoint. The build verifies checkpoint SHA-256 `646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b` and fails on a missing or changed file before publishing the new released handler. A default bare PyTorch Docker build still requires an explicitly supplied controlled checkpoint at runtime; it is not the production commissioning image.
+
+
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.

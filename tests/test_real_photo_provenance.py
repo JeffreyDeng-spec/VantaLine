@@ -14,13 +14,13 @@ from local_inspection_service.training.real_photo_provenance import source_group
 
 def test_camera_grouping_has_no_dispatch_and_preserves_original(tmp_path,monkeypatch):
     out=io.BytesIO();Image.new('RGB',(32,24),'blue').save(out,'JPEG');raw=out.getvalue()
-    monkeypatch.setattr(image_upload,'_business_files',BusinessFiles(runtime_provider=lambda:None))
+    files=BusinessFiles(runtime_provider=lambda:None)
     observed=[]
     def analyze(pixels,request_id,model_id,**kwargs):
         observed.append((source_group.get(),original_sha.get(),kwargs['image_path'].read_bytes()))
         return {'ok':True}
     upload=image_upload.ImageUpload(SimpleNamespace(ensure=lambda:None,permit=lambda m:None),
-        SimpleNamespace(name=lambda:lambda n:'capture.jpg',directory=lambda:tmp_path),lambda:np,lambda:cv2,analyze)
+        SimpleNamespace(name=lambda:lambda n:'capture.jpg',directory=lambda:tmp_path),lambda:np,lambda:cv2,analyze,files=lambda:files)
     for _ in range(2):
         result=asyncio.run(upload.analyze_image(UploadFile(filename='input.jpg',file=io.BytesIO(raw)),'model','session_1'))
         assert result=={'ok':True}

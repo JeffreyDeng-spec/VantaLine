@@ -16958,7 +16958,6 @@
   ],
   "shutdown": [
     "shutdown_application"
-
   ],
   "startup": [
     "verify_label_list_database",

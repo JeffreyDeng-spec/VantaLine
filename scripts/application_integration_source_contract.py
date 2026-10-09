@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / "tests/backend_contract/application_integration_delta.json").read_text())
 BUSINESS = json.loads((ROOT / "tests/backend_contract/application_business_delta.json").read_text())
+MAIN_FEEDBACK = json.loads((ROOT / "tests/backend_contract/application_main_feedback_delta.json").read_text())
 COMPOSITIONS = json.loads((ROOT / "tests/backend_contract/application_composition_bindings.json").read_text())
 
 
@@ -55,9 +56,9 @@ def verify_actual_compositions():
 
 def restore_integrated_root(source):
     verify_actual_compositions()
-    return restore_delta(source, FIXTURE)
+    return restore_delta(restore_delta(source, MAIN_FEEDBACK), FIXTURE)
 
 
 def restore_business_root(source):
     verify_actual_compositions()
-    return restore_delta(restore_delta(source, FIXTURE), BUSINESS)
+    return restore_delta(restore_delta(restore_delta(source, MAIN_FEEDBACK), FIXTURE), BUSINESS)
