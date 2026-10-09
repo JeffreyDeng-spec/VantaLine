@@ -1,3 +1,5 @@
+Training completion graph assembly does not change PLC I/O, lease ownership, ACK settlement or uncertain-write handling. Its synthetic graph verification does not contact a serial port or PLC.
+
 Diagnostic receipt/finalization now delegates to `plc/diagnostic_state.py` inside the existing station mutation transaction. It accepts an active or draining owner lease even after lease or diagnostic deadline expiry, so a late browser result can clear the in-flight diagnostic ID, deadline and token hash. It does not alter state, expiry or heartbeat, record an ACK, retry a physical write, or open a serial port. A repeated receipt fails because the diagnostic is no longer in flight.
 
 Diagnostic confirmation now delegates to `plc/diagnostic_state.py`. It still checks the active lease, matching diagnostic ID, strict deadline and token hash inside the original station mutation transaction. A missing hash short-circuits token access. A successful confirmation leaves in-flight evidence and lease timing untouched and may be repeated before the deadline; it is not evidence that a serial write or ACK succeeded.

@@ -1195,42 +1195,45 @@ from .training.jobs_query import JobsReadAccess
 from .training.status_projection import StatusAccess, StatusPreview
 from .training.runpod_transfer import TransferPaths
 
-_training_account_state = TrainingAccountState(runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope),
-storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)),
-rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
-writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
-require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
-view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)),
-defaults=lambda: DEFAULT_CONFIG['training'],
-legacy_owner=lambda: LEGACY_OWNER_ID,
-access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
-configuration=TrainingConfiguration(load=lambda: _app_configuration.load_config(), save=lambda config: _app_configuration.save_config(config)),
-sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))
+from .training.persistence_graph import (TrainingPersistenceGraph, TrainingAccountInputs,
+    PipelinePersistenceInputs, TrainingCandidateInputs)
+from .pipeline.task_store import PipelineTaskPaths, PipelineTaskRows
+from .pipeline.state_store import PipelineStatePaths, PipelineStateRows
+_training_persistence_graph = TrainingPersistenceGraph(
+    account=TrainingAccountInputs(        runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope),
+        storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)),
+        rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)),
+        writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)),
+        require_access=lambda record, user, write=False: require_record_access(record, user, write=write),
+        view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)),
+        defaults=lambda: DEFAULT_CONFIG['training'],
+        legacy_owner=lambda: LEGACY_OWNER_ID,
+        access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()),
+        configuration=TrainingConfiguration(load=lambda: _app_configuration.load_config(), save=lambda config: _app_configuration.save_config(config))),
+    pipeline=PipelinePersistenceInputs(        repository=lambda: runtime_postgres_repository_or_none(),
+        task_paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
+        task_rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
+        resolver=lambda: resolve_model_profiles,
+        state_paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
+        state_rows=PipelineStateRows(encode=lambda: pipeline_state_rows, decode=lambda: pipeline_state_from_rows),
+        normalize_method=lambda: normalize_pipeline_detection_method,
+        clean_id=lambda: sanitize_ai_detection_task_id,
+        link_model=lambda task: link_pipeline_trained_model(task)),
+    candidate=TrainingCandidateInputs(        guard=lambda: _auto_optimize_lock,
+        records=CandidateTrainingRecords(load=lambda task_id: load_auto_optimize_state(task_id), save=lambda state: save_auto_optimize_state(state)),
+        clean_id=lambda value: sanitize_ai_detection_task_id(value),
+        stop_capture=lambda state, model_id, **kwargs: auto_optimize_stop_capture_for_model_locked(state, model_id, **kwargs)),
+    model_specs=lambda: list_trained_model_specs())
+_training_account_state = _training_persistence_graph.account
 _training_user_state = _training_account_state.users
-_training_task_models = TrainingTaskModels(specs=lambda: list_trained_model_specs())
+_training_task_models = _training_persistence_graph.models
 from .pipeline.persistence_composition import PipelinePersistence
 from .pipeline.task_store import PipelineTaskPaths, PipelineTaskRows
 from .pipeline.state_store import PipelineStatePaths, PipelineStateRows
 
-_pipeline_persistence = PipelinePersistence(
-    repository=lambda: runtime_postgres_repository_or_none(),
-    task_paths=PipelineTaskPaths(data=lambda: DATA_DIR, tasks=lambda: PIPELINE_TASKS_PATH),
-    task_rows=PipelineTaskRows(encode=lambda task: pipeline_task_row(task), decode=lambda: row_raw_json_list),
-    resolver=lambda: resolve_model_profiles,
-    state_paths=PipelineStatePaths(data=lambda: DATA_DIR, state=lambda: PIPELINE_STATE_PATH),
-    state_rows=PipelineStateRows(encode=lambda: pipeline_state_rows, decode=lambda: pipeline_state_from_rows),
-    training_models=PipelineTrainingModels(resolve=lambda task, job_id: training_task_model_id(task, job_id), link=lambda task: link_pipeline_trained_model(task)),
-    normalize_method=lambda: normalize_pipeline_detection_method,
-    clean_id=lambda: sanitize_ai_detection_task_id,
-    sync_candidate=lambda task, **kwargs: sync_auto_optimize_training_candidate_from_task(task, **kwargs),
-)
+_pipeline_persistence = _training_persistence_graph.pipeline
 _pipeline_training_sync = _pipeline_persistence.training
-_training_candidate_sync = TrainingCandidateSync(
-    guard=lambda: _auto_optimize_lock,
-    records=CandidateTrainingRecords(load=lambda task_id: load_auto_optimize_state(task_id), save=lambda state: save_auto_optimize_state(state)),
-    clean_id=lambda value: sanitize_ai_detection_task_id(value),
-    stop_capture=lambda state, model_id, **kwargs: auto_optimize_stop_capture_for_model_locked(state, model_id, **kwargs),
-)
+_training_candidate_sync = _training_persistence_graph.candidates
 
 
 def default_training_state() -> dict[str, Any]:

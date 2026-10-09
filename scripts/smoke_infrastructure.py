@@ -198,7 +198,7 @@ class InfrastructureContracts(unittest.TestCase):
         import ast
         import application_integration_source_contract as contract
         source=(contract.ROOT/'local_inspection_service/server.py').read_text()
-        current=ast.parse(source)
+        current=ast.parse(contract.restore_training_persistence_graph_root(source))
         self.assertEqual(contract.digest(current),contract.INFRASTRUCTURE['integrated_ast_sha256'])
         parent=ast.parse(contract.restore_infrastructure_root(source))
         functions=lambda tree:[(node.name,contract.canonical(node)) for node in tree.body

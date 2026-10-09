@@ -1,3 +1,5 @@
+Training completion wiring lives in `training/persistence_graph.py`: provide only its narrow typed account/pipeline/candidate inputs and model-spec supplier. Do not route its internal completion callbacks through `server` or merge the existing persistence boundaries. Full Web factory/lifecycle consolidation and final release acceptance remain pending.
+
 # Agent overview
 
 **Status: Authoritative**

@@ -23,6 +23,14 @@ EXECUTION_METHODS = frozenset({'run_training_task', 'enqueue_training_task'})
 
 
 def training_port_target(api, name):
+    if hasattr(api, '_training_persistence_graph'):
+        graph = api._training_persistence_graph
+        if name == 'sync_pipeline_training_state_from_task':
+            return graph.pipeline, name
+        if name == 'training_task_model_id':
+            return graph.models, name
+        if name == 'sync_auto_optimize_training_candidate_from_task':
+            return graph.candidates, name
     if hasattr(api, '_app_configuration') and name in {'load_config', 'save_config'}:
         return api._app_configuration, name
     if hasattr(api, '_pipeline_persistence'):

@@ -333,6 +333,7 @@ jobs:
           python scripts/smoke_record_composition.py
           python scripts/smoke_application_foundation.py
           python scripts/smoke_infrastructure.py
+          python scripts/smoke_training_persistence_graph.py
           python scripts/smoke_http_application.py
           python scripts/smoke_http_upload_runtime.py
           python scripts/smoke_http_artifact_ports.py
