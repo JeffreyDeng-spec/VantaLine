@@ -19,6 +19,8 @@ def capture_provider_orchestration_window(api, Fixture, site, mode='ordinary'):
         with patch.dict(api.__dict__),ExitStack() as stack:
             caught=None;result=None;expected_error=None;expected=None
             def install(owner,name,action):
+                from provider_configuration_test_ports import provider_capability_target
+                owner,name=provider_capability_target(owner,name)
                 def callback(label):
                     def invoke(*args,**kwargs):events.append(label);return action(*args,**kwargs)
                     return invoke

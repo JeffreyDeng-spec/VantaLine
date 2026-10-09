@@ -424,3 +424,5 @@ Agent advancement tests replace the connected mark forwarder rather than mutatin
 The Codex environment edge adds no Agent decision or native lifecycle behavior. Existing pipeline graph source oracles verify the Codex registration delta before restoring their fixed parent; all original assertions remain.
 
 The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+Provider dependency-capture tests substitute secret-key identification on the actual ProviderConfiguration instance. The same original A/B/C argument-time mutation and missing-callable assertions remain; other provider capabilities retain their existing locations. The temporary mock is restored on exit and changes no model call, key selection or retry algorithm.
