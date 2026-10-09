@@ -127,6 +127,9 @@ class RunPodFlow:
             )
             if remote_status == "COMPLETED":
                 output = self.results.extract(status_body)
+                real_metrics=(output.get('training') or {}).get('real_photo_test_metrics')
+                if task.get('feedback_strategy')=='real_photo_vlm' and not isinstance(real_metrics,dict):
+                    raise RuntimeError('RunPod worker lacks real-photo held-out evaluation; do not automatically retrain')
                 import_updates = self.results.import_artifacts()({**task, "job_id": job_id, "runpod_job_id": runpod_job_id}, output)
                 self.records.update_provider()(
                     job_id,
@@ -136,6 +139,7 @@ class RunPodFlow:
                     remote_training_status=remote_status,
                     remote_training_response=self.results.summary(status_body),
                     runpod_training_output=self.results.summary(output),
+                    **({'real_photo_test_metrics':real_metrics} if task.get('feedback_strategy')=='real_photo_vlm' else {}),
                     current_epoch=max(1, min(500, int(task.get("epochs") or 1))),
                     total_epochs=max(1, min(500, int(task.get("epochs") or 1))),
                     note="RunPod YOLO worker 训练完成，模型已导入训练库。",

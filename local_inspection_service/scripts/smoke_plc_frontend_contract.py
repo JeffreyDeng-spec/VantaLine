@@ -78,7 +78,8 @@ def require_detection_upload_boundary(server: str, implementations: dict[str, st
     )
     for name, receiver, cls, filename, module, decorators in contract:
         roots = [n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name]
-        expected = ast.parse('async def entry():\n    return await '+receiver+'.'+name+'(file, model_id)').body[0]
+        arguments='file, model_id, capture_session_id' if name=='analyze_image' else 'file, model_id'
+        expected = ast.parse('async def entry():\n    return await '+receiver+'.'+name+'('+arguments+')').body[0]
         if len(roots) != 1 or ast.dump(ast.Module(body=roots[0].body, type_ignores=[])) != ast.dump(ast.Module(body=expected.body, type_ignores=[])):
             raise AssertionError('Upload root must forward to the inspected implementation: '+name)
         if [ast.dump(d) for d in roots[0].decorator_list] != [ast.dump(ast.parse(d, mode='eval').body) for d in decorators]:

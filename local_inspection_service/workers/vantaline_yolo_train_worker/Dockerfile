@@ -1,4 +1,10 @@
-FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+ARG BASE_IMAGE=pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+FROM ${BASE_IMAGE}
+
+ARG BASE_MODEL_SHA256
+RUN if [ -n "$BASE_MODEL_SHA256" ]; then \
+      printf "%s  %s\n" "$BASE_MODEL_SHA256" /models/vantaline-yolo-base.pt | sha256sum --check --strict; \
+    fi
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \

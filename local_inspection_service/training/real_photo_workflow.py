@@ -23,39 +23,59 @@ def schedule(repo, owner, task):
         if not state['enabled'] or not state.get('initialization') or state.get('pause_reason'):
             return
         current = state.get('round')
-        if current:
-            jobs = [repo.read_job(c, identifier) for identifier in current['review_jobs']]
-            if any(j['status'] in {'failed','interrupted','cancelled','stale'} for j in jobs):
-                state['pause_reason']='审核轮次未完整成功；请处理失败后明确重新启动'
+        if not current:
+            trigger=state.get('review_trigger',20)
+            rechecks=set(state.get('recheck_sample_ids',[]))
+            if len(state['samples']) < trigger and not rechecks:return
+            # Freeze at the cumulative trigger, before labels settle. Later arrivals
+            # cannot enlarge this cohort or keep it waiting indefinitely.
+            fresh=len(state['samples']) >= trigger
+            cutoff=trigger if fresh else state.get('reviewed_candidate_count',max(
+                (r['candidate_count'] for r in state.get('rounds',[]) if r.get('assessment_job')),default=0))
+            scope={s['sample_id'] for s in state['samples'][:trigger]} if fresh else set()
+            new=[s for s in state['samples'] if s['sample_id'] in scope|rechecks
+                 and s.get('review',{}).get('key')!=review_key(s,state['classes'])]
+            if not new:
+                state['pause_reason']='没有新增有效标注可审核；请处理标注失败或补充实拍'
                 return
-            if any(j['status']!='completed' for j in jobs):
+            current={'id':uuid.uuid4().hex,'candidate_count':cutoff,'review_jobs':[],
+                     'sample_ids':[s['sample_id'] for s in new],'created_at':time.time()}
+            state['round']=current
+        if not current['review_jobs']:
+            if not current.get('sample_ids'):
+                state['pause_reason']='本轮冻结范围缺失；请核查并明确重新启动'
                 return
-            if not current.get('assessment_job'):
-                inputs={'classes':state['classes'],'summary':summary(state),'round_id':current['id'],
-                        'new_decisions':[j['result'] for j in jobs], 'previous_assessment':state.get('assessment')}
-                current['assessment_job']=repo.enqueue(c,state,'assess','assess:'+current['id'],inputs)['id']
+            membership=set(current['sample_ids'])
+            new=[s for s in state['samples'] if s['sample_id'] in membership]
+            if len(new)!=len(membership):raise ValueError('frozen review original missing')
+            pending=[s for s in new if s.get('annotation',{}).get('status') not in {'completed','failed'}]
+            if pending:
+                c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='annotate' AND status IN ('failed','interrupted','stale','cancelled')",(owner,task))
+                failed_ids={j['inputs']['sample']['sample_id'] for j in repo.rows(c)}
+                if any(s['sample_id'] in failed_ids for s in pending):
+                    state['pause_reason']='存在未完整结算的标注；请主动重标并重新启动审核'
+                    current['status']='annotation_incomplete'
+                    state['rounds'].append(current);state.pop('round')
+                return
+            for i in range(0,len(new),10):
+                samples=[{**copy.deepcopy(s),'review_key':review_key(s,state['classes'])} for s in new[i:i+10]]
+                job=repo.enqueue(c,state,'review','review:'+current['id']+':'+str(i),
+                                 {'samples':samples,'classes':state['classes'],'round_id':current['id']})
+                current['review_jobs'].append(job['id'])
             return
-        if len(state['samples']) < state.get('review_trigger',20):
+        jobs = [repo.read_job(c, identifier) for identifier in current['review_jobs']]
+        if current.get('assessment_job'):jobs.append(repo.read_job(c,current['assessment_job']))
+        if any(j['status'] in {'failed','interrupted','cancelled','stale'} for j in jobs):
+            state['pause_reason']='审核或汇总未完整成功；请处理失败后明确重新启动'
             return
-        new = [s for s in state['samples'] if s.get('annotation',{}).get('status') in {'completed','failed'}
-               and s.get('review',{}).get('key')!=review_key(s,state['classes'])]
-        pending = [s for s in state['samples'] if not s.get('annotation')]
-        if pending:
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='annotate' AND status IN ('failed','interrupted','stale','cancelled')",(owner,task))
-            failed_ids={j['inputs']['sample']['sample_id'] for j in repo.rows(c)}
-            if any(s['sample_id'] in failed_ids for s in pending):state['pause_reason']='存在未完整结算的标注；请主动重标并重新启动审核'
-            return
-        if not new:
-            state['pause_reason']='没有新增有效标注可审核；请处理标注失败或补充实拍'
-            return
-        current={'id':uuid.uuid4().hex,'candidate_count':len(state['samples']), 'review_jobs':[],
-                 'created_at':time.time()}
-        for i in range(0,len(new),10):
-            samples=[{**copy.deepcopy(s),'review_key':review_key(s,state['classes'])} for s in new[i:i+10]]
-            job=repo.enqueue(c,state,'review','review:'+current['id']+':'+str(i),
-                             {'samples':samples,'classes':state['classes'],'round_id':current['id']})
-            current['review_jobs'].append(job['id'])
-        state['round']=current
+        if any(j['status']!='completed' for j in jobs):return
+        if not current.get('assessment_job'):
+            inputs={'classes':state['classes'],'summary':summary(state),'round_id':current['id'],
+                    'new_decisions':[j['result'] for j in jobs], 'previous_assessment':state.get('assessment'),
+                    'initialization':copy.deepcopy(state['initialization']),
+                    'approved_real_target':state['approved_real_target'],
+                    'review_trigger':state['review_trigger']}
+            current['assessment_job']=repo.enqueue(c,state,'assess','assess:'+current['id'],inputs)['id']
     return repo.mutate(owner,task,update)
 
 
@@ -70,6 +90,9 @@ def apply_result(repo, state, job, c):
         if sample.get('annotation'):sample['annotation_history'].append(sample['annotation'])
         sample['annotation']={**result,'receipt':{k:v for k,v in result.get('receipt',{}).items() if k!='response'},
                               'version':job['inputs']['version'],'job_id':job['id']}
+        if job['inputs'].get('explicit') and sample.get('review'):
+            rechecks=state.setdefault('recheck_sample_ids',[])
+            if sample['sample_id'] not in rechecks:rechecks.append(sample['sample_id'])
         return
     if job['kind'] in {'initialize','review','assess'}:
         review_report(job,result)
@@ -106,6 +129,8 @@ def apply_result(repo, state, job, c):
             state['last_dataset_fingerprint']=dataset_id
         state['assessment']={**result,'job_id':job['id'],'created_at':time.time()}
         state['approved_real_target']=result['approved_real_target']
+        state['reviewed_candidate_count']=current['candidate_count']
+        state['recheck_sample_ids']=[identifier for identifier in state.get('recheck_sample_ids',[]) if identifier not in round_ids]
         state['review_trigger']=current['candidate_count']+result['next_increment']
         if result['action']=='pause':state['pause_reason']=result['reason']
         state['rounds'].append(current)

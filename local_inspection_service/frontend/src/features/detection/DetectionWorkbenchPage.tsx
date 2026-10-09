@@ -1,3 +1,4 @@
+import { apiClient, withAuthScope } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { getFile } from "../agent/files";
@@ -662,6 +663,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState("__default__");
+  const realPhotoCaptureSession=useRef(crypto.randomUUID());
   const [selectedModelId, setSelectedModelId] = useState("");
   const [pendingModelId, setPendingModelId] = useState("");
   const [selectedAiTaskId, setSelectedAiTaskId] = useState("");
@@ -829,6 +831,15 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     routeTask?.aiBaselineTaskId ||
     routeTask?.aiTaskId ||
     "";
+  const realPhotoTaskId=routeTask
+    ? routeTask.autoOptimizeTaskId || routeTask.aiBaselineTaskId || routeTask.aiTaskId || (isTaskEntryAi(routeTask) ? routeTask.sourceId : "")
+    : isAi ? selectedAiTask?.id || "" : "";
+  const realPhotoFeedbackQuery = useQuery({
+    queryKey:["real-photo",auth.user.id,auth.dataUserId,realPhotoTaskId],
+    queryFn:() => apiClient.get<{selected?:boolean;candidate_models?:{model_id:string;status:string}[]}>(withAuthScope(`/api/ai/tasks/${encodeURIComponent(realPhotoTaskId)}/real-photo`,auth.user,auth.dataUserId)),
+    enabled:Boolean(realPhotoTaskId),refetchInterval:5000
+  });
+  const realPhotoSelected=Boolean(realPhotoFeedbackQuery.data?.selected);
   const environmentBackgroundQuery = useQuery({
     queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId),
     queryFn: () => getAiTaskAutoOptimize(auth, environmentBackgroundTaskId),
@@ -844,7 +855,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     hasTaskEnvironmentBackground(environmentBackgroundQuery.data) ||
     hasTaskEnvironmentBackground(selectedAiTask) ||
     hasTaskEnvironmentBackground(routeTaskEnvironmentBackground);
-  const environmentBackgroundRequired = Boolean(environmentBackgroundTaskId);
   const selectedAiModelId = aiTaskModelId(selectedAiTask);
   const allStatusModels = useMemo(() => {
     const specializedTaskModels = (status?.specialized_model_tasks || []).flatMap((task) => task.models || []);
@@ -853,7 +863,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const routeTaskModelOptions = useMemo(() => {
     if (!routeTask) return [];
     const hasAiBaseline = taskHasAiBaseline(routeTask);
-    const related = allStatusModels.filter((model) => statusModelMatchesTask(model, routeTask) && (!hasAiBaseline || !isAiModel(model)));
+    const realCandidateIds=new Set((realPhotoFeedbackQuery.data?.candidate_models || []).filter(c=>c.status==='completed').map(c=>c.model_id));
+    const related = allStatusModels.filter((model) => (statusModelMatchesTask(model, routeTask) || realCandidateIds.has(model.id)) && (!hasAiBaseline || !isAiModel(model)));
     if (!hasAiBaseline) return related;
     const aiTaskId = routeAiTask?.id || routeTask.aiBaselineTaskId || routeTask.autoOptimizeTaskId || routeTask.aiTaskId || "";
     const aiModelId = routeAiTask ? aiTaskModelId(routeAiTask) : routeTask.aiBaselineModelId || selectedAiModelId || (aiTaskId ? `${AI_TASK_MODEL_PREFIX}${aiTaskId}` : "");
@@ -873,7 +884,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         } as StatusModel]
       : [];
     return uniqueModels([...related, ...aiBaseline]);
-  }, [allStatusModels, routeAiTask, routeTask, selectedAiModelId]);
+  }, [allStatusModels, routeAiTask, routeTask, selectedAiModelId, realPhotoFeedbackQuery.data?.candidate_models]);
   const legacyAiModelOptions: StatusModel[] = !routeTask && isAi && selectedAiModelId
     ? [{
         id: selectedAiModelId,
@@ -892,6 +903,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const modelOptions = routeTask ? routeTaskModelOptions : isAi ? legacyAiModelOptions : currentTask?.models || [];
   const selectedModel = modelOptions.find((model) => model.id === selectedModelId) || null;
   const activeModelId = selectedModelId || (isAi ? selectedAiModelId : "");
+  const realPhotoMode=realPhotoSelected || /^trained_train_real_[0-9a-f]{32}__yolo$/.test(activeModelId);
+  const environmentBackgroundRequired=Boolean(environmentBackgroundTaskId) && !realPhotoMode;
   const activeModelIsAi = selectedModel ? isAiModel(selectedModel) : isAi;
   const activeDetectionLabel = modelDetectionLabel(selectedModel, activeModelIsAi);
   const activeResultLabel = modelResultLabel(selectedModel, activeModelIsAi);
@@ -1444,6 +1457,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         video: deviceId ? { deviceId: { exact: deviceId } } : true,
         audio: false
       });
+      realPhotoCaptureSession.current=crypto.randomUUID();
       setStream(nextStream);
       if (videoRef.current) {
         videoRef.current.srcObject = nextStream;
@@ -1594,9 +1608,10 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     try {
       const form = new FormData();
-      const uploadFile = kind === "video" || activeModelIsAi ? file : await optimizeImageUpload(file);
+      const uploadFile = kind === "video" || activeModelIsAi || realPhotoMode ? file : await optimizeImageUpload(file);
       form.append("file", uploadFile);
       form.append("model_id", activeModelId);
+      if (kind === "camera" && realPhotoMode) form.append("capture_session_id",realPhotoCaptureSession.current);
       const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
       const requiredPlcState = options?.requiredPlcState;
       if (requiredPlcState && (

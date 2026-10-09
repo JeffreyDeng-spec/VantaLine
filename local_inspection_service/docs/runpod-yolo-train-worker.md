@@ -178,3 +178,6 @@ The Web shared file checksum helper resolves mapped business files through a pin
 ## Real-photo feedback foundation boundary
 
 The feedback foundation adds source/annotation queues and strict original-image contracts but submits no RunPod training. Initial generated-image training and the worker request contract remain unchanged in this batch. Held-out real-photo evaluation and grouped dataset publication require the later training batch and compatible worker commissioning.
+
+
+For `real_photo_vlm`, the frozen dataset includes train/val/test, class IDs and test support counts; base SHA256 is mandatory. The compatible worker performs an unaugmented held-out test evaluation after training and returns `training.real_photo_test_metrics`; missing real support/test instances are unavailable, not zero. Mock training is rejected for this strategy. The Web executor rejects completed responses without those metrics. Rebuild/pin the worker image and verify a real GPU job before enabling the training account flag. Legacy pretraining payloads retain their behavior.

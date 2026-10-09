@@ -9885,6 +9885,64 @@ def _disable_legacy_feedback_for_real_photo(task_id):
         state['settings']={**(state.get('settings') or {}),'enabled':False,'auto_promote':False}
         save_auto_optimize_state(state)
 
+from .training.real_photo_dispatch import Dispatcher, DispatchPorts
+from .training.real_photo_training_config import freeze as freeze_real_photo_training_configuration
+
+def _real_photo_training_metadata(job):
+    owner=find_user(load_auth_store(),job['owner_user_id'])
+    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
+    token=_request_user.set(owner)
+    try:
+        _,task=_real_photo_feedback.task(job['task_id'])
+        if _real_photo_feedback.classes(task,owner)!=job['inputs']['classes']:
+            raise ValueError('frozen task category/reference version changed')
+        counts=task.get('required_accessory_counts') or {}
+        return {'feedback_task_id':job['task_id'],'required_accessory_counts':{
+            c['class_id']:max(0,int(counts.get(c['class_id'],1))) for c in job['inputs']['classes']}}
+    finally:_request_user.reset(token)
+
+def _submit_real_photo_training(job,dataset):
+    owner=find_user(load_auth_store(),job['owner_user_id'])
+    if not owner or not owner.get('active',True):raise ValueError('training owner account is unavailable')
+    token=_request_user.set(owner)
+    try:
+        if _real_photo_training_metadata(job)!=dataset['training_metadata']:
+            raise ValueError('frozen task rule snapshot changed')
+        config=scope_config_for_user(load_config(),owner)
+        selected=selected_accessories(config,dataset['selected_accessory_ids'])
+        if {s['id'] for s in selected}!=set(dataset['selected_accessory_ids']):
+            raise ValueError('frozen task classes no longer available')
+        by_id={s['id']:s for s in selected}
+        selected=[by_id[cid] for cid in dataset['selected_accessory_ids']]
+        request=TrainingStartRequest(selected_accessory_ids=dataset['selected_accessory_ids'],
+                                     sample_count=dataset['sample_count'],train_mode='yolo',dataset_id=dataset['id'])
+        return enqueue_training_task(request,selected,'train_model',dataset)
+    finally:_request_user.reset(token)
+
+_real_photo_dispatcher=Dispatcher(DispatchPorts(repository=_real_photo_repository,files=lambda:_business_files,
+    output=lambda owner:output_write_dir_for_owner('real_photo_datasets',owner),submit=_submit_real_photo_training,training=lambda identifier:load_training_task(identifier),
+    configuration=lambda:freeze_real_photo_training_configuration(
+        training_executor_mode(),detect_base_model,yolo_inference_device,os.environ),metadata=_real_photo_training_metadata))
+from .training.real_photo_masks import MaskDispatcher
+_real_photo_mask_dispatcher=MaskDispatcher(_real_photo_dispatcher.ports,lambda:resolve_model_profiles(),lambda settings:image_generation_provider_from_settings(settings))
+_real_photo_dispatch_stop=threading.Event()
+
+@app.on_event('startup')
+def start_real_photo_training_dispatcher():
+    from .training.real_photo_api import accounts
+    if not accounts():return
+    def loop(dispatcher):
+        while not _real_photo_dispatch_stop.wait(2):
+            try:
+                dispatcher.tick()
+            except Exception as exc:print('real-photo training dispatcher failed: '+type(exc).__name__,flush=True)
+    threading.Thread(target=loop,args=(_real_photo_mask_dispatcher,),name='real-photo-mask-dispatch',daemon=True).start()
+    if os.getenv('VANTALINE_REAL_PHOTO_TRAINING_ENABLED','')=='1':
+        threading.Thread(target=loop,args=(_real_photo_dispatcher,),name='real-photo-training-dispatch',daemon=True).start()
+
+@app.on_event('shutdown')
+def stop_real_photo_training_dispatcher():_real_photo_dispatch_stop.set()
+
 from .detection.rule_api import compose_detection_rule_api
 from .detection.rule_request_ports import RulePolicy, RuleStore, RuleAccess
 
@@ -10164,8 +10222,8 @@ _video_upload = VideoUpload(_upload_access, _upload_paths, lambda: shutil, lambd
 
 
 @app.post("/api/analyze/image")
-async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None)) -> dict[str, Any]:
-    return await _image_upload.analyze_image(file, model_id)
+async def analyze_image(file: UploadFile=File(...), model_id: str | None=Form(None), capture_session_id: str | None=Form(None)) -> dict[str, Any]:
+    return await _image_upload.analyze_image(file, model_id, capture_session_id)
 
 
 from .detection.camera_request import CameraDetectionRequest

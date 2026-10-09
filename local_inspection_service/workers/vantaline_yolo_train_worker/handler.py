@@ -479,6 +479,27 @@ def train_job(payload: dict[str, Any]) -> dict[str, Any]:
     base_model, base_model_summary = prepare_base_model(payload, job_dir)
     started = time.monotonic()
     best_pt, training = run_training(payload, job_id, yaml_path, base_model, job_dir)
+    if payload.get('feedback_strategy')=='real_photo_vlm':
+        if bool(payload.get('mock_train')):raise WorkerError('mock training cannot validate real-photo candidates')
+        evaluation=job_dir/'test_metrics.json'
+        script=job_dir/'evaluate_test.py'
+        script.write_text('''import json, sys
+from ultralytics import YOLO
+value=YOLO(sys.argv[1]).val(data=sys.argv[2],split="test",augment=False,plots=False,workers=0,device=sys.argv[4])
+box=value.box
+rows={str(int(c)):{"precision":float(box.p[i]),"recall":float(box.r[i]),"ap50":float(box.ap50[i]),"ap75":float(box.all_ap[i,5]),"ap50_95":float(box.ap[i])} for i,c in enumerate(box.ap_class_index)}
+open(sys.argv[3],"w").write(json.dumps(rows,allow_nan=False))
+''',encoding='utf-8')
+        status=run_subprocess([sys.executable,str(script),str(best_pt),str(yaml_path),str(evaluation),str(payload.get('device') or DEFAULT_DEVICE)],
+                             cwd=job_dir,log_path=job_dir/'logs'/'test.log',timeout_seconds=600)
+        if status!=0 or not evaluation.is_file():raise WorkerError('real-photo held-out evaluation failed')
+        if evaluation.stat().st_size>65536:raise WorkerError('test metrics exceed size bound')
+        rows=json.loads(evaluation.read_text());metrics={}
+        for index,cid in enumerate(payload['class_ids']):
+            unavailable=cid in payload['unsupported_by_real_data'] or not payload['test_class_counts'].get(cid)
+            metrics[cid]={'status':'unavailable','reason':'unsupported_by_real_data' if cid in payload['unsupported_by_real_data'] else 'no_test_instances','metrics':None} if unavailable else {'status':'evaluated','metrics':rows.get(str(index))}
+            if not unavailable and metrics[cid]['metrics'] is None:raise WorkerError('test class metrics missing')
+        training['real_photo_test_metrics']=metrics
     inference = run_inference_smoke(payload, best_pt, dataset, job_dir)
     artifacts = make_artifacts(payload, job_id, best_pt, job_dir)
     elapsed_ms = int((time.monotonic() - started) * 1000)
