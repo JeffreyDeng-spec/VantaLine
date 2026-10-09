@@ -60,10 +60,29 @@ def main():
                and any(alias.name == "ComparisonSubmission" for alias in node.names) for node in tree.body)
     assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
                    for target in node.targets if isinstance(target, ast.Name)}
-    composition = assignments["_comparison_submission"]
-    assert isinstance(composition, ast.Call) and isinstance(composition.func, ast.Name) and composition.func.id == "ComparisonSubmission"
+    # Follow the current owner graph; retain actual constructor capability checks.
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from application_integration_source_contract import verify_actual_compositions
+    verify_actual_compositions()
+    assert ast.dump(assignments["_comparison_submission"]) == ast.dump(ast.parse(
+        "_text_comparisons.submission", mode="eval").body)
+    owner_tree = ast.parse((APP_DIR / "text_inspection/comparison_composition.py").read_text())
+    assert any(isinstance(node, ast.ImportFrom) and node.module == "comparison_submission"
+               and any(alias.name == "ComparisonSubmission" for alias in node.names) for node in owner_tree.body)
+    owner = next(node for node in owner_tree.body if isinstance(node, ast.ClassDef)
+                 and node.name == "TextComparisonWorkflows")
+    constructor = next(node for node in owner.body if isinstance(node, ast.FunctionDef)
+                       and node.name == "__init__")
+    submission = next(node.value for node in constructor.body if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Attribute) and target.attr == "submission"
+                              for target in node.targets))
+    assert isinstance(submission, ast.Call) and isinstance(submission.func, ast.Name) and submission.func.id == "ComparisonSubmission"
+    registration = next(node for node in owner.body if isinstance(node, ast.FunctionDef)
+                        and node.name == "register_inspections")
+    assert ast.dump(registration.body[-1].value) == ast.dump(ast.parse(
+        "register_inspections(app, self.submission, self.reviews, self.access)", mode="eval").body)
     assert ast.dump(assignments["_inspection_routes"]) == ast.dump(ast.parse(
-        "register_text_inspections(app, _comparison_submission, _inspection_reviews, _inspection_access)", mode="eval").body)
+        "_text_comparisons.register_inspections(app)", mode="eval").body)
     assert ast.dump(assignments["compare_text_inspection_label"]) == ast.dump(ast.parse(
         "_inspection_routes.compare_text_inspection_label", mode="eval").body)
     record_source = (APP_DIR / "text_inspection/record_store.py").read_text(encoding="utf-8")
