@@ -66,7 +66,10 @@ class PostgresLocations:
                            "ORDER BY logical_path COLLATE \"C\",generation DESC) latest) children "
                            "WHERE state='ready' AND strpos(relative_path,'/')>0 ORDER BY 1",
                            (len(prefix) + 1, prefix, prefix[:-1] + "0"))
-            return [row[0] for row in cursor.fetchall()]
+            names = [row[0] for row in cursor.fetchall()]
+            for name in names:
+                logical_path(prefix + name)
+            return names
 
     def publish(self, artifact: Artifact, *, expected_generation: int) -> Artifact:
         if artifact.generation != expected_generation + 1:

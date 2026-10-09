@@ -99,6 +99,18 @@ class PostgresTests(unittest.TestCase):
             self.assertEqual(sorted(self.repo.directories(prefix)), expected)
         self.assertEqual(set(self.repo.directories("outputs/users")), {"a_", "a%", "中文", "retained"})
 
+    def test_directory_projection_rejects_invalid_child_name(self):
+        row = self.row()
+        with psycopg.connect(DSN) as connection:
+            connection.execute(
+                "INSERT INTO vantaline.artifact_locations "
+                "(logical_path,generation,object_key,sha256,size_bytes,state,created_at) "
+                "VALUES (%s,1,%s,%s,1,'ready',1)",
+                ("outputs/users/../invalid.png", row.key, row.sha256))
+        with self.assertRaises(ValueError):
+            self.repo.directories("outputs/users")
+        self.assertEqual(self.repo.directories("outputs/other"), [])
+
     def test_conflict_rolls_back_and_next_operation_works(self):
         first = self.repo.publish(self.row(), expected_generation=0)
         with self.assertRaises(ArtifactConflict):
