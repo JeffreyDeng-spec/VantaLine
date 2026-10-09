@@ -1414,3 +1414,5 @@ Before real-photo admission, verify that continuous YOLO arrivals cannot extend 
 Before rolling back a release with pending frozen review cohorts, close Web and reviewer admission, settle active attempts and stop the newer reviewer. Keep pending membership and job evidence intact; an older scheduler must not consume a new-format cohort with no review jobs. Reconcile the cohort explicitly before reopening any reviewer.
 
 Assessment inputs freeze the initialization decision, current approved-real target and candidate trigger alongside reviewed decisions. The Agent can lower its approved target within 20–50 with a reason, but must distinguish that new target from the recorded initial value; prior reports remain immutable.
+
+The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.

@@ -27,3 +27,22 @@ def test_crop_cannot_write_input_or_escape_sandbox():
     from local_inspection_service.training_review.image_tools import crop
     with pytest.raises(ValueError):crop('/input/original.png','/input/replaced.png',[0,0,10,10])
     with pytest.raises(ValueError):crop('/secret/actual.png','/work/crop.png',[0,0,10,10])
+
+
+@pytest.mark.parametrize('legacy',[False,True])
+def test_crop_pixels_and_transform_support_legacy_system_pillow(tmp_path,legacy):
+    import PIL
+    from PIL import Image
+    from local_inspection_service.training_review.image_tools import crop
+    source=tmp_path/'original.png';target=tmp_path/'crop.png'
+    Image.new('RGB',(40,30),'red').save(source)
+    api=SimpleNamespace(open=Image.open,LANCZOS=Image.Resampling.LANCZOS) if legacy else Image
+    # Exercise API selection without deleting globals used internally by current Pillow.
+    def mapped(path):return Path('/input/original.png' if path==source else '/work/crop.png')
+    with patch.object(PIL,'Image',api),patch.object(Path,'resolve',mapped):
+        evidence=crop(str(source),str(target),[3,4,13,14],2)
+    with Image.open(target) as result:
+        assert result.size==(20,20) and result.getpixel((10,10))==(255,0,0)
+    import json
+    assert json.loads(Path(str(target)+'.transform.json').read_text())==evidence
+    assert evidence['crop_pixels']==[3,4,13,14] and evidence['resampler']=='LANCZOS'
