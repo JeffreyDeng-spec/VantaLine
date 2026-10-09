@@ -192,3 +192,11 @@ The explicit Codex environment mapping changes no PLC authorization, workstation
 The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
 
 The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+
+Pose composition adds three strict outer source-oracle layers. The unchanged
+PLC lease/diagnostic composition regression validates the actual Pose owners
+before reversing those layers and inspecting its original PLC binding assertions.
+This test adaptation preserves protocol, browser ownership, lease/ACK rules,
+uncertain-write non-retry behavior and the original Web shutdown order; it adds
+no PLC access or production worker transition.
