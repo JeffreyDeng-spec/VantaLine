@@ -9066,21 +9066,92 @@ def delete_ai_detection_task_record(task_id: str, user: dict[str, Any], *, missi
 from .pipeline.task_mutations import PipelineTaskMutations
 from .pipeline.task_mutations_ports import MutationStorage, MutationAccess
 
-_pipeline_task_mutations = PipelineTaskMutations(
-    storage=MutationStorage(
-        runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none,
-        save_pipeline_task=lambda: save_pipeline_task,
-        save_pipeline_tasks=lambda: save_pipeline_tasks,
-        _pipeline_tasks_lock=lambda: _pipeline_tasks_lock,
-        load_pipeline_tasks=lambda: load_pipeline_tasks,
-        load_pipeline_task=lambda: load_pipeline_task,
-        save_pipeline_task_batch_changes=lambda: save_pipeline_task_batch_changes,
-    ),
-    access=MutationAccess(
-        sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id,
-        record_mutable_by_user=lambda: record_mutable_by_user,
-    ),
+from .pipeline.runtime_composition import (
+    PipelineRuntimeWorkflows,
+    RuntimeMutationStorage,
+    MutationAccess,
+    ActivationPolicyInputs,
+    ActivationStorageInputs,
+    PipelineAiIdentityInputs,
+    PipelineAiAccessoriesInputs,
+    PipelineAiAccessInputs,
+    PipelineAiProjectionInputs,
+    TrainingJobLookupInputs,
+    TrainingStatusEffectsInputs,
+    StageAdvancePolicyInputs,
+    StageAdvanceAssetsInputs,
+    StageAdvanceJobsInputs,
+    RuntimeStageAdvanceRuntimeInputs,
+    ReconciliationRegistryInputs,
+    ReconciliationCallsInputs,
+    AgentConversationRuntimeInputs,
+    AgentDecisionTextInputs,
+    RuntimeAgentPipelineEvidenceInputs,
+    AgentDecisionAccessoriesInputs,
+    AgentDecisionContextCallsInputs,
+    AgentDecisionPolicyValuesInputs,
+    AgentDecisionInvocationSettingsInputs,
+    AgentDecisionCodecInputs,
+    AgentDecisionFlowCallsInputs,
+    AgentActionStateInputs,
+    AgentActionJobsInputs,
+    AgentActionPoseInputs,
+    RuntimePipelineAutoAgentTasksInputs,
+    RuntimePipelineAutoAgentDecisionInputs,
+    PipelineAutoAgentExecutionInputs,
+    PipelineAutoAgentSchedulingInputs,
+    RuntimePipelineAdvanceTasksInputs,
+    RuntimePipelineAdvancePolicyInputs,
+    PipelineAdvanceExecutionInputs,
+    PipelineAdvanceSchedulingInputs,
+    PipelineRecommendationExecutionInputs,
+    PipelineRecommendationSchedulingInputs
 )
+
+_pipeline_workflows = PipelineRuntimeWorkflows(
+    queries=_pipeline_queries,
+    model_resolver=resolve_model_profiles,
+    scope=_runtime_repositories.thread_scope,
+    mutations_storage=RuntimeMutationStorage(runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none),
+    mutations_access=MutationAccess(sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id, record_mutable_by_user=lambda: record_mutable_by_user),
+    stages_activation_policy=ActivationPolicyInputs(HTTPException=lambda: HTTPException, accessory_lookup_by_id=lambda: accessory_lookup_by_id, clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id),
+    stages_activation_storage=ActivationStorageInputs(current_owner_fields=lambda: current_owner_fields, find_ai_detection_task=lambda: find_ai_detection_task, save_ai_detection_task=lambda: save_ai_detection_task, serialize_ai_detection_task=lambda: serialize_ai_detection_task),
+    stages_pipeline_ai_identity=PipelineAiIdentityInputs(safe_record_id=lambda: safe_record_id, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id, ai_detection_task_model_id=lambda: ai_detection_task_model_id),
+    stages_pipeline_ai_accessories=PipelineAiAccessoriesInputs(accessory_lookup_by_id=lambda: accessory_lookup_by_id, accessory_material_type=lambda: accessory_material_type),
+    stages_pipeline_ai_access=PipelineAiAccessInputs(source=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE, record_visible_to_user=lambda: record_visible_to_user, load_ai_detection_tasks=lambda: load_ai_detection_tasks),
+    stages_pipeline_ai_projection=PipelineAiProjectionInputs(clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, now=lambda: time.time),
+    stages_training_job_lookup=TrainingJobLookupInputs(load=lambda: load_training_task, path=lambda: training_task_path, public=lambda: public_refreshed_training_task),
+    stages_training_status_effects=TrainingStatusEffectsInputs(orchestration=lambda: agent_mcp_orchestration, set_stage=lambda: set_agent_mcp_stage),
+    stages_stage_advance_policy=StageAdvancePolicyInputs(recommend=lambda: agent_recommendation, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, training_quality=lambda: agent_mcp_training_quality_gate, link_model=lambda: link_pipeline_trained_model, http_error=lambda: HTTPException, cancelled_error=lambda: PipelineAdvanceCancelled),
+    stages_stage_advance_assets=StageAdvanceAssetsInputs(load_config=lambda: load_config, save_config=lambda: save_config, prepare=lambda: prepare_agent_mcp_before_sample_generation, materialize=lambda: materialize_agent_mcp_pose_assets, normalize=lambda: ensure_training_normalized_assets_for_selection),
+    stages_stage_advance_jobs=StageAdvanceJobsInputs(request_type=lambda: TrainingStartRequest, sample_generation=lambda: request_sample_generation, training=lambda: request_training, task_name=lambda: task_record_name, log_samples=lambda: log_agent_mcp_sample_tool_call, log_training=lambda: log_agent_mcp_training_tool_call),
+    stages_stage_advance_runtime=RuntimeStageAdvanceRuntimeInputs(monotonic=lambda: time.monotonic, clock=lambda: time.time, print=lambda: print),
+    stages_reconciliation_registry=ReconciliationRegistryInputs(timeout=lambda: PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S, now=lambda: time.time),
+    stages_reconciliation_calls=ReconciliationCallsInputs(load_agent_config=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, training_finder=lambda: training_task_finder, orchestration=lambda: agent_mcp_orchestration),
+    agent_conversation_runtime=AgentConversationRuntimeInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT),
+    agent_decision_text=AgentDecisionTextInputs(bounded=lambda: bounded_text),
+    agent_pipeline_evidence=RuntimeAgentPipelineEvidenceInputs(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    agent_decision_accessories=AgentDecisionAccessoriesInputs(lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type),
+    agent_decision_context_calls=AgentDecisionContextCallsInputs(stage_order=lambda: PIPELINE_STAGE_ORDER),
+    agent_decision_policy_values=AgentDecisionPolicyValuesInputs(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS),
+    agent_decision_invocation_settings=AgentDecisionInvocationSettingsInputs(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT),
+    agent_decision_codec=AgentDecisionCodecInputs(dumps=lambda: json.dumps, parse=lambda: parse_agent_json),
+    agent_decision_flow_calls=AgentDecisionFlowCallsInputs(chat=lambda: agent_chat_completion),
+    agent_action_state=AgentActionStateInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException),
+    agent_action_jobs=AgentActionJobsInputs(delete=lambda: delete_training_task_record),
+    agent_action_pose=AgentActionPoseInputs(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls),
+    execution_auto_tasks=RuntimePipelineAutoAgentTasksInputs(orchestration=lambda: agent_mcp_orchestration, max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS, pause=lambda: pause_agent_mcp_task, deepcopy=lambda: copy.deepcopy),
+    execution_auto_decision=RuntimePipelineAutoAgentDecisionInputs(scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, now=lambda: agent_mcp_now),
+    execution_auto_execution=PipelineAutoAgentExecutionInputs(identity=lambda: _request_user, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
+    execution_auto_scheduling=PipelineAutoAgentSchedulingInputs(thread=lambda: threading.Thread),
+    execution_advance_tasks=RuntimePipelineAdvanceTasksInputs(deepcopy=lambda: copy.deepcopy),
+    execution_advance_policy=RuntimePipelineAdvancePolicyInputs(cancelled_error=lambda: PipelineAdvanceCancelled, http_error=lambda: HTTPException, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, bounded_text=lambda: bounded_text),
+    execution_advance_execution=PipelineAdvanceExecutionInputs(identity=lambda: _request_user, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr, print=lambda: print),
+    execution_advance_scheduling=PipelineAdvanceSchedulingInputs(event=lambda: threading.Event, thread=lambda: threading.Thread),
+    execution_recommendation_execution=PipelineRecommendationExecutionInputs(identity=lambda: _request_user, recommend=lambda: agent_recommendation, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
+    execution_recommendation_scheduling=PipelineRecommendationSchedulingInputs(thread=lambda: threading.Thread)
+)
+_pipeline_task_mutations = _pipeline_workflows.mutations
 
 
 def save_pipeline_task_batch_changes(tasks: list[dict[str, Any]], changed_tasks: list[dict[str, Any]]) -> None:
@@ -10862,24 +10933,7 @@ from .pipeline.stage_composition import (
     ReconciliationCallsInputs
 )
 
-_pipeline_stages = PipelineStages(
-    queries=_pipeline_queries,
-    runtime=_pipeline_runtime,
-    activation_policy=ActivationPolicyInputs(HTTPException=lambda: HTTPException, accessory_lookup_by_id=lambda: accessory_lookup_by_id, clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id),
-    activation_storage=ActivationStorageInputs(current_owner_fields=lambda: current_owner_fields, find_ai_detection_task=lambda: find_ai_detection_task, save_ai_detection_task=lambda: save_ai_detection_task, serialize_ai_detection_task=lambda: serialize_ai_detection_task),
-    pipeline_ai_identity=PipelineAiIdentityInputs(safe_record_id=lambda: safe_record_id, sanitize_ai_detection_task_id=lambda: sanitize_ai_detection_task_id, ai_detection_task_model_id=lambda: ai_detection_task_model_id),
-    pipeline_ai_accessories=PipelineAiAccessoriesInputs(accessory_lookup_by_id=lambda: accessory_lookup_by_id, accessory_material_type=lambda: accessory_material_type),
-    pipeline_ai_access=PipelineAiAccessInputs(source=lambda: PIPELINE_DASHBOARD_AI_TASK_SOURCE, record_visible_to_user=lambda: record_visible_to_user, load_ai_detection_tasks=lambda: load_ai_detection_tasks),
-    pipeline_ai_projection=PipelineAiProjectionInputs(clean_ai_detection_task_name=lambda: clean_ai_detection_task_name, now=lambda: time.time),
-    training_job_lookup=TrainingJobLookupInputs(load=lambda: load_training_task, path=lambda: training_task_path, public=lambda: public_refreshed_training_task),
-    training_status_effects=TrainingStatusEffectsInputs(orchestration=lambda: agent_mcp_orchestration, set_stage=lambda: set_agent_mcp_stage),
-    stage_advance_policy=StageAdvancePolicyInputs(recommend=lambda: agent_recommendation, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, training_quality=lambda: agent_mcp_training_quality_gate, link_model=lambda: link_pipeline_trained_model, http_error=lambda: HTTPException, cancelled_error=lambda: PipelineAdvanceCancelled),
-    stage_advance_assets=StageAdvanceAssetsInputs(load_config=lambda: load_config, save_config=lambda: save_config, prepare=lambda: prepare_agent_mcp_before_sample_generation, materialize=lambda: materialize_agent_mcp_pose_assets, normalize=lambda: ensure_training_normalized_assets_for_selection),
-    stage_advance_jobs=StageAdvanceJobsInputs(request_type=lambda: TrainingStartRequest, sample_generation=lambda: request_sample_generation, training=lambda: request_training, task_name=lambda: task_record_name, log_samples=lambda: log_agent_mcp_sample_tool_call, log_training=lambda: log_agent_mcp_training_tool_call),
-    stage_advance_runtime=StageAdvanceRuntimeInputs(persist_progress=lambda: persist_pipeline_task_progress, monotonic=lambda: time.monotonic, clock=lambda: time.time, print=lambda: print),
-    reconciliation_registry=ReconciliationRegistryInputs(timeout=lambda: PIPELINE_ADVANCE_ZOMBIE_TIMEOUT_S, now=lambda: time.time),
-    reconciliation_calls=ReconciliationCallsInputs(load_agent_config=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, training_finder=lambda: training_task_finder, orchestration=lambda: agent_mcp_orchestration)
-)
+_pipeline_stages = _pipeline_workflows.stages
 _pipeline_ai_activation = _pipeline_stages.activation
 
 
@@ -11010,23 +11064,7 @@ from .agent.pipeline_composition import (
     AgentActionPoseInputs
 )
 
-_agent_pipeline_workflows = AgentPipelineWorkflows(
-    queries=_pipeline_queries,
-    model_resolver=resolve_model_profiles,
-    conversation_runtime=AgentConversationRuntimeInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, uuid=lambda: uuid.uuid4, limit=lambda: AGENT_MCP_CONVERSATION_LIMIT),
-    decision_text=AgentDecisionTextInputs(bounded=lambda: bounded_text),
-    pipeline_evidence=AgentPipelineEvidenceInputs(orchestration=lambda: agent_mcp_orchestration, image_config=lambda: agent_mcp_gemini_image_config, missing_assets=lambda: agent_mcp_missing_existing_asset_names, training_job=lambda: linked_training_job, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
-    decision_accessories=AgentDecisionAccessoriesInputs(lookup=lambda: accessory_lookup_by_id, material=lambda: accessory_material_type),
-    decision_context_calls=AgentDecisionContextCallsInputs(stage_order=lambda: PIPELINE_STAGE_ORDER),
-    decision_policy_values=AgentDecisionPolicyValuesInputs(actions=lambda: AGENT_PIPELINE_ACTIONS, targets=lambda: AGENT_PIPELINE_STAGE_TARGETS),
-    decision_invocation_settings=AgentDecisionInvocationSettingsInputs(load=lambda: load_agent_config, supported=lambda: agent_recommendation_supported, prompt=lambda: AGENT_PIPELINE_SYSTEM_PROMPT),
-    decision_codec=AgentDecisionCodecInputs(dumps=lambda: json.dumps, parse=lambda: parse_agent_json),
-    decision_flow_calls=AgentDecisionFlowCallsInputs(chat=lambda: agent_chat_completion),
-    action_state=AgentActionStateInputs(orchestration=lambda: agent_mcp_orchestration, now=lambda: agent_mcp_now, pause=lambda: pause_agent_mcp_task, bounded=lambda: bounded_text, http_error_type=lambda: HTTPException),
-    action_advance=AgentActionAdvanceInputs(mark=lambda: mark_pipeline_task_advancing, sync=lambda: sync_pipeline_task, advance=lambda: advance_pipeline_task),
-    action_jobs=AgentActionJobsInputs(delete=lambda: delete_training_task_record),
-    action_pose=AgentActionPoseInputs(photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, plan=lambda: ensure_agent_mcp_pose_plan, ensure_calls=lambda: ensure_agent_mcp_pose_tool_calls, config=lambda: agent_mcp_gemini_image_config, execute=lambda: execute_agent_mcp_pose_tool_calls)
-)
+_agent_pipeline_workflows = _pipeline_workflows.agent
 _agent_conversation = _agent_pipeline_workflows.conversation
 _agent_decision_context = _agent_pipeline_workflows.context
 _agent_decision_policy = _agent_pipeline_workflows.policy
@@ -11178,22 +11216,7 @@ from .pipeline.execution_composition import (
     PipelineRecommendationSchedulingInputs
 )
 
-_pipeline_execution = PipelineExecution(
-    persistence=_pipeline_persistence,
-    model_resolver=resolve_model_profiles,
-    scope=_runtime_repositories.thread_scope,
-    auto_tasks=PipelineAutoAgentTasksInputs(needs_agent=lambda: pipeline_task_needs_auto_agent, orchestration=lambda: agent_mcp_orchestration, signature=lambda: pipeline_task_decision_signature, max_steps=lambda: AGENT_MCP_AUTO_MAX_STEPS, pause=lambda: pause_agent_mcp_task, append_conversation=lambda: agent_mcp_append_conversation, deepcopy=lambda: copy.deepcopy),
-    auto_decision=PipelineAutoAgentDecisionInputs(scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, decide=lambda: agent_pipeline_decide, commit=lambda: commit_pipeline_agent_turn, now=lambda: agent_mcp_now),
-    auto_execution=PipelineAutoAgentExecutionInputs(identity=lambda: _request_user, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
-    auto_scheduling=PipelineAutoAgentSchedulingInputs(thread=lambda: threading.Thread),
-    advance_tasks=PipelineAdvanceTasksInputs(sync=lambda: sync_pipeline_task, deepcopy=lambda: copy.deepcopy),
-    advance_policy=PipelineAdvancePolicyInputs(advance=lambda: advance_pipeline_task, cancelled_error=lambda: PipelineAdvanceCancelled, http_error=lambda: HTTPException, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, bounded_text=lambda: bounded_text),
-    advance_execution=PipelineAdvanceExecutionInputs(identity=lambda: _request_user, scope_config=lambda: scope_config_for_user, load_config=lambda: load_config, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr, print=lambda: print),
-    advance_scheduling=PipelineAdvanceSchedulingInputs(event=lambda: threading.Event, thread=lambda: threading.Thread),
-    recommendation_tasks=PipelineRecommendationTasksInputs(next_stage=lambda: pipeline_next_recommendation_stage, ready=lambda: pipeline_recommendation_ready, signature=lambda: pipeline_recommendation_signature),
-    recommendation_execution=PipelineRecommendationExecutionInputs(identity=lambda: _request_user, recommend=lambda: agent_recommendation, clock=lambda: time.time, traceback=lambda: traceback.print_exc, stderr=lambda: sys.stderr),
-    recommendation_scheduling=PipelineRecommendationSchedulingInputs(thread=lambda: threading.Thread)
-)
+_pipeline_execution = _pipeline_workflows.execution
 _pipeline_auto_agent_runtime = _pipeline_execution.auto
 
 

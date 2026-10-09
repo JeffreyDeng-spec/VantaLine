@@ -184,3 +184,5 @@ Pipeline Agent conversation/action composition preserves the existing supplied p
 The PLC lease composition source-contract smoke now replays the validated outer PipelineStages delta before the existing domain deltas. PLC business code, browser lease/ACK behavior and physical I/O are unchanged; the original assertions remain and unknown outer wiring changes fail replay.
 
 PLC source-oracle checks also validate the outer PipelineTaskWorkflows assembly delta before restoring original coordination and lease constructors. This changes the test location adapter only; actual PLC ownership, at-most-once browser writes and ACK/uncertainty rules remain unchanged.
+
+PipelineRuntimeWorkflows composes native pipeline transitions without creating a PLC executor or changing browser-owned lease, dispatch, ACK or uncertain-write behavior. Legacy PLC shutdown and dormant worker state retain their original lifecycle.

@@ -1,5 +1,5 @@
 {
-  "version": 267,
+  "version": 268,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -577,6 +577,7 @@
     "pipeline/query_composition.py",
     "agent/pipeline_composition.py",
     "pipeline/stage_composition.py",
-    "pipeline/task_composition.py"
+    "pipeline/task_composition.py",
+    "pipeline/runtime_composition.py"
   ]
 }

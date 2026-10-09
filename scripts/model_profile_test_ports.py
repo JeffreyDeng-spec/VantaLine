@@ -23,6 +23,9 @@ def set_profile_service(api, value):
 
 
 def patch_fixture_capability(api, name, value, **kwargs):
+    if hasattr(api, '_pipeline_workflows'):
+        from scripts.pipeline_runtime_test_ports import OWNERS,patch_pipeline_runtime
+        if name in OWNERS:return patch_pipeline_runtime(api,name,value,**kwargs)
     if hasattr(api, '_pipeline_execution'):
         from scripts.pipeline_execution_test_ports import RUNTIME_FIELDS, METHODS, patch_pipeline_capability
         if name in RUNTIME_FIELDS or name in METHODS:

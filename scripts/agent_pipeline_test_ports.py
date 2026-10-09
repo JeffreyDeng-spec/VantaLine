@@ -16,6 +16,10 @@ def patch_agent_pipeline(api,name,value=DEFAULT,**kwargs):
     with ExitStack() as stack:
         root_patch=patch.object(api,name,**kwargs) if value is DEFAULT else patch.object(api,name,value,**kwargs)
         replacement=stack.enter_context(root_patch)
+        connected=getattr(api,'_pipeline_workflows',None)
+        if connected is not None:
+            from pipeline_runtime_test_ports import OWNERS
+            if name in OWNERS:stack.enter_context(patch.object(connected,name,replacement))
         if name in OWNED:
             stack.enter_context(patch.object(api._agent_pipeline_workflows,name,replacement))
         yield replacement

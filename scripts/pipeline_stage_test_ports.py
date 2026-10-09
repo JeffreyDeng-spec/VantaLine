@@ -16,6 +16,10 @@ def patch_pipeline_stage(api,name,value=DEFAULT,**kwargs):
     with ExitStack() as stack:
         root_patch=patch.object(api,name,**kwargs) if value is DEFAULT else patch.object(api,name,value,**kwargs)
         replacement=stack.enter_context(root_patch)
+        connected=getattr(api,'_pipeline_workflows',None)
+        if connected is not None:
+            from pipeline_runtime_test_ports import OWNERS
+            if name in OWNERS:stack.enter_context(patch.object(connected,name,replacement))
         owner=getattr(api,'_pipeline_stages',None)
         if owner is not None:
             if name in METHODS:stack.enter_context(patch.object(owner,name,replacement))
