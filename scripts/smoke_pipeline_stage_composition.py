@@ -1,4 +1,5 @@
 """Real pipeline stage graph and shared runtime, with synthetic external effects."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 import copy
 from dataclasses import fields
@@ -154,7 +155,7 @@ class StageCompositionContracts(unittest.TestCase):
         self.assertEqual(f.owner.pipeline_recommendation_signature({},'samples'),'late')
     def test_source_inverse_preserves_all_business_and_root_functions(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         restored=restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES)
         self.assertNotIn('_pipeline_stages = PipelineStages',restored)
         restore_plc_domain_root(source)

@@ -10,6 +10,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
 
 class PhotoHighlightImageContracts(unittest.TestCase):
     @classmethod
@@ -32,7 +33,7 @@ class PhotoHighlightImageContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
     def test_prompt_exact_text_and_name_precedence(self):
         uid=self.replace('accessory_uid',return_value='identifier')
         self.assertEqual(hashlib.sha256(self.api.photo_highlight_mask_prompt({'name':'Synthetic','label':'Other'}).encode()).hexdigest(),'06f8e24b093bf09a644768a51c52069272682840b155398c0d25e7a94e6f944e')

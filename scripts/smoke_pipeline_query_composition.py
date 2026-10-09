@@ -1,4 +1,5 @@
 """Actual six-service query graph, including its protected write side effects."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 from dataclasses import fields
 import json
@@ -210,7 +211,7 @@ class QueryCompositionContracts(unittest.TestCase):
 
     def test_source_inverse_rejects_wrong_owned_targets(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES))),PIPELINE_QUERIES['parent_ast_sha256'])
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):

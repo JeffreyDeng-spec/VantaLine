@@ -147,3 +147,16 @@ When replacing connected pipeline mutation capabilities for tests, use `scripts/
 Codex API environment configuration is an explicit registration input. The source-contract replay first validates the actual Codex API/worker and restores its single reviewed root call before earlier pipeline/PLC inverses. This test adaptation changes no pipeline or PLC business owner.
 
 The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.

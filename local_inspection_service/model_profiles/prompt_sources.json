@@ -1,5 +1,5 @@
 {
-  "version": 269,
+  "version": 270,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -580,6 +580,9 @@
     "pipeline/task_composition.py",
     "pipeline/runtime_composition.py",
     "codex_compare/api.py",
-    "codex_compare/worker.py"
+    "codex_compare/worker.py",
+    "agent/state_composition.py",
+    "agent/planning_composition.py",
+    "agent/pose_execution_composition.py"
   ]
 }

@@ -1,0 +1,93 @@
+{
+  "parent_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "parent_ast_sha256": "b5a5721ae6345cd10d18ee18b018befa680f57663044f311264c75962d0a59fc",
+  "integrated_ast_sha256": "11dbc2d76dbb8202003a8f3199039bce5d67ea6afd491d4e1f395347f31b6684",
+  "regions": [
+    {
+      "start": 2381,
+      "end": 2385,
+      "expected": [
+        "from .agent.pose_execution_composition import PoseExecutionWorkflows, PoseRenderReferences, PoseRenderPresentation, PoseRenderPaths, ArtifactsPoseRenderArtifactsInputs, PhotoSourceMedia, PhotoSpriteLimits, PhotoSpriteReadiness, PhotoObjectSelection, PhotosPhotoWorkflowObjectsInputs, PhotosPhotoWorkflowStateInputs, PhotosPhotoWorkflowModelsInputs, PhotoHighlightImagePolicy, PhotoMaskGeometry, BuilderPhotoBuildPolicyInputs, PhotoBuildRuntime, BuilderPhotoBuildMasksInputs, PhotoBuildModelPolicy, PhotoBuildPublication, PhotoBuildArtifacts, PoseSpriteMetadata, RegistrationPoseWorkflowModelsInputs, RegistrationPoseCallRegistryInputs, ExecutionPoseWorkflowModelsInputs, ExecutionPoseCallRegistryInputs, ExecutionPoseCallContentInputs, ExecutionPoseCallPresentationInputs, SamplesPoseWorkflowModelsInputs, SamplesPoseSampleStepsInputs, PoseWorkflowDiagnostics",
+        "_photo_pose_workflows = PoseExecutionWorkflows(state=_agent_state_workflows, planning=_pose_planning_workflows, files=_business_files, images=ImageFiles(lambda: cv2, files=_business_files), render_references=PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256), render_presentation=PoseRenderPresentation(screen=lambda: normalize_chroma_screen), artifacts_paths=PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id), artifacts_artifacts=ArtifactsPoseRenderArtifactsInputs(digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, dumps=lambda: json.dumps), artifacts_presentation=PoseRenderPresentation(screen=lambda: normalize_chroma_screen), sources_media=PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES), sources_limits=PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), sources_sprites=PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete), selection_selection=PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type), photos_objects=PhotosPhotoWorkflowObjectsInputs(identifier=lambda: accessory_uid, signature=lambda: accessory_sprite_version), photos_limits=PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), photos_state=PhotosPhotoWorkflowStateInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), photos_models=PhotosPhotoWorkflowModelsInputs(settings=lambda: image_generation_settings, provider=lambda: image_generation_provider_from_settings), image_input_policy=PhotoHighlightImagePolicy(identifier=lambda: accessory_uid, max_side=lambda: PHOTO_HIGHLIGHT_MASK_MAX_SIDE), comparison_geometry=PhotoMaskGeometry(alpha=lambda: alpha_bbox, iou=lambda: bbox_iou_xyxy), builder_policy=BuilderPhotoBuildPolicyInputs(material=lambda: accessory_material_type, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES), builder_runtime=PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text), builder_masks=BuilderPhotoBuildMasksInputs(decode=lambda: decode_photo_highlight_mask, bounds=lambda: alpha_bbox, roi=lambda: photo_highlight_auto_roi_mask), builder_model=PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), builder_publication=PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record), builder_artifacts=PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing), builder_metadata=PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints), registration_models=RegistrationPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), registration_registry=RegistrationPoseCallRegistryInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist), execution_models=ExecutionPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), execution_registry=ExecutionPoseCallRegistryInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist), execution_content=ExecutionPoseCallContentInputs(chroma=lambda: choose_agent_mcp_chroma_screen), execution_presentation=ExecutionPoseCallPresentationInputs(bounded=lambda: bounded_text), samples_models=SamplesPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), samples_steps=SamplesPoseSampleStepsInputs(missing=lambda: agent_mcp_missing_existing_asset_names, background=lambda: ensure_pipeline_background_plate, materialize=lambda: materialize_agent_mcp_pose_assets, save=lambda: save_config), samples_diagnostics=PoseWorkflowDiagnostics(stderr=lambda: sys.stderr, print_exception=lambda: traceback.print_exc))",
+        "_pose_render_content = _photo_pose_workflows.render",
+        "_pose_artifact_store = _photo_pose_workflows.artifacts"
+      ],
+      "original": [
+        "_pose_render_content = _PoseRenderContent(_PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256), _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files)",
+        "_pose_artifact_store = _PoseArtifactStore(_PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id), _PoseRenderArtifacts(output=lambda: agent_mcp_pose_output_path, digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, now=lambda: agent_mcp_now, dumps=lambda: json.dumps), _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files)"
+      ]
+    },
+    {
+      "start": 2425,
+      "end": 2428,
+      "expected": [
+        "_photo_highlight_sources = _photo_pose_workflows.sources",
+        "_photo_highlight_selection = _photo_pose_workflows.selection",
+        "_photo_highlight_workflow = _photo_pose_workflows.photos"
+      ],
+      "original": [
+        "_photo_highlight_sources = _PhotoHighlightSources(_PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES), _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete), files=_business_files)",
+        "_photo_highlight_selection = _PhotoHighlightSelection(_PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type))",
+        "_photo_highlight_workflow = _PhotoHighlightWorkflow(_PhotoWorkflowObjects(items=lambda: pipeline_photo_highlight_object_items, identifier=lambda: accessory_uid, sources=lambda: object_photo_highlight_source_paths, signature=lambda: accessory_sprite_version), _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), _PhotoWorkflowState(now=lambda: agent_mcp_now, tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, stage=lambda: set_agent_mcp_stage, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, build_plan=lambda: build_agent_mcp_pose_plan), _PhotoWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, settings=lambda: image_generation_settings, provider=lambda: image_generation_provider_from_settings, build_sprites=lambda: build_clean_sprites_from_photo_highlight_masks))"
+      ]
+    },
+    {
+      "start": 2438,
+      "end": 2440,
+      "expected": [
+        "_photo_highlight_image_input = _photo_pose_workflows.image_input",
+        "_photo_highlight_comparison = _photo_pose_workflows.comparison"
+      ],
+      "original": [
+        "_photo_highlight_image_input = _PhotoHighlightImageInput(_PhotoHighlightImagePolicy(identifier=lambda: accessory_uid, max_side=lambda: PHOTO_HIGHLIGHT_MASK_MAX_SIDE))",
+        "_photo_highlight_comparison = _PhotoHighlightComparison(_PhotoMaskGeometry(alpha=lambda: alpha_bbox, iou=lambda: bbox_iou_xyxy))"
+      ]
+    },
+    {
+      "start": 2448,
+      "end": 2450,
+      "expected": [
+        "_agent_image_io = _photo_pose_workflows.images",
+        "_photo_highlight_sprite_builder = _photo_pose_workflows.builder"
+      ],
+      "original": [
+        "_agent_image_io = ImageFiles(lambda: cv2, files=_business_files)",
+        "_photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(_PhotoBuildPolicy(material=lambda: accessory_material_type, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES), _PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text), _PhotoBuildMasks(prompt=lambda: photo_highlight_mask_prompt, input=lambda: photo_highlight_input_data_url, decode=lambda: decode_photo_highlight_mask, bounds=lambda: alpha_bbox, roi=lambda: photo_highlight_auto_roi_mask, compare=lambda: photo_highlight_auto_compare), _PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION), _PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record), _PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing), _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints), files=_business_files, images=_agent_image_io)"
+      ]
+    },
+    {
+      "start": 2460,
+      "end": 2463,
+      "expected": [
+        "_pose_call_registration = _photo_pose_workflows.registration",
+        "_pose_call_execution = _photo_pose_workflows.execution",
+        "_pose_sample_preparation = _photo_pose_workflows.samples"
+      ],
+      "original": [
+        "_pose_call_registration = _PoseCallRegistration(_PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration), _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call))",
+        "_pose_call_execution = _PoseCallExecution(_PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration), _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call), _PoseCallContent(prompt=lambda: agent_mcp_pose_prompt, references=lambda: agent_mcp_pose_reference_content, chroma=lambda: choose_agent_mcp_chroma_screen, artifact=lambda: write_agent_mcp_pose_artifact), _PoseCallPresentation(now=lambda: agent_mcp_now, bounded=lambda: bounded_text))",
+        "_pose_sample_preparation = _PoseSamplePreparation(_PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration), _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings), _PoseSampleSteps(missing=lambda: agent_mcp_missing_existing_asset_names, register=lambda: ensure_agent_mcp_pose_tool_calls, background=lambda: ensure_pipeline_background_plate, execute=lambda: execute_agent_mcp_pose_tool_calls, materialize=lambda: materialize_agent_mcp_pose_assets, photos=lambda: prepare_photo_highlight_sprites_for_task, save=lambda: save_config), _PoseWorkflowDiagnostics(stderr=lambda: sys.stderr, print_exception=lambda: traceback.print_exc))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "11b4112d8b8bee557b8d3a441a58a34c5ee9c0366dd5c045b65aebac3d586425",
+  "unchanged_business_sha256": {
+    "local_inspection_service/agent/pose_render_content.py": "19a77f0c64fac507f0905e9d17bc8655302a1a0940d17a798723f4541aaa00c5",
+    "local_inspection_service/agent/pose_artifact_store.py": "0d0112d5191cc3539fc9bbaf974fb8271397ca015376962a32a7533331095300",
+    "local_inspection_service/agent/photo_highlight_sources.py": "ba9a4de9654ce42434e89bd05e9f1834dca7ada94f855f0654727065a5060501",
+    "local_inspection_service/agent/photo_highlight_selection.py": "b47b3787c84063d534113c77d4f5abe7bcc5ff2cf6d65655fb486c0e0c888aba",
+    "local_inspection_service/agent/photo_highlight_workflow.py": "12f248bd5709bce0a515b481ba20799268044bed172a691dce8da7d991f9915e",
+    "local_inspection_service/agent/photo_highlight_image_input.py": "3fe868a94f5a9483db978ff3290f19d0c57fbe27aa7105947829d882b990ea04",
+    "local_inspection_service/agent/photo_highlight_comparison.py": "b1a8bfaa60a73ac805ef98182d922d3b45d79f72b515228b5823a7a4bb6bd0bb",
+    "local_inspection_service/agent/photo_highlight_builder.py": "d7e108476b2e7ed264ddfc6940cb6ed9a922e849e66d3f5160c77bcc83e0177c",
+    "local_inspection_service/agent/pose_call_registration.py": "1da630e83d9d49a980853ca7a4dc2b9b4ada988d61534cf2232c60c6c17d55ee",
+    "local_inspection_service/agent/pose_call_execution.py": "fcfa87d95621898eba2a578b6c46883d02044176c627fe2d40c0d6312228693e",
+    "local_inspection_service/agent/pose_sample_preparation.py": "255e1095a461f35cd3073f0eb66bda6cd1a8c0a3342eaca84d66a01367c24e59"
+  },
+  "baseline_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "preceding_deltas": [
+    "agent_state",
+    "pose_planning"
+  ],
+  "parent_is_virtual_replay_checkpoint": true
+}

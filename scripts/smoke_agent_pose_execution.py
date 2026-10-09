@@ -11,6 +11,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability
 
 class AgentPoseExecutionContracts(unittest.TestCase):
     @classmethod
@@ -36,7 +37,7 @@ class AgentPoseExecutionContracts(unittest.TestCase):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
 
     def orchestration(self):
         task = {'id': 'task'}

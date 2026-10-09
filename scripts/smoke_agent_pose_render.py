@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
-from scripts.provider_configuration_test_ports import patch_provider_capability
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseRenderContracts(unittest.TestCase):
@@ -38,7 +38,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch_provider_capability(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
 
     def settings(self, value):
         self.replace('image_generation_settings', return_value=value)
@@ -237,11 +237,11 @@ class AgentPoseRenderContracts(unittest.TestCase):
     def test_artifact_output_resolver_selected_before_effectful_call_lookup(self):
         output = self.artifact(); api = self.api
         later = Mock(return_value=self.directory / 'unexpected.png')
-        first = api.agent_mcp_pose_output_path
+        first = getattr(*pose_capability_target(api, "agent_mcp_pose_output_path"))
         class ChangingCall(dict):
             def get(self, key, default=None):
                 if key == 'accessory_id':
-                    api.agent_mcp_pose_output_path = later
+                    setattr(*pose_capability_target(api, "agent_mcp_pose_output_path"), later)
                     return 'part'
                 return super().get(key, default)
         api.write_agent_mcp_pose_artifact({}, ChangingCall(pose_id='top'), {'bytes': b'image'}, prompt='prompt', reference_assets=[])

@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
 import cv2
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
@@ -69,7 +70,7 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         self.laying=self.replace('apply_laying_standard_render_size_hints',side_effect=lambda assets:self.events.append('laying'))
         self.complete=self.replace('clean_sprites_policy_complete',return_value=True)
         self.stack.enter_context(patch.object(self.api.time,'time',return_value=123.9))
-    def replace(self,name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+    def replace(self,name,**kwargs):return self.stack.enter_context(patch_pose_capability(self.api,name,**kwargs))
     def build(self,**kwargs):return self.api.build_clean_sprites_from_photo_highlight_masks(self.task,self.item,self.provider,'model',**kwargs)
     def statuses(self):return [(x['item_type'],x['status']) for c in self.publish.call_args_list for x in c.kwargs['items']]
     def test_text_skips_sources_and_all_work(self):
@@ -256,7 +257,7 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         groups = self.builder_capability_groups
         capabilities=[]
         for name,type_name,bindings in groups:
-            selected={field:(self.api.time.time if source=='time.time' else getattr(self.api,source)) for field,source in bindings.items()}
+            selected={field:(self.api.time.time if source=='time.time' else getattr(*pose_capability_target(self.api,source))) for field,source in bindings.items()}
             if second and name=='runtime':
                 selected.update(identifier=lambda item:'second-uid',root=self.directory/'second-normalized',output=lambda kind,owner:self.directory/'second-output')
             if second and name=='policy':selected['complete']=lambda item,assets:False

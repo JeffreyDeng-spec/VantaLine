@@ -2868,3 +2868,25 @@ Provider dependency-capture tests substitute secret-key identification on the ac
 `python scripts/smoke_pipeline_status_file_ports.py` retains its original three cases. Its historical entry binding assertion uses `restore_plc_domain_root`, including actual owner/hash checks, rather than assuming the resource-status constructor remains in server.py. Identical paths on separate artifact owners and storage-error propagation remain direct behavior checks.
 
 The training state/task composition source oracle delegates its outer layers to `restore_integrated_root` once. Run both `smoke_training_state_workflows_composition.py` and `smoke_training_task_workflows_composition.py`; all original assertions remain, including unrelated entry/import/shutdown mutations and actual owner hashes. The original outer-replay failure is retained as evidence.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.
+
+Run `smoke_agent_state_graph.py`, `smoke_agent_planning_graph.py` and
+`smoke_agent_execution_graph.py` alongside the original Agent state/planning/
+render/execution/materialization and photo-highlight checks. Graph checks use
+synthetic providers and isolated local files, including artifact publication
+followed by digest failure with a single model invocation. Original source
+oracles validate all actual owners before reversing the three immutable deltas;
+unknown roots or changed actual owners are rejected. Named owner test seams
+replace the real supplied capability rather than private component aliases.

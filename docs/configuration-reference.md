@@ -1852,3 +1852,16 @@ Provider dependency-capture tests substitute secret-key identification on the ac
 Pipeline resource availability still uses the configured BusinessFiles capability supplied to PipelineQueries. The test-only historical constructor oracle now verifies the actual owner before strict replay; no storage configuration, environment variable, runtime fallback or public API default changes.
 
 The training source-oracle ordering repair changes no configuration defaults or providers. Actual application configuration remains verified by the central integrated replay before the historical training contract is inspected; duplicated premature configuration replay is removed only from the test helper.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.

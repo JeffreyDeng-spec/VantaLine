@@ -1,4 +1,5 @@
 """Actual native pipeline execution: pinning, identity, scopes, drain and isolation."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 import copy
 from contextlib import contextmanager
@@ -237,7 +238,7 @@ class PipelineExecutionContracts(unittest.TestCase):
             self.assertEqual(calls,[('same',{'id':'a'})]);self.assertEqual(graph.pin_calls,1)
     def test_exact_root_inverse_and_actual_execution_guards(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION))),PIPELINE_EXECUTION['parent_ast_sha256'])
         restore_plc_domain_root(source)
         with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace('_pipeline_advance_runtime = _pipeline_execution.advance','_pipeline_advance_runtime = _pipeline_execution.auto'))

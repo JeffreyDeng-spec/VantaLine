@@ -5666,10 +5666,33 @@ _agent_pose_assets = _AgentPoseAssets(
     _PoseAssetCalls(references=lambda: agent_mcp_pose_reference_assets, rebuild=lambda: agent_mcp_clean_sprites_need_rebuild),
     _PoseAssetCatalog(uid=lambda: accessory_uid, lookup=lambda: accessory_lookup_by_id, canonical_ids=lambda: canonical_pipeline_accessory_ids, has_asset=lambda: agent_mcp_accessory_has_existing_or_pose_asset, pose_tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE), files=_business_files
 )
-_agent_pose_templates = _AgentPoseTemplates(
-    _PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search),
-    _PoseTemplateCalls(request=lambda: agent_mcp_pose_request),
+from .agent.planning_composition import (
+    PosePlanningWorkflows,
+    PoseTemplateIdentity,
+    PolicyPosePlanIdentityInputs,
+    PosePlanContent,
+    PosePlanRuntime,
+    GenerationPosePlanIdentityInputs,
+    PosePlanProvider,
+    PosePlanMedia,
+    AssemblyPosePlanIdentityInputs,
+    AssemblyPosePlanCatalogInputs
 )
+_pose_planning_workflows = PosePlanningWorkflows(
+    templates_identity=PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search),
+    policy_identity=PolicyPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id),
+    policy_content=PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
+    policy_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    generation_identity=GenerationPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id),
+    generation_content=PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
+    generation_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    generation_provider=PosePlanProvider(settings=lambda: ai_detection_settings, call=lambda: call_ai_mcp_tool, dumps=lambda: json.dumps),
+    generation_media=PosePlanMedia(path=lambda: Path, encode=lambda: image_path_data_url, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY),
+    assembly_identity=AssemblyPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id),
+    assembly_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
+    assembly_catalog=AssemblyPosePlanCatalogInputs(lookup=lambda: accessory_lookup_by_id, counts=lambda: normalize_pipeline_accessory_counts, canonical_ids=lambda: canonical_pipeline_accessory_ids)
+)
+_agent_pose_templates = _pose_planning_workflows.templates
 
 def agent_mcp_pose_reference_assets(item: dict[str, Any]) -> list[dict[str, Any]]:
     return _agent_pose_assets.agent_mcp_pose_reference_assets(item)
@@ -10431,14 +10454,16 @@ def normalize_pipeline_accessory_counts(config: dict[str, Any], accessory_ids: l
 from .agent.orchestration_state import AgentOrchestrationState as _AgentOrchestrationState
 from .agent.tool_call_records import AgentToolCallRecords as _AgentToolCallRecords
 from .agent.state_ports import AgentStateRuntime as _AgentStateRuntime, AgentStateCalls as _AgentStateCalls, AgentToolCallIdentity as _AgentToolCallIdentity, AgentToolCallState as _AgentToolCallState
-_agent_orchestration_state = _AgentOrchestrationState(
-    _AgentStateRuntime(clock=lambda: time.time, now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_ORCHESTRATION_VERSION, image_config=lambda: agent_mcp_gemini_image_config),
-    _AgentStateCalls(defaults=lambda: agent_mcp_default_stages, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, stage=lambda: set_agent_mcp_stage),
+from .agent.state_composition import AgentStateWorkflows, AgentStateClock, AgentToolNames
+from .agent.pose_render_ports import PoseRenderConfigurationSources, PoseRenderConfigurationDefaults
+_agent_state_workflows = AgentStateWorkflows(
+    clock=AgentStateClock(clock=lambda: time.time, version=lambda: AGENT_MCP_ORCHESTRATION_VERSION),
+    tools=AgentToolNames(sanitize=lambda: safe_record_id, samples=lambda: AGENT_MCP_TOOL_SAMPLES, training=lambda: AGENT_MCP_TOOL_TRAINING),
+    configuration_sources=PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: _provider_configuration.image_generation_provider_key, provider_label=lambda: _provider_configuration.image_generation_provider_label, model=lambda: _provider_configuration.default_image_generation_model, base_url=lambda: _provider_configuration.default_image_generation_base_url, key_environment=lambda: _provider_configuration.default_image_generation_api_key_env),
+    configuration_defaults=PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
 )
-_agent_tool_call_records = _AgentToolCallRecords(
-    _AgentToolCallIdentity(sanitize=lambda: safe_record_id, identifier=lambda: agent_mcp_tool_call_id, samples=lambda: AGENT_MCP_TOOL_SAMPLES, training=lambda: AGENT_MCP_TOOL_TRAINING),
-    _AgentToolCallState(now=lambda: agent_mcp_now, orchestration=lambda: agent_mcp_orchestration, upsert=lambda: upsert_agent_mcp_tool_call, stage=lambda: set_agent_mcp_stage),
-)
+_agent_orchestration_state = _agent_state_workflows.state
+_agent_tool_call_records = _agent_state_workflows.tools
 
 def agent_mcp_now() -> int:
     return _agent_orchestration_state.agent_mcp_now()
@@ -10448,19 +10473,78 @@ from .agent.pose_render_configuration import PoseRenderConfiguration as _PoseRen
 from .agent.pose_render_content import PoseRenderContent as _PoseRenderContent
 from .agent.pose_artifact_store import PoseArtifactStore as _PoseArtifactStore
 from .agent.pose_render_ports import PoseRenderConfigurationSources as _PoseRenderConfigurationSources, PoseRenderConfigurationDefaults as _PoseRenderConfigurationDefaults, PoseRenderReferences as _PoseRenderReferences, PoseRenderPresentation as _PoseRenderPresentation, PoseRenderPaths as _PoseRenderPaths, PoseRenderArtifacts as _PoseRenderArtifacts
-_pose_render_configuration = _PoseRenderConfiguration(
-    _PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: _provider_configuration.image_generation_provider_key, provider_label=lambda: _provider_configuration.image_generation_provider_label, model=lambda: _provider_configuration.default_image_generation_model, base_url=lambda: _provider_configuration.default_image_generation_base_url, key_environment=lambda: _provider_configuration.default_image_generation_api_key_env),
-    _PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV),
+_pose_render_configuration = _agent_state_workflows.configuration
+from .agent.pose_execution_composition import (
+    PoseExecutionWorkflows,
+    PoseRenderReferences,
+    PoseRenderPresentation,
+    PoseRenderPaths,
+    ArtifactsPoseRenderArtifactsInputs,
+    PhotoSourceMedia,
+    PhotoSpriteLimits,
+    PhotoSpriteReadiness,
+    PhotoObjectSelection,
+    PhotosPhotoWorkflowObjectsInputs,
+    PhotosPhotoWorkflowStateInputs,
+    PhotosPhotoWorkflowModelsInputs,
+    PhotoHighlightImagePolicy,
+    PhotoMaskGeometry,
+    BuilderPhotoBuildPolicyInputs,
+    PhotoBuildRuntime,
+    BuilderPhotoBuildMasksInputs,
+    PhotoBuildModelPolicy,
+    PhotoBuildPublication,
+    PhotoBuildArtifacts,
+    PoseSpriteMetadata,
+    RegistrationPoseWorkflowModelsInputs,
+    RegistrationPoseCallRegistryInputs,
+    ExecutionPoseWorkflowModelsInputs,
+    ExecutionPoseCallRegistryInputs,
+    ExecutionPoseCallContentInputs,
+    ExecutionPoseCallPresentationInputs,
+    SamplesPoseWorkflowModelsInputs,
+    SamplesPoseSampleStepsInputs,
+    PoseWorkflowDiagnostics
 )
-_pose_render_content = _PoseRenderContent(
-    _PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
+_photo_pose_workflows = PoseExecutionWorkflows(
+    state=_agent_state_workflows,
+    planning=_pose_planning_workflows,
+    files=_business_files,
+    images=ImageFiles(lambda: cv2, files=_business_files),
+    render_references=PoseRenderReferences(contexts=lambda: accessory_reference_image_contexts, resolve=lambda: resolve_service_path, mime=lambda: mimetypes.guess_type, encode=lambda: base64.b64encode, public_url=lambda: public_output_url_for_existing, digest=lambda: file_sha256),
+    render_presentation=PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    artifacts_paths=PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
+    artifacts_artifacts=ArtifactsPoseRenderArtifactsInputs(digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, dumps=lambda: json.dumps),
+    artifacts_presentation=PoseRenderPresentation(screen=lambda: normalize_chroma_screen),
+    sources_media=PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
+    sources_limits=PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
+    sources_sprites=PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete),
+    selection_selection=PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type),
+    photos_objects=PhotosPhotoWorkflowObjectsInputs(identifier=lambda: accessory_uid, signature=lambda: accessory_sprite_version),
+    photos_limits=PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
+    photos_state=PhotosPhotoWorkflowStateInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE),
+    photos_models=PhotosPhotoWorkflowModelsInputs(settings=lambda: image_generation_settings, provider=lambda: image_generation_provider_from_settings),
+    image_input_policy=PhotoHighlightImagePolicy(identifier=lambda: accessory_uid, max_side=lambda: PHOTO_HIGHLIGHT_MASK_MAX_SIDE),
+    comparison_geometry=PhotoMaskGeometry(alpha=lambda: alpha_bbox, iou=lambda: bbox_iou_xyxy),
+    builder_policy=BuilderPhotoBuildPolicyInputs(material=lambda: accessory_material_type, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES),
+    builder_runtime=PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text),
+    builder_masks=BuilderPhotoBuildMasksInputs(decode=lambda: decode_photo_highlight_mask, bounds=lambda: alpha_bbox, roi=lambda: photo_highlight_auto_roi_mask),
+    builder_model=PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
+    builder_publication=PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record),
+    builder_artifacts=PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing),
+    builder_metadata=PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints),
+    registration_models=RegistrationPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    registration_registry=RegistrationPoseCallRegistryInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist),
+    execution_models=ExecutionPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    execution_registry=ExecutionPoseCallRegistryInputs(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist),
+    execution_content=ExecutionPoseCallContentInputs(chroma=lambda: choose_agent_mcp_chroma_screen),
+    execution_presentation=ExecutionPoseCallPresentationInputs(bounded=lambda: bounded_text),
+    samples_models=SamplesPoseWorkflowModelsInputs(error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
+    samples_steps=SamplesPoseSampleStepsInputs(missing=lambda: agent_mcp_missing_existing_asset_names, background=lambda: ensure_pipeline_background_plate, materialize=lambda: materialize_agent_mcp_pose_assets, save=lambda: save_config),
+    samples_diagnostics=PoseWorkflowDiagnostics(stderr=lambda: sys.stderr, print_exception=lambda: traceback.print_exc)
 )
-_pose_artifact_store = _PoseArtifactStore(
-    _PoseRenderPaths(owner_root=lambda: output_write_dir_for_owner, sanitize=lambda: safe_record_id),
-    _PoseRenderArtifacts(output=lambda: agent_mcp_pose_output_path, digest=lambda: file_sha256, public_url=lambda: public_output_url, bounded=lambda: bounded_text, now=lambda: agent_mcp_now, dumps=lambda: json.dumps),
-    _PoseRenderPresentation(screen=lambda: normalize_chroma_screen), files=_business_files
-)
+_pose_render_content = _photo_pose_workflows.render
+_pose_artifact_store = _photo_pose_workflows.artifacts
 
 def agent_mcp_gemini_image_config() -> dict[str, Any]:
     return _pose_render_configuration.agent_mcp_gemini_image_config()
@@ -10494,27 +10578,9 @@ from .agent.pose_plan_policy import PosePlanPolicy as _PosePlanPolicy
 from .agent.pose_plan_generation import PosePlanGeneration as _PosePlanGeneration
 from .agent.pose_plan_assembly import PosePlanAssembly as _PosePlanAssembly
 from .agent.pose_plan_ports import PosePlanIdentity as _PosePlanIdentity, PosePlanContent as _PosePlanContent, PosePlanRuntime as _PosePlanRuntime, PosePlanTemplates as _PosePlanTemplates, PosePlanProvider as _PosePlanProvider, PosePlanMedia as _PosePlanMedia, PosePlanCalls as _PosePlanCalls, PosePlanCatalog as _PosePlanCatalog
-_pose_plan_policy = _PosePlanPolicy(
-    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
-    _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
-    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
-    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
-)
-_pose_plan_generation = _PosePlanGeneration(
-    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
-    _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile),
-    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
-    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
-    _PosePlanProvider(settings=lambda: ai_detection_settings, call=lambda: call_ai_mcp_tool, dumps=lambda: json.dumps),
-    _PosePlanMedia(path=lambda: Path, encode=lambda: image_path_data_url, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY),
-    _PosePlanCalls(payload=lambda: accessory_pose_plan_prompt_payload, prompt=lambda: pose_plan_system_prompt, normalize=lambda: normalize_accessory_pose_plan, generate=lambda: generate_accessory_pose_plan),
-)
-_pose_plan_assembly = _PosePlanAssembly(
-    _PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id),
-    _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time),
-    _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan),
-    _PosePlanCatalog(lookup=lambda: accessory_lookup_by_id, counts=lambda: normalize_pipeline_accessory_counts, canonical_ids=lambda: canonical_pipeline_accessory_ids, ensure=lambda: ensure_accessory_pose_plan),
-)
+_pose_plan_policy = _pose_planning_workflows.policy
+_pose_plan_generation = _pose_planning_workflows.generation
+_pose_plan_assembly = _pose_planning_workflows.assembly
 
 def accessory_pose_plan_prompt_payload(item: dict[str, Any]) -> dict[str, Any]:
     return _pose_plan_policy.accessory_pose_plan_prompt_payload(item)
@@ -10646,20 +10712,9 @@ from .agent.photo_highlight_sources import PhotoHighlightSources as _PhotoHighli
 from .agent.photo_highlight_selection import PhotoHighlightSelection as _PhotoHighlightSelection
 from .agent.photo_highlight_workflow import PhotoHighlightWorkflow as _PhotoHighlightWorkflow
 from .agent.photo_highlight_ports import PhotoSourceMedia as _PhotoSourceMedia, PhotoSpriteLimits as _PhotoSpriteLimits, PhotoSpriteReadiness as _PhotoSpriteReadiness, PhotoObjectSelection as _PhotoObjectSelection, PhotoWorkflowObjects as _PhotoWorkflowObjects, PhotoWorkflowState as _PhotoWorkflowState, PhotoWorkflowModels as _PhotoWorkflowModels
-_photo_highlight_sources = _PhotoHighlightSources(
-    _PhotoSourceMedia(resolve=lambda: resolve_service_path, suffixes=lambda: IMAGE_REFERENCE_SUFFIXES),
-    _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
-    _PhotoSpriteReadiness(assets=lambda: clean_sprite_assets, complete=lambda: clean_sprites_policy_complete), files=_business_files
-)
-_photo_highlight_selection = _PhotoHighlightSelection(
-    _PhotoObjectSelection(normalize=lambda: normalize_pipeline_detection_method, training=lambda: pipeline_method_uses_training, lookup=lambda: accessory_lookup_by_id, canonical=lambda: canonical_pipeline_accessory_ids, material=lambda: accessory_material_type),
-)
-_photo_highlight_workflow = _PhotoHighlightWorkflow(
-    _PhotoWorkflowObjects(items=lambda: pipeline_photo_highlight_object_items, identifier=lambda: accessory_uid, sources=lambda: object_photo_highlight_source_paths, signature=lambda: accessory_sprite_version),
-    _PhotoSpriteLimits(minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES, version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
-    _PhotoWorkflowState(now=lambda: agent_mcp_now, tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, stage=lambda: set_agent_mcp_stage, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, build_plan=lambda: build_agent_mcp_pose_plan),
-    _PhotoWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, settings=lambda: image_generation_settings, provider=lambda: image_generation_provider_from_settings, build_sprites=lambda: build_clean_sprites_from_photo_highlight_masks),
-)
+_photo_highlight_sources = _photo_pose_workflows.sources
+_photo_highlight_selection = _photo_pose_workflows.selection
+_photo_highlight_workflow = _photo_pose_workflows.photos
 
 def object_photo_highlight_source_paths(item: dict[str, Any], *, limit: int = PHOTO_HIGHLIGHT_MAX_REFERENCE_IMAGES) -> list[Path]:
     return _photo_highlight_sources.object_photo_highlight_source_paths(item, limit=limit)
@@ -10688,16 +10743,8 @@ from .agent.photo_highlight_masks import decode_photo_highlight_mask as _decode_
 from .agent.photo_highlight_masks import photo_highlight_auto_roi_mask as _photo_highlight_auto_roi_mask_impl
 from .agent.photo_highlight_comparison import PhotoHighlightComparison as _PhotoHighlightComparison
 from .agent.photo_highlight_image_ports import PhotoHighlightImagePolicy as _PhotoHighlightImagePolicy, PhotoMaskGeometry as _PhotoMaskGeometry
-_photo_highlight_image_input = _PhotoHighlightImageInput(
-
-    _PhotoHighlightImagePolicy(identifier=lambda: accessory_uid, max_side=lambda: PHOTO_HIGHLIGHT_MASK_MAX_SIDE),
-
-)
-_photo_highlight_comparison = _PhotoHighlightComparison(
-
-    _PhotoMaskGeometry(alpha=lambda: alpha_bbox, iou=lambda: bbox_iou_xyxy),
-
-)
+_photo_highlight_image_input = _photo_pose_workflows.image_input
+_photo_highlight_comparison = _photo_pose_workflows.comparison
 
 def photo_highlight_mask_prompt(item: dict[str, Any]) -> str:
     return _photo_highlight_image_input.photo_highlight_mask_prompt(item)
@@ -10724,16 +10771,8 @@ def photo_highlight_auto_compare(ai_roi_mask: np.ndarray, auto_roi_mask: np.ndar
 
 from .agent.photo_highlight_builder import PhotoHighlightSpriteBuilder as _PhotoHighlightSpriteBuilder
 from .agent.photo_highlight_builder_ports import PhotoBuildPolicy as _PhotoBuildPolicy, PhotoBuildRuntime as _PhotoBuildRuntime, PhotoBuildMasks as _PhotoBuildMasks, PhotoBuildModelPolicy as _PhotoBuildModelPolicy, PhotoBuildPublication as _PhotoBuildPublication, PhotoBuildArtifacts as _PhotoBuildArtifacts, PoseSpriteMetadata as _PoseSpriteMetadata
-_agent_image_io = ImageFiles(lambda: cv2, files=_business_files)
-_photo_highlight_sprite_builder = _PhotoHighlightSpriteBuilder(
-    _PhotoBuildPolicy(material=lambda: accessory_material_type, sources=lambda: object_photo_highlight_source_paths, ready=lambda: photo_highlight_clean_sprites_ready, alpha=lambda: object_alpha_material_policy, complete=lambda: clean_sprites_policy_complete, minimum=lambda: PHOTO_HIGHLIGHT_MIN_REFERENCE_IMAGES),
-    _PhotoBuildRuntime(identifier=lambda: accessory_uid, root=lambda: NORMALIZED_DIR, output=lambda: output_write_dir_for_owner, safe_id=lambda: safe_record_id, now=lambda: time.time, bounded=lambda: bounded_text),
-    _PhotoBuildMasks(prompt=lambda: photo_highlight_mask_prompt, input=lambda: photo_highlight_input_data_url, decode=lambda: decode_photo_highlight_mask, bounds=lambda: alpha_bbox, roi=lambda: photo_highlight_auto_roi_mask, compare=lambda: photo_highlight_auto_compare),
-    _PhotoBuildModelPolicy(attempts=lambda: PHOTO_HIGHLIGHT_MASK_MAX_ATTEMPTS, error=lambda: AiProviderError, pose_version=lambda: AGENT_MCP_SPRITE_BUILD_VERSION, photo_version=lambda: PHOTO_HIGHLIGHT_SPRITE_BUILD_VERSION),
-    _PhotoBuildPublication(sanitize=lambda: sanitize_data_analysis_record_id, item=lambda: image_processing_item, publish=lambda: upsert_data_analysis_image_processing_record),
-    _PhotoBuildArtifacts(write=lambda: write_clean_sprite, public_url=lambda: public_output_url_for_existing),
-    _PoseSpriteMetadata(footprint=lambda: pose_render_footprint_metadata, normalize=lambda: normalize_sprite_family_canvases, scale=lambda: apply_upright_scale_correction_metadata, laying=lambda: apply_laying_standard_render_size_hints), files=_business_files, images=_agent_image_io
-)
+_agent_image_io = _photo_pose_workflows.images
+_photo_highlight_sprite_builder = _photo_pose_workflows.builder
 
 def build_clean_sprites_from_photo_highlight_masks(
     task: dict[str, Any],
@@ -10770,24 +10809,9 @@ from .agent.pose_call_registration import PoseCallRegistration as _PoseCallRegis
 from .agent.pose_call_execution import PoseCallExecution as _PoseCallExecution
 from .agent.pose_sample_preparation import PoseSamplePreparation as _PoseSamplePreparation
 from .agent.pose_execution_ports import PoseWorkflowState as _PoseWorkflowState, PoseWorkflowModels as _PoseWorkflowModels, PoseCallRegistry as _PoseCallRegistry, PoseCallContent as _PoseCallContent, PoseCallPresentation as _PoseCallPresentation, PoseSampleSteps as _PoseSampleSteps, PoseWorkflowDiagnostics as _PoseWorkflowDiagnostics
-_pose_call_registration = _PoseCallRegistration(
-    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
-    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
-    _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call),
-)
-_pose_call_execution = _PoseCallExecution(
-    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
-    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
-    _PoseCallRegistry(tool=lambda: AGENT_MCP_TOOL_POSE_IMAGE, lookup=lambda: accessory_lookup_by_id, cached=lambda: agent_mcp_accessory_pose_images_exist, identifier=lambda: agent_mcp_tool_call_id, upsert=lambda: upsert_agent_mcp_tool_call),
-    _PoseCallContent(prompt=lambda: agent_mcp_pose_prompt, references=lambda: agent_mcp_pose_reference_content, chroma=lambda: choose_agent_mcp_chroma_screen, artifact=lambda: write_agent_mcp_pose_artifact),
-    _PoseCallPresentation(now=lambda: agent_mcp_now, bounded=lambda: bounded_text),
-)
-_pose_sample_preparation = _PoseSamplePreparation(
-    _PoseWorkflowState(plan=lambda: ensure_agent_mcp_pose_plan, photo_flow=lambda: pipeline_uses_photo_highlight_sprite_flow, stage=lambda: set_agent_mcp_stage, skip_legacy=lambda: mark_legacy_pose_flow_skipped_for_photo_highlight, pause=lambda: pause_agent_mcp_task, current=lambda: agent_mcp_orchestration),
-    _PoseWorkflowModels(configuration=lambda: agent_mcp_gemini_image_config, error=lambda: AiProviderError, provider=lambda: image_generation_provider_from_settings, settings=lambda: image_generation_settings),
-    _PoseSampleSteps(missing=lambda: agent_mcp_missing_existing_asset_names, register=lambda: ensure_agent_mcp_pose_tool_calls, background=lambda: ensure_pipeline_background_plate, execute=lambda: execute_agent_mcp_pose_tool_calls, materialize=lambda: materialize_agent_mcp_pose_assets, photos=lambda: prepare_photo_highlight_sprites_for_task, save=lambda: save_config),
-    _PoseWorkflowDiagnostics(stderr=lambda: sys.stderr, print_exception=lambda: traceback.print_exc),
-)
+_pose_call_registration = _photo_pose_workflows.registration
+_pose_call_execution = _photo_pose_workflows.execution
+_pose_sample_preparation = _photo_pose_workflows.samples
 
 def execute_agent_mcp_pose_tool_calls(task: dict[str, Any], config: dict[str, Any]) -> bool:
     return _pose_call_execution.execute_agent_mcp_pose_tool_calls(task, config)

@@ -7,6 +7,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class PhotoHighlightWorkflowContracts(unittest.TestCase):
@@ -30,7 +31,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
     def source_fixture(self):
         self.resolve = self.replace('resolve_service_path', side_effect=lambda value: self.directory / value)
         self.replace('IMAGE_REFERENCE_SUFFIXES', new={'.png'})
@@ -209,7 +210,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
     def test_skip_refreshes_clock_for_eager_existing_policy_default(self):
         task,config,state=self.state_fixture();state['photo_highlight_sprite_policy']={};later=Mock(return_value=202)
         def first():
-            self.api.agent_mcp_now=later
+            setattr(*pose_capability_target(self.api, 'agent_mcp_now'), later)
             return 101
         self.clock.side_effect=first
         self.api.mark_legacy_pose_flow_skipped_for_photo_highlight(task,config,state)

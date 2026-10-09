@@ -1,4 +1,5 @@
 """Explicit pose publication and materialization with isolated artifact stores."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -77,7 +78,7 @@ class AgentPoseStoragePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): cls(**args)
             with self.assertRaises(TypeError): cls(**args, files=None)
             files = Falsey(); self.assertIs(cls(**args, files=files).files, files)
-        tree = ast.parse((Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py').read_text(encoding='utf-8')); names = {'_' + cls.__name__ for cls in classes}; found = []
+        tree = ast.parse(restore_pose_domain_root((Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py').read_text(encoding='utf-8'))); names = {'_' + cls.__name__ for cls in classes}; found = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in names:
                 values = [kw.value for kw in node.keywords if kw.arg == 'files']; self.assertEqual(len(values), 1)

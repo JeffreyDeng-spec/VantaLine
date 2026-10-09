@@ -19,8 +19,23 @@ class IntegrationContracts(unittest.TestCase):
         older = contract.restore_business_root(self.source)
         self.assertEqual(contract.digest(ast.parse(older)), contract.BUSINESS["parent_ast_sha256"])
 
+    def test_pose_actual_owners_and_outer_fixture_mutations_fail(self):
+        original_read = Path.read_text
+        for relative in ("agent/state_composition.py", "agent/planning_composition.py", "agent/pose_execution_composition.py"):
+            target = (contract.ROOT / "local_inspection_service" / relative).resolve()
+            def read(path, *args, **kwargs):
+                value = original_read(path, *args, **kwargs)
+                return value + "\nunreviewed_owner = None\n" if path.resolve() == target else value
+            with self.subTest(owner=relative), patch.object(Path, "read_text", read), self.assertRaises(AssertionError):
+                contract.restore_pose_domain_root(self.source)
+        for name in ("POSE_EXECUTION", "POSE_PLANNING", "AGENT_STATE"):
+            altered = copy.deepcopy(getattr(contract, name))
+            altered["regions"][0]["expected"][0] = "unreviewed_owner = None"
+            with self.subTest(fixture=name), patch.object(contract, name, altered), self.assertRaises(AssertionError):
+                contract.restore_pose_domain_root(self.source)
+
     def test_exact_partial_replays_remain_guarded_at_every_checkpoint(self):
-        fixtures = (contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
+        fixtures = (contract.POSE_EXECUTION, contract.POSE_PLANNING, contract.AGENT_STATE, contract.CODEX_ENVIRONMENT, contract.PIPELINE_RUNTIME,
                     contract.PIPELINE_TASKS, contract.PIPELINE_STAGES,
                     contract.AGENT_PIPELINE, contract.PIPELINE_QUERIES,
                     contract.PIPELINE_EXECUTION, contract.PIPELINE_PERSISTENCE,
@@ -36,7 +51,7 @@ class IntegrationContracts(unittest.TestCase):
             source = contract.restore_delta(source, fixture)
 
     def test_partial_replay_still_checks_the_actual_native_owner(self):
-        source = contract.restore_delta(contract.restore_delta(self.source,
+        source = contract.restore_delta(contract.restore_delta(contract.restore_pose_domain_root(self.source),
                     contract.CODEX_ENVIRONMENT), contract.PIPELINE_RUNTIME)
         target = (contract.ROOT / "local_inspection_service/pipeline/runtime_composition.py").resolve()
         original_read = Path.read_text

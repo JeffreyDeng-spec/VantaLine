@@ -24,6 +24,9 @@ PIPELINE_PERSISTENCE = json.loads((ROOT / "tests/backend_contract/pipeline_persi
 PLC_CAPTURE = json.loads((ROOT / "tests/backend_contract/plc_capture_composition_delta.json").read_text())
 PLC_OPERATIONS = json.loads((ROOT / "tests/backend_contract/plc_lease_diagnostic_composition_delta.json").read_text())
 PLC_WORKSTATION = json.loads((ROOT / "tests/backend_contract/plc_workstation_composition_delta.json").read_text())
+AGENT_STATE = json.loads((ROOT / "tests/backend_contract/agent_state_composition_delta.json").read_text())
+POSE_PLANNING = json.loads((ROOT / "tests/backend_contract/pose_planning_composition_delta.json").read_text())
+POSE_EXECUTION = json.loads((ROOT / "tests/backend_contract/pose_execution_composition_delta.json").read_text())
 COMPOSITIONS = json.loads((ROOT / "tests/backend_contract/application_composition_bindings.json").read_text())
 
 
@@ -60,6 +63,9 @@ def restore_delta(source, fixture):
 
 def verify_actual_compositions():
     """Validate real owned constructor edges before using an old-location oracle."""
+    assert digest(ast.parse((ROOT / "local_inspection_service/agent/state_composition.py").read_text())) == AGENT_STATE["actual_owner_ast_sha256"], "Actual Agent state composition changed"
+    assert digest(ast.parse((ROOT / "local_inspection_service/agent/planning_composition.py").read_text())) == POSE_PLANNING["actual_owner_ast_sha256"], "Actual Pose planning composition changed"
+    assert digest(ast.parse((ROOT / "local_inspection_service/agent/pose_execution_composition.py").read_text())) == POSE_EXECUTION["actual_owner_ast_sha256"], "Actual Pose execution composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text())) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/workstation_composition.py").read_text())) == PLC_WORKSTATION["actual_owner_ast_sha256"], "Actual PLC workstation composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/codex_compare/api.py").read_text())) == CODEX_ENVIRONMENT["actual_owner_ast_sha256"], "Actual Codex environment binding changed"
@@ -73,7 +79,7 @@ def verify_actual_compositions():
     assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/persistence_composition.py").read_text())) == PIPELINE_PERSISTENCE["actual_owner_ast_sha256"], "Actual pipeline persistence composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/capture_composition.py").read_text())) == PLC_CAPTURE["actual_owner_ast_sha256"], "Actual PLC capture composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/lease_diagnostic_composition.py").read_text())) == PLC_OPERATIONS["actual_owner_ast_sha256"], "Actual PLC lease/diagnostic composition changed"
-    for path, expected in {**PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"], **CODEX_ENVIRONMENT["unchanged_business_sha256"]}.items():
+    for path, expected in {**AGENT_STATE["unchanged_business_sha256"], **POSE_PLANNING["unchanged_business_sha256"], **POSE_EXECUTION["unchanged_business_sha256"], **PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"], **CODEX_ENVIRONMENT["unchanged_business_sha256"]}.items():
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
@@ -94,7 +100,7 @@ def restore_business_root(source):
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
     verify_actual_compositions()
-    fixtures = (CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
+    fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE, CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
                 AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
                 PIPELINE_PERSISTENCE, PLC_CAPTURE, PLC_OPERATIONS, PLC_WORKSTATION)
     for index, fixture in enumerate(fixtures):
@@ -107,4 +113,22 @@ def restore_plc_domain_root(source):
             continue
         source = restore_delta(source, fixture)
     assert digest(ast.parse(source)) == PLC_WORKSTATION["parent_ast_sha256"]
+    return source
+
+
+def restore_pose_domain_root(source):
+    """Check real Pose owners and fold only the three immutable outer deltas."""
+    verify_actual_compositions()
+    fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE)
+    older = (CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
+             AGENT_PIPELINE, PIPELINE_QUERIES, PIPELINE_EXECUTION,
+             PIPELINE_PERSISTENCE, PLC_CAPTURE, PLC_OPERATIONS, PLC_WORKSTATION)
+    for index, fixture in enumerate(fixtures):
+        accepted = {item[key] for item in (*fixtures[index + 1:], *older)
+                    for key in ("integrated_ast_sha256", "parent_ast_sha256")}
+        if digest(ast.parse(source)) in accepted:
+            continue
+        source = restore_delta(source, fixture)
+    assert digest(ast.parse(source)) in {item[key] for item in older
+                                        for key in ("integrated_ast_sha256", "parent_ast_sha256")}
     return source

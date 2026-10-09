@@ -1,4 +1,5 @@
 """Actual lease/diagnostic graphs using synthetic state and optional isolated PG."""
+from application_integration_source_contract import restore_pose_domain_root
 from dataclasses import fields
 from pathlib import Path
 import copy
@@ -143,7 +144,7 @@ class LeaseDiagnosticContracts(unittest.TestCase):
     def test_whole_root_inverse_and_actual_owner_mutation_guards(self):
         import ast
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,PLC_CAPTURE,PLC_OPERATIONS,restore_delta,restore_plc_domain_root,digest
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION),PIPELINE_PERSISTENCE),PLC_CAPTURE),PLC_OPERATIONS))),PLC_OPERATIONS['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in [('_plc_lease_diagnostic_workflows.acquisition','_plc_lease_diagnostic_workflows.maintenance'),('workstation=_plc_workstation_workflows','workstation=None')]:

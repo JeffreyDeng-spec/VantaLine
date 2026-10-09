@@ -2332,3 +2332,16 @@ Provider dependency-capture tests substitute secret-key identification on the ac
 Pipeline resource-status file binding is now assembled by PipelineQueries. The retained source-position oracle uses the strict integrated-root inverse, which verifies the actual query owner and unchanged business files before inspecting the original binding. Runtime file-isolation and error-propagation assertions continue to exercise PipelineResourceStatus directly.
 
 Training task source contracts now enter through the central integrated-root inverse once. It verifies current domain owners, then configuration and integration layers in order before the unchanged training-specific import, owner, business-source and route/lifetime checks. A premature second configuration inverse is removed; runtime training code is unchanged.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.

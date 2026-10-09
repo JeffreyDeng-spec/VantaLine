@@ -1,4 +1,5 @@
 """Photo-highlight IO isolation using synthetic model output and real adapters."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -93,7 +94,7 @@ class AgentPhotoImagePortsTests(unittest.TestCase):
         for values in ({'files': None, 'images': images}, {'files': files, 'images': None}):
             with self.assertRaises(TypeError): PhotoHighlightSpriteBuilder(*args, **values)
         service = PhotoHighlightSpriteBuilder(*args, files=files, images=images); self.assertIs(service.files, files); self.assertIs(service.images, images)
-        tree = ast.parse((Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(restore_pose_domain_root((Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py').read_text(encoding='utf-8')))
         calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_PhotoHighlightSpriteBuilder']; self.assertEqual(len(calls), 1)
         for field, name in [('files', '_business_files'), ('images', '_agent_image_io')]:
             values = [kw.value for kw in calls[0].keywords if kw.arg == field]; self.assertEqual(len(values), 1)

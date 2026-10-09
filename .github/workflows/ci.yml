@@ -528,6 +528,9 @@ jobs:
           python scripts/smoke_agent_settings_api.py
           python scripts/smoke_agent_pipeline_decisions.py
           python scripts/smoke_agent_pipeline_actions.py
+          python scripts/smoke_agent_state_graph.py
+          python scripts/smoke_agent_planning_graph.py
+          python scripts/smoke_agent_execution_graph.py
           python scripts/smoke_agent_state.py
           python scripts/smoke_agent_pose_assets.py
           python scripts/smoke_agent_pose_planning.py

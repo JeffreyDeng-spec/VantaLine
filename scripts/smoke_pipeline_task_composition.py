@@ -1,4 +1,5 @@
 """Actual pipeline task graph, original HTTP registrars and isolated account state."""
+from application_integration_source_contract import restore_pose_domain_root
 import ast
 import copy
 from contextvars import ContextVar
@@ -255,7 +256,7 @@ class TaskCompositionContracts(unittest.TestCase):
 
     def test_source_inverse_rejects_unknown_route_or_owner(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME);restore_plc_domain_root(source)
+        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME);restore_plc_domain_root(source)
         restored=restore_delta(source,PIPELINE_TASKS);self.assertNotIn('_pipeline_tasks = PipelineTaskWorkflows',restored)
         with self.assertRaises(AssertionError):restore_plc_domain_root(source.replace('stages=_pipeline_stages,','stages=None,',1))
 

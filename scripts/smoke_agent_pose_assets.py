@@ -9,6 +9,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch
 
 sys.path.insert(0,str(Path.cwd()))
+from scripts.agent_pose_test_ports import pose_capability_target
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseAssetsContracts(unittest.TestCase):
@@ -39,7 +40,10 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
             self.stack.enter_context(patch(n,side_effect=AssertionError('external operation forbidden')))
 
-    def patch(self,name,**kw):return self.stack.enter_context(patch.object(self.api,name,**kw))
+    def patch(self,name,**kw):
+        # Only template methods have moved; asset-service callbacks still use the entry seam.
+        target = pose_capability_target(self.api,name) if name in {'agent_mcp_pose_request','agent_mcp_pose_templates','agent_mcp_object_kind'} else (self.api,name)
+        return self.stack.enter_context(patch.object(*target,**kw))
 
     def path(self,name,exists=True):
 
@@ -139,7 +143,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
         class BaseId:
 
-            def __format__(self,spec):api.agent_mcp_pose_request=later;return 'part'
+            def __format__(self,spec):setattr(*pose_capability_target(api,"agent_mcp_pose_request"),later);return 'part'
 
         result=self.api.agent_mcp_pose_templates(BaseId(),'bottle');self.assertEqual([x['request'] for x in result],[{'later':True},{'later':True}]);old.assert_not_called();self.assertEqual(later.call_count,2)
 
