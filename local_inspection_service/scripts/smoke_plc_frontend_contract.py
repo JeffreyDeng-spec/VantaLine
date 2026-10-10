@@ -186,7 +186,7 @@ def main() -> None:
             "failure copy": "PLC 同步失败",
             "diagnostic payload": "plc_sync: result.plc_sync || null",
             "workstation status": "getPlcWorkstation",
-            "explicit connect": "connectPlc",
+            "shared local connect": "LocalPlcControls",
             "camera-only upload": "analyzeCamera",
             "browser execution": "plcClientRef.current.execute",
             "manual D206 diagnostic": "写入 6 并读取 D206",

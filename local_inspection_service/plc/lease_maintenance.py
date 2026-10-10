@@ -22,6 +22,7 @@ class LeaseMaintenance:
                 and int(lease.get("lease_epoch") or -1) == int(request.lease_epoch)
                 and lease.get("owner_user_id") == user_id
                 and lease.get("state") == "active"
+                and lease.get("communication_verified") is True
                 and int(lease.get("expires_at") or 0) > now
                 and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
             )

@@ -385,3 +385,36 @@ def web_serial_profile_fingerprint(config: Mapping[str, Any]) -> str:
     normalized["enabled"] = False
     material = json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(material.encode("ascii")).hexdigest()
+
+
+def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:
+    """A bounded, read-only check tied to this connecting lease; never a D/Y write."""
+    normalized = normalize_web_serial_config(config)
+    frames = []
+    for target in (normalized["capture_input_register"], normalized["result_register"]):
+        frame = build_d_register_read_frame(logical_device_address(target), normalized["checksum_mode"])
+        frames.append({"target": target, "frame_hex": frame.hex().upper()})
+    return {"id": check_id, "station_id": lease["station_id"], "session_id": lease["session_id"],
+            "lease_epoch": lease["lease_epoch"], "config_generation": lease["config_generation"],
+            "deadline_at": lease["expires_at"], "timeout_ms": WEB_SERIAL_ACK_TIMEOUT_MS, "frames": frames}
+
+
+def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> None:
+    from .plc_fx_ascii import parse_d_register_read_response
+    plan = lease.get("connection_check") or {}
+    if not check_id or plan.get("id") != check_id:
+        raise ValueError("plc_connection_verification_required_reload_page")
+    if any(plan.get(key) != lease.get(key) for key in ("station_id", "session_id", "lease_epoch", "config_generation")):
+        raise ValueError("plc_connection_check_fenced")
+    if int(plan.get("deadline_at") or 0) <= now:
+        raise ValueError("plc_connection_check_expired")
+    if len(reads) != 2 or len(plan.get("frames", [])) != 2:
+        raise ValueError("plc_connection_check_invalid_response")
+    for frame, evidence in zip(plan["frames"], reads):
+        evidence = evidence.model_dump() if hasattr(evidence, "model_dump") else evidence
+        try:
+            if evidence["target"] != frame["target"] or not re.fullmatch(r"[0-9A-Fa-f]{16}", evidence["response_hex"]):
+                raise ValueError("invalid response")
+            parse_d_register_read_response(bytes.fromhex(evidence["response_hex"]))
+        except Exception as exc:
+            raise ValueError("plc_connection_check_invalid_response") from exc

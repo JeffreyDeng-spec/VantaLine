@@ -2330,6 +2330,29 @@
           "title": "PlcConfigRequest",
           "type": "object"
         },
+        "PlcConnectionReadEvidence": {
+          "additionalProperties": false,
+          "properties": {
+            "response_hex": {
+              "maxLength": 16,
+              "minLength": 16,
+              "pattern": "^[0-9A-Fa-f]{16}$",
+              "title": "Response Hex",
+              "type": "string"
+            },
+            "target": {
+              "maxLength": 4,
+              "title": "Target",
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "response_hex"
+          ],
+          "title": "PlcConnectionReadEvidence",
+          "type": "object"
+        },
         "PlcWebSerialAttemptRequest": {
           "additionalProperties": false,
           "properties": {
@@ -2588,6 +2611,26 @@
         "PlcWorkstationLeaseActivateRequest": {
           "additionalProperties": false,
           "properties": {
+            "connection_check_id": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Connection Check Id"
+            },
+            "connection_reads": {
+              "items": {
+                "$ref": "#/components/schemas/PlcConnectionReadEvidence"
+              },
+              "maxItems": 2,
+              "title": "Connection Reads",
+              "type": "array"
+            },
             "lease_epoch": {
               "title": "Lease Epoch",
               "type": "integer"
@@ -2716,6 +2759,26 @@
             "name"
           ],
           "title": "PlcWorkstationPairRequest",
+          "type": "object"
+        },
+        "PlcWorkstationSelfPairRequest": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          "title": "PlcWorkstationSelfPairRequest",
           "type": "object"
         },
         "PlcWorkstationVerifyRequest": {
@@ -9368,6 +9431,86 @@
           "summary": "Verify Plc Web Serial Workstation Profile"
         }
       },
+      "/api/plc/workstation/self-config": {
+        "post": {
+          "operationId": "self_config_plc_workstation_api_plc_workstation_self_config_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcWebSerialConfigRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Self Config Plc Workstation Api Plc Workstation Self Config Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Self Config Plc Workstation"
+        }
+      },
+      "/api/plc/workstation/self-pair": {
+        "post": {
+          "operationId": "self_pair_plc_workstation_api_plc_workstation_self_pair_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcWorkstationSelfPairRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "title": "Response Self Pair Plc Workstation Api Plc Workstation Self Pair Post",
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Self Pair Plc Workstation"
+        }
+      },
       "/api/plc/workstations": {
         "get": {
           "operationId": "list_plc_web_serial_workstations_api_plc_workstations_get",
@@ -13518,6 +13661,40 @@
       "path": "/api/version",
       "permission": {
         "GET": []
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "self_pair_plc_workstation",
+      "path": "/api/plc/workstation/self-pair",
+      "permission": {
+        "POST": [
+          "inspection",
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "self_config_plc_workstation",
+      "path": "/api/plc/workstation/self-config",
+      "permission": {
+        "POST": [
+          "inspection",
+          "ai_detection"
+        ]
       },
       "response_model_exclude_unset": false,
       "status_code": null

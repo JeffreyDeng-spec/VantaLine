@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "upstream_sha": "8195c96970c1e41582d4796fe2b23508ea9f837a",
+  "previous_candidate": "9b9ca73c6f6d657ab3427409fc9be1835801daea",
+  "business_sources": {
+    "local_inspection_service/plc/station_service.py": {
+      "previous_sha256": "98ac0f73603bdefdce153bb50c1d52312ee134dd42446c429f99690dc8aae5fb",
+      "main_sha256": "cd2e99d2c4d7a2d2716fa7ac7e87525317333c43a35bd65bfb70fa13412fe79f",
+      "actual_sha256": "a4b8e046f355e9a310bf46507da9f65a18146ee5af9d91f957723fcae4c4ac4c",
+      "delta": "Latest main station service plus its root active-lease communication_verified guard relocated to its actual method"
+    },
+    "local_inspection_service/plc/lease_acquisition.py": {
+      "previous_sha256": "91c5ef02b7ca1b9d11193af4e43c15115588a3f962a28cb12a9e1d2fee431fd1",
+      "main_sha256": "6f7370ff1fa46acd18108b804be697939eb3d0e0719855e3c04582ca3379393e",
+      "actual_sha256": "6f7370ff1fa46acd18108b804be697939eb3d0e0719855e3c04582ca3379393e",
+      "delta": "Latest main unchanged"
+    },
+    "local_inspection_service/plc/lease_maintenance.py": {
+      "previous_sha256": "ac6958bd99c572bd526d92b2b530bd2b68aa9f9e882218a1b8228aa91518956a",
+      "main_sha256": "24597c67e4a4a4109b266e7895dc7513714ada7d3e946e45a4f3e4fb951f93ed",
+      "actual_sha256": "24597c67e4a4a4109b266e7895dc7513714ada7d3e946e45a4f3e4fb951f93ed",
+      "delta": "Latest main unchanged"
+    }
+  },
+  "scope": "Approved upstream PLC setup/verification retained; frozen historical source oracles remain unchanged"
+}

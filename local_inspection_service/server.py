@@ -680,6 +680,7 @@ from .schemas.plc import PlcWorkstationLeaseActivateRequest
 from .schemas.plc import PlcWorkstationLeaseHeartbeatRequest
 from .schemas.plc import PlcWorkstationLeaseRebindRequest
 from .schemas.plc import PlcWorkstationLeaseRequest
+from .schemas.plc import PlcWorkstationSelfPairRequest
 from .schemas.plc import PlcWorkstationPairRequest
 from .plc.workstation_repository import PlcWorkstationRepository
 from .schemas.plc import PlcWorkstationVerifyRequest
@@ -3795,6 +3796,9 @@ from .compatibility.plc import (
     dispatch_plc_for_detection,
     dispatch_plc_for_detection_async,
     finish_plc_web_serial_diagnostic,
+    self_pair_plc_workstation,
+    self_config_plc_workstation,
+    _require_plc_operator,
     get_plc_web_serial_workstation,
     heartbeat_plc_web_serial_connection,
     list_plc_web_serial_workstations,

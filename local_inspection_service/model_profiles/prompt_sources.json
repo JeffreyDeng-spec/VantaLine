@@ -1,5 +1,5 @@
 {
-  "version": 277,
+  "version": 278,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -612,6 +612,8 @@
     "runtime/wiring/inspection.py",
     "runtime/wiring/plc.py",
     "runtime/wiring/text.py",
-    "runtime/wiring/training_pipeline.py"
+    "runtime/wiring/training_pipeline.py",
+    "plc/workstation_self_service.py",
+    "plc/workstation_self_service_api.py"
   ]
 }

@@ -43,6 +43,9 @@ from local_inspection_service.schemas.plc import PlcWorkstationLeaseActivateRequ
 from local_inspection_service.schemas.plc import PlcWorkstationLeaseHeartbeatRequest
 from local_inspection_service.schemas.plc import PlcWorkstationLeaseRebindRequest
 from local_inspection_service.schemas.plc import PlcWorkstationLeaseRequest
+from local_inspection_service.schemas.plc import PlcWorkstationSelfPairRequest
+from local_inspection_service.plc.workstation_self_service import WorkstationSelfService
+from local_inspection_service.plc.workstation_self_service_api import register_workstation_self_service
 from local_inspection_service.schemas.plc import PlcWorkstationPairRequest
 from local_inspection_service.schemas.plc import PlcWorkstationVerifyRequest
 from local_inspection_service.model_profiles.dependencies import ProfileApiDependencies
@@ -247,6 +250,7 @@ class HttpRegistrationInputs:
     _plc_config_diagnostics: Callable[[], local_inspection_service.plc.config_diagnostics.ConfigDiagnostics]
     _plc_connection_lease: Callable[[], local_inspection_service.plc.connection_lease.ConnectionLease]
     _plc_dispatch_diagnostic: Callable[[], local_inspection_service.plc.dispatch_diagnostic.DispatchDiagnostic]
+    _plc_workstation_self_service: Callable[[], WorkstationSelfService]
     _plc_workstation_management: Callable[[], local_inspection_service.plc.workstation_management.WorkstationManagement]
     _prepared_comparison_runtime: Callable[[], local_inspection_service.text_inspection.comparison_runtime.ComparisonRuntime]
     _provider_configuration: Callable[[], local_inspection_service.model_providers.configuration_composition.ProviderConfiguration]
@@ -321,6 +325,8 @@ class HttpRegistration:
     auth_logout: Callable[..., Any]
     auth_status: Callable[..., Any]
     background_image: Callable[..., Any]
+    self_pair_plc_workstation: Callable[..., Any]
+    self_config_plc_workstation: Callable[..., Any]
     claim_plc_capture_session: Callable[..., Any]
     clone_incoming_text_reference: Callable[..., Any]
     compare_text_inspection_label: Callable[..., Any]
@@ -672,6 +678,10 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
     @app.get('/api/version')
     def get_release_version() -> dict[str, Any]:
         return current_release_version()
+
+    _plc_self_service_routes = register_workstation_self_service(app, ports._plc_workstation_self_service())
+    self_pair_plc_workstation = _plc_self_service_routes.self_pair_plc_workstation
+    self_config_plc_workstation = _plc_self_service_routes.self_config_plc_workstation
 
     _register_workstation_management_routes(app, get_workstation=get_plc_web_serial_workstation, list_workstations=list_plc_web_serial_workstations, pair_workstation=pair_plc_web_serial_workstation, update_config=update_plc_web_serial_workstation_config, verify_profile=verify_plc_web_serial_workstation_profile)
 
@@ -1106,6 +1116,8 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
         auth_logout=auth_logout,
         auth_status=auth_status,
         background_image=background_image,
+        self_pair_plc_workstation=self_pair_plc_workstation,
+        self_config_plc_workstation=self_config_plc_workstation,
         claim_plc_capture_session=claim_plc_capture_session,
         clone_incoming_text_reference=clone_incoming_text_reference,
         compare_text_inspection_label=compare_text_inspection_label,

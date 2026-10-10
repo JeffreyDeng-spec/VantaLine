@@ -10,6 +10,8 @@ from typing import Any, Callable
 import contextvars
 import _thread
 from ..application_values import ApplicationValues
+from ...auth.policy import user_has_permission
+from ...plc.workstation_self_service import OperatorIdentity, SelfServiceStation, SelfPairRecords, WorkstationSelfService
 from typing import Any
 from local_inspection_service.plc.browser_dispatch_ports import BrowserDispatchPolicy
 from typing import Callable
@@ -215,6 +217,7 @@ class PlcAssembly:
     _plc_station_service: local_inspection_service.plc.station_service.PlcStationService
     _plc_transport_factory: Callable[[dict[str, Any]], Any] | None
     _plc_web_serial_require_active_lease: Callable[..., Any]
+    _plc_workstation_self_service: WorkstationSelfService
     _plc_workstation_management: local_inspection_service.plc.workstation_management.WorkstationManagement
     _plc_workstation_repository: local_inspection_service.plc.workstation_repository.PlcWorkstationRepository
     _plc_workstation_workflows: local_inspection_service.plc.workstation_composition.PlcWorkstationWorkflows
@@ -270,8 +273,8 @@ def assemble_plc(values: ApplicationValues, environment: MutableMapping[str, str
     def plc_web_serial_pair(request: Request, response: Response, name: str, station_id: str | None=None) -> dict[str, Any]:
         return _plc_station_service.plc_web_serial_pair(request, response, name, station_id)
 
-    def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-        return _plc_station_service.plc_web_serial_update_config(station_id, candidate)
+    def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any], require_disconnected: bool = False) -> dict[str, Any]:
+        return _plc_station_service.plc_web_serial_update_config(station_id, candidate, require_disconnected)
 
     def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, Any]:
         return _plc_station_service.plc_web_serial_set_verified(station_id, verified)
@@ -431,6 +434,12 @@ def assemble_plc(values: ApplicationValues, environment: MutableMapping[str, str
     _plc_legacy_dispatch = LegacyDispatch(policy=LegacyDispatchPolicy(PLC_CONTROL_GENERATION_KEY=lambda: values.PLC_CONTROL_GENERATION_KEY, PLC_FINALIZE_REASONS=lambda: PLC_FINALIZE_REASONS, PLC_QUEUE_WAIT_SECONDS=lambda: values.PLC_QUEUE_WAIT_SECONDS, PLC_WORKER_TOTAL_TIMEOUT_SECONDS=lambda: values.PLC_WORKER_TOTAL_TIMEOUT_SECONDS, PLC_TERMINAL_ALLOWED_PHASES=lambda: PLC_TERMINAL_ALLOWED_PHASES, PLC_TERMINAL_DIAGNOSTIC_SOURCES=lambda: PLC_TERMINAL_DIAGNOSTIC_SOURCES, PlcAttemptTerminalResult=lambda: PlcAttemptTerminalResult, PlcConfigError=lambda: PlcConfigError, PlcDispatchStateConflict=lambda: PlcDispatchStateConflict, PlcTerminalResultCode=lambda: PlcTerminalResultCode, PlcTransportError=lambda: PlcTransportError, PlcTransportPhase=lambda: PlcTransportPhase), configuration=LegacyDispatchConfiguration(load_config=lambda: load_config, normalize_plc_config=lambda: normalize_plc_config, raw_plc_namespace=lambda: raw_plc_namespace, plc_activation_errors=lambda: plc_activation_errors, plc_config_audit_snapshot=lambda: plc_config_audit_snapshot, plc_claim_or_renew_io_owner=lambda: plc_claim_or_renew_io_owner, plc_current_process_owns_io=lambda: plc_current_process_owns_io), records=_native_LegacyDispatchRecords_2812(plc_dispatch_identity=lambda: plc_dispatch_identity, get_validated_idempotent_dispatch=lambda: get_validated_idempotent_dispatch, plc_dispatch_record_is_terminal=lambda: plc_dispatch_record_is_terminal, plc_dispatch_is_pristine_queue=lambda: plc_dispatch_is_pristine_queue, plc_dispatch_adoption_blocker=lambda: plc_dispatch_adoption_blocker, create_plc_dispatch=lambda: create_plc_dispatch, plc_transition_attempting=lambda: plc_transition_attempting, plc_advance_attempt=lambda: plc_advance_attempt, plc_finalize_dispatch=lambda: plc_finalize_dispatch, plc_start_attempt=lambda: plc_start_attempt, plc_finish_attempt=lambda: plc_finish_attempt, plc_dispatch_conflict_response=lambda: plc_dispatch_conflict_response), execution=LegacyDispatchExecution(_config_io_lock=lambda: ports._config_io_lock(), _plc_active_attempts=lambda: _plc_active_attempts, _plc_runtime_entry=lambda: _plc_runtime_entry, _register_plc_dispatch_runtime=lambda: _register_plc_dispatch_runtime, _plc_deadline_snapshot=lambda: _plc_deadline_snapshot, _plc_dispatch_slots=lambda: _plc_dispatch_slots, _plc_write_pending=lambda: _plc_write_pending, _plc_io_executor=lambda: _plc_io_executor, _plc_transport_factory=lambda: _plc_transport_factory, dispatch_fx_plc_detection_result=lambda: dispatch_fx_plc_detection_result, dispatch_plc_for_detection=lambda: dispatch_plc_for_detection, _run_queued_plc_dispatch=lambda: _run_queued_plc_dispatch))
     _plc_config_diagnostics = _ConfigDiagnostics(_ConfigSources(load=lambda: load_config, raw_namespace=lambda: raw_plc_namespace, normalize=lambda: normalize_plc_config, defaults=lambda: DEFAULT_PLC_CONFIG, activation_errors=lambda: plc_activation_errors, dispatch_audit=lambda: plc_dispatch_audit_records), _ConfigDisplay(logical_address=lambda: logical_device_address, device_verified=lambda: plc_device_profile_verified, read_verified=lambda: plc_read_profile_verified), _ConfigRuntime(active_attempts=lambda: _plc_active_attempts_snapshot, audit_limit=lambda: values.PLC_DISPATCH_AUDIT_LIMIT, protocol_id=lambda: PLC_PROTOCOL_ID, generation_key=lambda: values.PLC_CONTROL_GENERATION_KEY, queue_wait_seconds=lambda: values.PLC_QUEUE_WAIT_SECONDS, worker_total_timeout_seconds=lambda: values.PLC_WORKER_TOTAL_TIMEOUT_SECONDS), _ConfigAccess(require_permission=lambda: ports.require_permission()), _ConfigErrors(config_error=lambda: PlcConfigError, http_error=lambda: HTTPException))
     _plc_workstation_management = _WorkstationManagement(_WorkstationAccess(require_permission=lambda: ports.require_permission(), station_from_request=lambda: plc_web_serial_station_from_request, require_station=lambda: require_plc_web_serial_station), _WorkstationProjection(station_payload=lambda: plc_web_serial_station_payload, unpaired_payload=lambda: plc_web_serial_unpaired_payload, list_workstations=lambda: plc_web_serial_list_workstations), _WorkstationMutation(pair=lambda: plc_web_serial_pair, update_config=lambda: plc_web_serial_update_config, set_verified=lambda: plc_web_serial_set_verified), _WorkstationErrors(config_error=lambda: PlcConfigError, http_error=lambda: HTTPException))
+    _plc_workstation_self_service = WorkstationSelfService(
+        OperatorIdentity(current_user=lambda: ports.current_auth_user(), has_permission=lambda: user_has_permission),
+        SelfServiceStation(station_from_request=lambda: plc_web_serial_station_from_request, require_station=lambda: require_plc_web_serial_station, station_payload=lambda: plc_web_serial_station_payload, pair=lambda: plc_web_serial_pair, update_config=lambda: plc_web_serial_update_config),
+        SelfPairRecords(record=lambda: _plc_workstation_workflows._plc_web_serial_record, row=lambda: _plc_workstation_workflows._plc_workstation_row, mutate=lambda: _plc_workstation_workflows._plc_web_serial_mutate, clock=lambda: time.time()),
+        _WorkstationErrors(config_error=lambda: PlcConfigError, http_error=lambda: HTTPException),
+    )
     _plc_connection_lease = _ConnectionLease(_LeaseAccess(require_station=lambda: require_plc_web_serial_station, require_model_permission=lambda: require_analyze_model_permission), _LeaseMutation(claim=lambda: plc_web_serial_claim_connecting_lease, activate=lambda: plc_web_serial_activate_lease, heartbeat=lambda: plc_web_serial_heartbeat, rebind_model=lambda: plc_web_serial_rebind_model, disconnect=lambda: plc_web_serial_release_lease), _LeaseErrors(config_error=lambda: PlcConfigError, http_error=lambda: HTTPException))
     _plc_dispatch_diagnostic = _DispatchDiagnostic(_DispatchAccess(require_permission=lambda: ports.require_permission(), require_station=lambda: require_plc_web_serial_station), _DispatchMutation(declare_attempt=lambda: plc_web_serial_declare_attempt, diagnostic_plan=lambda: plc_web_serial_diagnostic_plan, diagnostic_receipt=lambda: plc_web_serial_finish_diagnostic, diagnostic_confirm=lambda: plc_web_serial_confirm_diagnostic, record_receipt=lambda: plc_web_serial_record_receipt), _DispatchErrors(config_error=lambda: PlcConfigError, http_error=lambda: HTTPException))
     return PlcAssembly(
@@ -462,6 +471,7 @@ def assemble_plc(values: ApplicationValues, environment: MutableMapping[str, str
         _plc_station_service=_plc_station_service,
         _plc_transport_factory=_plc_transport_factory,
         _plc_web_serial_require_active_lease=_plc_web_serial_require_active_lease,
+        _plc_workstation_self_service=_plc_workstation_self_service,
         _plc_workstation_management=_plc_workstation_management,
         _plc_workstation_repository=_plc_workstation_repository,
         _plc_workstation_workflows=_plc_workstation_workflows,

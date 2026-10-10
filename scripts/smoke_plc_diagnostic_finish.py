@@ -36,7 +36,7 @@ class FinishContract:
     def setUp(self):
         self.state = {"lease": {"raw_json": {
             "station_id": "station", "session_id": "session", "lease_epoch": 4,
-            "owner_user_id": "owner", "state": "active", "expires_at": 101,
+            "owner_user_id": "owner", "state": "active", "communication_verified": True, "expires_at": 101,
             "in_flight_dispatch_id": "plcdiag_id", "in_flight_deadline_at": 101,
             "diagnostic_token_hash": "hash:token", "other": "retained",
         }}}

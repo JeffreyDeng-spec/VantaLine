@@ -17,6 +17,7 @@ from local_inspection_service.schemas.plc import PlcWorkstationLeaseHeartbeatReq
 from local_inspection_service.schemas.plc import PlcWorkstationLeaseRebindRequest
 from local_inspection_service.schemas.plc import PlcWorkstationLeaseRequest
 from local_inspection_service.schemas.plc import PlcWorkstationPairRequest
+from local_inspection_service.schemas.plc import PlcWorkstationSelfPairRequest
 from local_inspection_service.schemas.plc import PlcWorkstationVerifyRequest
 from fastapi import Request
 from fastapi import Response
@@ -92,8 +93,8 @@ def plc_web_serial_list_workstations() -> list[dict[str, Any]]:
 def plc_web_serial_pair(request: Request, response: Response, name: str, station_id: str | None=None) -> dict[str, Any]:
     return _plc_station_service.plc_web_serial_pair(request, response, name, station_id)
 
-def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-    return _plc_station_service.plc_web_serial_update_config(station_id, candidate)
+def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any], require_disconnected: bool = False) -> dict[str, Any]:
+    return _plc_station_service.plc_web_serial_update_config(station_id, candidate, require_disconnected)
 
 def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, Any]:
     return _plc_station_service.plc_web_serial_set_verified(station_id, verified)
@@ -258,6 +259,15 @@ def update_plc_config(request: PlcConfigRequest) -> dict[str, Any]:
 
 def get_plc_web_serial_workstation(request: Request) -> dict[str, Any]:
     return _plc_workstation_management.get(request)
+
+def _require_plc_operator() -> None:
+    return _application.plc._plc_workstation_self_service.require_operator()
+
+def self_pair_plc_workstation(request: Request, response: Response, payload: PlcWorkstationSelfPairRequest) -> dict[str, Any]:
+    return _application.plc._plc_workstation_self_service.self_pair(request, response, payload)
+
+def self_config_plc_workstation(request: Request, payload: PlcWebSerialConfigRequest) -> dict[str, Any]:
+    return _application.plc._plc_workstation_self_service.self_config(request, payload)
 
 def list_plc_web_serial_workstations() -> dict[str, Any]:
     return _plc_workstation_management.list()

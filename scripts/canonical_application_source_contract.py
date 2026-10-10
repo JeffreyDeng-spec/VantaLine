@@ -19,6 +19,7 @@ EXPECTED_PATHS = frozenset([
     'local_inspection_service/config/list_policy.py', 'local_inspection_service/pipeline/errors.py',
     'local_inspection_service/runtime/application.py', 'local_inspection_service/runtime/application_values.py',
     'local_inspection_service/runtime/application_lifetime.py', 'local_inspection_service/runtime/default_application.py',
+    'local_inspection_service/plc/workstation_self_service.py', 'local_inspection_service/plc/workstation_self_service_api.py',
     *('local_inspection_service/compatibility/' + name + '.py' for name in ('__init__', 'infrastructure', 'inspection', 'training_pipeline', 'analytics', 'plc', 'text')),
     *('local_inspection_service/runtime/wiring/' + name + '.py' for name in ('__init__', 'infrastructure', 'inspection', 'training_pipeline', 'analytics', 'plc', 'text', 'http_registration')),
 ])

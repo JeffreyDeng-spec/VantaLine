@@ -443,3 +443,5 @@ signatures and route/lifecycle order remain unchanged; no algorithm or prompt
 change is included. This closes these domain edges, not complete application
 factory assembly. New tasks use manifest v270 with 583 actual source entries;
 historical task snapshots and secret references are unchanged.
+
+Operator PLC self-pair and self-config are explicit controller exceptions in the generated API manifest. The shared local PLC controls own human confirmation, browser identity and connection release; these operations are not exposed as Agent actions.

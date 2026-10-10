@@ -89,6 +89,8 @@ export class PlcWebSerialClient {
   private releaseLock: (() => void) | null = null;
   private queue: Promise<unknown> = Promise.resolve();
   private stopped = true;
+  private connecting = false;
+  private connectionGeneration = 0;
   private disconnectListener: ((event: Event) => void) | null = null;
   private pendingRead: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
   private pendingReadResolved = false;
@@ -99,7 +101,7 @@ export class PlcWebSerialClient {
   }
 
   state(): PlcBrowserConnectionState | null {
-    if (!this.port || !this.lease || this.stopped) return null;
+    if (!this.port || !this.lease || this.stopped || !this.lease.communication_verified) return null;
     return {
       connected: true,
       sessionId: this.lease.session_id,
@@ -109,31 +111,69 @@ export class PlcWebSerialClient {
     };
   }
 
-  async connect(stationId: string, modelId: string, onFatal: (message: string) => void) {
+  async connect(stationId: string, modelId: string, onFatal: (message: string) => void, selectedPort?: SerialPort, onProgress?: (message: string) => void) {
     if (!PlcWebSerialClient.supported() || !navigator.serial) throw new Error("请使用最新版桌面 Edge 或 Chrome，并通过 HTTPS 打开网站");
     if (this.state()) return this.state();
+    if (this.connecting) throw new Error("PLC 正在连接，请稍候");
+    this.connecting = true;
+    const generation = ++this.connectionGeneration;
+    const ensureCurrent = () => {
+      if (generation !== this.connectionGeneration) throw new Error("PLC 连接已取消，请重新连接");
+    };
     try {
       // Keep requestPort at the front of the explicit click handler so Chromium
       // does not lose transient user activation during a network round trip.
-      this.port = await navigator.serial.requestPort();
+      this.port = selectedPort || await navigator.serial.requestPort();
+      ensureCurrent();
+      await this.queue;
+      ensureCurrent();
       this.releaseLock = await acquireStationLock(stationId);
+      ensureCurrent();
       this.lease = await claimPlcWorkstationConnection({
         client_instance_id: clientInstanceId(),
         model_id: modelId,
         bundle_version: PLC_WEB_SERIAL_VERSION
       });
+      ensureCurrent();
       await this.port.open({ baudRate: 9600, dataBits: 7, stopBits: 1, parity: "even", flowControl: "none" });
+      ensureCurrent();
       if (!this.port.readable || !this.port.writable) throw new Error("串口未提供读写通道");
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
-      await this.requireQuietInput(500);
+      const check = this.lease.connection_check;
+      if (!check || check.frames.length !== 2) throw new Error("请刷新页面后重新连接 PLC");
+      const verify = async () => {
+        ensureCurrent();
+        await this.requireQuietInput(500);
+        onProgress?.("正在校验 PLC 通信…");
+        const reads: Array<{ target: string; response_hex: string }> = [];
+        for (const frame of check.frames) {
+          ensureCurrent();
+          if (document.visibilityState !== "visible" || Date.now() >= check.deadline_at * 1000) throw new Error("PLC 校验已过期或页面在后台，请重新连接");
+          this.armRead();
+          await Promise.resolve();
+          if (this.pendingReadResolved) throw new Error("PLC 校验前存在串口残留数据");
+          await this.writer!.write(bytesFromHex(frame.frame_hex));
+          const response = await this.readExact(8, check.timeout_ms);
+          parseDiagnosticWordResponse(response);
+          reads.push({ target: frame.target, response_hex: hexFromBytes(response) });
+          await this.requireQuietInput(check.timeout_ms);
+        }
+        return reads;
+      };
+      const verification = this.queue.then(verify, verify);
+      this.queue = verification.then(() => undefined, () => undefined);
+      const connectionReads = await verification;
       const info = this.port.getInfo();
       this.lease = await activatePlcWorkstationConnection({
         session_id: this.lease.session_id,
         lease_epoch: this.lease.lease_epoch,
         usb_vendor_id: info.usbVendorId,
-        usb_product_id: info.usbProductId
+        usb_product_id: info.usbProductId,
+        connection_check_id: check.id,
+        connection_reads: connectionReads
       });
+      ensureCurrent();
       this.stopped = false;
       this.disconnectListener = (event: Event) => {
         if (event.target === this.port) void this.failClosed("PLC 串口已拔出，请检查线路后人工重连", onFatal);
@@ -151,10 +191,13 @@ export class PlcWebSerialClient {
     } catch (error) {
       await this.disconnect(true);
       throw error;
+    } finally {
+      this.connecting = false;
     }
   }
 
   async disconnect(notifyServer = true) {
+    this.connectionGeneration += 1;
     this.stopped = true;
     if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;

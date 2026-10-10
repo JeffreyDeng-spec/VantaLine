@@ -117,7 +117,7 @@ class StationContracts(unittest.TestCase):
     def test_payload_deadline_generation_and_release_gates(self):
         station = self.state["station"]
         station.update(profile_verified=True, profile_verified_fingerprint="a")
-        lease = {"state": "active", "expires_at": 101, "config_generation": 3, "bundle_version": "v4"}
+        lease = {"state": "active", "communication_verified": True, "expires_at": 101, "config_generation": 3, "bundle_version": "v4"}
         self.api.plc_web_serial_current_lease = lambda station_id: lease
         self.api.plc_web_serial_recent_dispatches = lambda station_id: ["history"]
         result = self.api.plc_web_serial_station_payload(station)
@@ -134,7 +134,7 @@ class StationContracts(unittest.TestCase):
     def test_config_migration_and_transaction_failure_preserve_state(self):
         station = self.state["station"]
         station["config"] = {"legacy": True}
-        self.state["lease"] = {"state": "active", "in_flight_deadline_at": 120}
+        self.state["lease"] = {"state": "active", "communication_verified": True, "in_flight_deadline_at": 120}
         def normalize(config):
             if config.get("legacy"): raise ConfigError("legacy")
             return dict(config)
@@ -153,7 +153,7 @@ class StationContracts(unittest.TestCase):
     def test_unchanged_config_still_drains_and_profile_changes_reset(self):
         station = self.state["station"]
         station.update(profile_verified=True, profile_verified_fingerprint="a")
-        self.state["lease"] = {"state": "active", "in_flight_deadline_at": 120}
+        self.state["lease"] = {"state": "active", "communication_verified": True, "in_flight_deadline_at": 120}
         self.api.plc_web_serial_station_payload = lambda row: row
         result = self.api.plc_web_serial_update_config("s", dict(station["config"]))
         self.assertEqual(result["config_generation"], 3)
@@ -181,7 +181,7 @@ class StationContracts(unittest.TestCase):
         with self.assertRaises(ConfigError): self.api.plc_web_serial_pair(request, object(), "  ")
         self.api.current_auth_user = lambda: {"id": "account"}
         self.api.plc_web_serial_station_from_request = lambda request: self.state["station"]
-        self.state["lease"] = {"state": "active", "in_flight_deadline_at": 120}
+        self.state["lease"] = {"state": "active", "communication_verified": True, "in_flight_deadline_at": 120}
         cookies = []
         def cookie(*args, **kwargs):
             cookies.append((args, kwargs))

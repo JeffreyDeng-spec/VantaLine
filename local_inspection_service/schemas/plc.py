@@ -1,5 +1,5 @@
 """Strict PLC HTTP request shapes; physical I/O remains browser-owned."""
-from pydantic import BaseModel, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 from ..plc_fx_ascii import PROTOCOL_ID as PLC_PROTOCOL_ID
 from ..plc_web_serial import WEB_SERIAL_PROFILE_ID, WEB_SERIAL_SCHEMA_VERSION
 
@@ -76,6 +76,21 @@ class PlcWorkstationPairRequest(BaseModel):
     station_id: StrictStr | None = None
 
 
+class PlcWorkstationSelfPairRequest(BaseModel):
+    class Config:
+        extra = "forbid"
+
+    name: StrictStr | None = Field(default=None, min_length=1, max_length=80)
+
+
+class PlcConnectionReadEvidence(BaseModel):
+    class Config:
+        extra = "forbid"
+
+    target: StrictStr = Field(max_length=4)
+    response_hex: StrictStr = Field(min_length=16, max_length=16, pattern=r"^[0-9A-Fa-f]{16}$")
+
+
 class PlcWorkstationVerifyRequest(BaseModel):
     class Config:
         extra = "forbid"
@@ -100,6 +115,8 @@ class PlcWorkstationLeaseActivateRequest(BaseModel):
     lease_epoch: StrictInt
     usb_vendor_id: StrictInt | None = None
     usb_product_id: StrictInt | None = None
+    connection_check_id: StrictStr | None = Field(default=None, max_length=80)
+    connection_reads: list[PlcConnectionReadEvidence] = Field(default_factory=list, max_length=2)
 
 
 class PlcWorkstationLeaseHeartbeatRequest(BaseModel):

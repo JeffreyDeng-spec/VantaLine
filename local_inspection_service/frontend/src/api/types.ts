@@ -980,6 +980,12 @@ export interface PlcWorkstationLease {
   expires_at: number;
   heartbeat_at: number;
   serial_info?: { usb_vendor_id?: number; usb_product_id?: number };
+  communication_verified?: boolean;
+  connection_check?: {
+    id: string; station_id: string; session_id: string; lease_epoch: number;
+    config_generation: number; deadline_at: number; timeout_ms: number;
+    frames: Array<{ target: string; frame_hex: string }>;
+  };
 }
 
 export interface PlcWorkstationResponse {

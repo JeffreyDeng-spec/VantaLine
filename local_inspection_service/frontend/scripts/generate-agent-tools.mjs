@@ -19,6 +19,8 @@ const groups = {
   users: 'getUsers updateUser deleteUser'
 };
 const exceptions = {
+  selfPairPlcWorkstation: 'controller: operator confirmation owns browser-local workstation registration',
+  selfSavePlcWorkstationConfig: 'controller: local PLC controls release the connection before saving browser-bound configuration',
   getAccessoryDetail: 'asset-adapter: accessoryActions supplies opaque asset IDs',
   cropAccessoryTextImage: 'asset-adapter: accessoryActions resolves current owned asset ID',
   setAccessoryAiReference: 'asset-adapter: accessoryActions resolves current owned asset ID',

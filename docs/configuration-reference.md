@@ -1896,3 +1896,9 @@ Real-photo localization applies fixed longest-edge limits of 1024 for class refe
 训练审核诊断随不可变 worker 发布，无新增运行开关或模型配置。尝试回执包含固定诊断及提示词 SHA-256；1000 字符的 reason/gap 限制在版本化审核 skill 中显式说明。CLI/model/报告约束保持不变。
 
 Real-photo provider encoding is fixed JPEG quality 90, matching the label-comparison encoding; this is not a configurable fallback. Original bytes and training/review PNGs remain unchanged. Transport and response-validation failures are classified separately without endpoint, credential or embedded-media text.
+
+## Operator-confirmed workstation setup
+
+**Status: Authoritative**
+
+`inspection` and `ai_detection` accounts may self-register/configure their current cookie-bound workstation. The first-use UI proposes D205 input, trigger 1, D206 result, blank Y and automatic capture enabled; operator confirmation is required before enabling the station. Existing configurations are preserved, and unconfirmed server defaults remain disabled. Transport parameters stay FX3GA-40MR / FX ASCII / 9600 / 7E1 / 500ms / zero write retries. Read-only connection verification is lease-scoped and separate from manual `profile_verified`. These APIs grant no global configuration or station takeover permission.

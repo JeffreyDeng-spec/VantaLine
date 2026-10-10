@@ -8,6 +8,7 @@ import { useAuth } from "../auth/auth-context";
 import { useToast } from "../../components/ToastProvider";
 import { DeviceSettings, LegacyCostLedger } from "./DeviceSettings";
 import "./settings.css";
+import { LocalPlcControls } from "../plc/LocalPlcControls";
 
 const API = "/api/admin/model-profiles";
 type Profile = {
@@ -63,7 +64,8 @@ export function RulesPage() {
       </header>
       <section className="panel page-panel">
         <h3>本机设备</h3>
-        <p>相机选择与获授权的 PLC 连接操作在检测工作页进行。</p>
+        <p>本机 PLC 可以自主配置和连接；相机与生产检测在检测工作页进行。</p>
+        {(user?.permissions?.includes("inspection") || user?.permissions?.includes("ai_detection")) && <LocalPlcControls />}
         <Link to={workspacePath("/inspect")}>打开检测中心</Link>
       </section>
     </section>

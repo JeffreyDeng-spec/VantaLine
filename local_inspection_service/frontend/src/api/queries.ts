@@ -166,6 +166,14 @@ export function pairPlcWorkstation(payload: { name: string; station_id?: string 
   return apiClient.post<PlcWorkstationResponse>("/api/plc/workstations/pair", payload);
 }
 
+export function selfPairPlcWorkstation(payload: { name?: string } = {}) {
+  return apiClient.post<PlcWorkstationResponse>("/api/plc/workstation/self-pair", payload);
+}
+
+export function selfSavePlcWorkstationConfig(payload: PlcWebSerialConfig) {
+  return apiClient.post<PlcWorkstationResponse>("/api/plc/workstation/self-config", payload);
+}
+
 export function savePlcWorkstationConfig(payload: PlcWebSerialConfig) {
   return apiClient.post<PlcWorkstationResponse>("/api/plc/workstation/config", payload);
 }
@@ -187,6 +195,8 @@ export function activatePlcWorkstationConnection(payload: {
   lease_epoch: number;
   usb_vendor_id?: number;
   usb_product_id?: number;
+  connection_check_id: string;
+  connection_reads: Array<{ target: string; response_hex: string }>;
 }) {
   return apiClient.post<PlcWorkstationLease>("/api/plc/workstation/connect/activate", payload);
 }

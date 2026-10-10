@@ -82,7 +82,7 @@ class ConfirmContract(unittest.TestCase):
             "station": {"raw_json": {"config_generation": 3, "config": {"enabled": True}}},
             "lease": {"raw_json": {
                 "station_id": "station", "session_id": "session", "lease_epoch": 4,
-                "owner_user_id": "owner", "state": "active", "expires_at": 101,
+                "owner_user_id": "owner", "state": "active", "communication_verified": True, "expires_at": 101,
                 "config_generation": 3, "bundle_version": "v4",
                 "model_id": "model", "heartbeat_at": 90,
                 "in_flight_dispatch_id": "plcdiag_id", "in_flight_deadline_at": 101,
@@ -370,7 +370,7 @@ class ConfirmContract(unittest.TestCase):
                 "created_at": now, "updated_at": now, "config": {"enabled": True},
             }
             lease = {
-                "station_id": "station", "session_id": "session", "state": "active",
+                "station_id": "station", "session_id": "session", "state": "active", "communication_verified": True,
                 "lease_epoch": 4, "owner_user_id": "owner", "model_id": "model",
                 "client_instance_id": "browser", "bundle_version": "v4",
                 "config_generation": 3, "heartbeat_at": now, "expires_at": now + 7200,

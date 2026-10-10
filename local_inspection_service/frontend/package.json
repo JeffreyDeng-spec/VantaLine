@@ -12,7 +12,8 @@
     "build:preview": "npm run typecheck && VITE_ROUTER_BASENAME=/react-preview vite build",
     "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",
     "build": "npm run build:preview",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:plc-connection": "node scripts/test-plc-connection.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

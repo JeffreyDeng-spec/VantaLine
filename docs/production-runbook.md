@@ -1919,3 +1919,9 @@ Task-resource latency diagnosis: directory discovery should return immediate nam
 训练审核失败时先核查 error_code、固定诊断和已有 usage。历史 RuntimeError 没有完整退出/报告证据，不可据此猜测原因或反复收费试错。新 worker 记录 CLI 完成/退出与报告拒绝分类；发布后仅在旧付费尝试结算且无运行中任务时重启独立服务，随后通过前端主动恢复验证。不得将诊断补齐视为历史会话成功，回滚仍保留证据且不自动重放。
 
 Roll out JPEG90 real-photo provider copies as a complete immutable release; retain prior PNG annotation versions and original images. Verify the new input-policy receipt and actual returned boxes from an explicit frontend operation. Settled transport failures are not automatically replayed; safe failure stage/type fields do not imply a known provider outcome or zero charges. Stop reviewer admission before restarting it if any paid session remains active.
+
+## Operator PLC connection commissioning
+
+**Status: Authoritative**
+
+After the immutable self-service release deploys, check `/api/version` for matching frontend/backend release and protocol consistency. Existing line browsers reload and manually reconnect; old unverified leases cannot continue production. An operator confirms the local D/Y configuration, grants the native serial chooser and waits for both read responses to validate before camera production. Confirm real ACKs and two-line isolation with on-site equipment; browser-reported read evidence and CI fixtures do not certify output wiring or register purpose. On failure, preserve current evidence, keep PLC action disabled and diagnose manually without replaying uncertain writes. Restore the previous whole immutable release for rollback, reload browsers and reconnect. No server serial operation or runtime schema migration is required.

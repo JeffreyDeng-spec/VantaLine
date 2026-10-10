@@ -253,7 +253,10 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     lease_payload = lease.json()
     active = client.post(
         "/api/plc/workstation/connect/activate",
-        json={"session_id": lease_payload["session_id"], "lease_epoch": lease_payload["lease_epoch"]},
+        json={"session_id": lease_payload["session_id"], "lease_epoch": lease_payload["lease_epoch"],
+              "connection_check_id": lease_payload["connection_check"]["id"],
+              "connection_reads": [{"target": f["target"], "response_hex": "0230303030034333"}
+                                   for f in lease_payload["connection_check"]["frames"]]},
     )
     assert_status(active, 200, "activate lease")
     rebound_model = client.post(

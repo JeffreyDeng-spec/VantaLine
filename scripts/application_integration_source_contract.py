@@ -34,6 +34,7 @@ AGENT_STATE = json.loads((ROOT / "tests/backend_contract/agent_state_composition
 POSE_PLANNING = json.loads((ROOT / "tests/backend_contract/pose_planning_composition_delta.json").read_text())
 POSE_EXECUTION = json.loads((ROOT / "tests/backend_contract/pose_execution_composition_delta.json").read_text())
 COMPOSITIONS = json.loads((ROOT / "tests/backend_contract/application_composition_bindings.json").read_text())
+MAIN283_PLC = json.loads((ROOT / "tests/backend_contract/main283_plc_integration_delta.json").read_text())
 
 
 def canonical(node):
@@ -68,6 +69,17 @@ def restore_delta(source, fixture):
 
 
 def verify_actual_compositions():
+    assert MAIN283_PLC["schema"] == 1, "Unknown PLC integration schema"
+    assert MAIN283_PLC["upstream_sha"] == "8195c96970c1e41582d4796fe2b23508ea9f837a", "Unreviewed PLC upstream"
+    assert MAIN283_PLC["previous_candidate"] == "9b9ca73c6f6d657ab3427409fc9be1835801daea", "Unreviewed PLC parent"
+    main_sources = {
+        "local_inspection_service/plc/station_service.py": "cd2e99d2c4d7a2d2716fa7ac7e87525317333c43a35bd65bfb70fa13412fe79f",
+        "local_inspection_service/plc/lease_acquisition.py": "6f7370ff1fa46acd18108b804be697939eb3d0e0719855e3c04582ca3379393e",
+        "local_inspection_service/plc/lease_maintenance.py": "24597c67e4a4a4109b266e7895dc7513714ada7d3e946e45a4f3e4fb951f93ed",
+    }
+    assert set(MAIN283_PLC["business_sources"]) == set(main_sources), "PLC integration source inventory changed"
+    for path, expected in main_sources.items():
+        assert MAIN283_PLC["business_sources"][path]["main_sha256"] == expected, "PLC upstream source changed: " + path
     assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
@@ -89,6 +101,10 @@ def verify_actual_compositions():
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/capture_composition.py").read_text())) == PLC_CAPTURE["actual_owner_ast_sha256"], "Actual PLC capture composition changed"
     assert digest(ast.parse((ROOT / "local_inspection_service/plc/lease_diagnostic_composition.py").read_text())) == PLC_OPERATIONS["actual_owner_ast_sha256"], "Actual PLC lease/diagnostic composition changed"
     for path, expected in {**AGENT_STATE["unchanged_business_sha256"], **POSE_PLANNING["unchanged_business_sha256"], **POSE_EXECUTION["unchanged_business_sha256"], **PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"], **CODEX_ENVIRONMENT["unchanged_business_sha256"]}.items():
+        if path in MAIN283_PLC["business_sources"]:
+            accepted = MAIN283_PLC["business_sources"][path]
+            assert expected == accepted["previous_sha256"], "Historical PLC baseline changed: " + path
+            expected = accepted["actual_sha256"]
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():

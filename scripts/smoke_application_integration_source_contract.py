@@ -20,6 +20,27 @@ class IntegrationContracts(unittest.TestCase):
         older = contract.restore_business_root(self.source)
         self.assertEqual(contract.digest(ast.parse(older)), contract.BUSINESS["parent_ast_sha256"])
 
+    def test_main_plc_delta_cannot_extend_or_replace_the_reviewed_baseline(self):
+        path = "local_inspection_service/plc/station_service.py"
+        for mode in ("extra-path", "missing-path", "schema", "upstream", "parent", "main-hash", "old-hash"):
+            altered = copy.deepcopy(contract.MAIN283_PLC)
+            if mode == "extra-path":
+                altered["business_sources"]["local_inspection_service/pipeline/task_metadata.py"] = copy.deepcopy(altered["business_sources"][path])
+            elif mode == "missing-path":
+                altered["business_sources"].pop(path)
+            elif mode == "schema":
+                altered["schema"] = 2
+            elif mode == "upstream":
+                altered["upstream_sha"] = "0" * 40
+            elif mode == "parent":
+                altered["previous_candidate"] = "0" * 40
+            elif mode == "main-hash":
+                altered["business_sources"][path]["main_sha256"] = "0" * 64
+            else:
+                altered["business_sources"][path]["previous_sha256"] = "0" * 64
+            with self.subTest(mode=mode), patch.object(contract, "MAIN283_PLC", altered), self.assertRaises(AssertionError):
+                contract.verify_actual_compositions()
+
     def test_pose_actual_owners_and_outer_fixture_mutations_fail(self):
         original_read = Path.read_text
         for relative in ("agent/state_composition.py", "agent/planning_composition.py", "agent/pose_execution_composition.py"):
