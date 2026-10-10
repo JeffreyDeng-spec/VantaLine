@@ -3316,15 +3316,42 @@ async def test_total_deadline_before_and_after_attempt() -> None:
             [lambda writes: ScriptedTransport(writes, response=ACK, write_started=write_started, write_release=write_release)]
         )
         server._plc_transport_factory = blocking
-        pending = asyncio.create_task(
-            server.dispatch_plc_for_detection_async(
-                {"request_id": "deadline-during-attempt", "passed": True},
-                source="image",
-                fingerprint="deadline-during-attempt",
+        # This case tests a deadline *during* a fake write, not runner scheduling.
+        # Keep the real record admission window generous, then advance only the
+        # dispatch wrapper's test clock after its write-start barrier is observed.
+        # The actual asyncio scheduler and all outcome/at-most-once assertions
+        # remain intact; the before-write case above still uses a real deadline.
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from local_inspection_service.plc import legacy_dispatch
+        real_loop = asyncio.get_running_loop()
+        server.PLC_WORKER_TOTAL_TIMEOUT_SECONDS = 10.0
+
+        class DeadlineLoop:
+            expired = False
+
+            def time(self) -> float:
+                return 11.0 if self.expired else 0.0
+
+            def run_in_executor(self, *args: Any, **kwargs: Any) -> Any:
+                return real_loop.run_in_executor(*args, **kwargs)
+
+        clock = DeadlineLoop()
+        dispatch_asyncio = SimpleNamespace(get_running_loop=lambda: clock, sleep=asyncio.sleep)
+        # The server namespace covers the retained AST baseline selector; the
+        # extracted implementation resolves its own module's asyncio namespace.
+        with patch.object(server, "asyncio", dispatch_asyncio), \
+                patch.object(legacy_dispatch, "asyncio", dispatch_asyncio):
+            pending = asyncio.create_task(
+                server.dispatch_plc_for_detection_async(
+                    {"request_id": "deadline-during-attempt", "passed": True},
+                    source="image",
+                    fingerprint="deadline-during-attempt",
+                )
             )
-        )
-        assert await wait_event_async(write_started)
-        response = await pending
+            assert await wait_event_async(write_started, timeout=5.0)
+            clock.expired = True
+            response = await pending
         snapshot = response["plc_sync"]
         assert snapshot["attempted"] is True, snapshot
         assert snapshot["outcome"] == "outcome_uncertain"

@@ -2369,3 +2369,11 @@ rejected, including partial reruns that reuse previously successful shard report
 **Status: Authoritative**
 
 Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.
+
+The retained legacy-dispatch synthetic deadline regression keeps the real
+before-write timeout case. Its during-write case uses an event-controlled dispatch
+clock: expiration is triggered only after the fake transport's write-start barrier.
+This avoids treating slow runner persistence as a different test scenario. All
+uncertain-outcome, worker-continuation, newer-final-evidence, single-audit and
+exactly-one-frame assertions remain unchanged; production dispatch and the real
+asyncio scheduler are not patched or modified by this release.
