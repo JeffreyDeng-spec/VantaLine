@@ -250,3 +250,36 @@ def test_assessment_receives_initial_and_current_thresholds_before_lowering(data
     state=repo.get('a','task')
     assert state['approved_real_target']==20 and state['initialization']['approved_real_target']==30
     assert len([j for j in repo.jobs('a','task') if j['kind']=='train'])==1
+
+
+def test_source_confirmation_is_versioned_idempotent_and_rechecks_once(database):
+    from contextlib import contextmanager
+    from fastapi import HTTPException
+    from local_inspection_service.training.real_photo_api import FeedbackService,GroupRequest
+    from local_inspection_service.training.real_photo_contracts import source_confirmed
+    repo=ready(database)
+    def accept(state,c):
+        s=state['samples'][0];s['review']={'key':review_key(s,state['classes']),'decision':'accept_positive'}
+    repo.mutate('a','task',accept)
+    repo.enable('a','task',classes(),{},False);before=repo.get('a','task');jobs=repo.jobs('a','task')
+    service=FeedbackService.__new__(FeedbackService)
+    @contextmanager
+    def repository():yield repo
+    service.repo=repository;service.task=lambda *a,**kw:({'id':'a'}, {})
+    service.status=lambda identifier:repo.get('a',identifier)
+    request=GroupRequest(source_group='known-batch',source_group_confirmed=False)
+    state=service.group('task','0',request);s=state['samples'][0]
+    assert not source_confirmed(s) and s['source_group_version']==1
+    assert s['source_group_history'][0]['source_group']=='0'
+    assert s['source_group_modified_by']=='a' and s['source_group_modified_at']
+    assert review_key(s,state['classes'])!=s['review']['key']
+    assert state['recheck_sample_ids']==['0'] and not state['enabled']
+    service.group('task','0',request)
+    assert repo.get('a','task')['samples'][0]==s and repo.jobs('a','task')==jobs
+    state=service.group('task','0',GroupRequest(source_group='known-batch',source_group_confirmed=True))
+    assert source_confirmed(state['samples'][0]) and state['samples'][0]['source_group_version']==2
+    assert state['recheck_sample_ids']==['0'] and repo.jobs('a','task')==jobs
+    unchanged=repo.get('a','task')
+    with pytest.raises(HTTPException) as error:
+        service.group('task','0',GroupRequest(source_group='historical-task-unconfirmed',source_group_confirmed=True))
+    assert error.value.status_code==422 and repo.get('a','task')==unchanged

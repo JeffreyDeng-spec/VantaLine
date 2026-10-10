@@ -2333,3 +2333,8 @@ Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=c
 Disposable PostgreSQL coverage includes old cancelled/failed/interrupted/stale annotations followed by an explicit newer version: the cohort waits for the new version, queues review only after completion and preserves the old terminal attempt. Existing current-version failure tests still block training. No paid replay occurs in these fixtures.
 
 Real PostgreSQL API mutation coverage verifies disabled legacy-round source edits persist, remain disabled, archive membership once and leave the job set unchanged. Enabled active-round edits still return 409 and roll back the attempted source change.
+
+
+## Real-photo source confirmation
+
+Real-photo source-confirmation checks cover legacy accepted pending-source records, explicit false flags, empty groups, server rejection of accept decisions, and refusal to export old frozen datasets containing such sources. Real PostgreSQL API tests verify source history/actor/time, one review identity change, idempotent repeated saves, no paid jobs on editing, explicit confirmation and rejection of a confirmed placeholder. Run the seven focused real-photo feedback/workflow/review-tools/dataset/dispatch/training-config/cache suites against a disposable PostgreSQL database, plus frontend typecheck/production build, boundaries, model dependency and docs contracts.
