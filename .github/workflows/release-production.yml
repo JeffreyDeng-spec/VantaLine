@@ -134,6 +134,12 @@ jobs:
               print("Runtime observation environment preflight failed", file=sys.stderr)
               raise SystemExit(1) from None
           PY_OBSERVER_ENVIRONMENT
+          executing_installer_sha="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" sha256sum /usr/local/sbin/vantaline-install-release | awk '{print $1}')"
+          [[ "$executing_installer_sha" =~ ^[0-9a-f]{64}$ ]]
+          printf 'executing_installer_sha256=%s\n' "$executing_installer_sha"
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True; print(json.dumps({"prior_git_commit":d["git_commit"],"prior_release":d["release"],"consistent":True}))'
       - name: Upload and deploy exact release
         run: |
           artifact="release-output/$RELEASE_ID.tar.gz"
