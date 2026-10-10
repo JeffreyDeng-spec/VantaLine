@@ -69,6 +69,38 @@ def test_pause_archives_round_and_revokes_late_review_before_source_edit(databas
     assert repo.claim({'a'},{'review'},'model','fixture') is None
 
 
+@pytest.mark.parametrize('legacy_paused',[False,True])
+def test_source_edit_archives_legacy_paused_round_without_enabling_work(database,legacy_paused):
+    from contextlib import contextmanager
+    from fastapi import HTTPException
+    from local_inspection_service.training.real_photo_api import FeedbackService,GroupRequest
+    repo=ready(database);schedule(repo,'a','task')
+    frozen=copy.deepcopy(repo.get('a','task')['round'])
+    if legacy_paused:
+        repo.enable('a','task',classes(),{},False)
+        # Compatibility snapshot from the old pause implementation.
+        repo.mutate('a','task',lambda state,c:state.update(round=frozen,rounds=[]))
+    before=repo.get('a','task');jobs=repo.jobs('a','task')
+    service=FeedbackService.__new__(FeedbackService)
+    @contextmanager
+    def repository():yield repo
+    service.repo=repository
+    service.task=lambda *a,**kw:({'id':'a'}, {})
+    service.status=lambda identifier:repo.get('a',identifier)
+    if not legacy_paused:
+        with pytest.raises(HTTPException) as error:service.group('task','19',GroupRequest(source_group='confirmed-batch'))
+        assert error.value.status_code==409 and repo.get('a','task')==before
+    else:
+        state=service.group('task','19',GroupRequest(source_group='confirmed-batch'))
+        assert not state['enabled'] and 'round' not in state
+        assert state['samples'][-1]['source_group']=='confirmed-batch'
+        assert state['rounds'][-1]['id']==frozen['id'] and state['rounds'][-1]['status']=='cancelled'
+        assert state['rounds'][-1]['sample_ids']==frozen['sample_ids']
+        service.group('task','18',GroupRequest(source_group='confirmed-batch'))
+        assert len(repo.get('a','task')['rounds'])==1
+    assert repo.jobs('a','task')==jobs
+
+
 def test_failed_initialization_diagnostics_survive_without_requeue(database):
     repo=database();repo.enable('a','task',classes(),{})
     job,token=repo.claim({'a'},{'initialize'},'gpt-6-astra','fixture')
@@ -129,6 +161,37 @@ def test_failed_cohort_annotation_archives_scope_and_allows_explicit_recovery(da
     assert state['rounds'][-1]['status']=='annotation_incomplete'
     assert len(state['rounds'][-1]['sample_ids'])==20
     assert not any(j['kind'] in {'review','train'} for j in repo.jobs('a','task'))
+
+
+@pytest.mark.parametrize('old_status',['cancelled','failed','interrupted','stale'])
+def test_old_terminal_annotation_does_not_block_explicit_new_version(database,old_status):
+    repo=database();repo.enable('a','task',classes(),{})
+    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':20,'reason':'bounded cohort'})
+    for i,row in enumerate(state_fixture()['samples']):
+        sample=copy.deepcopy(row);sample.pop('review')
+        if i==19:sample.pop('annotation')
+        repo.capture('a','task',sample)
+    schedule(repo,'a','task');previous=repo.get('a','task')['round']['id']
+    repo.enable('a','task',classes(),{},False)
+    old=next(j for j in repo.jobs('a','task') if j['kind']=='annotate')
+    with repo.tx() as c:
+        old['status']=old_status;repo.save_job(c,old)
+    repo.enable('a','task',classes(),{},True)
+    def new_version(state,c):
+        sample=state['samples'][-1];sample['annotation_version']=2
+        repo.enqueue(c,state,'annotate','explicit-version-2',
+            {'sample':sample,'classes':state['classes'],'profiles':{},'version':2,'explicit':True})
+    repo.mutate('a','task',new_version)
+    schedule(repo,'a','task');state=repo.get('a','task')
+    assert not state.get('pause_reason') and state['round']['id']!=previous
+    assert not state['round']['review_jobs']
+    finish(repo,'annotate',lambda j:{'status':'completed','objects':[{'class_id':'a','bbox':[0,0,10,10]}],'receipt':{}})
+    schedule(repo,'a','task');state=repo.get('a','task')
+    assert not state.get('pause_reason') and len(state['round']['review_jobs'])==2
+    jobs=repo.jobs('a','task')
+    assert next(j for j in jobs if j['id']==old['id'])['status']==old_status
+    assert len([j for j in jobs if j['kind']=='annotate'])==2
+    assert state['samples'][-1]['annotation']['version']==2
 
 
 def test_failed_assessment_blocks_future_paid_annotation(database):

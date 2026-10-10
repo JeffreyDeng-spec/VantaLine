@@ -2329,3 +2329,7 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 **Status: Authoritative**
 
 Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.
+
+Disposable PostgreSQL coverage includes old cancelled/failed/interrupted/stale annotations followed by an explicit newer version: the cohort waits for the new version, queues review only after completion and preserves the old terminal attempt. Existing current-version failure tests still block training. No paid replay occurs in these fixtures.
+
+Real PostgreSQL API mutation coverage verifies disabled legacy-round source edits persist, remain disabled, archive membership once and leave the job set unchanged. Enabled active-round edits still return 409 and roll back the attempted source change.
