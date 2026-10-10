@@ -394,8 +394,6 @@ jobs:
     - uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        cache: ${{ inputs.cold-cache != true && 'pip' || '' }}
-        cache-dependency-path: requirements-production.lock
     - name: Identify immutable dependency environment
       id: environment
       run: python scripts/ci_environment.py key
@@ -406,7 +404,19 @@ jobs:
         path: ${{ runner.temp }}/vantaline-ci-venv
         key: ${{ steps.environment.outputs.key }}
       continue-on-error: true
-    - name: Install and verify locked production dependencies
+    - name: Verify cached environment and install the full lock
+      id: cached-environment
+      continue-on-error: true
+      run: python scripts/ci_environment.py prepare-cache
+    - name: Recover existing pip cache for a full fallback
+      if: ${{ steps.cached-environment.outcome != 'success' || steps.cached-environment.outputs.ready != 'true' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: ${{ inputs.cold-cache != true && 'pip' || '' }}
+        cache-dependency-path: requirements-production.lock
+    - name: Rebuild and verify all dependencies after a cache miss
+      if: ${{ steps.cached-environment.outcome != 'success' || steps.cached-environment.outputs.ready != 'true' }}
       run: python scripts/ci_environment.py prepare
     - name: Verify backend CI coverage and gate failure modes
       run: 'python scripts/backend_ci.py verify
@@ -680,7 +690,7 @@ jobs:
   workflow_dispatch:
     inputs:
       cold-cache:
-        description: Measure backend setup without restoring or saving the pip cache
+        description: Run full CI without backend environment or pip cache restoration/saving
         type: boolean
         default: false
       force-full:

@@ -51,6 +51,25 @@ class GateContract(unittest.TestCase):
                 step['if']="${{ needs.ci-mode.outputs.mode == 'full' }}"
                 with self.subTest(name=name,action=action),self.assertRaises(AssertionError):backend_ci.validate_reuse_bootstrap(changed)
 
+    def test_cache_first_fallback_cannot_skip_a_successful_cache_miss(self):
+        import yaml
+        shards = yaml.safe_load((backend_ci.ROOT/'.github/workflows/ci.yml').read_text())['jobs']['backend-shards']
+        backend_ci.validate_cache_bootstrap(shards)
+        for name in ('Recover existing pip cache for a full fallback', 'Rebuild and verify all dependencies after a cache miss'):
+            changed = copy.deepcopy(shards)
+            step = next(s for s in changed['steps'] if s.get('name') == name)
+            step['if'] = step['if'].replace(' || ', ' && ')
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                backend_ci.validate_cache_bootstrap(changed)
+        for mode in ('run', 'conditional', 'continue'):
+            changed = copy.deepcopy(shards)
+            step = next(s for s in changed['steps'] if s.get('id') == 'cached-environment')
+            if mode == 'run': step['run'] = 'exit 0'
+            elif mode == 'conditional': step['if'] = 'false'
+            else: step['continue-on-error'] = False
+            with self.subTest(mode=mode), self.assertRaises(AssertionError):
+                backend_ci.validate_cache_bootstrap(changed)
+
     def test_fixed_legacy_helper_replacement_has_exact_predecessor(self):
         import json
         base=json.loads(backend_ci.MANIFEST.read_text());delta=json.loads(backend_ci.ADDITIONS.read_text())

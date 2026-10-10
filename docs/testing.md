@@ -2993,6 +2993,13 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 
 ## Full CI, trusted environments and exact-tree evidence
 
+Backend runners first restore, checksum and version-check the main-built environment,
+then install/verify the entire lock and initialize fonts in the same process. Only a
+miss, corruption or cached-preparation exception restores the existing pip download
+cache and performs a complete installation. The recovery condition checks both
+actual step outcome and its ready output; cached preparation cannot mask a failure.
+PRs never save an installed environment, and no validation/assertion is removed.
+
 Automatic promotion also requires the successful main CI commit to equal the
 workflow-run event's current default-branch commit before a deployment job starts.
 A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
@@ -3123,3 +3130,70 @@ Independent performance runs remain scheduled or explicit; PR performance is
 required inside CI. Frozen inventory rebalancing requires a reviewed revision.
 
 Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
+
+## Historical upstream ordinary CI timing evidence (2026-10-11)
+
+This section records the upstream 348-command ordinary CI scope before the expanded refactor gate. Its 170-second target and 22-job timings do not certify the current 461-command, 24-job suite or its required full performance protocols. The frozen baseline inventory and reviewed refactor schedule remain until the complete expanded suite has its own timing evidence; only the upstream cache-first dependency preparation is adopted here.
+
+**Acceptance in progress.** Five minutes remains an unverified target until a real
+immutable production promotion completes within the declared budgets.
+
+### Configuration and initialization
+
+Policy PR [#287](https://github.com/JeffreyDeng-spec/VantaLine/pull/287) preserves
+348 ordinary backend commands, five independent full benchmarks, twelve isolated
+Python 3.10/PostgreSQL 16 shards and all preceding frontend/safety/package/document
+contracts. Latest main changes through #289 are retained. Frontend browser and build
+jobs run independently, while browser fixtures remain serial within their runner.
+
+| Run | Scope | Complete CI window | Environment |
+| --- | --- | ---: | --- |
+| [38077555167](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38077555167) | Initial parallel full PR suite | 300 s | pip available; trusted environment absent |
+| [38078720785](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38078720785) | Final bootstrap policy and balanced shards | 296 s | pip available; trusted environment absent |
+| [38079267038](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079267038) | Required full main initialization | 314 s | first policy merge; no PR reuse |
+| [38079713809](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079713809) | Full manual dependency-cold measurement | 295 s | backend environment and pip restoration/saving disabled; ordinary npm cache unchanged |
+
+These initialization results do not establish the 170-second PR budget. The first
+source artifact's actual downloaded ZIP was independently checked against GitHub's
+SHA-256 digest; it contained twelve complete reports and all 348 ordinary commands.
+The policy merge deliberately forces one full main run; initialization passed.
+Trusted prewarm [38079266970](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079266970)
+produced an 802,530,043-byte compressed environment, below the 1.5 GiB ceiling.
+Only protected main builds
+and saves the installed-environment cache, with its own capacity and integrity checks.
+
+### Final fixed-configuration acceptance
+
+First cached full PR run [38080683294](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38080683294)
+succeeded in **210 seconds**, above the 170-second budget. Environment restore took
+11–19 s and the full lock/integrity/font preparation 6–9 s. Shard test times ranged
+60–118 s; one later runner start was 35 s behind the first ordinary job. This led
+to cache-first preparation (pip restoration only on fallback) and another fixed
+longest-group-first balance estimated at 82.6–82.7 test seconds per shard.
+Refinement PR [#290](https://github.com/JeffreyDeng-spec/VantaLine/pull/290)
+passed all 22 ordinary jobs in [38081853788](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38081853788),
+with a complete CI window of **308 seconds**. Its changed cache-policy hash was
+not yet available from trusted main, so it used the full installation fallback.
+After merge, trusted prewarm [38082713423](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38082713423)
+succeeded for the new rules. First final-policy warm run [38083034860](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083034860)
+passed in **205 seconds**. All installed-environment caches were restored without
+pip fallback. The last shard started 47 seconds after CI began, with 93 seconds
+of tests; the aggregate gate then took 11 seconds. Initialization main overlapped
+this run, so a subsequent isolated measurement is required. This result fails the
+170-second PR budget and is retained without excluding later runner delay.
+Second final-policy full PR run [38083450430](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083450430)
+also passed, in **206 seconds**. No checks were removed. The 170-second budget
+remains unmet within the current runner resources; the next measurement retains
+the same fixed configuration.
+
+Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
+and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded
+initial PR queue/review-and-merge waiting, stage durations and later runner queueing.
+A fallback run is recorded as full execution, without claiming evidence reuse.
+
+### Subsequent releases
+
+Record the next three genuine production promotions after the first accepted chain.
+Do not create artificial releases to fill this table or treat a skipped release job as
+a deployed release. `measure_ci_chain.py` reconciles successful run/attempt metadata;
+the release's exact-SHA install and `/api/version` checks must also have succeeded.

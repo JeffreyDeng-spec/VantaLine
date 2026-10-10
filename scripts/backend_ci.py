@@ -111,6 +111,7 @@ def verify(manifest):
                  'documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance']:
         assert workflow['jobs'][name]['needs'] == ['ci-mode']
         assert workflow['jobs'][name]['if'] == ('${{ !cancelled() }}' if name in ('frontend','source-safety') else "${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}")
+    validate_cache_bootstrap(shards)
     gate_job = workflow['jobs']['backend-plc']
     assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
@@ -140,6 +141,24 @@ def validate_reuse_bootstrap(workflow):
         prior = steps[:validator]
         assert any(s.get('uses', '').startswith('actions/checkout@') and 'if' not in s for s in prior), f'{name}: reuse lacks checkout'
         assert any(s.get('uses', '').startswith('actions/setup-python@') and 'if' not in s and s['with']['python-version']=='3.10' for s in prior), f'{name}: reuse lacks Python'
+
+
+def validate_cache_bootstrap(shards):
+    steps = shards['steps']
+    setup = next(s for s in steps if s.get('uses') == 'actions/setup-python@v5')
+    assert 'cache' not in setup['with'], 'hot environment must not restore redundant pip downloads'
+    preparation = [s for s in steps if s.get('id') == 'cached-environment']
+    assert len(preparation) == 1 and preparation[0].get('run') == 'python scripts/ci_environment.py prepare-cache'
+    assert preparation[0].get('continue-on-error') is True and 'if' not in preparation[0]
+    predicate = "${{ steps.cached-environment.outcome != 'success' || steps.cached-environment.outputs.ready != 'true' }}"
+    recovery = [s for s in steps if s.get('name') == 'Recover existing pip cache for a full fallback']
+    rebuild = [s for s in steps if s.get('name') == 'Rebuild and verify all dependencies after a cache miss']
+    assert len(recovery) == len(rebuild) == 1
+    assert recovery[0].get('if') == rebuild[0].get('if') == predicate, 'cache miss/failure must rebuild'
+    assert recovery[0].get('uses') == 'actions/setup-python@v5'
+    assert recovery[0]['with'] == {'python-version': '3.10', 'cache': "${{ inputs.cold-cache != true && 'pip' || '' }}", 'cache-dependency-path': 'requirements-production.lock'}
+    assert rebuild[0].get('run') == 'python scripts/ci_environment.py prepare' and not rebuild[0].get('continue-on-error', False)
+    assert steps.index(preparation[0]) < steps.index(recovery[0]) < steps.index(rebuild[0])
 
 
 def execute(item, output, timeout=900):

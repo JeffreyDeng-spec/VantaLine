@@ -59,12 +59,15 @@ def validate(directory, info):
     assert version==info['python'], 'cached interpreter mismatch'
 
 
-def prepare():
+def prepare(cache_only=False):
     directory=environment_path();info=descriptor()
     try:
         validate(directory,info)
         print('Verified main-built environment cache; install still verifies the full lock.')
     except (OSError,ValueError,AssertionError,KeyError,subprocess.SubprocessError):
+        if cache_only:
+            print('Environment cache missing/invalid; defer full installation until pip cache recovery.')
+            return False
         print('Environment cache missing/invalid; rebuilding all locked dependencies.')
         if directory.exists():shutil.rmtree(directory)
         subprocess.run([sys.executable,'-m','venv',str(directory)],check=True)
@@ -75,6 +78,7 @@ def prepare():
     subprocess.run([python,'-c','import matplotlib.font_manager'],check=True)
     if os.environ.get('GITHUB_PATH'):
         with open(os.environ['GITHUB_PATH'],'a') as f:f.write(str(directory/'bin')+'\n')
+    return True
 
 
 def seal():
@@ -97,11 +101,15 @@ def prune():
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('command',choices=['key','prepare','seal','prune']);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('command',choices=['key','prepare','prepare-cache','seal','prune']);args=parser.parse_args()
     if args.command=='key':
         key=cache_key(descriptor());print(key)
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('key='+key+'\n')
     elif args.command=='prepare':prepare()
+    elif args.command=='prepare-cache':
+        ready=prepare(cache_only=True)
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('ready='+str(ready).lower()+'\n')
     elif args.command=='seal':seal()
     else:prune()

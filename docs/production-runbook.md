@@ -1934,6 +1934,13 @@ To correct unfrozen real-photo source groups, pause from the frontend and wait f
 
 ## Full CI latency and evidence diagnosis
 
+Backend runners first restore, checksum and version-check the main-built environment,
+then install/verify the entire lock and initialize fonts in the same process. Only a
+miss, corruption or cached-preparation exception restores the existing pip download
+cache and performs a complete installation. The recovery condition checks both
+actual step outcome and its ready output; cached preparation cannot mask a failure.
+PRs never save an installed environment, and no validation/assertion is removed.
+
 Automatic promotion also requires the successful main CI commit to equal the
 workflow-run event's current default-branch commit before a deployment job starts.
 A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
@@ -2020,3 +2027,5 @@ required inside CI. Frozen inventory rebalancing requires a reviewed revision.
 Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
 
 Zero-byte logs are valid only for fixed silent Git preparation checks `check-298` and `check-299`, with the empty-content SHA-256. They do not waive numeric performance, actual artifact provenance or production runtime observation. Invalid evidence still falls back to complete CI.
+
+The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.

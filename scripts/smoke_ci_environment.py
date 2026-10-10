@@ -46,6 +46,20 @@ class EnvironmentContract(unittest.TestCase):
             env.prepare();self.assertEqual(run.call_count,3)
             self.assertIn(str(env.LOCK),run.call_args_list[0].args[0])
 
+    def test_cache_first_miss_defers_all_installation_until_download_cache_recovery(self):
+        with patch.object(env,'environment_path',return_value=Path('/synthetic')),patch.object(env,'descriptor',return_value={}),patch.object(env,'validate',side_effect=AssertionError('corrupt')),patch.object(env.subprocess,'run') as run:
+            self.assertFalse(env.prepare(cache_only=True));run.assert_not_called()
+
+    def test_cache_first_hit_checks_integrity_and_installs_full_lock_once(self):
+        with patch.object(env,'environment_path',return_value=Path('/synthetic')),patch.object(env,'descriptor',return_value={}),patch.object(env,'validate') as verify,patch.object(env.subprocess,'run') as run:
+            self.assertTrue(env.prepare(cache_only=True));verify.assert_called_once();self.assertEqual(run.call_count,3)
+            self.assertIn(str(env.LOCK),run.call_args_list[0].args[0])
+
+    def test_cached_install_failure_cannot_emit_ready_success(self):
+        import subprocess
+        with patch.object(env,'environment_path',return_value=Path('/synthetic')),patch.object(env,'descriptor',return_value={}),patch.object(env,'validate'),patch.object(env.subprocess,'run',side_effect=subprocess.CalledProcessError(1,'install')):
+            with self.assertRaises(subprocess.CalledProcessError):env.prepare(cache_only=True)
+
     def test_pr_cannot_seal_or_delete_shared_cache(self):
         with patch.dict(os.environ,{'GITHUB_REF':'refs/pull/2/merge','GITHUB_EVENT_NAME':'pull_request'},clear=True):
             with self.assertRaises(AssertionError):env.seal()
