@@ -3316,29 +3316,63 @@ async def test_total_deadline_before_and_after_attempt() -> None:
             [lambda writes: ScriptedTransport(writes, response=ACK, write_started=write_started, write_release=write_release)]
         )
         server._plc_transport_factory = blocking
-        pending = asyncio.create_task(
-            server.dispatch_plc_for_detection_async(
-                {"request_id": "deadline-during-attempt", "passed": True},
-                source="image",
-                fingerprint="deadline-during-attempt",
+        original_snapshot = server._plc_deadline_snapshot
+        original_worker = server._run_queued_plc_dispatch
+        after_worker_finished = threading.Event()
+
+        def snapshot_after_write(*, dispatch_id: str, source: str, request_id: str, passed: bool) -> dict[str, Any]:
+            # Observing write_started after awaiting a response cannot order an
+            # already-created snapshot. Arrange this scenario's actual write
+            # before calling the unchanged snapshot, outside its config lock.
+            assert request_id == "deadline-during-attempt"
+            assert write_started.wait(2.0), "synthetic write did not start before deadline snapshot"
+            return original_snapshot(
+                dispatch_id=dispatch_id, source=source, request_id=request_id, passed=passed
             )
-        )
-        assert await wait_event_async(write_started)
-        response = await pending
-        snapshot = response["plc_sync"]
-        assert snapshot["attempted"] is True, snapshot
-        assert snapshot["outcome"] == "outcome_uncertain"
-        assert snapshot["worker_continues"] is True, snapshot
-        assert snapshot["active_attempts"]
-        snapshot_version = snapshot["state_version"]
-        write_release.set()
-        final = wait_worker_done(snapshot["dispatch_id"])
-        assert final["attempted"] is True
-        assert final["deadline_exceeded"] is True
-        assert final["worker_continues"] is False
-        assert final["state_version"] > snapshot_version
-        assert len(audit_for(snapshot["dispatch_id"])) == 1
-        assert blocking.writes == [build_d206_frame("119C", True)]
+
+        def tracked_worker(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            try:
+                return original_worker(*args, **kwargs)
+            finally:
+                after_worker_finished.set()
+
+        server._plc_deadline_snapshot = snapshot_after_write
+        server._run_queued_plc_dispatch = tracked_worker
+        try:
+            pending = asyncio.create_task(
+                server.dispatch_plc_for_detection_async(
+                    {"request_id": "deadline-during-attempt", "passed": True},
+                    source="image",
+                    fingerprint="deadline-during-attempt",
+                )
+            )
+            assert await wait_event_async(write_started)
+            response = await pending
+            snapshot = response["plc_sync"]
+            assert snapshot["attempted"] is True, snapshot
+            assert snapshot["outcome"] == "outcome_uncertain"
+            assert snapshot["worker_continues"] is True, snapshot
+            assert snapshot["active_attempts"]
+            snapshot_version = snapshot["state_version"]
+            write_release.set()
+            final = wait_worker_done(snapshot["dispatch_id"])
+            assert final["attempted"] is True
+            assert final["deadline_exceeded"] is True
+            assert final["worker_continues"] is False
+            assert final["state_version"] > snapshot_version
+            assert len(audit_for(snapshot["dispatch_id"])) == 1
+            assert blocking.writes == [build_d206_frame("119C", True)]
+        finally:
+            write_release.set()
+            try:
+                assert await wait_event_async(after_worker_finished, timeout=5.0), "synthetic dispatch worker did not finish"
+                done, _ = await asyncio.wait({pending}, timeout=2.0)
+                assert pending in done, "synthetic dispatch response did not finish"
+                if not pending.cancelled():
+                    pending.exception()
+            finally:
+                server._plc_deadline_snapshot = original_snapshot
+                server._run_queued_plc_dispatch = original_worker
     finally:
         server.PLC_WORKER_TOTAL_TIMEOUT_SECONDS = original_total
         server.dispatch_plc_for_detection = original_dispatch

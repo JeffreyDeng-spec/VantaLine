@@ -1,5 +1,7 @@
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
+The retained legacy deadline smoke uses a synthetic write-event barrier to establish its after-write snapshot premise and drains the synthetic worker before restoring test callbacks. Its 0.5-second deadline and evidence assertions remain. This test scheduling changes no production PLC policy, browser ownership, protocol, persistence, physical I/O or uncertain-write retry behavior; it does not establish real-device acceptance.
+
 Account visibility graph wiring retains the existing private configuration projection and media permissions. PLC route ordering, workstation leases, browser-only I/O, actual ACK and uncertain-write handling remain unchanged.
 
 Training completion graph assembly does not change PLC I/O, lease ownership, ACK settlement or uncertain-write handling. Its synthetic graph verification does not contact a serial port or PLC.
