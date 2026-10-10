@@ -1324,6 +1324,8 @@ Assessment inputs freeze the initialization decision, current approved-real targ
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
 
 
-Real-photo localization applies fixed longest-edge limits of 1024 for class references and 2048 for the actual original before lossless PNG encoding. Source byte/pixel limits and the 48 MiB serialized request limit still apply. This introduces no environment option or alternate model; original dimensions, first-frame orientation and scale evidence remain frozen. Preparation-stage failures display only fixed stage codes and exception types, never secret-bearing exception messages.
+Real-photo localization applies fixed longest-edge limits of 1024 for class references and 2048 for the actual original before provider JPEG quality-90 encoding (review/export canonicalization remains lossless PNG). Source byte/pixel limits and the 48 MiB serialized request limit still apply. This introduces no environment option or alternate model; original dimensions, first-frame orientation and scale evidence remain frozen. Preparation-stage failures display only fixed stage codes and exception types, never secret-bearing exception messages.
 
 训练审核诊断随不可变 worker 发布，无新增运行开关或模型配置。尝试回执包含固定诊断及提示词 SHA-256；1000 字符的 reason/gap 限制在版本化审核 skill 中显式说明。CLI/model/报告约束保持不变。
+
+Real-photo provider encoding is fixed JPEG quality 90, matching the label-comparison encoding; this is not a configurable fallback. Original bytes and training/review PNGs remain unchanged. Transport and response-validation failures are classified separately without endpoint, credential or embedded-media text.
