@@ -2427,3 +2427,46 @@ Real PostgreSQL API mutation coverage verifies disabled legacy-round source edit
 ## Real-photo source confirmation
 
 Real-photo source-confirmation checks cover legacy accepted pending-source records, explicit false flags, empty groups, server rejection of accept decisions, and refusal to export old frozen datasets containing such sources. Real PostgreSQL API tests verify source history/actor/time, one review identity change, idempotent repeated saves, no paid jobs on editing, explicit confirmation and rejection of a confirmed placeholder. The assembled API baseline includes only the additive optional confirmation field; verify the full application contract after updating it. Run the seven focused real-photo feedback/workflow/review-tools/dataset/dispatch/training-config/cache suites against a disposable PostgreSQL database, plus frontend typecheck/production build, boundaries, model dependency and docs contracts.
+
+## Full-chain CI timing evidence (2026-10-11)
+
+**Acceptance in progress.** Five minutes remains an unverified target until a real
+immutable production promotion completes within the declared budgets.
+
+### Configuration and initialization
+
+Policy PR [#287](https://github.com/JeffreyDeng-spec/VantaLine/pull/287) preserves
+348 ordinary backend commands, five independent full benchmarks, twelve isolated
+Python 3.10/PostgreSQL 16 shards and all preceding frontend/safety/package/document
+contracts. Latest main changes through #289 are retained. Frontend browser and build
+jobs run independently, while browser fixtures remain serial within their runner.
+
+| Run | Scope | Complete CI window | Environment |
+| --- | --- | ---: | --- |
+| [38077555167](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38077555167) | Initial parallel full PR suite | 300 s | pip available; trusted environment absent |
+| [38078720785](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38078720785) | Final bootstrap policy and balanced shards | 296 s | pip available; trusted environment absent |
+| [38079267038](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079267038) | Required full main initialization | 314 s | first policy merge; no PR reuse |
+| [38079713809](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079713809) | Full manual dependency-cold measurement | 295 s | backend environment and pip restoration/saving disabled; ordinary npm cache unchanged |
+
+These initialization results do not establish the 170-second PR budget. The first
+source artifact's actual downloaded ZIP was independently checked against GitHub's
+SHA-256 digest; it contained twelve complete reports and all 348 ordinary commands.
+The policy merge deliberately forces one full main run; initialization passed.
+Trusted prewarm [38079266970](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38079266970)
+produced an 802,530,043-byte compressed environment, below the 1.5 GiB ceiling.
+Only protected main builds
+and saves the installed-environment cache, with its own capacity and integrity checks.
+
+### Final fixed-configuration acceptance
+
+Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
+and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded
+initial PR queue/review-and-merge waiting, stage durations and later runner queueing.
+A fallback run is recorded as full execution, without claiming evidence reuse.
+
+### Subsequent releases
+
+Record the next three genuine production promotions after the first accepted chain.
+Do not create artificial releases to fill this table or treat a skipped release job as
+a deployed release. `measure_ci_chain.py` reconciles successful run/attempt metadata;
+the release's exact-SHA install and `/api/version` checks must also have succeeded.
