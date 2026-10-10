@@ -70,7 +70,7 @@ def verify(manifest):
     for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
                  'documentation','frontend','codex-comparison']:
         assert workflow['jobs'][name]['needs'] == ['backend-shards']
-        assert workflow['jobs'][name]['if'] == 'always()'
+        assert workflow['jobs'][name]['if'] == '${{ !cancelled() }}'
     gate_job = workflow['jobs']['backend-plc']
     assert gate_job['needs'] == ['backend-shards'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())

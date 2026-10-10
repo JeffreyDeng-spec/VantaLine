@@ -2328,7 +2328,7 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 
 Required `CI` executes all backend correctness, safety, migration and compatibility
 checks in 12 isolated `backend-shard-*` jobs. These shards get the first runner
-wave; the seven other CI jobs wait for them and use `always()` so failures still
+wave; the seven other CI jobs wait for them and use `!cancelled()` so failures still
 collect their evidence. This avoids competing with the backend for the account’s
 runner quota. Overall CI duration includes this later frontend/safety/package wave
 and is reported separately from backend latency. `scripts/backend_ci_manifest.json`
