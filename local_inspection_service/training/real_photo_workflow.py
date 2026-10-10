@@ -53,8 +53,8 @@ def schedule(repo, owner, task):
             pending=[s for s in new if s.get('annotation',{}).get('status') not in {'completed','failed'}]
             if pending:
                 c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='annotate' AND status IN ('failed','interrupted','stale','cancelled')",(owner,task))
-                failed_ids={j['inputs']['sample']['sample_id'] for j in repo.rows(c)}
-                if any(s['sample_id'] in failed_ids for s in pending):
+                failed_versions={(j['inputs']['sample']['sample_id'], int(j['inputs'].get('version',1))) for j in repo.rows(c)}
+                if any((s['sample_id'],int(s.get('annotation_version',1))) in failed_versions for s in pending):
                     state['pause_reason']='存在未完整结算的标注；请主动重标并重新启动审核'
                     current['status']='annotation_incomplete'
                     state['rounds'].append(current);state.pop('round')

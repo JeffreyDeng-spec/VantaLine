@@ -131,6 +131,37 @@ def test_failed_cohort_annotation_archives_scope_and_allows_explicit_recovery(da
     assert not any(j['kind'] in {'review','train'} for j in repo.jobs('a','task'))
 
 
+@pytest.mark.parametrize('old_status',['cancelled','failed','interrupted','stale'])
+def test_old_terminal_annotation_does_not_block_explicit_new_version(database,old_status):
+    repo=database();repo.enable('a','task',classes(),{})
+    finish(repo,'initialize',lambda j:{'review_trigger':20,'approved_real_target':20,'reason':'bounded cohort'})
+    for i,row in enumerate(state_fixture()['samples']):
+        sample=copy.deepcopy(row);sample.pop('review')
+        if i==19:sample.pop('annotation')
+        repo.capture('a','task',sample)
+    schedule(repo,'a','task');previous=repo.get('a','task')['round']['id']
+    repo.enable('a','task',classes(),{},False)
+    old=next(j for j in repo.jobs('a','task') if j['kind']=='annotate')
+    with repo.tx() as c:
+        old['status']=old_status;repo.save_job(c,old)
+    repo.enable('a','task',classes(),{},True)
+    def new_version(state,c):
+        sample=state['samples'][-1];sample['annotation_version']=2
+        repo.enqueue(c,state,'annotate','explicit-version-2',
+            {'sample':sample,'classes':state['classes'],'profiles':{},'version':2,'explicit':True})
+    repo.mutate('a','task',new_version)
+    schedule(repo,'a','task');state=repo.get('a','task')
+    assert not state.get('pause_reason') and state['round']['id']!=previous
+    assert not state['round']['review_jobs']
+    finish(repo,'annotate',lambda j:{'status':'completed','objects':[{'class_id':'a','bbox':[0,0,10,10]}],'receipt':{}})
+    schedule(repo,'a','task');state=repo.get('a','task')
+    assert not state.get('pause_reason') and len(state['round']['review_jobs'])==2
+    jobs=repo.jobs('a','task')
+    assert next(j for j in jobs if j['id']==old['id'])['status']==old_status
+    assert len([j for j in jobs if j['kind']=='annotate'])==2
+    assert state['samples'][-1]['annotation']['version']==2
+
+
 def test_failed_assessment_blocks_future_paid_annotation(database):
     repo=ready(database);schedule(repo,'a','task')
     for _ in range(2):

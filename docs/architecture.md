@@ -1803,3 +1803,5 @@ Pausing real-photo feedback archives and clears the active review round while re
 **Status: Authoritative**
 
 Detection no longer collects or requires an empty production-background photo. Image, video and dedicated camera inspection use the selected authorized model directly, subject to existing model/camera/PLC gates. The workbench removes its background dialog, camera stream, readiness query and upload workflow. Background libraries, stored task environment records, training selection/hydration and the compatibility server upload endpoint remain unchanged; synthetic training retains its existing selected-background or green_conveyor fallback.
+
+Real-photo preparation settlement is version-aware: old terminal annotation evidence cannot mark a newer explicit version incomplete. The current version retains its normal failure gate; new labels still await completed whole-image review before training.

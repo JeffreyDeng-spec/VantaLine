@@ -1441,3 +1441,5 @@ To correct unfrozen real-photo source groups, pause from the frontend and wait f
 **Status: Authoritative**
 
 After this release, reload the detection page and verify a task with no saved environment background can submit image, video and camera inspection without a background dialog. Preserve existing backgrounds and training jobs; whole-release rollback restores the previous UI and no data restoration is required.
+
+When explicitly relabeling a failed or cancelled real original, verify the new version progresses to review without an old-version incomplete-cohort pause. Preserve previous receipts; the new version is one separately authorized call. Do not clear old jobs or retry their uncertain attempts to resolve the status.

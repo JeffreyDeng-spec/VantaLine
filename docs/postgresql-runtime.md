@@ -601,3 +601,5 @@ Reference prefixes add a reference_cache job kind and versioned state pointer in
 Transport budget and pool-retirement evidence use additive fields in existing attempt/receipt JSON (connect_upload_timeout_seconds, read_timeout_seconds, pool_idle_reset, pool_failure_reset). No DDL, old-row rewrite, task-version reset or claim/publication fencing change. Failed paid outcomes remain terminal until an explicit frontend action creates a new attempt.
 
 Real-photo pause archives the active round with cancelled status/time in the existing state JSON and clears the active pointer inside the same fenced transaction that revokes queued/running jobs. Repeated pause does not duplicate history. No schema migration, historical annotation rewrite or automatic paid replay is introduced.
+
+Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.
