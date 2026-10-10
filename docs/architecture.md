@@ -1793,3 +1793,9 @@ Real-photo provider copies use fixed JPEG90 4:4:4 after 1024/2048 longest-edge b
 **Status: Authoritative**
 
 The detection workbench and ordinary-user device settings share `LocalPlcControls` and the browser Web Serial controller. Detector accounts self-register a cookie-bound workstation and save its confirmed local configuration without global settings permissions; they cannot list or take over other workstations. Local name changes preserve the cookie and do not rotate another browser's binding. Configuration edits disconnect first and reject live leases. A connecting lease supplies a read-only check for both configured D registers; activation validates bounded browser evidence. Current-generation communication verification gates active leases and production attempts while ordinary image/video detection stays available without PLC. Model selection may follow connection, but model binding and camera readiness gate production. Verification state extends existing raw JSON records without a schema migration; see the PLC contract for evidence limits and reconnect behavior.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+Detection no longer collects or requires an empty production-background photo. Image, video and dedicated camera inspection use the selected authorized model directly, subject to existing model/camera/PLC gates. The workbench removes its background dialog, camera stream, readiness query and upload workflow. Background libraries, stored task environment records, training selection/hydration and the compatibility server upload endpoint remain unchanged; synthetic training retains its existing selected-background or green_conveyor fallback.

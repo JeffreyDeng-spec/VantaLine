@@ -311,10 +311,6 @@ export function updateAiTaskAutoOptimize(
   return apiClient.patch<AiAutoOptimizeStatus>(`/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize`, payload);
 }
 
-export function uploadAiTaskEnvironmentBackground(taskId: string, form: FormData, options?: ApiRequestOptions) {
-  return apiClient.upload<AiAutoOptimizeStatus>(`/api/ai/tasks/${encodeURIComponent(taskId)}/environment-background`, form, options);
-}
-
 export function deleteAiTaskAutoOptimizeSample(taskId: string, sampleId: string) {
   return apiClient.delete<AiAutoOptimizeStatus>(
     `/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize/samples/${encodeURIComponent(sampleId)}`

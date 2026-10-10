@@ -191,6 +191,7 @@ jobs:
       - name: Install pinned navigation test browser
         run: npx --no-install playwright install --with-deps chromium
       - run: npm run test:plc-connection
+      - run: node ../../scripts/test_detection_without_background.cjs
       - name: Verify public/workspace navigation
         env:
           NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
