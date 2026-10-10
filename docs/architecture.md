@@ -1787,3 +1787,9 @@ COS child-directory enumeration now projects distinct immediate child names from
 独立训练审核 worker 的报告 broker 在原有鉴权、版本与完整报告约束下记录固定拒绝分类。CLI 完成但报告缺失/被拒绝、非零退出或失败 turn 均阻塞训练；诊断不授予接纳或重试权限，不保存 CLI/异常原文。
 
 Real-photo provider copies use JPEG quality 90 after the same 1024/2048 longest-edge bounds. Full first-frame PNG canonicalization remains the review/dataset format. Receipts identify bounded-first-frame-jpeg-v2, encoded and decoded-input hashes, pre-encoding pixel hash and quality. Transport failures retain only fixed stage/type classifications; no automatic paid replay is added.
+
+## Local PLC self-service
+
+**Status: Authoritative**
+
+The detection workbench and ordinary-user device settings share `LocalPlcControls` and the browser Web Serial controller. Detector accounts self-register a cookie-bound workstation and save its confirmed local configuration without global settings permissions; they cannot list or take over other workstations. Local name changes preserve the cookie and do not rotate another browser's binding. Configuration edits disconnect first and reject live leases. A connecting lease supplies a read-only check for both configured D registers; activation validates bounded browser evidence. Current-generation communication verification gates active leases and production attempts while ordinary image/video detection stays available without PLC. Model selection may follow connection, but model binding and camera readiness gate production. Verification state extends existing raw JSON records without a schema migration; see the PLC contract for evidence limits and reconnect behavior.

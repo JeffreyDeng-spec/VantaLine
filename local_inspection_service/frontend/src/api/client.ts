@@ -45,6 +45,15 @@ function apiErrorMessage(response: Response, body = "", path = "") {
   if (response.status === 503 && /first admin setup required/i.test(raw)) {
     return "需要先创建管理员。";
   }
+  const plcMessages: Record<string, string> = {
+    plc_connection_verification_required_reload_page: "连接流程已更新，请刷新页面后重新连接 PLC。",
+    plc_connection_check_invalid_response: "PLC 通信校验失败，请检查接线、设备型号与通信参数。",
+    plc_connection_check_expired: "PLC 通信校验已过期，请重新连接。",
+    plc_connection_check_fenced: "PLC 连接已失效，请重新连接。",
+    plc_workstation_in_use: "本机 PLC 已被其他页面使用，请先断开原连接。",
+    plc_workstation_generation_changed: "本机 PLC 配置已变化，请重新连接校验。"
+  };
+  if (plcMessages[raw]) return plcMessages[raw];
   return raw;
 }
 

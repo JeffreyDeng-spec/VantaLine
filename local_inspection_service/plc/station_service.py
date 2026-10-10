@@ -151,6 +151,7 @@ class PlcStationService:
         lease_active = bool(
             lease
             and lease.get("state") == "active"
+            and lease.get("communication_verified") is True
             and int(lease.get("expires_at") or 0) > now
             and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
             and lease.get("bundle_version") == self.policy.WEB_SERIAL_PROTOCOL_VERSION()
@@ -294,13 +295,17 @@ class PlcStationService:
         return self.projection.plc_web_serial_station_payload()(record)
 
 
-    def plc_web_serial_update_config(self, station_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
+    def plc_web_serial_update_config(self, station_id: str, candidate: dict[str, Any], require_disconnected: bool = False) -> dict[str, Any]:
         normalized = self.policy.normalize_web_serial_config()(candidate)
 
         def mutate(state: dict[str, dict[str, Any] | None]) -> None:
             station = self.storage._plc_web_serial_record()(state.get("station"))
             if not station:
                 raise self.policy.PlcConfigError()("plc_workstation_not_found")
+            lease = self.storage._plc_web_serial_record()(state.get("lease"))
+            now = int((state.get("clock") or {}).get("now") or time.time())
+            if require_disconnected and lease and lease.get("state") in {"connecting", "active", "draining"} and int(lease.get("expires_at") or 0) > now:
+                raise self.policy.PlcConfigError()("plc_workstation_in_use_disconnect_before_config")
             current_raw = station.get("config") if isinstance(station.get("config"), dict) else {}
             try:
                 current = self.policy.normalize_web_serial_config()(current_raw)

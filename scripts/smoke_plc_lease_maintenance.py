@@ -65,7 +65,7 @@ class LeaseStateContract(unittest.TestCase):
             "lease": {
                 "raw_json": {
                     "station_id": "station", "session_id": "session", "lease_epoch": 4,
-                    "owner_user_id": "owner", "state": "active", "config_generation": 3,
+                    "owner_user_id": "owner", "state": "active", "communication_verified": True, "config_generation": 3,
                     "expires_at": 101, "heartbeat_at": 90, "in_flight_dispatch_id": "plcweb_a",
                     "in_flight_deadline_at": 105,
                 }
@@ -306,7 +306,7 @@ class LeaseStateContract(unittest.TestCase):
                 "created_at": now, "updated_at": now,
             }
             lease = {
-                "station_id": "station", "session_id": "session", "state": "active",
+                "station_id": "station", "session_id": "session", "state": "active", "communication_verified": True,
                 "lease_epoch": 4, "owner_user_id": "owner", "model_id": "model",
                 "client_instance_id": "browser", "bundle_version": "v4",
                 "config_generation": 3, "heartbeat_at": now, "expires_at": now + 60,

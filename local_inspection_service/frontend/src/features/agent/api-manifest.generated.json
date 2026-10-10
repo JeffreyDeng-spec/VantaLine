@@ -786,6 +786,14 @@
     "ui": "src/api/queries.ts"
   },
   {
+    "source": "selfPairPlcWorkstation",
+    "status": "controller: operator confirmation owns browser-local workstation registration"
+  },
+  {
+    "source": "selfSavePlcWorkstationConfig",
+    "status": "controller: local PLC controls release the connection before saving browser-bound configuration"
+  },
+  {
     "name": "save_plc_workstation_config",
     "source": "savePlcWorkstationConfig",
     "domain": "settings",

@@ -7,6 +7,8 @@ def route_required_permission(path: str, method: str) -> str | None:
     # not the administrator's provider-configuration permission.
     if clean_path == "/api/agent/capabilities" or clean_path.startswith("/api/operations/"):
         return None
+    if clean_path in {"/api/plc/workstation/self-pair", "/api/plc/workstation/self-config"} and method == "POST":
+        return "inspection"
     plc_admin_routes = {
         ("/api/plc/config", "GET"),
         ("/api/plc/config", "POST"),
@@ -86,6 +88,8 @@ def route_required_permission(path: str, method: str) -> str | None:
 def route_allowed_permissions(path: str, method: str) -> tuple[str, ...]:
     clean_path = path.rstrip("/") or "/"
     permission = route_required_permission(path, method)
+    if clean_path in {"/api/plc/workstation/self-pair", "/api/plc/workstation/self-config"} and method == "POST":
+        return ("inspection", "ai_detection")
     if clean_path.startswith("/api/training/resources"):
         return ("model_library", "training_pipeline")
     if clean_path.startswith("/api/analyze"):

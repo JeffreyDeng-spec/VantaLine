@@ -68,7 +68,7 @@ class RebindContract(unittest.TestCase):
             }},
             "lease": {"raw_json": {
                 "station_id": "station", "session_id": "session", "lease_epoch": 4,
-                "owner_user_id": "owner", "state": "active", "expires_at": 101,
+                "owner_user_id": "owner", "state": "active", "communication_verified": True, "expires_at": 101,
                 "config_generation": 3, "bundle_version": "v4",
                 "model_id": "old", "heartbeat_at": 90,
                 "in_flight_dispatch_id": "", "in_flight_deadline_at": 0,
@@ -143,6 +143,8 @@ class RebindContract(unittest.TestCase):
             ("disabled", lambda: self.state["station"]["raw_json"]["config"].update(enabled=False),
              "plc_workstation_disabled"),
         )
+        if not self.baseline:
+            cases = (*cases, ("verification", lambda: self.lease().pop("communication_verified", None), "plc_workstation_lease_fenced"))
         for label, change, error in cases:
             with self.subTest(label=label):
                 self.setUp()
@@ -350,7 +352,7 @@ class RebindContract(unittest.TestCase):
                 "created_at": now, "updated_at": now, "config": {"enabled": True},
             }
             lease = {
-                "station_id": "station", "session_id": "session", "state": "active",
+                "station_id": "station", "session_id": "session", "state": "active", "communication_verified": True,
                 "lease_epoch": 4, "owner_user_id": "owner", "model_id": "old",
                 "client_instance_id": "browser", "bundle_version": "v4",
                 "config_generation": 3, "heartbeat_at": now, "expires_at": now + 60,

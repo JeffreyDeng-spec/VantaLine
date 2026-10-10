@@ -190,6 +190,7 @@ jobs:
       - run: npm run test:plc-capture
       - name: Install pinned navigation test browser
         run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:plc-connection
       - name: Verify public/workspace navigation
         env:
           NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
@@ -281,6 +282,8 @@ jobs:
       # Phase 1/1-hardening exercise the retired server-side pyserial dispatcher.
       # Production v4 is browser-owned Web Serial and the server must perform 0
       # serial I/O, so only the frozen-history verifier remains in source.
+      - run: python scripts/smoke_plc_self_service.py
+      - run: python scripts/smoke_plc_request_models.py
       - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
       - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
       - run: python scripts/smoke_plc_workstation_management.py
@@ -386,7 +389,6 @@ jobs:
           python scripts/smoke_plc_station_service.py
           python scripts/smoke_plc_browser_dispatch.py
           python scripts/smoke_plc_workstation_repository.py
-          python scripts/smoke_plc_request_models.py
           python scripts/smoke_plc_legacy_dispatch.py
           python scripts/smoke_plc_dispatch_runtime_state.py
           python scripts/smoke_plc_capture_state.py

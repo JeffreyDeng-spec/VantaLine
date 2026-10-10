@@ -37,6 +37,7 @@ import type {
   StatusModel
 } from "../../api/types";
 import { PlcWebSerialClient, type PlcBrowserConnectionState } from "../plc/webSerialClient";
+import { LocalPlcControls } from "../plc/LocalPlcControls";
 import { nextCaptureTriggerState } from "../plc/captureTriggerState.mjs";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { FileDropZone } from "../../components/FileDropZone";
@@ -689,7 +690,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     message: "PLC 到位拍照未启用。"
   });
   const [plcConnectionStatus, setPlcConnectionStatus] = useState(
-    PlcWebSerialClient.supported() ? "PLC 尚未连接。" : "当前浏览器不支持 Web Serial。"
+    PlcWebSerialClient.supported() ? "当前 PLC 未连接，PLC 联动未生效。" : "当前浏览器不支持 Web Serial。"
   );
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<DetectionResult | null>(null);
@@ -1146,6 +1147,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
           const triggerAt = Date.now();
           const video = videoRef.current;
           const cameraReady = source === "camera" && Boolean(stream) && Boolean(activeModelId)
+            && plcBoundModelIdRef.current === activeModelId
             && Boolean(video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0)
             && Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled))
             && !busyRef.current && !plcDiagnosticBusy;
@@ -1698,31 +1700,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     }
   }
 
-  async function connectPlc() {
-    if (!activeModelId) {
-      notify({ title: "请先选择检测模型", tone: "error" });
-      return;
-    }
-    const workstation = plcWorkstationQuery.data;
-    if (!workstation?.paired || !workstation.station) return notify({ title: "请让管理员先在 PLC 设置中绑定本机工作站", tone: "error" });
-    if (!workstation.config?.enabled) return notify({ title: "管理员尚未允许这台工作站启用 PLC 联动", tone: "error" });
-    try {
-      await plcClientRef.current.connect(workstation.station.id, activeModelId, (message) => {
-        setPlcConnected(false);
-        setPlcConnectionStatus(message);
-      });
-      plcBoundModelIdRef.current = activeModelId;
-      setPlcConnected(true);
-      setPlcConnectionStatus(`已连接 ${workstation.station.name}；可连续检测；配置 generation ${workstation.config_generation}。`);
-      await plcWorkstationQuery.refetch();
-    } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setPlcConnected(false);
-      setPlcConnectionStatus(`PLC 连接失败：${message}`);
-      notify({ title: "PLC 连接失败", description: message, tone: "error" });
-    }
-  }
-
   async function disconnectPlc(message = "PLC 已断开。") {
     await plcClientRef.current.disconnect(true);
     plcBoundModelIdRef.current = "";
@@ -1999,21 +1976,14 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   <Camera size={15} aria-hidden="true" />
                   拍照 {activeDetectionLabel}
                 </button>
-                {plcConnected ? (
-                  <button className="secondary compact-action" type="button" onClick={() => void disconnectPlc()}>
-                    断开 PLC
-                  </button>
-                ) : (
-                  <button
-                    className="secondary compact-action"
-                    type="button"
-                    disabled={Boolean(busy) || !PlcWebSerialClient.supported() || !plcWorkstationQuery.data?.paired}
-                    onClick={() => void connectPlc()}
-                  >
-                    连接本机 PLC
-                  </button>
-                )}
               </div>
+              <LocalPlcControls client={plcClientRef.current} modelId={activeModelId} connected={plcConnected}
+                externalStatus={plcConnectionStatus} productionReady={Boolean(stream && activeModelId)} disabled={Boolean(busy) || plcDiagnosticBusy}
+                onConnectionChange={(connected) => {
+                  plcBoundModelIdRef.current = connected ? activeModelId : "";
+                  setPlcConnected(connected);
+                  setPlcConnectionStatus(connected ? "PLC 通信正常。" : "当前 PLC 未连接，PLC 联动未生效。");
+                }} />
               <p className={`hint-line ${error ? "danger-text" : ""}`}>{error || cameraStatus}</p>
               <p className={`hint-line ${plcConnected ? "success-text" : ""}`}>
                 {plcWorkstationQuery.data?.station ? `工作站：${plcWorkstationQuery.data.station.name}。` : "本机尚未绑定工作站。"} {plcConnectionStatus}

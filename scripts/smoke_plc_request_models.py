@@ -36,6 +36,10 @@ PAYLOADS = {
     'PlcWebSerialReceiptOperation': OPERATION,
     'PlcWebSerialReceiptRequest': dict(session_id='session', lease_epoch=1, attempt_token='token', outcome='ack', operations=[OPERATION]),
 }
+if not BASELINE:
+    PAYLOADS['PlcWorkstationSelfPairRequest'] = dict(name='产线电脑')
+    PAYLOADS['PlcWorkstationLeaseActivateRequest'].update(
+        connection_check_id='check', connection_reads=[dict(target='D205', response_hex='0230303030034333')])
 
 
 def models():
@@ -97,8 +101,12 @@ class PlcRequestContracts(unittest.TestCase):
             protocol=PROTOCOL_ID, profile_id=WEB_SERIAL_PROFILE_ID, schema_version=WEB_SERIAL_SCHEMA_VERSION))
         self.assertIsNone(MODELS.PlcCaptureSessionRequest(camera_ready=False).model_id)
         self.assertIsNone(MODELS.PlcWorkstationPairRequest(name='station').station_id)
+        activation_defaults = dict(session_id='s', lease_epoch=1, usb_vendor_id=None, usb_product_id=None)
+        if not BASELINE:
+            activation_defaults.update(connection_check_id=None, connection_reads=[])
+            self.assertIsNone(MODELS.PlcWorkstationSelfPairRequest().name)
         self.assertEqual(MODELS.PlcWorkstationLeaseActivateRequest(session_id='s', lease_epoch=1).model_dump(),
-            dict(session_id='s', lease_epoch=1, usb_vendor_id=None, usb_product_id=None))
+            activation_defaults)
         self.assertEqual(MODELS.PlcConfigRequest(timeout=1).timeout, 1)
 
     def test_nested_receipt_validation(self):
