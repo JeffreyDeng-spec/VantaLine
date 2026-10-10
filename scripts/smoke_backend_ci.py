@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from backend_ci import digest, load_manifest, run_shard, validate_reports
+from backend_ci import digest, execute, load_manifest, performance, run_shard, validate_reports
 
 
 class GateContract(unittest.TestCase):
@@ -67,6 +67,26 @@ class GateContract(unittest.TestCase):
             report=json.loads((Path(temp)/'shard-0.json').read_text())
             self.assertEqual(report['status'],'failed')
             self.assertIn('completed_at',report)
+
+    def test_timeout_terminates_and_keeps_nonzero_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            record=execute(dict(id='timeout',group='timeout',run="python3 -c 'import time; time.sleep(10)'",env={},cwd='.'),Path(temp),timeout=.05)
+            self.assertEqual(record['returncode'],124)
+            self.assertEqual(record['status'],'failed')
+
+    def test_performance_exception_cannot_write_success(self):
+        manifest={'checks':[dict(id='cleanup',group='storage',run='python scripts/verify_ci_benchmark_storage.py',env={},cwd='.',always=True)],
+                  'performance':[dict(id='benchmark',run='test benchmark',env={},cwd='.',group='benchmark')]}
+        with tempfile.TemporaryDirectory() as temp:
+            def fail(item,*args,**kwargs):
+                if item['id']=='benchmark':raise OSError('injected')
+                return dict(id=item['id'],status='success',returncode=0)
+            with patch('backend_ci.execute',side_effect=fail):
+                with self.assertRaises(OSError):performance(manifest,Path(temp))
+            import json
+            report=json.loads((Path(temp)/'performance.json').read_text())
+            self.assertEqual(report['status'],'failed')
+            self.assertEqual(report['commands'][-1]['id'],'cleanup')
 
 
 if __name__=='__main__':unittest.main()

@@ -287,6 +287,9 @@ jobs:
         run: |
           pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
           python scripts/verify_production_dependencies.py requirements-production.lock
+          # The old first smoke populated Matplotlib's font cache before tests
+          # patched subprocess.Popen. Each isolated runner needs the same setup.
+          python -c 'import matplotlib.font_manager'
       - name: Verify backend CI coverage and gate failure modes
         run: |
           python scripts/backend_ci.py verify

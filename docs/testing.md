@@ -2332,7 +2332,9 @@ preserves the 348 ordinary commands and their shell/env variants from commit
 `7bb2475`; dependency groups stay on one shard and execute in original order.
 The coverage fingerprint records the initial migration: intentional future command
 changes must update the inventory and fingerprint together after reviewing coverage.
-The executor records command identity, exit status and elapsed time; failure stops
+Each runner initializes the locked Matplotlib font cache before guarded tests,
+matching the old suite’s earlier import without relaxing its subprocess/network
+denials. The executor records command identity, exit status and elapsed time; failure stops
 ordinary commands in that shard but still attempts final storage evidence.
 
 The required `backend-plc` aggregate succeeds only when every shard, report and

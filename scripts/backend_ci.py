@@ -6,7 +6,7 @@ Only synthetic tests are run here. The manifest preserves shell/env variants fro
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -222,6 +222,9 @@ def performance(manifest, output):
             if record['status'] != 'success':
                 failed = True
                 break
+    except BaseException:
+        failed = True
+        raise
     finally:
         for item in final_checks:
             record = execute(item, output)
