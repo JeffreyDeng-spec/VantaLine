@@ -46,6 +46,21 @@ def test_failed_chunk_blocks_round_admission_and_never_replayed(database):
     assert not any(j['kind']=='train' for j in repo.jobs('a','task'))
 
 
+def test_failed_initialization_diagnostics_survive_without_requeue(database):
+    repo=database();repo.enable('a','task',classes(),{})
+    job,token=repo.claim({'a'},{'initialize'},'gpt-6-astra','fixture')
+    diagnostics={'exit_code':0,'turn_completed':True,'report_accepted':False,
+                 'report_refusals':{'reason_invalid':1},'prompt_sha256':'fixture'}
+    repo.receipt(job['id'],job['attempt_id'],{'diagnostics':diagnostics,'usage':{'input_tokens':123}})
+    repo.finish(job['id'],token,{'error_code':'report_rejected'},lambda *a:None,success=False)
+    schedule(repo,'a','task')
+    saved=repo.jobs('a','task')
+    assert len(saved)==1 and saved[0]['status']=='failed'
+    assert saved[0]['attempt_receipt']['diagnostics']==diagnostics
+    assert saved[0]['attempt_receipt']['usage']=={'input_tokens':123}
+    assert repo.get('a','task')['pause_reason'] and not repo.claim({'a'},{'initialize'},'model','fixture')
+
+
 @pytest.mark.parametrize('future_failed',[False,True])
 def test_pending_cohort_freezes_before_late_unannotated_or_failed_arrival(database,future_failed):
     repo=database();repo.enable('a','task',classes(),{})
