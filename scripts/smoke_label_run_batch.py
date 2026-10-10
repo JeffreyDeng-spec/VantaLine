@@ -111,6 +111,13 @@ class FakeRepository:
                 "next_cursor": f"{identity}.{next_offset}" if next_offset < len(rows) else None}
 
 
+class FixtureLabelRepository:
+    """Construct the raw fixture while retaining a real type for API checks."""
+
+    def __new__(cls, raw):
+        return raw
+
+
 def baseline_register():
     source = os.environ.get("VANTALINE_LABEL_LIST_BASELINE_SOURCE")
     if not source:
@@ -137,7 +144,7 @@ def list_client(register, repo, root, expected_status=200):
          patch.object(worker_api, "register", fixture_worker), \
          patch.object(api.pdf_import, "register", lambda *_, runtime_provider=None: None), \
          patch.dict(register.__globals__, {
-             "LabelRepository": lambda raw: raw,
+             "LabelRepository": FixtureLabelRepository,
              "MediaStore": lambda *_, runtime_provider=None: object(),
          }):
         register(app, access, repositories, imports, lambda: None,

@@ -147,7 +147,7 @@ def postgres_ddl(schema_name: str = "vantaline") -> str:
         statements.append(create_table_statement(table))
         statements.extend(index_statement(index) for index in table.indexes)
     statements.append(invalidation_ddl(schema_name))
-    statements.append(derived_ddl(schema_name))
+    statements.append(derived_ddl(schema_name).strip("\n"))
     statements.extend(
         [
             "INSERT INTO schema_migrations (version, applied_at, metadata_json)",
