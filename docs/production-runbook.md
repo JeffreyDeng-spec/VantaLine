@@ -1436,22 +1436,41 @@ After the connection/upload-budget release, settle active paid tasks before revi
 
 To correct unfrozen real-photo source groups, pause from the frontend and wait for active attempts to settle; pause archives the active cohort and revokes its jobs. Verify each group save persists. Re-enable does not replay cancelled labels or uncertain cache requests: explicitly relabel missing images and explicitly restart failed cache creation after inspecting receipts.
 
-## Backend CI latency diagnosis
+## Full CI latency and evidence diagnosis
 
-`backend-plc` is a fail-closed aggregate of 12 runner/database-isolated shards.
-Consult its setup-inclusive timing summary and 30-day command artifacts. A failed
-setup, assertion, cancellation or missing report prevents automatic promotion;
-do not replace it with a successful performance run or manually deploy a bundle.
-The five complete performance matrices live in `Backend performance`, with the
-same bounded synthetic database and frozen baselines, and do not trigger release.
+Use required `backend-plc`'s ordinary-job and twelve-shard summaries plus 30-day
+command/receipt artifacts. Full PR CI includes every correctness, safety, migration
+and compatibility check concurrently; only complete performance matrices are
+independent. Keep the Python 3.10 lock, PostgreSQL 16 and isolated disk-backed
+ordinary databases. A failed setup/assertion, cancellation, skip or absent report
+blocks promotion. A successful performance run cannot substitute for CI.
 
-The target is ≤5 minutes from first backend shard start through aggregate
-validation. Record initial queue delay separately and include later shard queueing
-in wall time. Preserve final-commit evidence from three consecutive runs and one
-cold-cache run before claiming the target achieved. PR supersession cancellation
-is scoped to that PR; main runs and production deployments retain their existing
-completion behavior. Revert CI changes through a reviewed PR; runtime rollback
-continues to restore the whole previous immutable release without altering data.
+A main push's `ci-mode` reports full execution or verified PR reuse. Reuse requires
+independent GitHub run/job/attempt success, final same-repository PR head, exact
+actual tested tree and first parent, unchanged policy, recent complete evidence and
+explicit artifact SHA-256 equality. The three required checks execute validators.
+Fork/rebase/ambiguous association or custom squash, stale/malformed evidence,
+partial reruns and API failure select full CI after at most twenty seconds of
+discovery. Use manual `force-full=true` for diagnosis; `cold-cache=true`, push-run
+reruns and the daily 04:00 Asia/Shanghai inspection also force full CI and do not
+automatically deploy. The initialization merge must first finish full main CI.
+
+The trusted main dependency workflow runs at 02:00 Asia/Shanghai and on lock/build
+rule changes. Inspect its exact Ubuntu/image/architecture/Python/lock/rule key and
+1.5 GiB capacity check. PR runners only restore the environment, check integrity,
+install the full lock and verify versions; invalid/unavailable caches fall back to
+pip installation. The workflow deletes only its own old main environment keys.
+Do not increase cache capacity/billing/runner tier or cache databases/runtime state.
+
+Only successful main push `CI` triggers immutable main-SHA packaging and deployment.
+Inspect install/health checks and `/api/version` against the release commit, never a
+PR bundle. Record PR CI, main validation, packaging/deploy/health and workflow
+handoffs against the 170/30/90/10-second targets. Exclude initial PR queue and human
+review/merge waiting only; record raw elapsed time and count later queueing. Require
+three final full-CI runs, a cold-cache record, an actual ≤300-second production chain
+and records of the next three genuine chains before claiming complete acceptance.
+PR supersession does not cancel main CI or begun deployments. Revert CI through
+a reviewed PR; runtime recovery restores the entire previous immutable release.
 
 ## Empty-background step removal
 

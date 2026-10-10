@@ -1,29 +1,41 @@
 name: CI
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      cold-cache:
-        description: 'Measure backend setup without restoring or saving the pip cache'
-        type: boolean
-        default: false
-
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
-
+  actions: read
 jobs:
+  ci-mode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      proof: ${{ steps.mode.outputs.proof }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Choose full tests or exact-tree verification
+      id: mode
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FORCE_FULL: ${{ inputs.force-full }}
+        COLD_CACHE: ${{ inputs.cold-cache }}
+      run: |-
+        args=()
+        if [ "$FORCE_FULL" = true ]; then args+=(--force-full); fi
+        if [ "$COLD_CACHE" = true ]; then args+=(--cold-cache); fi
+        python scripts/ci_evidence.py prepare "${args[@]}"
   artifact-storage:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
-    if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -32,234 +44,277 @@ jobs:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: storage_fixture
           POSTGRES_DB: vantaline_cos_storage_test
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ARTIFACT_TEST_DATABASE_URL: postgresql://vantaline:storage_fixture@127.0.0.1:5432/vantaline_cos_storage_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install -c requirements-production.lock pillow fastapi httpx 'psycopg[binary]' cos-python-sdk-v5 opencv-python numpy python-multipart
-      - run: python scripts/smoke_artifact_storage.py
-      - run: python scripts/smoke_artifact_integrations.py
-      - run: python scripts/smoke_artifact_postgres.py
-      - name: Real-photo feedback contracts and PostgreSQL competition
-        env:
-          REAL_PHOTO_TEST_DATABASE_URL: ${{ env.ARTIFACT_TEST_DATABASE_URL }}
-        run: |
-          pip install pytest requests PyYAML
-          python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py tests/test_real_photo_provenance.py tests/test_real_photo_cache.py
-      - name: Verify Linux kernel capacity and cross-user cache leases
-        run: sudo "$(command -v python)" scripts/smoke_artifact_volumes.py
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: pip install -c requirements-production.lock pillow fastapi httpx 'psycopg[binary]' cos-python-sdk-v5 opencv-python
+        numpy python-multipart
+    - run: python scripts/smoke_artifact_storage.py
+    - run: python scripts/smoke_artifact_integrations.py
+    - run: python scripts/smoke_artifact_postgres.py
+    - name: Real-photo feedback contracts and PostgreSQL competition
+      env:
+        REAL_PHOTO_TEST_DATABASE_URL: ${{ env.ARTIFACT_TEST_DATABASE_URL }}
+      run: |
+        pip install pytest requests PyYAML
+        python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py tests/test_real_photo_provenance.py tests/test_real_photo_cache.py
+    - name: Verify Linux kernel capacity and cross-user cache leases
+      run: sudo "$(command -v python)" scripts/smoke_artifact_volumes.py
   doc-image-runtime:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
-    if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install Pillow
-      - run: python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
-      - name: Validate locked runtime
-        run: VANTALINE_DOC_IMAGE_BUNDLE="$RUNNER_TEMP/doc-image-bundle" python -c 'from local_inspection_service.document_images import _runtime; _runtime()'
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: pip install Pillow
+    - run: python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
+    - name: Validate locked runtime
+      run: VANTALINE_DOC_IMAGE_BUNDLE="$RUNNER_TEMP/doc-image-bundle" python -c 'from local_inspection_service.document_images
+        import _runtime; _runtime()'
   source-safety:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
     if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Reject tracked runtime and secret files
-        shell: bash
-        run: |
-          set -euo pipefail
-          forbidden='(^|/)(\.env($|\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\.(pem|key|sqlite3?|db|dump)$|server\.py\.bak'
-          if git ls-files | grep -E "$forbidden"; then
-            echo 'Forbidden generated, runtime, backup, database, or secret file is tracked.' >&2
-            exit 1
-          fi
-      - name: Verify PLC release contract
-        run: python scripts/verify_release_contract.py
-      - name: Verify COS evacuation integrity and failure boundaries
-        run: python scripts/smoke_cos_migrate.py
-      - name: Verify browser camera and file-drop contracts
-        run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
-      - name: Validate release shell syntax
-        run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
-      - name: Verify deterministic runtime controller and isolated contracts
-        run: |
-          python scripts/render_release_installer.py
-          python scripts/smoke_release_runtime_contract.py
-          python scripts/smoke_release_runtime_storage.py
-          python scripts/smoke_release_runtime_client.py
-          python scripts/smoke_release_runtime_transition.py
-          python scripts/smoke_release_services.py
-          bash scripts/install_release.sh --capabilities
-      - name: Exercise managed runtime installer faults in a private mount namespace
-        run: |
-          VANTALINE_BASE_INSTALLER=scripts/install_release.sh bash scripts/smoke_release_runtime_installer.sh
-      - name: Exercise embedded installer faults in a private mount namespace
-        run: |
-          git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
-          VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
-      - name: Verify root journal bridge against the installed controller and UID998 layout
-        run: |
-          git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_handoff
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_promotion_failure
-      - name: Verify commissioned Web allowance with the frozen root-storage predecessor
-        run: |
-          git fetch --no-tags --depth=1 origin efb80cdccd0ad713a4b984c29f36a3a094881fe4
-          git show efb80cdccd0ad713a4b984c29f36a3a094881fe4:scripts/install_release.sh > "$RUNNER_TEMP/root-storage-installer.sh"
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/root-storage-installer.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_budget_handoff
-      - name: Keep mutable backgrounds outside immutable releases
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -F 'BACKGROUND_DIR = DATA_DIR / "backgrounds"' local_inspection_service/server.py
-          grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
-          grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
-          grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
-
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Reject tracked runtime and secret files
+      shell: bash
+      run: |
+        set -euo pipefail
+        forbidden='(^|/)(\.env($|\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\.(pem|key|sqlite3?|db|dump)$|server\.py\.bak'
+        if git ls-files | grep -E "$forbidden"; then
+          echo 'Forbidden generated, runtime, backup, database, or secret file is tracked.' >&2
+          exit 1
+        fi
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify PLC release contract
+      run: python scripts/verify_release_contract.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify COS evacuation integrity and failure boundaries
+      run: python scripts/smoke_cos_migrate.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify browser camera and file-drop contracts
+      run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Validate release shell syntax
+      run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify deterministic runtime controller and isolated contracts
+      run: |
+        python scripts/render_release_installer.py
+        python scripts/smoke_release_runtime_contract.py
+        python scripts/smoke_release_runtime_storage.py
+        python scripts/smoke_release_runtime_client.py
+        python scripts/smoke_release_runtime_transition.py
+        python scripts/smoke_release_services.py
+        bash scripts/install_release.sh --capabilities
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Exercise managed runtime installer faults in a private mount namespace
+      run: |
+        VANTALINE_BASE_INSTALLER=scripts/install_release.sh bash scripts/smoke_release_runtime_installer.sh
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Exercise embedded installer faults in a private mount namespace
+      run: |
+        git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
+        VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify root journal bridge against the installed controller and UID998 layout
+      run: |
+        git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_handoff
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_promotion_failure
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify commissioned Web allowance with the frozen root-storage predecessor
+      run: |
+        git fetch --no-tags --depth=1 origin efb80cdccd0ad713a4b984c29f36a3a094881fe4
+        git show efb80cdccd0ad713a4b984c29f36a3a094881fe4:scripts/install_release.sh > "$RUNNER_TEMP/root-storage-installer.sh"
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/root-storage-installer.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_budget_handoff
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Keep mutable backgrounds outside immutable releases
+      shell: bash
+      run: |
+        set -euo pipefail
+        grep -F 'BACKGROUND_DIR = DATA_DIR / "backgrounds"' local_inspection_service/server.py
+        grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
+        grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
+        grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+      run: python3 scripts/ci_evidence.py assert-reuse --check source-safety
+      working-directory: .
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
   release-package:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
-    if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: local_inspection_service/frontend/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Build and inspect immutable embedded package
-        run: |
-          (cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)
-          python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
-          python scripts/build_release_artifact.py \
-            --release v2026.10.0 --git-commit "$(git rev-parse HEAD)" \
-            --built-at 2026-10-03T00:00:00Z \
-            --doc-image-bundle "$RUNNER_TEMP/doc-image-bundle" \
-            --output "$RUNNER_TEMP/bridge-package.tar.gz"
-          mkdir -p "$RUNNER_TEMP/bridge-extract"
-          tar -xzf "$RUNNER_TEMP/bridge-package.tar.gz" -C "$RUNNER_TEMP/bridge-extract"
-          (cd "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" && sha256sum -c SHA256SUMS)
-          cmp scripts/install_release.sh "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0/scripts/install_release.sh"
-          python3 - "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" <<'PY'
-          import json, pathlib, subprocess, sys
-          root = pathlib.Path(sys.argv[1])
-          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          version = json.loads((root / 'VERSION.json').read_text())
-          topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
-          assert version['git_commit'] == commit
-          assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
-                              'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}
-          PY
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Build and inspect immutable embedded package
+      run: |
+        (cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)
+        python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
+        python scripts/build_release_artifact.py \
+          --release v2026.10.0 --git-commit "$(git rev-parse HEAD)" \
+          --built-at 2026-10-03T00:00:00Z \
+          --doc-image-bundle "$RUNNER_TEMP/doc-image-bundle" \
+          --output "$RUNNER_TEMP/bridge-package.tar.gz"
+        mkdir -p "$RUNNER_TEMP/bridge-extract"
+        tar -xzf "$RUNNER_TEMP/bridge-package.tar.gz" -C "$RUNNER_TEMP/bridge-extract"
+        (cd "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" && sha256sum -c SHA256SUMS)
+        cmp scripts/install_release.sh "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0/scripts/install_release.sh"
+        python3 - "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" <<'PY'
+        import json, pathlib, subprocess, sys
+        root = pathlib.Path(sys.argv[1])
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+        version = json.loads((root / 'VERSION.json').read_text())
+        topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
+        assert version['git_commit'] == commit
+        assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
+                            'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}
+        PY
   documentation:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
-    if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Test documentation impact fixtures
-        run: python scripts/verify_docs_contract.py --self-test
-      - name: Verify documentation contract and PR impact
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=()
-          if [[ -n "${BASE_REF:-}" ]]; then args+=(--base-ref "$BASE_REF"); fi
-          python scripts/verify_docs_contract.py "${args[@]}"
-
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Test documentation impact fixtures
+      run: python scripts/verify_docs_contract.py --self-test
+    - name: Verify documentation contract and PR impact
+      env:
+        BASE_REF: ${{ github.event.pull_request.base.sha }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        args=()
+        if [[ -n "${BASE_REF:-}" ]]; then args+=(--base-ref "$BASE_REF"); fi
+        python scripts/verify_docs_contract.py "${args[@]}"
   frontend:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
     if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: local_inspection_service/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: local_inspection_service/frontend/package-lock.json
-      - run: npm ci
-      - run: npm run test:plc-capture
-      - name: Install pinned navigation test browser
-        run: npx --no-install playwright install --with-deps chromium
-      - run: npm run test:plc-connection
-      - run: node ../../scripts/test_detection_without_background.cjs
-      - name: Verify public/workspace navigation
-        env:
-          NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
-        run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs && node ../../scripts/test_settings_ui.cjs
-      - name: Upload navigation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: navigation-ui
-          path: ${{ runner.temp }}/navigation-ui
-          if-no-files-found: ignore
-      - name: Verify Codex comparison report UI
-        env:
-          REVIEW_UI_BASE: http://127.0.0.1:5190/react-preview
-          CODEX_UI_OUTPUT: ${{ runner.temp }}/codex-ui
-        run: |
-          npm run dev -- --host 127.0.0.1 --port 5190 > "$RUNNER_TEMP/codex-vite.log" 2>&1 &
-          preview_pid=$!
-          trap 'kill "$preview_pid"' EXIT
-          curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html >/dev/null
-          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
-          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_label_batch_ui.cjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: codex-report-ui
-          path: ${{ runner.temp }}/codex-ui
-          if-no-files-found: ignore
-      - run: npm run test:agent
-      - run: npm run typecheck
-      - run: npm run build:production-cutover
-      - name: Verify built protocol
-        working-directory: .
-        run: python scripts/verify_release_contract.py
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm ci
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run test:plc-capture
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Install pinned navigation test browser
+      run: npx --no-install playwright install --with-deps chromium
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run test:plc-connection
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: node ../../scripts/test_detection_without_background.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify public/workspace navigation
+      env:
+        NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
+      run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs && node ../../scripts/test_settings_ui.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Upload navigation evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: navigation-ui
+        path: ${{ runner.temp }}/navigation-ui
+        if-no-files-found: ignore
+    - name: Verify Codex comparison report UI
+      env:
+        REVIEW_UI_BASE: http://127.0.0.1:5190/react-preview
+        CODEX_UI_OUTPUT: ${{ runner.temp }}/codex-ui
+      run: |
+        npm run dev -- --host 127.0.0.1 --port 5190 > "$RUNNER_TEMP/codex-vite.log" 2>&1 &
+        preview_pid=$!
+        trap 'kill "$preview_pid"' EXIT
+        curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html >/dev/null
+        PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
+        PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_label_batch_ui.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - uses: actions/upload-artifact@v4
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
+      with:
+        name: codex-report-ui
+        path: ${{ runner.temp }}/codex-ui
+        if-no-files-found: ignore
+    - run: npm run test:agent
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run typecheck
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run build:production-cutover
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify built protocol
+      working-directory: .
+      run: python scripts/verify_release_contract.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+      run: python3 scripts/ci_evidence.py assert-reuse --check frontend
+      working-directory: .
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
   backend-shards:
     name: backend-shard-${{ matrix.shard }}
     runs-on: ubuntu-latest
@@ -268,7 +323,19 @@ jobs:
       fail-fast: false
       max-parallel: 12
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        shard:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
     services:
       postgres:
         image: postgres:16
@@ -277,12 +344,8 @@ jobs:
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
       postgres_benchmark:
         image: postgres:16
         env:
@@ -290,81 +353,128 @@ jobs:
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
         ports:
-          - 5433:5432
-        options: >-
-          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648
-          --memory=3221225472 --memory-swap=3221225472
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        - 5433:5432
+        options: --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648 --memory=3221225472 --memory-swap=3221225472
+          --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
       VANTALINE_BENCHMARK_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5433/vantaline
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: ${{ inputs.cold-cache != true && 'pip' || '' }}
-          cache-dependency-path: requirements-production.lock
-      - name: Install and verify locked production dependencies
-        run: |
-          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
-          python scripts/verify_production_dependencies.py requirements-production.lock
-          # The old first smoke populated Matplotlib's font cache before tests
-          # patched subprocess.Popen. Each isolated runner needs the same setup.
-          python -c 'import matplotlib.font_manager'
-      - name: Verify backend CI coverage and gate failure modes
-        run: |
-          python scripts/backend_ci.py verify
-          python scripts/smoke_backend_ci.py
-      - name: Run isolated backend shard
-        env:
-          BACKEND_RESULT_DIR: ${{ runner.temp }}/backend-results
-          VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
-          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
-        run: python scripts/backend_ci.py run --shard ${{ matrix.shard }} --output "$BACKEND_RESULT_DIR"
-      - name: Upload command timings and results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
-          path: ${{ runner.temp }}/backend-results/
-          if-no-files-found: error
-          retention-days: 30
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: ${{ inputs.cold-cache != true && 'pip' || '' }}
+        cache-dependency-path: requirements-production.lock
+    - name: Identify immutable dependency environment
+      id: environment
+      run: python scripts/ci_environment.py key
+    - name: Restore main-built dependency environment
+      if: ${{ inputs.cold-cache != true }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vantaline-ci-venv
+        key: ${{ steps.environment.outputs.key }}
+      continue-on-error: true
+    - name: Install and verify locked production dependencies
+      run: python scripts/ci_environment.py prepare
+    - name: Verify backend CI coverage and gate failure modes
+      run: |-
+        python scripts/backend_ci.py verify
+        python scripts/smoke_backend_ci.py
 
+        python scripts/smoke_ci_evidence.py
+        python scripts/smoke_ci_environment.py
+    - name: Run isolated backend shard
+      env:
+        BACKEND_RESULT_DIR: ${{ runner.temp }}/backend-results
+        VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+        VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+      run: python scripts/backend_ci.py run --shard ${{ matrix.shard }} --output "$BACKEND_RESULT_DIR"
+    - name: Upload command timings and results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+        path: ${{ runner.temp }}/backend-results/
+        if-no-files-found: error
+        retention-days: 30
+    needs:
+    - ci-mode
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
   backend-plc:
     name: backend-plc
     if: always()
-    needs: [backend-shards]
+    needs:
+    - ci-mode
+    - backend-shards
+    - artifact-storage
+    - doc-image-runtime
+    - source-safety
+    - release-package
+    - documentation
+    - frontend
+    - codex-comparison
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: backend-shard-${{ github.run_attempt }}-*
-          path: backend-results
-          merge-multiple: true
-      - name: Fail closed and summarize backend latency
-        env:
-          SHARD_RESULT: ${{ needs.backend-shards.result }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/backend-jobs.json"
-          python scripts/backend_ci.py gate --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json" --matrix-result "$SHARD_RESULT"
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: backend-shard-${{ github.run_attempt }}-*
+        path: backend-results
+        merge-multiple: true
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Fail closed and summarize backend latency
+      env:
+        SHARD_RESULT: ${{ needs.backend-shards.result }}
+        GH_TOKEN: ${{ github.token }}
+        CI_NEEDS: ${{ toJSON(needs) }}
+      run: |-
+        gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/backend-jobs.json"
+        python scripts/backend_ci.py gate --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json" --matrix-result "$SHARD_RESULT"
 
+        python scripts/ci_evidence.py publish --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json"
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+        CI_NEEDS: ${{ toJSON(needs) }}
+      run: python scripts/ci_evidence.py assert-reuse --check backend-plc
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
+    - name: Publish full CI receipt
+      if: ${{ success() && needs.ci-mode.outputs.mode == 'full' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-evidence-${{ github.run_attempt }}
+        path: backend-results/*.json
+        if-no-files-found: error
+        retention-days: 30
+    - name: Retain verified main provenance
+      if: ${{ success() && needs.ci-mode.outputs.mode == 'reuse' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: main-ci-evidence-${{ github.run_attempt }}
+        path: reuse-evidence.json
+        if-no-files-found: error
+        retention-days: 30
   codex-comparison:
-    # Reserve the first runner wave for all 12 backend shards. Other checks
-    # still execute after failure, and every CI job still gates the release.
-    if: ${{ !cancelled() }}
-    needs: [backend-shards]
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-22.04
     services:
       postgres:
@@ -373,17 +483,34 @@ jobs:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       CODEX_TEST_DATABASE_URL: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
-      - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart httpx pytest
-      - run: python -m pytest tests/codex_compare -q
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+    - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart
+        httpx pytest
+    - run: python -m pytest tests/codex_compare -q
+'on':
+  pull_request: null
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+    inputs:
+      cold-cache:
+        description: Measure backend setup without restoring or saving the pip cache
+        type: boolean
+        default: false
+      force-full:
+        description: Run every test; never reuse prior PR evidence
+        type: boolean
+        default: false
+  schedule:
+  - cron: 0 20 * * *

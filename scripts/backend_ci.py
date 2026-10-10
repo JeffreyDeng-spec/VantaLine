@@ -69,10 +69,10 @@ def verify(manifest):
     assert pr_trigger is None or isinstance(pr_trigger, dict) and 'paths' not in pr_trigger
     for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
                  'documentation','frontend','codex-comparison']:
-        assert workflow['jobs'][name]['needs'] == ['backend-shards']
-        assert workflow['jobs'][name]['if'] == '${{ !cancelled() }}'
+        assert workflow['jobs'][name]['needs'] == ['ci-mode']
+        assert workflow['jobs'][name]['if'] == ('${{ !cancelled() }}' if name in ('frontend','source-safety') else "${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}")
     gate_job = workflow['jobs']['backend-plc']
-    assert gate_job['needs'] == ['backend-shards'] and gate_job['if'] == 'always()'
+    assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
     triggers = performance.get('on', performance.get(True))
     assert triggers['schedule'] == [{'cron': '0 19 * * *'}]
@@ -130,7 +130,10 @@ def run_shard(manifest, shard, output):
     report = {'schema':1, 'manifest_sha256':digest(manifest), 'shard':shard,
               'commit':os.environ.get('GITHUB_SHA', ''), 'run_id':os.environ.get('GITHUB_RUN_ID', ''),
               'run_attempt':os.environ.get('GITHUB_RUN_ATTEMPT', ''),
-              'started_at':timestamp(), 'status':'failed', 'commands':[]}
+              'started_at':timestamp(), 'status':'failed', 'commands':[],
+              'environment':{'python':'.'.join(map(str,sys.version_info[:3])),
+                  'runner_os':os.environ.get('RUNNER_OS',''), 'image':os.environ.get('ImageVersion',''),
+                  'architecture':os.environ.get('RUNNER_ARCH','')}}
     path = output/f'shard-{shard}.json'
     write_report(path, report)
     checks = [item for item in manifest['checks'] if item['shard'] == shard]

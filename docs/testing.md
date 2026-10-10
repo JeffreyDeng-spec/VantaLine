@@ -2324,49 +2324,69 @@ Real-photo transport regression exercises the installed urllib3 socket-write tim
 
 Disposable PostgreSQL regression verifies pause archives frozen round membership, releases the active round, retains originals and initialization, cancels queued review work, rejects the running review token and does not duplicate history on repeated pause. Verify source-group persistence through the released frontend after pause; changing an input alone is not evidence of a successful save.
 
-## Backend CI parallel execution and performance evidence
+## Full CI, trusted environments and exact-tree evidence
 
-Required `CI` executes all backend correctness, safety, migration and compatibility
-checks in 12 isolated `backend-shard-*` jobs. These shards get the first runner
-wave; the seven other CI jobs wait for them and use `!cancelled()` so failures still
-collect their evidence. This avoids competing with the backend for the account’s
-runner quota. Overall CI duration includes this later frontend/safety/package wave
-and is reported separately from backend latency. `scripts/backend_ci_manifest.json`
-preserves the 348 ordinary commands and their shell/env variants from commit
-`7bb2475`; dependency groups stay on one shard and execute in original order.
-The coverage fingerprint records the initial migration: intentional future command
-changes must update the inventory and fingerprint together after reviewing coverage.
-Each runner initializes the locked Matplotlib font cache before guarded tests,
-matching the old suite’s earlier import without relaxing its subprocess/network
-denials. The executor records command identity, exit status and elapsed time; failure stops
-ordinary commands in that shard but still attempts final storage evidence.
+Required `CI` runs 348 ordinary backend commands in 12 isolated shards alongside
+frontend, source safety, documentation, package and other correctness jobs. There
+is no change-path filter for ordinary PR correctness. The explicit manifest retains
+the original shell/environment variants and keeps each ordered dependency group
+on one runner. Python 3.10, PostgreSQL 16, the production lock and independent
+ordinary disk-backed databases remain mandatory. Only the five complete synthetic
+benchmarks run separately in `Backend performance`, on relevant PRs, at 03:00
+Asia/Shanghai on main, and manually; their samples, baselines, assertions and
+bounded benchmark database remain unchanged and never trigger deployment.
 
-The required `backend-plc` aggregate succeeds only when every shard, report and
-expected command succeeds for the same commit, workflow run and attempt. Missing,
-failed, cancelled, skipped, stale or malformed evidence blocks the gate. Artifacts
-retain command logs/timings for 30 days; the summary reports setup-inclusive job
-time and the slowest 20 commands. The ≤300-second target measures from the first
-backend shard start through gate validation, excluding only the initial GitHub
-queue. Later shard queueing counts; a timeout is not a substitute for measured speed.
+`backend-plc`, `frontend` and `source-safety` retain their required names. Full CI's
+aggregate waits for every ordinary job. It rejects failures, cancellations, skips,
+missing/duplicate commands, stale commits and partial-attempt results. Successful
+runs publish `ci-evidence.json` and all twelve reports for 30 days, bound to repository,
+PR head/base, actual tested commit/tree/first parent, run/attempt, policy hashes and
+environments. The summary includes setup and the slowest twenty commands.
 
-`Backend performance` owns the five full history/cache/projection/legacy-index/batch
-benchmarks, preserving fixed baselines, populations, repeats, samples and assertions.
-Relevant backend/script/test/dependency/workflow PRs trigger it, as do daily main
-runs at 03:00 Asia/Shanghai and manual dispatch. Performance failures remain visible
-and require review, but do not block the ordinary CI gate or trigger production
-deployment. Benchmark protocol and result-equivalence smoke checks remain required
-in ordinary CI. The four real-PostgreSQL benchmarks still route only to the bounded
-second database; storage guards and their fault tests remain in both workflows.
+`Prepare CI dependencies` builds a fresh environment only on trusted main when its
+lock/build rules change, daily at 02:00 Asia/Shanghai, or manually. The exact cache
+key binds Ubuntu and runner image versions, architecture, actual Python patch and
+interpreter, lock and environment rules. PRs restore this environment without saving
+it or using restore keys. Every shard validates its file manifest, installs the full
+lock even on a hit, verifies versions and initializes the locked font cache. A missing,
+invalid or unavailable environment falls back to full installation with the existing
+pip cache. Only the environment directory is cached; source, database state, secrets
+and runtime/customer data are excluded. The builder checks a 1.5 GiB compressed
+ceiling and removes only its own prior main environment keys; account capacity,
+billing and runner tiers are unchanged.
 
-Validate changes with `python scripts/backend_ci.py verify`,
-`python scripts/smoke_backend_ci.py`, `python scripts/smoke_ci_benchmark_storage.py`,
-the documentation contract, release contract, release shell syntax and diff checks.
-After an initial green GitHub run, download shard artifacts and execute
-`python scripts/backend_ci.py rebalance --results <artifact-directory>` to commit
-the deterministic longest-group-first assignment. Verify the final commit with
-three consecutive ≤300-second runs and separately record a cold-cache run using manual `CI` dispatch with `cold-cache=true`. Rerun the
-whole CI workflow for this gate; reports from earlier attempts are deliberately
-rejected, including partial reruns that reuse previously successful shard reports.
+A first-attempt main push may reuse the newest completed successful same-repository
+PR `CI`. The validator independently queries GitHub jobs/run/attempt/artifact identity,
+checks the downloaded ZIP's SHA-256 against GitHub's artifact digest, and verifies
+the tested Git tree and first parent against actual main. Final head, unchanged
+workflow/dependency/validation policy, complete command results and a 24-hour age
+limit are mandatory. Ordinary merge and unambiguous squash are supported; rebase,
+forks, indistinguishable custom squash messages and all uncertainty select full CI.
+Discovery is killed after twenty seconds. Each required check then runs a validator;
+a skipped job never substitutes for a required success. Policy-changing initialization,
+API failures and invalid evidence run the full suite. Manual `force-full`, `cold-cache`,
+all push-run reruns and daily 04:00 Asia/Shanghai main inspections also run full CI.
+Manual/scheduled runs and performance runs never deploy. New PR commits cancel
+superseded PR CI; main runs and begun production deployments remain uncancelled.
+
+Run `python scripts/backend_ci.py verify`, `python scripts/smoke_backend_ci.py`,
+`python scripts/smoke_ci_evidence.py`, `python scripts/smoke_ci_environment.py`,
+`python scripts/smoke_ci_benchmark_storage.py`, release/doc contracts, shell syntax
+and `git diff --check`. Negative fixtures cover provider failures/partial reruns,
+forged success, wrong head/tree/parent/policy/attempt, expired or mismatched artifacts,
+missing commands, discovery timeout and corrupt/read-only caches. Mechanically
+compare preserved ordinary job commands/environment/cwd against latest main.
+Rebalance measured ordered groups with `backend_ci.py rebalance` and commit the
+fixed assignment; do not remove assertions to meet a time target.
+
+The acceptance budget is full PR CI ≤170 s, main validation ≤30 s, immutable
+packaging/deployment/health ≤90 s, and handoff ≤10 s: ≤300 s total. Measure three
+consecutive final-configuration full runs plus one cold-cache run. Exclude only
+initial PR queueing and human review/merge waiting; include subsequent runner
+queueing and handoffs. Bootstrap must complete one full main run before business
+PRs can reuse evidence. Record an actual PR→main→production chain and the next
+three genuine release chains, with raw total, excluded human wait and stage/queue
+times. These are acceptance targets, not demonstrated production performance.
 
 ## Detection without an empty-background step
 

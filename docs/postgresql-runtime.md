@@ -604,7 +604,7 @@ Real-photo pause archives the active round with cancelled status/time in the exi
 
 ## Parallel backend CI storage
 
-Backend correctness contracts run on 12 separate runners, each with an independent
+Full CI backend correctness contracts run on 12 separate runners, each with an independent
 ordinary disk-backed PostgreSQL 16 instance. Existing schemas, concurrency and
 durability assertions are unchanged; tests within one shard remain serial. The
 storage-isolation dependency group also inspects the separate bounded synthetic
@@ -615,7 +615,8 @@ than the required backend gate. The four SQL benchmarks still override only thei
 individual command DSNs to the bounded second instance; the fake legacy benchmark
 keeps its prior environment. Both workflows enforce fsync, synchronous_commit
 and full_page_writes, distinct instance identities and original capacity limits.
-No database contents are cached or shared between runners; production storage,
+Exact-tree main reuse validates the complete PR database evidence; it does not restore
+a test database. No database contents are cached or shared between runners; production storage,
 migrations and rollback remain unchanged.
 
 Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.

@@ -1128,26 +1128,41 @@ The operator setup UI, self-service permissions and verified connection activati
 
 The required artifact-storage CI includes the new real-photo prefix-cache PostgreSQL contracts. Release the dedicated cache-aware worker, API redaction/statistics and frontend cache status together; a legacy worker must not process new cache jobs. Before reviewer reload or whole-release rollback, close admission and settle/reconcile existing paid sessions. Preserve additive raw-JSON jobs/cache generations and all provider receipts; rollback never replays an uncertain attempt. Live frontend prefix/suffix commissioning remains separate from passing CI.
 
-## Backend CI aggregation
+## Full CI evidence and immutable promotion
 
-The existing required check `backend-plc` now aggregates 12 independent backend
-shards. Backend shards run first to avoid quota-induced staggered starts. Other
-CI jobs run afterward even if backend fails; all jobs still gate release success.
-All ordinary backend assertions remain mandatory, without change-path
-skips. Every report is bound to its manifest, commit, run and attempt; a missing,
-failed, skipped or cancelled shard blocks merge and automatic release.
+`CI` runs all ordinary jobs concurrently with twelve isolated backend shards.
+`backend-plc` waits for the full ordinary inventory and publishes commit/run/attempt
+bound receipts only after every job succeeds. Required names `backend-plc`,
+`frontend` and `source-safety` are unchanged. Full synthetic performance remains
+independent and preserves its existing protocols and assertions.
 
-Full synthetic performance matrices run in the separate `Backend performance`
-workflow on relevant PRs, daily main and manual dispatch; their results are
-review evidence rather than required release checks. They never trigger the
-`Release and deploy production` workflow, which continues listening only to
-successful push `CI` on main. The 31-sample protocols and all existing assertions
-are preserved. Only superseded PR runs are automatically cancelled; main CI and
-production deployments are not cancelled by this change.
+Main may accept complete same-repository final-head PR evidence only after independent
+GitHub success checks, explicit artifact digest verification, exact tested tree and
+first-parent equivalence, unchanged CI/dependency/validation policy, and a maximum
+24-hour age. The three required checks execute verification jobs on this path.
+Ambiguous merge association, rebase/fork, partial rerun, missing/failed checks or any
+validation/API anomaly trigger full CI within a twenty-second discovery budget.
+Manual force-full/cold-cache and reruns/scheduled main inspection are always full.
+The CI-policy initialization merge runs full CI before later business PR reuse.
 
-CI configuration rollback uses a reviewed revert. If runtime promotion has
-occurred, restore one complete previous immutable release under the existing
-rollback procedure; never copy individual workflow/application files to a host.
+`Release and deploy production` still accepts only a successful `CI` main **push**.
+It rebuilds from that exact main SHA, creates one immutable frontend/backend package,
+verifies commit/package/install health and `/api/version`, and retains the existing
+whole-release rollback. It never promotes a PR package. Manual/scheduled CI,
+dependency warming and `Backend performance` do not trigger deployment. Only
+superseded PR CI is automatically cancelled; main and begun deployments complete.
+
+Trusted main alone builds/saves exact-key Python environments; PRs only restore
+and still install/verify the full production lock. Cache misses or invalid environments
+rebuild dependencies. Cache scope, capacity and ownership are documented in testing;
+no database/source/secret/customer state or extra paid runner resources are introduced.
+
+Five-minute promotion is a measured acceptance target (170/30/90/10 seconds), not
+an unconditional guarantee. Keep three final full-CI timing results, a cold run and
+an actual production-chain record; count subsequent queueing/handoffs and report
+human waiting separately. Record the following three real chains as well. Evidence
+fallback may exceed five minutes and must remain visible. Revert the reviewed CI PR
+to restore the prior policy; runtime rollback restores one complete immutable release.
 
 ## Empty-background step removal
 

@@ -1,0 +1,49 @@
+name: Prepare CI dependencies
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'requirements-production.lock'
+      - 'scripts/ci_environment.py'
+      - 'scripts/verify_production_dependencies.py'
+      - '.github/workflows/ci-dependencies.yml'
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: trusted-main-ci-environment
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: requirements-production.lock
+      - name: Identify dependency environment
+        id: environment
+        run: python scripts/ci_environment.py key
+      - name: Build and validate a fresh locked environment
+        run: |
+          python scripts/ci_environment.py prepare
+          python scripts/ci_environment.py seal
+      - name: Measure compressed cache capacity
+        run: |
+          tar -I zstd -cf "$RUNNER_TEMP/environment-size.tar.zst" -C "$RUNNER_TEMP/vantaline-ci-venv" .
+          test "$(stat -c %s "$RUNNER_TEMP/environment-size.tar.zst")" -le 1610612736
+      - name: Remove only prior environments owned by this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/ci_environment.py prune
+      - uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vantaline-ci-venv
+          key: ${{ steps.environment.outputs.key }}
