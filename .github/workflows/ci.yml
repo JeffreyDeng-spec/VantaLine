@@ -20,6 +20,10 @@ permissions:
 
 jobs:
   artifact-storage:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -52,6 +56,10 @@ jobs:
       - name: Verify Linux kernel capacity and cross-user cache leases
         run: sudo "$(command -v python)" scripts/smoke_artifact_volumes.py
   doc-image-runtime:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +75,10 @@ jobs:
       - name: Validate locked runtime
         run: VANTALINE_DOC_IMAGE_BUNDLE="$RUNNER_TEMP/doc-image-bundle" python -c 'from local_inspection_service.document_images import _runtime; _runtime()'
   source-safety:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +137,10 @@ jobs:
           grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
 
   release-package:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -166,6 +182,10 @@ jobs:
                               'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}
           PY
   documentation:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -184,6 +204,10 @@ jobs:
           python scripts/verify_docs_contract.py "${args[@]}"
 
   frontend:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -337,6 +361,10 @@ jobs:
           python scripts/backend_ci.py gate --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json" --matrix-result "$SHARD_RESULT"
 
   codex-comparison:
+    # Reserve the first runner wave for all 12 backend shards. Other checks
+    # still execute after failure, and every CI job still gates the release.
+    if: always()
+    needs: [backend-shards]
     runs-on: ubuntu-22.04
     services:
       postgres:

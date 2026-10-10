@@ -1131,7 +1131,9 @@ The required artifact-storage CI includes the new real-photo prefix-cache Postgr
 ## Backend CI aggregation
 
 The existing required check `backend-plc` now aggregates 12 independent backend
-shards. All ordinary backend assertions remain mandatory, without change-path
+shards. Backend shards run first to avoid quota-induced staggered starts. Other
+CI jobs run afterward even if backend fails; all jobs still gate release success.
+All ordinary backend assertions remain mandatory, without change-path
 skips. Every report is bound to its manifest, commit, run and attempt; a missing,
 failed, skipped or cancelled shard blocks merge and automatic release.
 

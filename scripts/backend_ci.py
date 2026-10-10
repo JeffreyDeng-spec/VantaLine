@@ -67,6 +67,10 @@ def verify(manifest):
     assert shards['strategy']['max-parallel'] == 12
     pr_trigger = workflow.get('on', workflow.get(True, {})).get('pull_request')
     assert pr_trigger is None or isinstance(pr_trigger, dict) and 'paths' not in pr_trigger
+    for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
+                 'documentation','frontend','codex-comparison']:
+        assert workflow['jobs'][name]['needs'] == ['backend-shards']
+        assert workflow['jobs'][name]['if'] == 'always()'
     gate_job = workflow['jobs']['backend-plc']
     assert gate_job['needs'] == ['backend-shards'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
