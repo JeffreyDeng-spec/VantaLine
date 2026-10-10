@@ -54,6 +54,21 @@ class EvidenceContract(unittest.TestCase):
     def check(self):
         ci.validate_receipt(self.receipt,self.reports,self.run,self.jobs,self.artifact,self.pr,self.context,self.now)
 
+    def test_exact_silent_preparations_can_reuse_complete_evidence(self):
+        for name in ('check-298.log', 'check-299.log'):
+            entry = next(e for e in self.receipt['performance']['raw_logs'] if e['path'] == name)
+            entry.update(bytes=0, sha256=hashlib.sha256(b'').hexdigest())
+        self.check()
+
+    def test_empty_protocol_or_wrong_empty_preparation_digest_is_rejected(self):
+        for name, value in (('check-298.log', 'a' * 64), ('check-299.log', 'a' * 64),
+                            ('check-002.log', hashlib.sha256(b'').hexdigest())):
+            self.setUp()
+            entry = next(e for e in self.receipt['performance']['raw_logs'] if e['path'] == name)
+            entry.update(bytes=0, sha256=value)
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                self.check()
+
     def test_both_performance_jobs_are_mandatory_current_attempt(self):
         for name in ('backend-performance','manual-history-performance'):
             for conclusion in ('failure','cancelled','skipped',None):

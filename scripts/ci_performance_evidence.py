@@ -115,7 +115,11 @@ def validate_reused(manifest, receipt, jobs):
     validate_performance(manifest, report, receipt['tested_sha'], receipt['run_id'], receipt['run_attempt'])
     assert report['numeric_protocols'] == {'original_raw':54, 'original_rounded':2, 'beta':16, 'storage_snapshots':2}
     assert [Path(e['path']).name for e in report['raw_logs']] == [e['id']+'.log' for e in performance_plan(manifest)]
-    assert all(e['bytes'] > 0 and len(e['sha256']) == 64 for e in report['raw_logs'])
+    for entry in report['raw_logs']:
+        assert type(entry['bytes']) is int and entry['bytes'] >= 0 and len(entry['sha256']) == 64
+        if entry['bytes'] == 0:
+            assert Path(entry['path']).name in {'check-298.log', 'check-299.log'}, 'empty protocol log'
+            assert entry['sha256'] == hashlib.sha256(b'').hexdigest(), 'wrong empty preparation digest'
     validate_manual(receipt['manual'])
     for name, proof in [('backend-performance', report), ('manual-history-performance', receipt['manual'])]:
         actual = [j for j in jobs['jobs'] if j['name'] == name]

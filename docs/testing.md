@@ -2951,6 +2951,10 @@ CI PostgreSQL service images use the Docker Official Images ECR public mirror, p
 
 ## Canonical application acceptance
 
+Historical source-contract replay caches only immutable summaries keyed by complete source text and inverse strings keyed by complete source plus serialized fixture content. Every validation still reads and checks current product files. No validation result, path timestamp, mutable AST, module or owner is cached. Warm-cache source and in-place fixture mutations must still fail; all previous source assertions and the CI command/time budgets remain unchanged. This avoids repeating CPU-heavy inverse reconstruction in synthetic PLC lease subcases.
+
+Exact-tree evidence may contain empty logs only for the fixed `check-298` Git-blob assertion and `check-299` redirected Git export, with the actual empty-content SHA-256. Benchmark and storage logs remain nonempty, and current producers, complete numeric protocols and actual artifact checks remain mandatory.
+
 Run `python scripts/smoke_application_factory.py`, `python scripts/smoke_canonical_application_source_contract.py`, `python scripts/verify_backend_contract.py` and `python scripts/verify_backend_boundaries.py`. Factory tests use actual application construction, real ASGI auth/error/media requests, distinct mutable defaults, concurrent ContextVar transfer to threads, synthetic connector reuse/rebuild/exception release, independent idle shutdown, repeated startup/close, bounded-close admission races and startup/construction/initialization failure cleanup. They start no native worker, paid inference or device I/O.
 
 HTTP contract fixtures are unchanged. Historical source oracles first verify all 23 actual relocated product sources against the fixed canonical migration ASTs, then replay the immutable f5c9 parent as test data. Each current module mutation and incomplete/modified parent fixture is rejected. Product code never parses or executes that parent. Keep all prior native-business, model-binding, PostgreSQL, PLC, pagination, frontend, migration, documentation and release checks. Offline factory tests alone do not grant performance or production-release acceptance.

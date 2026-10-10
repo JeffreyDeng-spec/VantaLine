@@ -14,6 +14,52 @@ class IntegrationContracts(unittest.TestCase):
         from canonical_application_source_contract import restore_canonical_root
         self.source = restore_canonical_root((contract.ROOT / "local_inspection_service/server.py").read_text())
 
+    def test_warm_replay_rechecks_current_owner_and_changed_root(self):
+        expected = contract.restore_plc_domain_root(self.source)
+        relative = 'local_inspection_service/plc/workstation_composition.py'
+        target = (contract.ROOT / relative).resolve()
+        original_read = Path.read_text
+        def read(path, *args, **kwargs):
+            value = original_read(path, *args, **kwargs)
+            return value + '\nunreviewed_warm_owner = None\n' if path.resolve() == target else value
+        with patch.object(Path, 'read_text', read), self.assertRaises(AssertionError):
+            contract.restore_plc_domain_root(self.source)
+        with self.assertRaises(AssertionError):
+            contract.restore_plc_domain_root(self.source + '\nunreviewed_warm_root = None\n')
+        self.assertEqual(contract.restore_plc_domain_root(self.source), expected)
+
+    def test_warm_inverse_rechecks_in_place_fixture_changes(self):
+        parent, current = 'value = 1\n', 'value = 2\n'
+        fixture = {'parent_ast_sha256': contract.digest(ast.parse(parent)),
+                   'integrated_ast_sha256': contract.digest(ast.parse(current)),
+                   'regions': [{'start': 0, 'end': 1, 'original': [parent], 'expected': [current]}]}
+        expected = contract.restore_delta(current, fixture)
+        self.assertEqual(contract.restore_delta(current, copy.deepcopy(fixture)), expected)
+        for mode in ('original', 'expected', 'parent', 'integrated', 'regions'):
+            altered = copy.deepcopy(fixture)
+            self.assertEqual(contract.restore_delta(current, altered), expected)
+            if mode in ('original', 'expected'):
+                altered['regions'][0][mode][0] = 'value = 3\n'
+            elif mode == 'regions':
+                altered['regions'].clear()
+            else:
+                altered[mode + '_ast_sha256'] = '0' * 64
+            with self.subTest(mode=mode), self.assertRaises(AssertionError):
+                contract.restore_delta(current, altered)
+            altered.clear()
+            altered.update(copy.deepcopy(fixture))
+            self.assertEqual(contract.restore_delta(current, altered), expected)
+
+    def test_text_summary_keeps_original_ast_semantics(self):
+        original = contract.source_digest('value = 1\n')
+        self.assertEqual(contract.source_digest('value=1\n'), original)
+        self.assertNotEqual(contract.source_digest('value = 2\n'), original)
+        tree = ast.parse('value = 1\n')
+        self.assertEqual(contract.digest(tree), original)
+        tree.body[0].value.value = 2
+        self.assertNotEqual(contract.digest(tree), original)
+        self.assertEqual(contract.source_digest('value = 1\n'), original)
+
     def test_current_root_and_actual_owner_bindings_pass_before_replay(self):
         contract.verify_actual_compositions()
         original = contract.restore_integrated_root(self.source)

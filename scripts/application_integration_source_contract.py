@@ -5,6 +5,7 @@ new graph must match its fixed AST before any delta is reversed; unrelated or
 unknown changes cannot be hidden by the replay.
 """
 import ast
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -54,7 +55,21 @@ def digest(node):
     return hashlib.sha256(json.dumps(canonical(node), ensure_ascii=False).encode()).hexdigest()
 
 
+@lru_cache(maxsize=256)
+def source_digest(source):
+    """Cache immutable summaries by complete text; callers still read each file."""
+    return digest(ast.parse(source))
+
+
 def restore_delta(source, fixture):
+    # Include every fixture value, not its identity or path. Warm replay must
+    # reject later source/fixture changes just as cold replay does.
+    return _restore_delta_cached(source, json.dumps(fixture, sort_keys=True))
+
+
+@lru_cache(maxsize=64)
+def _restore_delta_cached(source, fixture_json):
+    fixture = json.loads(fixture_json)
     tree = ast.parse(source)
     if digest(tree) == fixture["parent_ast_sha256"]:
         return source
@@ -83,26 +98,26 @@ def verify_actual_compositions():
         actual_expected = ("a4b8e046f355e9a310bf46507da9f65a18146ee5af9d91f957723fcae4c4ac4c"
                            if path.endswith("/station_service.py") else expected)
         assert MAIN283_PLC["business_sources"][path]["actual_sha256"] == actual_expected, "Unreviewed PLC integration source: " + path
-    assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
+    assert source_digest((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text()) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
     """Validate real owned constructor edges before using an old-location oracle."""
-    assert digest(ast.parse((ROOT / "local_inspection_service/agent/state_composition.py").read_text())) == AGENT_STATE["actual_owner_ast_sha256"], "Actual Agent state composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/agent/planning_composition.py").read_text())) == POSE_PLANNING["actual_owner_ast_sha256"], "Actual Pose planning composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/agent/pose_execution_composition.py").read_text())) == POSE_EXECUTION["actual_owner_ast_sha256"], "Actual Pose execution composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text())) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/plc/workstation_composition.py").read_text())) == PLC_WORKSTATION["actual_owner_ast_sha256"], "Actual PLC workstation composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/codex_compare/api.py").read_text())) == CODEX_ENVIRONMENT["actual_owner_ast_sha256"], "Actual Codex environment binding changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/codex_compare/worker.py").read_text())) == CODEX_ENVIRONMENT["actual_worker_ast_sha256"], "Actual Codex worker environment binding changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/runtime_composition.py").read_text())) == PIPELINE_RUNTIME["actual_owner_ast_sha256"], "Actual pipeline runtime composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/task_composition.py").read_text())) == PIPELINE_TASKS["actual_owner_ast_sha256"], "Actual pipeline task composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/stage_composition.py").read_text())) == PIPELINE_STAGES["actual_owner_ast_sha256"], "Actual pipeline stage composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/agent/pipeline_composition.py").read_text())) == AGENT_PIPELINE["actual_owner_ast_sha256"], "Actual Agent pipeline composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/query_composition.py").read_text())) == PIPELINE_QUERIES["actual_owner_ast_sha256"], "Actual pipeline query composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/execution_composition.py").read_text())) == PIPELINE_EXECUTION["actual_owner_ast_sha256"], "Actual pipeline execution composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/pipeline/persistence_composition.py").read_text())) == PIPELINE_PERSISTENCE["actual_owner_ast_sha256"], "Actual pipeline persistence composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/plc/capture_composition.py").read_text())) == PLC_CAPTURE["actual_owner_ast_sha256"], "Actual PLC capture composition changed"
-    assert digest(ast.parse((ROOT / "local_inspection_service/plc/lease_diagnostic_composition.py").read_text())) == PLC_OPERATIONS["actual_owner_ast_sha256"], "Actual PLC lease/diagnostic composition changed"
+    assert source_digest((ROOT / "local_inspection_service/agent/state_composition.py").read_text()) == AGENT_STATE["actual_owner_ast_sha256"], "Actual Agent state composition changed"
+    assert source_digest((ROOT / "local_inspection_service/agent/planning_composition.py").read_text()) == POSE_PLANNING["actual_owner_ast_sha256"], "Actual Pose planning composition changed"
+    assert source_digest((ROOT / "local_inspection_service/agent/pose_execution_composition.py").read_text()) == POSE_EXECUTION["actual_owner_ast_sha256"], "Actual Pose execution composition changed"
+    assert source_digest((ROOT / "local_inspection_service/training/dispatcher_runtime.py").read_text()) == MAIN_FEEDBACK["dispatcher_runtime_ast_sha256"], "Actual dispatcher runtime changed"
+    assert source_digest((ROOT / "local_inspection_service/plc/workstation_composition.py").read_text()) == PLC_WORKSTATION["actual_owner_ast_sha256"], "Actual PLC workstation composition changed"
+    assert source_digest((ROOT / "local_inspection_service/codex_compare/api.py").read_text()) == CODEX_ENVIRONMENT["actual_owner_ast_sha256"], "Actual Codex environment binding changed"
+    assert source_digest((ROOT / "local_inspection_service/codex_compare/worker.py").read_text()) == CODEX_ENVIRONMENT["actual_worker_ast_sha256"], "Actual Codex worker environment binding changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/runtime_composition.py").read_text()) == PIPELINE_RUNTIME["actual_owner_ast_sha256"], "Actual pipeline runtime composition changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/task_composition.py").read_text()) == PIPELINE_TASKS["actual_owner_ast_sha256"], "Actual pipeline task composition changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/stage_composition.py").read_text()) == PIPELINE_STAGES["actual_owner_ast_sha256"], "Actual pipeline stage composition changed"
+    assert source_digest((ROOT / "local_inspection_service/agent/pipeline_composition.py").read_text()) == AGENT_PIPELINE["actual_owner_ast_sha256"], "Actual Agent pipeline composition changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/query_composition.py").read_text()) == PIPELINE_QUERIES["actual_owner_ast_sha256"], "Actual pipeline query composition changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/execution_composition.py").read_text()) == PIPELINE_EXECUTION["actual_owner_ast_sha256"], "Actual pipeline execution composition changed"
+    assert source_digest((ROOT / "local_inspection_service/pipeline/persistence_composition.py").read_text()) == PIPELINE_PERSISTENCE["actual_owner_ast_sha256"], "Actual pipeline persistence composition changed"
+    assert source_digest((ROOT / "local_inspection_service/plc/capture_composition.py").read_text()) == PLC_CAPTURE["actual_owner_ast_sha256"], "Actual PLC capture composition changed"
+    assert source_digest((ROOT / "local_inspection_service/plc/lease_diagnostic_composition.py").read_text()) == PLC_OPERATIONS["actual_owner_ast_sha256"], "Actual PLC lease/diagnostic composition changed"
     for path, expected in {**AGENT_STATE["unchanged_business_sha256"], **POSE_PLANNING["unchanged_business_sha256"], **POSE_EXECUTION["unchanged_business_sha256"], **PLC_WORKSTATION["unchanged_business_sha256"], **PLC_OPERATIONS["unchanged_business_sha256"], **PLC_CAPTURE["unchanged_business_sha256"], **PIPELINE_PERSISTENCE["unchanged_business_sha256"], **PIPELINE_EXECUTION["unchanged_business_sha256"], **PIPELINE_QUERIES["unchanged_business_sha256"], **AGENT_PIPELINE["unchanged_business_sha256"], **PIPELINE_STAGES["unchanged_business_sha256"], **PIPELINE_TASKS["unchanged_business_sha256"], **PIPELINE_RUNTIME["unchanged_business_sha256"], **CODEX_ENVIRONMENT["unchanged_business_sha256"]}.items():
         if path in MAIN283_PLC["business_sources"]:
             accepted = MAIN283_PLC["business_sources"][path]
@@ -111,7 +126,7 @@ def verify_actual_compositions():
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text(encoding="utf-8"))) == expected, \
+        assert source_digest((ROOT / path).read_text(encoding="utf-8")) == expected, \
             "Actual composition capability changed: " + path
 
 
@@ -138,10 +153,10 @@ def restore_plc_domain_root(source):
         remaining = fixtures[index + 1:]
         accepted_descendants = {item[key] for item in remaining
                                 for key in ("integrated_ast_sha256", "parent_ast_sha256")}
-        if digest(ast.parse(source)) in accepted_descendants:
+        if source_digest(source) in accepted_descendants:
             continue
         source = restore_delta(source, fixture)
-    assert digest(ast.parse(source)) == PLC_WORKSTATION["parent_ast_sha256"]
+    assert source_digest(source) == PLC_WORKSTATION["parent_ast_sha256"]
     return source
 
 
@@ -156,10 +171,10 @@ def restore_pose_domain_root(source):
     for index, fixture in enumerate(fixtures):
         accepted = {item[key] for item in (*fixtures[index + 1:], *older)
                     for key in ("integrated_ast_sha256", "parent_ast_sha256")}
-        if digest(ast.parse(source)) in accepted:
+        if source_digest(source) in accepted:
             continue
         source = restore_delta(source, fixture)
-    assert digest(ast.parse(source)) in {item[key] for item in older
+    assert source_digest(source) in {item[key] for item in older
                                         for key in ("integrated_ast_sha256", "parent_ast_sha256")}
     return source
 
@@ -228,7 +243,7 @@ def restore_real_photo_workflows_root(source):
     verify_main288_real_photo_sources()
     verify_main289_real_photo_sources()
     for path, expected in fixture["actual_owner_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+        assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
         if path in MAIN284_REAL_PHOTO["business_sources"]:
             accepted = MAIN284_REAL_PHOTO["business_sources"][path]
@@ -243,7 +258,7 @@ def restore_real_photo_workflows_root(source):
             assert expected == accepted["previous_sha256"], "Historical main288 source changed: " + path
             expected = accepted["actual_sha256"]
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+    if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
 
@@ -253,10 +268,10 @@ def restore_provider_transports_root(source):
     source = restore_real_photo_workflows_root(source)
     fixture = PROVIDER_TRANSPORTS
     for path, expected in fixture["actual_owner_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+        assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+    if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
 
@@ -266,10 +281,10 @@ def restore_account_visibility_root(source):
     source = restore_provider_transports_root(source)
     fixture = ACCOUNT_VISIBILITY
     for path, expected in fixture["actual_owner_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+        assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+    if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
 
@@ -279,10 +294,10 @@ def restore_training_persistence_graph_root(source):
     source = restore_account_visibility_root(source)
     fixture = TRAINING_PERSISTENCE_GRAPH
     for path, expected in fixture["actual_owner_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+        assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
+    if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
 
@@ -291,10 +306,10 @@ def restore_infrastructure_root(source):
     """Validate real infrastructure edges, then fold only a fixed entry delta."""
     source = restore_training_persistence_graph_root(source)
     for path, expected in INFRASTRUCTURE["actual_owner_ast_sha256"].items():
-        assert digest(ast.parse((ROOT / path).read_text())) == expected, path
+        assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in INFRASTRUCTURE["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    actual = digest(ast.parse(source))
+    actual = source_digest(source)
     if actual == INFRASTRUCTURE["integrated_ast_sha256"]:
         return restore_delta(source, INFRASTRUCTURE)
     earlier = (INFRASTRUCTURE, PATH_CONFIGURATION, POSE_EXECUTION, POSE_PLANNING, AGENT_STATE,
@@ -310,10 +325,10 @@ def restore_infrastructure_root(source):
 def restore_path_configuration_root(source):
     """Validate the actual closed graph before preserving older strict oracles."""
     source = restore_infrastructure_root(source)
-    assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"]
+    assert source_digest((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text()) == PATH_CONFIGURATION["actual_owner_ast_sha256"]
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
-    actual = digest(ast.parse(source))
+    actual = source_digest(source)
     if actual == PATH_CONFIGURATION["integrated_ast_sha256"]:
         return restore_delta(source, PATH_CONFIGURATION)
     earlier = (PATH_CONFIGURATION, POSE_EXECUTION, POSE_PLANNING, AGENT_STATE,

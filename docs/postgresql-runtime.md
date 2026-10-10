@@ -901,3 +901,5 @@ Independent performance runs remain scheduled or explicit; PR performance is
 required inside CI. Frozen inventory rebalancing requires a reviewed revision.
 
 Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
+
+Only fixed silent Git preparation checks `check-298` and `check-299` may record zero-byte logs with the empty-content SHA-256. PostgreSQL benchmark/storage logs remain nonempty and retain all complete numeric and durability checks; database behavior and performance thresholds are unchanged.
