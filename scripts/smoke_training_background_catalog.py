@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_catalog_application_test_ports import bind_training_background_catalog, assert_default_training_background_catalog
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class TrainingBackgroundCatalogContracts(unittest.TestCase):
@@ -22,10 +24,12 @@ class TrainingBackgroundCatalogContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_background_catalog(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_catalog(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-catalog-')))
         self.directory = self.root / 'backgrounds'; self.sets = self.directory / 'sets'
         self.manifest = self.directory / 'background_sets.json'; self.default = self.directory / 'default.png'
@@ -514,12 +518,12 @@ class TrainingBackgroundCatalogContracts(unittest.TestCase):
             manifest_path = directory / 'background_sets.json'; manifest_path.write_text(json.dumps({'sets': {'private': {'owner_user_id': 'hidden'}}}), encoding='utf-8')
             callbacks = []
             def port(fn): value = Mock(side_effect=fn); callbacks.append(value); return value
-            manifest = BackgroundManifest(port(lambda: directory), port(lambda: manifest_path))
-            files = BackgroundImageFiles(port(lambda: {'.png', '.jpg'}))
+            manifest = BackgroundManifest(port(lambda: directory), port(lambda: manifest_path), files=BusinessFiles(lambda: None))
+            files = BackgroundImageFiles(port(lambda: {'.png', '.jpg'}), files=BusinessFiles(lambda: None))
             def minimum(identifier): (sets / identifier / 'generated.jpg').write_bytes((owner + '-variant').encode())
             seed = BackgroundSeeding(BackgroundSeedPaths(port(lambda: default), port(lambda: sets)),
                 port(manifest.load_background_sets_manifest), port(manifest.write_background_sets_manifest), port(minimum),
-                port(lambda: seed.seed_default_background_set()), port(lambda: 101))
+                port(lambda: seed.seed_default_background_set()), port(lambda: 101), files=BusinessFiles(lambda: None))
             def audit(meta, path): return {'created_at': 11, 'updated_at': 22, 'owner_user_id': meta.get('owner_user_id', ''), 'owner_username': meta.get('owner_username', '')}
             catalog = BackgroundCatalog(BackgroundCatalogPaths(port(lambda: sets), port(lambda: root / 'outputs')),
                 BackgroundCatalogRecords(port(manifest.load_background_sets_manifest), port(seed.background_set_dirs),

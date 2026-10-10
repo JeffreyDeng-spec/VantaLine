@@ -12,6 +12,8 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.agent_pose_materialization_application_test_ports import bind_pose_materialization, assert_default_pose_materialization
 
 class AgentPoseMaterializationContracts(unittest.TestCase):
     @classmethod
@@ -23,6 +25,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_pose_materialization(cls.api)
 
     @classmethod
     def tearDownClass(cls):
@@ -32,6 +35,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        bind_pose_materialization(self.api,self.stack)
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir=self.root.name)))
         for name in ('requests.sessions.Session.request', 'urllib.request.urlopen', 'subprocess.Popen', 'os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
@@ -367,7 +371,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
         PoseChromaPolicy(group(ports.PoseChromaSources))
         PoseCutoutPipeline(group(ports.PoseCutoutSources))
         PoseSpriteBuilder(group(ports.PoseChromaSources), group(ports.PoseSpritePolicy), group(ports.PoseSpriteRuntime), group(ports.PoseSpriteImages), group(ports.PoseSpriteMetadata), group(ports.PoseAssetMedia))
-        PoseAssetMaterialization(group(ports.PoseChromaSources), group(ports.PoseMaterializationState), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites))
+        PoseAssetMaterialization(group(ports.PoseChromaSources), group(ports.PoseMaterializationState), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites), files=BusinessFiles())
         for getter in getters:
             getter.assert_not_called()
 
@@ -390,7 +394,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
             pipeline = PoseCutoutPipeline(cutouts)
             builder = PoseSpriteBuilder(chroma_ports, group(ports.PoseSpritePolicy, material=lambda: lambda item: 'text'), group(ports.PoseSpriteRuntime), group(ports.PoseSpriteImages), group(ports.PoseSpriteMetadata), group(ports.PoseAssetMedia))
             state = {'photo_highlight_sprite_policy': {'name': name}}
-            materialization = PoseAssetMaterialization(chroma_ports, group(ports.PoseMaterializationState, current=lambda: lambda task: state), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites))
+            materialization = PoseAssetMaterialization(chroma_ports, group(ports.PoseMaterializationState, current=lambda: lambda task: state), group(ports.PoseAssetMedia), group(ports.PoseMaterializationSprites), files=BusinessFiles())
             return chroma, pipeline, builder, materialization, screen, cut, bbox
         instances = {name: make(name) for name in ('first', 'second')}
         image = np.zeros((4, 6, 3), dtype=np.uint8)

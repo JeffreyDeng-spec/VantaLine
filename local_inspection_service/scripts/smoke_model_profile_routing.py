@@ -7,7 +7,10 @@ import tempfile
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
+from dataclasses import replace
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'scripts'))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 os.environ['LOCAL_INSPECTION_ROOT']=tempfile.mkdtemp(prefix='model-routing-')
 (Path(os.environ['LOCAL_INSPECTION_ROOT'])/'local_inspection_service'/'static').mkdir(parents=True)
 os.environ['VANTALINE_DATA_STORE']='json'
@@ -29,7 +32,9 @@ def main():
     assert client.request('DELETE','/api/ai/config/key').status_code==409
     for permission in ('ai_config','agent_config','system_settings'):
         assert not s.user_has_permission({'id':'member','role':'user','permissions':[permission]},permission)
-    with patch.object(s,'current_auth_user',return_value={'id':'member','role':'user'}):
+    from scripts.agent_settings_application_test_ports import assert_default_agent_settings
+    assert_default_agent_settings(s)
+    with patch.object(s,'current_auth_user',return_value={'id':'member','role':'user'}), patch.object(s._agent_settings_projection,'_auth',replace(s._agent_settings_projection._auth,current_user=lambda:s.current_auth_user)):
         public=s.public_agent_config({**s.DEFAULT_AGENT_CONFIG,'api_key':'private-key','model':'fixture','base_url':'https://fixture.invalid'})
         assert not {'api_keys','api_key_masked','api_key_env','active_key_id','base_url'} & public.keys()
     for provider,model in [('qwen','qwen3-vl-flash'),('doubao','doubao-seed-evolving'),('gemini','gemini-2.5-flash')]:
@@ -40,21 +45,24 @@ def main():
         def transport(request,*args,**kwargs):
             calls.append(json.loads(request.data))
             return io.BytesIO(json.dumps(response).encode())
-        with patch.object(s,'ai_urlopen',transport):
+        with patch_provider_capability(s, 'ai_urlopen', transport):
             output,_=s.ai_provider_from_settings(settings).generate_json('fixture',[{'type':'text','text':'fixture'}])
         assert output==value and len(calls)==1
         if provider=='qwen': assert calls[0]['enable_thinking'] is False
         if provider=='doubao': assert calls[0]['thinking']=={'type':'disabled'}
         if provider=='gemini': response['candidates'][0]['finishReason']='MAX_TOKENS'
         else: response['choices'][0]['finish_reason']='length'
-        with patch.object(s,'ai_urlopen',transport):
+        with patch_provider_capability(s, 'ai_urlopen', transport):
             try:s.ai_provider_from_settings(settings).generate_json('fixture',[])
             except s.AiProviderError:pass
             else:raise AssertionError('truncated completion accepted')
         def denied(*args,**kwargs):raise urllib.error.HTTPError('https://fixture.invalid',401,'denied',{},io.BytesIO(b'invalid key fixture-secret-never-log'))
-        with patch.object(s,'ai_urlopen',denied):
+        with patch_provider_capability(s, 'ai_urlopen', denied):
             try:s.ai_provider_from_settings(settings).generate_json('fixture',[])
             except s.AiProviderAuthError as exc:assert settings['api_key'] not in str(exc)
             else:raise AssertionError('bad key accepted')
     print('PASS model profile real provider routing, truncated/error rejection, secret redaction and old HTTP/admin permissions')
-if __name__=='__main__':main()
+if __name__=='__main__':
+    with (patch('urllib.request.urlopen', side_effect=AssertionError('unmocked external transport')),
+          patch('requests.sessions.Session.request', side_effect=AssertionError('unmocked external transport'))):
+        main()

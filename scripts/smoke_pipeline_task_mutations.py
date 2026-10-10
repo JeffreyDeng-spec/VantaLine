@@ -12,6 +12,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PIPELINE_TASK_MUTATIONS_BASELINE_SOURCE')
 NAMES=('save_pipeline_task_batch_changes','mark_pipeline_ai_task_deleted','mark_pipeline_task_advancing','persist_pipeline_task_progress')
 ORIGINAL_DOCSTRINGS={'mark_pipeline_task_advancing': 'Flag a task (in memory) as queued for the async advance runner. The caller\n    persists it and then schedules the worker after releasing _pipeline_tasks_lock.', 'persist_pipeline_task_progress': 'Write live sub-step progress to the stored task record so the UI reflects\n    an in-flight advance immediately. Safe to call from the advance worker thread\n    (it briefly takes _pipeline_tasks_lock); never call while already holding it.'}
@@ -103,7 +104,8 @@ class MutationsContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_task_mutations' for t in n.targets));count=0
+        from application_integration_source_contract import restore_plc_domain_root
+        tree=ast.parse(restore_plc_domain_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_task_mutations' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,9)

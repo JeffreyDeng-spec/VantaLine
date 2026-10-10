@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import inspect
 import os
 import sys
 import tempfile
@@ -15,6 +16,82 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "tests/backend_contract/application.json"
+
+
+def same_capability(actual, expected):
+    """Compare the function and, for a bound method, its exact receiver."""
+    if actual is expected:
+        return True
+    return (inspect.ismethod(actual) and inspect.ismethod(expected)
+            and actual.__func__ is expected.__func__
+            and actual.__self__ is expected.__self__)
+
+
+def initial_capability(getter, compatible, verified_relays=()):
+    """Signature compatibility is separate from initial ownership proof."""
+    initial = getter()
+    assert callable(initial) and callable(compatible)
+    assert initial.__name__ == compatible.__name__
+    assert inspect.signature(initial) == inspect.signature(compatible)
+    assert same_capability(initial, compatible) or any(
+        same_capability(initial, relay) for relay in verified_relays
+    )
+    return initial
+
+
+def assert_owned_text_callbacks(application):
+    """Exercise each graph-local relay against its actual native receiver.
+
+    Stop at that receiver, before file writes, OCR or model/provider work. A
+    same-named relay from another application must not satisfy this witness.
+    These are test-only, explicit edges; no production lookup is introduced.
+    """
+    from unittest.mock import patch
+
+    text = application.text
+    task, config, event = {}, {}, {}
+    cases = (
+        (text._incoming_access.task, text._incoming_task_access,
+         'require', ('contract-task',), {'write': True}, ('contract-task',), {'write': True}),
+        (text._incoming_tasks.public, application.training_pipeline._task_projection,
+         'pipeline_task_public', (task, config), {}, (task, config),
+         dict(ai_task_ids=None, trained_model_specs=None, auto_optimize_states=None,
+              auto_optimize_states_by_id=None, sanitize=True)),
+        (text._incoming_media.output, application.infrastructure._service_paths,
+         'output_write_dir_for_owner', ('incoming', 'contract-user'), {}, ('incoming', 'contract-user'), {}),
+        (text._incoming_execution.capacity, text._incoming_capacity,
+         'require', (17,), {}, (17,), {}),
+        (text._incoming_retention.audit, text._incoming_text_store,
+         'append_incoming_text_audit', (event,), {}, (event,), {}),
+        (text._comparison_submission.models.call, application.inspection._model_tool_dispatch,
+         'call_ai_mcp_tool', ('contract-tool', task), {}, ('contract-tool', task), {}),
+        (text._beta_comparison.observer, text._incoming_ocr_engine,
+         'get', (None,), {}, (), {}),
+    )
+    # This existing port captures a fixed bound method; patching the class later
+    # would not intercept it. Check the captured function AND native receiver.
+    allowed = text._incoming_task_access.allowed()
+    ownership = inspect.getclosurevars(allowed).nonlocals['ports'].record_owner_id()
+    assert same_capability(ownership, application.infrastructure._record_ownership.record_owner_id)
+    assert allowed({'owner_user_id': 'alice'}, {'id': 'alice', 'role': 'user'})
+    assert not allowed({'owner_user_id': 'alice'}, {'id': 'bob', 'role': 'user'})
+    verified = [allowed]
+    for getter, owner, method, args, kwargs, native_args, native_kwargs in cases:
+        callback = getter()
+        witness = RuntimeError('stop at the expected native receiver')
+        with patch.object(type(owner), method, autospec=True, side_effect=witness) as observed:
+            try:
+                callback(*args, **kwargs)
+            except RuntimeError as error:
+                assert error is witness
+            else:
+                raise AssertionError(f'callback did not reach native receiver {method}')
+            observed.assert_called_once_with(owner, *native_args, **native_kwargs)
+            # Mock argument equality is insufficient for value-equal owners.
+            assert observed.call_args.args[0] is owner
+        assert same_capability(getter(), callback)
+        verified.append(callback)
+    return tuple(verified)
 
 
 def capture():
@@ -32,20 +109,23 @@ def capture():
         sys.path.insert(0, str(ROOT))
         from local_inspection_service import server
         from starlette.routing import Mount
+        from local_inspection_service.runtime.default_application import default_application
+        verified_relays = assert_owned_text_callbacks(default_application)
 
         for provider, name in [(server._detection_task_store.rows.decode, 'row_raw_json_list'),
                                (server._detection_task_store.normalize_background, 'safe_background_set_id')]:
             original = getattr(server, name)
+            initial = initial_capability(provider, original)
             try:
-                assert provider() is original
+                assert same_capability(provider(), initial)
                 replacement = lambda *args, **kwargs: None
                 setattr(server, name, replacement)
-                assert provider() is replacement
+                assert same_capability(provider(), initial)
                 setattr(server, name, None)
-                assert provider() is None
+                assert same_capability(provider(), initial)
             finally:
                 setattr(server, name, original)
-            assert provider() is original
+            assert same_capability(provider(), initial)
         from local_inspection_service.detection import geometry, postprocessing, drawing
         assert server.polygon_area is geometry.polygon_area
         assert server.postprocess_detections is postprocessing.postprocess_detections
@@ -65,16 +145,17 @@ def capture():
         for field, name in [('crop', 'crop_detection_region'), ('score', 'score_ocr_variants'), ('match', 'match_ocr_text_accessory')]:
             provider = getattr(server._ocr_attachment.dependencies, field)
             original = getattr(server, name)
+            initial = initial_capability(provider, original)
             try:
-                assert provider() is original
+                assert same_capability(provider(), initial)
                 replacement = lambda *args, **kwargs: None
                 setattr(server, name, replacement)
-                assert provider() is replacement
+                assert same_capability(provider(), initial)
                 setattr(server, name, None)
-                assert provider() is None
+                assert same_capability(provider(), initial)
             finally:
                 setattr(server, name, original)
-            assert provider() is original
+            assert same_capability(provider(), initial)
 
         assert server._ocr_matching.stopwords() is server.OCR_ACCESSORY_PROFILE_STOPWORDS
         assert server._manual_classifier.keywords() is server.MANUAL_TYPE_KEYWORDS
@@ -103,7 +184,7 @@ def capture():
         assert server._incoming_text_store.paths.references() == server.INCOMING_TEXT_REFERENCES_PATH
         assert server._incoming_text_store.paths.inspections() == server.INCOMING_TEXT_INSPECTIONS_PATH
         assert server._incoming_text_store.paths.audit() == server.INCOMING_TEXT_AUDIT_PATH
-        assert server._incoming_text_store.rows.decode() is server.row_raw_json_list
+        assert same_capability(server._incoming_text_store.rows.decode(), server.row_raw_json_list)
         from local_inspection_service.text_inspection import incoming_analysis
         assert server.decode_incoming_reference is incoming_analysis.decode_reference
         assert server._ocr_result_mapping is incoming_analysis.result_mapping
@@ -111,7 +192,7 @@ def capture():
         assert server._incoming_text_ocr_lock is server._incoming_ocr_engine.lock
         assert server._text_compare_beta_cache is server._beta_comparison.cache
         assert server._text_compare_beta_cache_lock is server._beta_comparison.lock
-        assert server._beta_comparison.observer() is server.incoming_text_ocr_observations
+        initial_capability(server._beta_comparison.observer, server.incoming_text_ocr_observations, verified_relays)
         assert [route.endpoint for route in server.app.routes if route.name == "analyze_text_compare_beta"] == [server.analyze_text_compare_beta]
 
 
@@ -136,16 +217,17 @@ def capture():
         )
         for getter, name in incoming_getters:
             original = getattr(server, name)
-            assert getter() is original
+            initial = initial_capability(getter, original, verified_relays)
+            assert same_capability(getter(), initial)
             replacement = lambda *args, **kwargs: None
             try:
                 setattr(server, name, replacement)
-                assert getter() is replacement
+                assert same_capability(getter(), initial)
                 setattr(server, name, None)
-                assert getter() is None
+                assert same_capability(getter(), initial)
             finally:
                 setattr(server, name, original)
-            assert getter() is original
+            assert same_capability(getter(), initial)
         for routes in (server._incoming_catalog_routes, server._incoming_inspection_routes):
             for name in routes.__dataclass_fields__:
                 endpoint = getattr(server, name)
@@ -181,33 +263,38 @@ def capture():
         bindings = (
             (server, "bounded_text", (server._standard_imports.bounded_text, server._standard_edits.bounded_text)),
             (server, "extract_doc_images", (server._standard_imports.parsers.doc,)),
-            (server, "_text_v2_write", (server._standard_media.write,)),
+            (server._text_standards, "write", (server._standard_media.write,)),
             (server.document_import_jobs, "mark_unavailable", (server._standard_imports.classification.mark_unavailable,)),
             (server, "_text_v2_expected_revision", (server._standard_edits.revisions.expected,)),
             (server, "_text_v2_public", (server._standard_records.public,)),
-            (server, "_text_v2_apply_revision", (server._standard_edits.revisions.apply,)),
-            (server, '_text_v2_owned', (server._inspection_records.owned,)),
-            (server, '_text_v2_media_path', (server._comparison_submission.media.path,)),
+            (server._text_standards, "apply_revision", (server._standard_edits.revisions.apply,)),
+            (server._text_comparisons, 'owned', (server._inspection_records.owned,)),
+            (server._text_comparisons, 'media_path', (server._comparison_submission.media.path,)),
             (server, 'sha256_bytes', (server._comparison_submission.media.digest,)),
             (server, '_text_v2_prepare_image', (server._comparison_submission.images.prepare,)),
             (server, '_text_v2_annotate', (server._comparison_submission.images.annotate,)),
             (server, 'call_ai_mcp_tool', (server._comparison_submission.models.call,)),
             (server, 'normalize_vlm_provider_result', (server._comparison_submission.models.normalize,)),
             (server, '_text_v2_diagnostic_event', (server._comparison_submission.diagnostics.event,)),
-            (server, '_text_v2_read_verified', (server._inspection_reviews.read_verified,)),
+            (server._text_comparisons, 'read_verified', (server._inspection_reviews.read_verified,)),
             (server, 'append_incoming_text_audit', (server._inspection_reviews.audit,)),
             (server, 'bounded_text', (server._inspection_reviews.bounded_text,)),
         )
         for owner, attribute, getters in bindings:
             original = getattr(owner, attribute)
-            for getter in getters:
-                assert getter() == original  # Bound methods are recreated on attribute access.
+            initials = [initial_capability(getter, original, verified_relays if owner is server else ())
+                        for getter in getters]
+            for getter, initial in zip(getters, initials):
+                assert same_capability(getter(), initial)
             replacement = lambda *args, **kwargs: None
             with patch.object(owner, attribute, replacement):
-                for getter in getters:
-                    assert getter() is replacement
-            for getter in getters:
-                assert getter() == original
+                for getter, initial in zip(getters, initials):
+                    if owner is server:
+                        assert same_capability(getter(), initial)
+                    else:
+                        assert getter() is replacement
+            for getter, initial in zip(getters, initials):
+                assert same_capability(getter(), initial)
         assert server._comparison_submission.records is server._inspection_reviews.records
         assert server._comparison_submission.access is server._inspection_reviews.access is server._inspection_access
         for name in ("compare_text_inspection_label", "get_text_inspection_v2_evidence",

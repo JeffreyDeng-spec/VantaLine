@@ -1,20 +1,22 @@
 import hashlib
 """Ordinary uploaded-image decoding, persistence and analysis."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 from collections.abc import Callable
 from typing import Any
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
 from .analysis_ports import AnalysisCall
-from .upload_ports import UploadAccess, UploadPaths, ImageArrays, ImageDecoder
+from .upload_ports import UploadAccess, UploadPaths, ImageArrays, ImageDecoder, UploadFiles
 from ..training.real_photo_provenance import group
 import uuid
 import re
 
 class ImageUpload:
     def __init__(self, access: UploadAccess, paths: UploadPaths,
-                 arrays: Callable[[], ImageArrays], images: Callable[[], ImageDecoder], analyze: AnalysisCall):
+                 arrays: Callable[[], ImageArrays], images: Callable[[], ImageDecoder], analyze: AnalysisCall,
+                 *, files: Callable[[], UploadFiles]):
+        if not callable(files):
+            raise TypeError("files must be callable")
+        self.files = files
         self.access, self.paths, self.arrays, self.images, self.analyze = access, paths, arrays, images, analyze
 
     async def analyze_image(self, file: UploadFile, model_id: str | None, capture_session_id: str | None = None) -> dict[str, Any]:
@@ -28,7 +30,7 @@ class ImageUpload:
             raise HTTPException(status_code=400, detail='Could not decode image')
         request_id = self.paths.name()(file.filename).rsplit('.', 1)[0]
         upload_path = self.paths.directory() / f"{request_id}{Path(file.filename).suffix.lower() or '.png'}"
-        _business_files.write_bytes(upload_path, payload)
+        self.files().write_bytes(upload_path, payload)
         if capture_session_id and not re.fullmatch(r'[a-zA-Z0-9_-]{1,128}',capture_session_id):
             raise HTTPException(422,'Invalid camera capture session')
         source_group='camera_session:'+capture_session_id if capture_session_id else 'upload_batch:'+uuid.uuid4().hex

@@ -16,6 +16,7 @@ from smoke_artifact_storage import StorageTests
 from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
 from local_inspection_service.runtime.identity import RequestIdentity
 from local_inspection_service.storage.artifacts.runtime import ArtifactRuntime
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.http import ArtifactStaticFiles
 from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
 from local_inspection_service.codex_compare.media import MediaStore
@@ -42,16 +43,15 @@ class IntegrationTests(unittest.TestCase):
         files = BusinessFiles(runtime_provider=self.runtime)
         metadata = image_job_metadata.ImageJobMetadata(
             image_job_metadata.ProvenanceDependencies(
-                dataset_archives.file_sha256, lambda: "fixture",
+                lambda path: dataset_archives.file_sha256(path, files=files), lambda: "fixture",
                 lambda: {"circle": [path]}, lambda: 8,
-            ), None,
+            ), None, files=files
         )
         job = {"pose_family": "circle", "input_files": []}
-        with patch.object(image_job_metadata, "_business_files", files), patch.object(dataset_archives, "_business_files", files):
-            self.assertTrue(metadata.ensure_image_job_target_guides(job))
-            self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
-            self.assertFalse(path.exists())
-            self.assertFalse(metadata.ensure_image_job_target_guides(job))
+        self.assertTrue(metadata.ensure_image_job_target_guides(job))
+        self.assertEqual(job["target_guide_sha256"], {path.name: row.sha256})
+        self.assertFalse(path.exists())
+        self.assertFalse(metadata.ensure_image_job_target_guides(job))
 
     def test_detection_native_port_publishes_verified_bytes_and_propagates_failure(self):
         import cv2
@@ -63,7 +63,7 @@ class IntegrationTests(unittest.TestCase):
         self.budget.limits.update(cache=1024 * 1024, upload=1024 * 1024)
         self.budget.free_bytes = lambda: 10 * 1024 * 1024
         policy = InspectionImagePolicy(lambda: self.root / "outputs/inspection", lambda: 100, lambda: 90)
-        writer = InspectionImageStore(lambda: cv2, policy, lambda: 1, lambda s: s)
+        writer = InspectionImageStore(lambda: cv2, policy, lambda: 1, lambda s: s, runtime_provider=self.runtime)
         pixels = np.full((8, 8, 3), 120, dtype=np.uint8)
         with patch("local_inspection_service.storage.artifacts.images.get_runtime", self.runtime):
             path = writer.write_mcp_inspection_image(pixels, "fixture")
@@ -88,7 +88,7 @@ class IntegrationTests(unittest.TestCase):
         paid = Mock()
         routing = SimpleNamespace(analyze=Mock(side_effect=ArtifactUnavailable("synthetic COS failure")), ai=paid)
         with self.assertRaises(ArtifactUnavailable):
-            DetectionAnalysis(inputs, routing, None, None).analyze_bgr(None, "fixture")
+            DetectionAnalysis(inputs, routing, None, None, runtime_provider=lambda: None).analyze_bgr(None, "fixture")
         paid.assert_not_called()
 
     def test_retention_tombstones_index_and_keeps_remote_history(self):
@@ -103,14 +103,14 @@ class IntegrationTests(unittest.TestCase):
         repository.mark_incoming_text_evidence_purged.return_value = True
         media = SimpleNamespace(root=lambda: self.root / "outputs", under=lambda p, root: p.is_relative_to(root))
         retention = incoming_retention.IncomingRetention(None, media, SimpleNamespace(repository=lambda: repository),
-                                                         None, lambda: Mock(), lambda: "system")
-        with patch.object(incoming_retention, "_business_files", BusinessFiles(runtime_provider=self.runtime)):
-            self.locations.fail = True
-            with self.assertRaises(RuntimeError):
-                retention.purge()
-            repository.mark_incoming_text_evidence_purged.assert_not_called()
-            self.locations.fail = False
-            self.assertEqual(retention.purge(), {"records": 1, "files": 1})
+                                                         None, lambda: Mock(), lambda: "system",
+                                                         files=BusinessFiles(runtime_provider=self.runtime))
+        self.locations.fail = True
+        with self.assertRaises(RuntimeError):
+            retention.purge()
+        repository.mark_incoming_text_evidence_purged.assert_not_called()
+        self.locations.fail = False
+        self.assertEqual(retention.purge(), {"records": 1, "files": 1})
         self.assertEqual(self.locations.rows[source.path].state, "deleted")
         self.assertEqual(self.client.rows[source.key], b"history")
 
@@ -445,8 +445,8 @@ class IntegrationTests(unittest.TestCase):
             return {"ok": True}
         service = image_upload.ImageUpload(SimpleNamespace(ensure=lambda: None, permit=lambda model: None),
                                          SimpleNamespace(name=lambda: (lambda filename: "fixture.png"), directory=lambda: self.root / "uploads"),
-                                         lambda: np, lambda: cv2, analyze)
-        with patch.object(image_upload._business_files, "runtime_provider", self.runtime):
+                                         lambda: np, lambda: cv2, analyze, files=lambda: BusinessFiles(runtime_provider=self.runtime))
+        with self.subTest(storage="explicit runtime"):
             result = asyncio.run(service.analyze_image(UploadFile(file=io.BytesIO(payload), filename="image.png"), None))
             self.assertTrue(result["ok"])
             self.client.fail = True

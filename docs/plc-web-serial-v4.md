@@ -1,3 +1,11 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
+The retained legacy deadline smoke uses a synthetic write-event barrier to establish its after-write snapshot premise and drains the synthetic worker before restoring test callbacks. Its 0.5-second deadline and evidence assertions remain. This test scheduling changes no production PLC policy, browser ownership, protocol, persistence, physical I/O or uncertain-write retry behavior; it does not establish real-device acceptance.
+
+Account visibility graph wiring retains the existing private configuration projection and media permissions. PLC route ordering, workstation leases, browser-only I/O, actual ACK and uncertain-write handling remain unchanged.
+
+Training completion graph assembly does not change PLC I/O, lease ownership, ACK settlement or uncertain-write handling. Its synthetic graph verification does not contact a serial port or PLC.
+
 Diagnostic receipt/finalization now delegates to `plc/diagnostic_state.py` inside the existing station mutation transaction. It accepts an active or draining owner lease even after lease or diagnostic deadline expiry, so a late browser result can clear the in-flight diagnostic ID, deadline and token hash. It does not alter state, expiry or heartbeat, record an ACK, retry a physical write, or open a serial port. A repeated receipt fails because the diagnostic is no longer in flight.
 
 Diagnostic confirmation now delegates to `plc/diagnostic_state.py`. It still checks the active lease, matching diagnostic ID, strict deadline and token hash inside the original station mutation transaction. A missing hash short-circuits token access. A successful confirmation leaves in-flight evidence and lease timing untouched and may be repeated before the deadline; it is not evidence that a serial write or ACK succeeded.
@@ -43,6 +51,12 @@ dispatch dependency; this extraction leaves capture streaming and physical-write
 rules unchanged.
 
 **Status: Authoritative — only current PLC implementation contract**
+
+Path/configuration composition retains ApplicationConfiguration's atomic protected
+namespace mutation and per-owner authorization ContextVar. Moving directory,
+sanitizer and path-migration callbacks into their domain owner does not change
+leases, browser ownership, protocol or uncertain-write no-retry behavior. Source
+contracts validate the actual new owner before replaying the original PLC oracle.
 
 ## Ownership and profile
 
@@ -132,11 +146,86 @@ Dedicated camera orchestration is implemented in `detection/camera_request.py`; 
 ### Real-photo feedback provenance
 
 The dedicated camera request propagates its existing station/session identity as a source group around analysis. This metadata grants no PLC capability and changes no dispatch fingerprint, D/Y frames, lease, retry or physical-write behavior. Ordinary image/video provenance also grants no camera dispatch authority.
+Historical server worker definitions now live in plc/legacy_workers.py, with per-instance locks and thread references. The current start_plc_runtime_workers hook still returns None and does not start them. This is retained legacy implementation for contract/history verification, not a supported physical-I/O topology: only the leased workstation browser performs PLC communication. No protocol, lease, ACK, uncertain-write retry or browser capture behavior changes.
+
+Active-lease validation retains record/clock/user order, session/owner/active-state fencing, strict expiry, generation and protocol checks, optional epoch and enabled configuration. A zero/missing database timestamp still selects the live fallback clock. Missing/fenced/disabled errors and lazy short-circuit evaluation remain distinct. The owned guard records no ACK, sends no serial command and changes no lease. A supplied configuration migration callback retains its existing side effects and exceptions.
+
+The legacy activation readiness helper moved out of the application entry; start_plc_runtime_workers still returns without starting any server-side serial activity. Its optional import check never opens a port. Existing DB-clock atomic-primitive requirement and ordered profile/dependency errors are retained solely for compatibility; passing this policy does not authorize a physical write or establish browser ACK evidence.
+
+LegacyRuntimeCoordination isolates retained coordination bookkeeping only. Claims still use the existing application clock and namespace transaction, and a successful claim can invoke the supplied heartbeat starter. This is not a DB-clock physical-I/O fencing primitive or permission to enable server serial I/O. Current startup remains dormant and Web Serial ownership/ACK rules are unchanged.
+
+LegacyDispatchRecords retains reverse audit lookup and the exact idempotent dispatch hash, source/request/passed-identity/fingerprint checks. Only record lookup is under the existing configuration guard; verification retains its original position after guard release. Conflict responses preserve authoritative evidence and the existing failed/no-new-I/O fields. No physical action or retry is added.
+
+The retained reconciliation and input-poll bodies moved intact into LegacyPlcOperations. They remain disabled by current startup. Reconciliation skips invalid or non-pristine records, settles the same blocked records and returns after one eligible item. Polling retains ownership/pending gates, nonblocking slot acquisition, release in finally and post-read generation checks. The module is not a new physical-I/O permission; only synthetic read/transport capabilities are used in its tests.
+
+Unreachable pre-Web-Serial capture implementation tails are no longer present in the application entry. Claim/heartbeat/release/event-stream routes remain registered with the same request schemas and HTTP 410 behavior. Current PLC config still forwards to the existing service, and physical I/O remains browser-only.
+
+Bootstrap location composition retains the existing plc_web_serial_state.json location beneath the same data directory. It creates no files, changes no browser lease or dispatch protocol and opens no serial port.
+
+Cost service composition is initialized immediately after the retained legacy PLC route slot; those PLC route bodies, registration order, browser ownership and serial prohibition remain unchanged. The early PipelineTaskStore constructor stores suppliers only and performs no database or physical operation.
+
+DetectionWorkflows closes internal ordinary/AI/publication/capture routing without adding PLC dispatch. The no-dispatch source contract follows root aliases through the actual graph to both original analysis implementations, checks the real pinned teacher route, and rejects class/decorator import shadowing. Dedicated camera provenance, browser leases, actual ACK and uncertain-write no-retry rules remain unchanged. Synthetic graph tests perform no physical PLC I/O.
 
 
+Configuration persistence allocates its RLock and protected-namespace ContextVar
+inside ApplicationConfiguration. The default assembled Web instance keeps its
+legacy _config_io_lock alias for existing PLC suppliers; those suppliers still
+select the guard lazily. Two independently constructed configuration owners have
+distinct guards and flags. PostgreSQL PLC namespace writes retain the existing
+advisory lock and atomic write transaction. This does not complete the PLC
+workstation/capture domain factory or alter browser ownership, lease checks, ACK
+evidence or the prohibition on retrying uncertain physical writes.
 Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.
 
 An ordinary upload's optional capture-session identifier is feedback grouping metadata only. It never asserts a PLC camera request, station lease or dispatch. Non-PLC camera frames can therefore remain in one dataset source group while using ordinary image detection.
+
+## Workstation composition boundary
+
+Workstation persistence, station policy and browser dispatch now compose through `PlcWorkstationWorkflows`. Internal service callbacks select their domain owner after arguments are evaluated; active-lease validation retains its fixed station binding. Pairing, generation upgrades, expiry settlement, declaration persistence, lease fencing and ACK validation remain in their existing business modules and transactions. Recent dispatch and station projection may write and must not be treated as cached reads. No physical serial operation, uncertain-write replay or new worker is introduced. Full PLC/application lifecycle assembly remains a separate gate.
+
+Lease and diagnostic composition selects the same supplied workstation graph. Diagnostic confirmation and model rebind use its initial bound active-lease member. A disconnect with an in-flight diagnostic keeps the original draining lease, and a late diagnostic receipt clears evidence without manufacturing an ACK or extending expiry. Frame construction and row serialization failures still roll back the station transaction. No server serial port, retry or new runtime topology is introduced.
+
+Retained capture state uses PlcCaptureWorkflows for coordination, expiry and durable receipts. This does not enable legacy capture routes (410), change the no-op start_plc_runtime_workers hook, or start a server serial poller. Browser-only PLC I/O, uncertain-write non-retry and distinct lease epochs remain required.
+
+Pipeline persistence assembly leaves capture 410 routes, browser workstation ownership, PLC plan/ACK contracts, and the no-op server PLC startup unchanged. The capture and workstation state machines retain separate owners.
+
+The pipeline native runtime graph does not enable capture routes, server serial workers or PLC transport factories. Only leased browser dispatch retains physical I/O authority; ordinary pipeline/image tasks do not gain PLC write permissions.
+
+The PipelineQueries assembly retains existing auto-optimization stop-capture capabilities and does not change browser ownership, workstation leases, diagnostic receipts, actual ACK or uncertain-write rules. It starts no legacy PLC polling worker.
+
+Pipeline Agent conversation/action composition preserves the existing supplied pause and pose execution capabilities. It changes no workstation/browser ownership, lease or actual ACK rules, and starts no PLC poller or worker.
+
+The PLC lease composition source-contract smoke now replays the validated outer PipelineStages delta before the existing domain deltas. PLC business code, browser lease/ACK behavior and physical I/O are unchanged; the original assertions remain and unknown outer wiring changes fail replay.
+
+PLC source-oracle checks also validate the outer PipelineTaskWorkflows assembly delta before restoring original coordination and lease constructors. This changes the test location adapter only; actual PLC ownership, at-most-once browser writes and ACK/uncertainty rules remain unchanged.
+
+PipelineRuntimeWorkflows composes native pipeline transitions without creating a PLC executor or changing browser-owned lease, dispatch, ACK or uncertain-write behavior. Legacy PLC shutdown and dormant worker state retain their original lifecycle.
+
+The explicit Codex environment mapping changes no PLC authorization, workstation lease, browser serial I/O or ACK/uncertain-write handling. Its regression uses synthetic accounts and performs no PLC or paid model operation.
+
+The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+
+Pose composition adds three strict outer source-oracle layers. The unchanged
+PLC lease/diagnostic composition regression validates the actual Pose owners
+before reversing those layers and inspecting its original PLC binding assertions.
+This test adaptation preserves protocol, browser ownership, lease/ACK rules,
+uncertain-write non-retry behavior and the original Web shutdown order; it adds
+no PLC access or production worker transition.
+
+The default infrastructure builder adds one strict outer source delta before
+the existing path/Pose replay. Actual construction modules and unchanged
+business sources are verified; the original PLC regressions retain their
+assertions. HTTP route order, Web lifecycle positions, browser lease/ACK and
+uncertain-write non-retry behavior remain unchanged. Source manifest v272
+includes the real infrastructure modules for new tasks only; historical model
+snapshots are not rewritten. This change introduces no physical PLC IO.
+
+Provider/real-photo graph assembly does not change workstation ownership, lease/epoch, ACK or uncertainty policy. The feedback bridge's training submission remains separate from browser PLC dispatch. Its native startup and shutdown perform no server serial I/O. Preserve the complete PLC and HTTP contracts when accepting the consolidated backend composition batch.
+
+Canonical application assembly preserves the actual PLC services, HTTP contracts and browser-only physical I/O rules. Each app receives fresh logical PLC runtime/executor state; closing another app cannot close it. No serial ownership, lease, ACK, uncertain-write retry, protocol or camera provenance behavior changes. Keep the complete PLC/release regression and whole-package rollback gates.
 
 ## Operator-owned local setup and connection verification
 

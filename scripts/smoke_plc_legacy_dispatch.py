@@ -1,6 +1,7 @@
 """Exercise retained legacy dispatch with synthetic serial and persistence only."""
 import ast
 import asyncio
+from contextlib import ExitStack
 from dataclasses import fields
 import os
 from pathlib import Path
@@ -15,11 +16,22 @@ NAMES = ('dispatch_plc_for_detection', '_run_queued_plc_dispatch', 'dispatch_plc
 
 
 def main():
+    with ExitStack() as lifetime:
+        run(lifetime)
+
+
+def run(lifetime):
     if not BASELINE:
         from local_inspection_service.plc import legacy_dispatch
         assert 'local_inspection_service.server' not in sys.modules
     # This fixture creates its own temporary data/static directories before app import.
     from local_inspection_service.scripts import smoke_plc_phase1_hardening as fixture
+    default = fixture.server
+    if not BASELINE:
+        from scripts.plc_legacy_test_composition import build
+        fixture.server = build(default)
+        lifetime.callback(setattr, fixture, 'server', default)
+        lifetime.callback(fixture.server._plc_io_executor.shutdown, wait=True)
     server = fixture.server
     if BASELINE:
         nodes = [n for n in ast.parse(Path(BASELINE).read_text(encoding='utf-8-sig')).body
@@ -40,20 +52,25 @@ def main():
                     assert getter() is replacement
                 assert getter() is original
         for name in NAMES:
-            callback = AsyncMock(return_value=object()) if name.endswith('_async') else Mock(return_value=object())
             result, source, fingerprint = {}, object(), object()
             kwargs = dict(source=source, fingerprint=fingerprint)
             if name == 'dispatch_plc_for_detection':
                 kwargs['expected_generation'] = object()
             elif name.endswith('_async'):
                 kwargs['inline_fake_transport'] = object()
-            with patch.object(server, '_plc_legacy_dispatch', SimpleNamespace(**{name: callback})):
-                outcome = getattr(server, name)(result, **kwargs)
+            # The real default compatibility function must reach its actual
+            # native receiver. Fixture reassignment is a separate typed seam.
+            with patch.object(type(default._plc_legacy_dispatch), name, autospec=True) as callback:
+                callback.return_value = object()
+                outcome = getattr(default, name)(result, **kwargs)
                 if name.endswith('_async'):
                     outcome = asyncio.run(outcome)
                 assert outcome is callback.return_value
-                callback.assert_called_once_with(result, **kwargs)
-        print('PASS standalone import, 43 late capabilities and three root forwarding identities', flush=True)
+                callback.assert_called_once_with(default._plc_legacy_dispatch, result, **kwargs)
+                assert callback.call_args.args[0] is default._plc_legacy_dispatch
+                if name.endswith('_async'):
+                    callback.assert_awaited_once_with(default._plc_legacy_dispatch, result, **kwargs)
+        print('PASS standalone import, 43 explicit fixture capabilities and three real default forwarding identities', flush=True)
 
     # Legacy matrices already provide only ScriptedTransport. Supplying dependency
     # availability models that fixture, without installing or opening real serial I/O.

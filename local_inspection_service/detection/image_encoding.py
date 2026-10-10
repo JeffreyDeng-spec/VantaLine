@@ -1,5 +1,6 @@
 """JPEG data URLs from arrays and local images."""
 from ..storage.artifacts.images import image_backend
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from pathlib import Path
 import base64
@@ -7,7 +8,11 @@ import numpy as np
 from .media_ports import MediaImages, EncodeArray
 
 class ImageEncoding:
-    def __init__(self, images: Callable[[], MediaImages], error: Callable[[str], Exception], encode: EncodeArray):
+    def __init__(self, images: Callable[[], MediaImages], error: Callable[[str], Exception], encode: EncodeArray,
+                 *, runtime_provider: Callable[[], ArtifactRuntime | None]):
+        if not callable(runtime_provider):
+            raise TypeError("runtime_provider must be callable")
+        self.runtime_provider = runtime_provider
         self.images, self.error, self.encode = images, error, encode
 
     def image_bgr_data_url(self, image_bgr: np.ndarray, max_side: int = 1280, quality: int = 82) -> str:
@@ -22,7 +27,7 @@ class ImageEncoding:
         return f"data:image/jpeg;base64,{base64.b64encode(encoded.tobytes()).decode('ascii')}"
 
     def image_path_data_url(self, path: Path, max_side: int = 1024, quality: int = 78) -> str | None:
-        image = image_backend(self.images()).imread(str(path), self.images().IMREAD_COLOR)
+        image = image_backend(self.images(), runtime_provider=self.runtime_provider).imread(str(path), self.images().IMREAD_COLOR)
         if image is None:
             return None
         return self.encode(image, max_side=max_side, quality=quality)

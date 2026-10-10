@@ -4,15 +4,17 @@ import time
 from typing import Any
 import uuid
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import AccessoryImageReader
 from fastapi import HTTPException
 from .policy import normalize_object_alpha_material_policy, object_alpha_policy_label
 from .preparation_ports import CandidateMedia, CandidatePreparation, CandidateStorage
 
 
 class CandidateFactory:
-    def __init__(self, media: CandidateMedia, preparation: CandidatePreparation, storage: CandidateStorage):
+    def __init__(self, media: CandidateMedia, preparation: CandidatePreparation, storage: CandidateStorage, *, images: AccessoryImageReader):
+        if images is None:
+            raise TypeError('images is required')
+        self.images = images
         self.media, self.preparation, self.storage = media, preparation, storage
 
     def create_accessory_candidate(self, 
@@ -58,7 +60,7 @@ class CandidateFactory:
             thumb_dir = self.media.output_directory("accessory_candidates") / candidate_id
             thumb_dir.mkdir(parents=True, exist_ok=True)
         for idx, src in enumerate(image_sources[:8]):
-            image = _image_files.imread(str(src), cv2.IMREAD_COLOR)
+            image = self.images.imread(str(src), cv2.IMREAD_COLOR)
             if image is not None:
                 thumbnails.append(self.media.thumbnail(image, thumb_dir / f"source_{idx + 1:02d}.png", 0))
         item["thumbnails"] = thumbnails[:8]

@@ -25,6 +25,28 @@ DISPATCH = (True, False, False, False, True)
 ADMIN = (False, True, True, True, False)
 
 
+def build_dispatch_fixture():
+    from canonical_application_source_contract import verify_actual_sources
+    from local_inspection_service.plc.dispatch_diagnostic import DispatchDiagnostic
+    from local_inspection_service.plc.dispatch_diagnostic_ports import DispatchAccess, DispatchErrors, DispatchMutation
+    verify_actual_sources()
+    api = types.SimpleNamespace()
+    service = DispatchDiagnostic(
+        DispatchAccess(lambda: api.require_permission, lambda: api.require_plc_web_serial_station),
+        DispatchMutation(lambda: api.plc_web_serial_declare_attempt,
+                         lambda: api.plc_web_serial_diagnostic_plan,
+                         lambda: api.plc_web_serial_finish_diagnostic,
+                         lambda: api.plc_web_serial_confirm_diagnostic,
+                         lambda: api.plc_web_serial_record_receipt),
+        DispatchErrors(lambda: api.PlcConfigError, lambda: api.HTTPException))
+    api.declare_plc_web_serial_attempt = service.declare_attempt
+    api.create_plc_web_serial_diagnostic_plan = service.diagnostic_plan
+    api.finish_plc_web_serial_diagnostic = service.diagnostic_receipt
+    api.confirm_plc_web_serial_diagnostic = service.diagnostic_confirm
+    api.record_plc_web_serial_receipt_endpoint = service.record_receipt
+    return api
+
+
 class ConfigError(Exception):
     pass
 
@@ -62,8 +84,7 @@ class DispatchApiContract(unittest.TestCase):
                                     PlcWebSerialReceiptRequest=object)
             exec(compile(ast.Module(body=functions, type_ignores=[]), baseline, "exec"), cls.api.__dict__)
         else:
-            from local_inspection_service import server
-            cls.api = server
+            cls.api = build_dispatch_fixture()
 
     @classmethod
     def tearDownClass(cls):
@@ -93,6 +114,16 @@ class DispatchApiContract(unittest.TestCase):
 
     def replace(self, name, value):
         self.stack.enter_context(patch.object(self.api, name, value, create=True))
+
+    def test_actual_http_receivers(self):
+        if os.environ.get("VANTALINE_PLC_DISPATCH_API_BASELINE_SOURCE"):
+            self.skipTest("candidate composition only")
+        from plc_http_test_contract import assert_http_receivers
+        assert_http_receivers(self, '_plc_dispatch_diagnostic', [
+            (name, method, (self.dispatch_id, self.request, self.payload) if dispatch
+             else (self.request, self.payload))
+            for name, method, dispatch in zip(NAMES, ('declare_attempt', 'diagnostic_plan',
+                 'diagnostic_receipt', 'diagnostic_confirm', 'record_receipt'), DISPATCH)])
 
     def call(self, name, dispatch):
         if dispatch:

@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_SHADOW_EVALUATION_BASELINE_SOURCE')
 NAMES=('start_auto_optimize_shadow_worker','auto_optimize_shadow_worker','maybe_promote_auto_optimize_model_locked','cleanup_auto_optimize_retired_candidate_locked')
@@ -50,11 +51,17 @@ class ShadowContract(unittest.TestCase):
         with patch.object(time,'time',return_value=123.9),patch.object(time,'sleep',side_effect=lambda n:f.events.append(('sleep',n))):f.service.auto_optimize_shadow_worker('task','sample')
 
     def test_starter_key_dedupe_and_failed_start_retains_slot(self):
-        f=self.fixture();thread=Mock();thread.is_alive.return_value=True;f.threads['task:sample']=thread
+        f=self.fixture();f.b['auto_optimize_shadow_worker']=Mock();thread=Mock();thread.is_alive.return_value=True;f.threads['task:sample']=thread
         with patch.object(threading,'Thread',side_effect=AssertionError('unexpected')):f.service.start_auto_optimize_shadow_worker(' ' ,'sample');f.service.start_auto_optimize_shadow_worker(' task ','sample')
         thread.is_alive.return_value=False;new=Mock();error=RuntimeError('start');new.start.side_effect=error
         with patch.object(threading,'Thread',return_value=new) as factory,self.assertRaises(RuntimeError) as caught:f.service.start_auto_optimize_shadow_worker('task','sample')
-        self.assertIs(caught.exception,error);self.assertIs(f.threads['task:sample'],new);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=f.b['auto_optimize_shadow_worker'],args=('task','sample'),name='auto-opt-shadow-task',daemon=True)
+        self.assertIs(caught.exception,error);self.assertIs(f.threads['task:sample'],new);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=factory.call_args.kwargs['target'],args=('task','sample'),name='auto-opt-shadow-task',daemon=True)
+        if BASELINE:self.assertIs(factory.call_args.kwargs['target'],f.b['auto_optimize_shadow_worker'])
+        else:
+            self.assertIsNot(factory.call_args.kwargs['target'],f.b['auto_optimize_shadow_worker'])
+            factory.call_args.kwargs['target'](*factory.call_args.kwargs['args'])
+            f.b['auto_optimize_shadow_worker'].assert_not_called()
+            self.assertFalse(f.service.close(0))  # Failed start is still owned; invoked late target was revoked.
 
     def test_gates_and_missing_image_skip_analysis(self):
         for scenario in ('disabled','candidate','sample','image'):
@@ -121,10 +128,12 @@ class ShadowContract(unittest.TestCase):
         for name,args,kwargs in zip(NAMES,(('t','s'),('t','s'),({},),({},'old')),({},{},{},{'keep_model_id':'new'})):
             mock=Mock(return_value=object());fn=getattr(server,name)
             if hasattr(fn,'__wrapped__'):fn=fn.__wrapped__
-            with patch.object(server,'_auto_optimization_shadow_evaluation',SimpleNamespace(**{name:mock})):self.assertIs(fn(*args,**kwargs),mock.return_value)
-            mock.assert_called_once_with(*args,**kwargs)
+            with patch.object(type(service), name, autospec=True, return_value=mock.return_value) as receiver:
+                self.assertIs(fn(*args,**kwargs),mock.return_value)
+                receiver.assert_called_once_with(service, *args, **kwargs)
+                self.assertIs(receiver.call_args.args[0], service)
         self.assertTrue(hasattr(server.auto_optimize_shadow_worker,'__wrapped__'))
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[1]);self.assertEqual(ast.unparse(node.decorator_list[0]),'pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))')
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[1]);self.assertEqual(ast.unparse(node.decorator_list[0]),'pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))')
         subprocess.run([sys.executable,'-c',"import sys; import local_inspection_service.training.auto_optimization_shadow_evaluation; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)
 
 if __name__=='__main__':unittest.main()

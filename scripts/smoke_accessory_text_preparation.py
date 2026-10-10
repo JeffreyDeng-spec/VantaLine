@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException,UploadFile
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_ACCESSORY_TEXT_PREPARATION_BASELINE_SOURCE')
 NAMES=('order_points','target_paper_pixel_size','ratio_close','quad_is_axis_aligned','best_document_quad','document_quad_mean_size','detect_document_quad','letterbox_document_onto_paper','resize_document_to_paper','is_text_rectified_path','stable_text_crop_stem','text_raw_crop_prefix','text_raw_has_rectified','text_image_paths_for_upload_limit','text_accessory_source_count','validate_text_accessory_uploads','normalize_text_image')
 
@@ -86,7 +87,7 @@ class TextPreparationContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_accessory_text_preparation' for t in n.targets));count=0
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_accessory_text_preparation' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,18)

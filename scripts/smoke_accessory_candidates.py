@@ -244,6 +244,9 @@ def root_callback_contract():
         os.environ.update(LOCAL_INSPECTION_ROOT=temporary, VANTALINE_DATA_STORE='json',
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
+        from scripts.accessory_application_test_ports import frozen_field, accessory_callback
+        from scripts.canonical_application_source_contract import verify_actual_sources
+        verify_actual_sources()
         from local_inspection_service.scripts.model_profiles_fixture import install
         install(server)
         trace = LockTrace()
@@ -255,7 +258,7 @@ def root_callback_contract():
             server.enrich_record_audit_fields, server.require_record_access, server.candidate_image_jobs,
             server.ensure_image_job_task_id, lambda job: dict(job), server.store_candidate_image_job))
         old_binding = {'image': {'id': 'historical', 'version': 7, 'prompt_version': 'source-sha256:v1:fixture'}}
-        with patch.object(server, 'POSE_TARGET_GUIDE_IMAGES', {'fixture': [guide]}):
+        with frozen_field(server._default_application.values, 'POSE_TARGET_GUIDE_IMAGES', {'fixture': [guide]}):
             singular = {'generation_step':'anchor_replacement','status':'completed','pose_family':'fixture',
                         'anchor_image_path':str(anchor),'input_files':[str(anchor)],'model_profiles':copy.deepcopy(old_binding)}
             store.save_accessory_candidate(root/'candidates/legacy.json', {'id':'legacy','owner_user_id':'alice','codex_image_job':singular})
@@ -287,7 +290,7 @@ def root_callback_contract():
             assert server.ensure_candidate_image_job_task_ids(invalid) is False
             # Exercise the actual application composition and its lazy root
             # callbacks as well as the isolated service tested above.
-            with patch.object(server, 'ACCESSORY_CANDIDATES_DIR', root/'assembled'), patch.object(server, 'refresh_codex_image_job', side_effect=lambda value: dict(value)):
+            with frozen_field(server._default_application.values, 'ACCESSORY_CANDIDATES_DIR', root/'assembled'), accessory_callback(server, 'refresh_codex_image_job', side_effect=lambda value: dict(value)):
                 server.save_accessory_candidate(root/'assembled/wired.json',
                     {'id':'wired','owner_user_id':'alice','codex_image_job':{'job_id':'wired-job','task_id':'stable','candidate_id':'wired'}})
                 with server._request_user.bind({'id':'alice','role':'user'}):

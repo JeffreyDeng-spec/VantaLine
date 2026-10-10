@@ -1,6 +1,5 @@
 """Preview output directory and plan JSON persistence with existing partial-write semantics."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingTextWriter
 from collections.abc import Callable
 import json
 from pathlib import Path
@@ -8,7 +7,10 @@ from typing import Any
 
 
 class PreviewArtifactStore:
-    def __init__(self, output: Callable[[str], Path], jobs: Callable[[], Path]):
+    def __init__(self, output: Callable[[str], Path], jobs: Callable[[], Path], *, files: TrainingTextWriter):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.output, self.jobs = output, jobs
 
     def create_directory(self, preview_id: str) -> Path:
@@ -17,4 +19,4 @@ class PreviewArtifactStore:
         return job_dir
 
     def write_plan(self, preview_id: str, plan: dict[str, Any]) -> None:
-        _business_files.write_text(self.jobs() / f"{preview_id}.json", json.dumps(plan, indent=2), encoding="utf-8")
+        self.files.write_text(self.jobs() / f"{preview_id}.json", json.dumps(plan, indent=2), encoding="utf-8")

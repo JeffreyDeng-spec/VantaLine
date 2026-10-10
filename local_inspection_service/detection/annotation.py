@@ -1,5 +1,6 @@
 """Detection box geometry, rendering and output with explicit image/storage capabilities."""
 from ..storage.artifacts.images import image_backend
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from pathlib import Path
 import math
@@ -50,7 +51,11 @@ class DetectionAnnotation:
     def __init__(self, normalize: Callable[[Any], list[float] | None], pixels: Callable[[], PixelProjection],
                  text: Callable[[], BoundedText], images: Callable[[], AnnotationImages],
                  directory: Callable[[str], Path], url: Callable[[Path], str],
-                 draw: BoxDrawing, original: Callable[[np.ndarray, str], str]):
+                 draw: BoxDrawing, original: Callable[[np.ndarray, str], str],
+                 *, runtime_provider: Callable[[], ArtifactRuntime | None]):
+        if not callable(runtime_provider):
+            raise TypeError("runtime_provider must be callable")
+        self.runtime_provider = runtime_provider
         self.normalize, self.pixels, self.text, self.images = normalize, pixels, text, images
         self.directory, self.url, self.draw, self.original = directory, url, draw, original
 
@@ -116,7 +121,7 @@ class DetectionAnnotation:
     def write_ai_original_output(self, image_bgr: np.ndarray, request_id: str) -> str:
         out_name = f"{request_id}_ai_original.jpg"
         out_path = self.directory("ai_detection") / out_name
-        image_backend(self.images()).imwrite(str(out_path), image_bgr, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
+        image_backend(self.images(), runtime_provider=self.runtime_provider).imwrite(str(out_path), image_bgr, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
         return self.url(out_path)
 
     def write_ai_annotated_output(self, image_bgr: np.ndarray, request_id: str, detections: list[dict[str, Any]], rule: dict[str, Any]) -> str:
@@ -125,5 +130,5 @@ class DetectionAnnotation:
             return self.original(image_bgr, request_id)
         out_name = f"{request_id}_ai_annotated.jpg"
         out_path = self.directory("ai_detection") / out_name
-        image_backend(self.images()).imwrite(str(out_path), annotated, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
+        image_backend(self.images(), runtime_provider=self.runtime_provider).imwrite(str(out_path), annotated, [int(self.images().IMWRITE_JPEG_QUALITY), 92])
         return self.url(out_path)

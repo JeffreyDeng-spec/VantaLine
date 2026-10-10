@@ -1,5 +1,6 @@
 """Fail-closed storage/settings inspection and benchmark-only routing contracts."""
 from pathlib import Path
+import copy
 import os
 import io
 import sys
@@ -81,29 +82,54 @@ class StorageContracts(unittest.TestCase):
             with self.assertRaises(AssertionError):storage.main()
         inspect.assert_called_once()
 
-    def test_only_four_real_pg_benchmarks_route_to_second_database(self):
-        root=Path(__file__).resolve().parents[1]
-        workflow=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
-        backend=workflow['jobs']['backend-shards']
+    def check_benchmark_routing(self, workflow, manifest=None):
+        backend=workflow['jobs']['backend-performance']
         self.assertEqual(backend['env']['VANTALINE_POSTGRES_DSN'],storage.NORMAL_DSN)
         self.assertEqual(backend['env']['VANTALINE_BENCHMARK_POSTGRES_DSN'],storage.BENCHMARK_DSN)
         ordinary=backend['services']['postgres'];self.assertEqual(ordinary['ports'],['5432:5432'])
         self.assertNotIn('--tmpfs',ordinary['options'])
         selected=[]
+        actual_invocations=[]
+        commands=['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','beta_summaries','summary_reads','projection','run_batch']]
         prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
-        import json
-        manifest=json.loads((root/'scripts/backend_ci_manifest.json').read_text())
+        from backend_ci import load_manifest
+        manifest=load_manifest() if manifest is None else manifest
         for item in manifest['checks']:
             self.assertNotIn('$VANTALINE_BENCHMARK_POSTGRES_DSN',item['run'])
             self.assertNotIn('VANTALINE_POSTGRES_DSN',item['env'])
         for item in manifest['performance']:
             line=item['run']
+            if any(command in line for command in commands):
+                self.assertIn(line,[prefix+command for command in commands])
+                actual_invocations.append(line[len(prefix):])
             if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
                 self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
-        performance=yaml.safe_load((root/'.github/workflows/backend-performance.yml').read_text())['jobs']['performance']
-        self.assertEqual(performance['services'],backend['services'])
-        self.assertEqual(performance['env'],backend['env'])
-        self.assertEqual(selected,['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','summary_reads','projection','run_batch']])
+        self.assertEqual(selected,commands)
+        self.assertEqual(actual_invocations,commands)
+
+
+    def test_only_five_real_pg_benchmarks_route_to_second_database(self):
+        root=Path(__file__).resolve().parents[1]
+        workflow=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
+        self.check_benchmark_routing(workflow)
+
+    def test_beta_missing_wrong_or_duplicate_override_is_rejected(self):
+        root=Path(__file__).resolve().parents[1]
+        original=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
+        prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
+        command='python scripts/benchmark_label_beta_summaries.py'
+        for mode in ('bare','ordinary','wrong-secondary','duplicate','bare-extra'):
+            workflow=copy.deepcopy(original)
+            from backend_ci import load_manifest
+            manifest=copy.deepcopy(load_manifest())
+            step=next(s for s in manifest['performance'] if s['run']==prefix+command)
+            replacement={'bare':command, 'ordinary':prefix.replace('$VANTALINE_BENCHMARK_POSTGRES_DSN','$VANTALINE_POSTGRES_DSN')+command,
+                         'wrong-secondary':prefix.replace('AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN"','AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN"')+command,
+                         'duplicate':prefix+command+'\n'+prefix+command,
+                         'bare-extra':command+'\n'+prefix+command}[mode]
+            step['run']=step['run'].replace(prefix+command,replacement)
+            with self.subTest(mode=mode),self.assertRaises(AssertionError):
+                self.check_benchmark_routing(workflow,manifest)
 
 
 if __name__=='__main__':unittest.main()

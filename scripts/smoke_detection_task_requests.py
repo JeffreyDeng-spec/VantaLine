@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.schemas.detection import AiDetectionTaskRequest
 BASELINE=os.environ.get('VANTALINE_DETECTION_TASK_REQUESTS_BASELINE_SOURCE')
 NAMES=('get_ai_detection_tasks','create_ai_detection_task','update_ai_detection_task','delete_ai_detection_task_record','delete_ai_detection_task')
@@ -86,7 +87,7 @@ class Contracts(unittest.TestCase):
   self.b['mark_pipeline_ai_task_deleted']=self.mark('pipeline_delete');out=self.s.delete_ai_detection_task('one');self.assertEqual(out['deleted_task_id'],'one');self.assertEqual(out['status'],'deleted')
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_constructor_and_actual_assembly(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_task_requests' for t in n.targets));count=0
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_task_requests' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,30)

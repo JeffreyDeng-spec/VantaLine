@@ -11,6 +11,8 @@ import unittest
 from unittest.mock import Mock, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.provider_configuration_test_ports import patch_provider_capability
+from scripts.training_executor_application_test_ports import bind_training_executor, assert_default_training_executor
 
 
 class TrainingExecutorContracts(unittest.TestCase):
@@ -22,10 +24,12 @@ class TrainingExecutorContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_training_executor(server)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_training_executor(self.api,self.stack)
         self.stack.enter_context(patch.dict(os.environ,{},clear=True))
         self.request=self.stack.enter_context(patch.object(requests,'request',side_effect=AssertionError('unexpected network request')))
     def response(self,status,body=None,text='',failure=None):
@@ -137,13 +141,13 @@ class TrainingExecutorContracts(unittest.TestCase):
         self.request.assert_not_called()
         original_get=os.environ.get;events=[]
         def get(key,default=None):events.append(key);return original_get(key,default)
-        with patch.object(os.environ,'get',side_effect=get),patch.object(api,'masked_url_for_status',side_effect=lambda value:events.append('mask') or 'masked'):
+        with patch.object(os.environ,'get',side_effect=get),patch_provider_capability(api, 'masked_url_for_status', side_effect=lambda value: events.append('mask') or 'masked'):
             self.assertEqual(api.training_execution_status()['remote_endpoint'],'masked')
         self.assertEqual(events[:3],[api.REMOTE_TRAINING_ENDPOINT_ENV,api.REMOTE_TRAINING_EXECUTOR_ENV,'mask'])
         os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://['
         with self.assertRaises(ValueError):api.training_execution_status()
         os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://x'
-        with patch.object(api,'masked_url_for_status',side_effect=RuntimeError('mask')):
+        with patch_provider_capability(api, 'masked_url_for_status', side_effect=RuntimeError('mask')):
             with self.assertRaisesRegex(RuntimeError,'mask'):api.training_execution_status()
 
     def test_runpod_request_one_success_identity_headers_and_timeout(self):
@@ -501,7 +505,7 @@ class TrainingExecutorContracts(unittest.TestCase):
                 failure=OSError('first-only')
                 if stage=='mask':
                     self.configured();os.environ[api.REMOTE_TRAINING_ENDPOINT_ENV]='https://fixture.invalid'
-                    probe=stack.enter_context(patch.object(api,'masked_url_for_status',side_effect=chain([failure],repeat('valid'))))
+                    probe=stack.enter_context(patch_provider_capability(api, 'masked_url_for_status', side_effect=chain([failure], repeat('valid'))))
                     invoke=api.training_execution_status
                 else:
                     probe=stack.enter_context(patch.object(api._training_executor_settings,'environment',side_effect=chain([failure],repeat({}))))

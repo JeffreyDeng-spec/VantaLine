@@ -17145,9 +17145,7 @@
     }
   ],
   "shutdown": [
-    "stop_real_photo_training_dispatcher",
-    "set",
-    "stop"
+    "shutdown_application"
   ],
   "startup": [
     "verify_label_list_database",

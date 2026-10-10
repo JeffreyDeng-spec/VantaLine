@@ -1,7 +1,11 @@
 """Automatic optimization label batch processing and worker startup."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+from collections.abc import Callable
 import threading
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
+from ..model_profiles.dependencies import ResolverProvider
+from ..model_profiles.snapshots import bind_current
 import time
 from .auto_optimization_label_processing_ports import ProcessingState, ProcessingArtifacts, ProcessingExecution
 
@@ -11,7 +15,13 @@ class AutoOptimizationLabelProcessing:
     artifacts: ProcessingArtifacts
     execution: ProcessingExecution
 
+    runtime: TrainingThreadLifecycle = field(default_factory=TrainingThreadLifecycle, compare=False, repr=False, kw_only=True)
+    model_resolver: ResolverProvider | None = field(default=None, compare=False, repr=False, kw_only=True)
+
     def start_auto_optimize_label_worker(self, task_id: str) -> None:
+        return self.runtime.submit(lambda launch: self._start_label(task_id, launch))
+
+    def _start_label(self, task_id: str, launch: ThreadLaunch) -> None:
         clean_task_id = self.state.sanitize_ai_detection_task_id()(task_id)
         if not clean_task_id:
             return
@@ -19,9 +29,8 @@ class AutoOptimizationLabelProcessing:
             existing = self.state._auto_optimize_label_threads().get(clean_task_id)
             if existing and existing.is_alive():
                 return
-            thread = threading.Thread(target=self.state.auto_optimize_label_worker(), args=(clean_task_id,), name=f"auto-opt-label-{clean_task_id}", daemon=True)
-            self.state._auto_optimize_label_threads()[clean_task_id] = thread
-            thread.start()
+            launch(lambda wrap: threading.Thread(target=wrap(self.state.auto_optimize_label_worker()), args=(clean_task_id,), name=f"auto-opt-label-{clean_task_id}", daemon=True),
+                   lambda thread: self.state._auto_optimize_label_threads().__setitem__(clean_task_id, thread))
 
 
     def auto_optimize_process_label_sample(self,
@@ -95,7 +104,7 @@ class AutoOptimizationLabelProcessing:
                 results: list[dict[str, Any]] = []
                 with self.execution.ThreadPoolExecutor()(max_workers=len(pending_samples), thread_name_prefix=f"auto-opt-mask-{task_id}") as executor:
                     futures = [
-                        executor.submit(self.execution.auto_optimize_process_label_sample(), task_id, pending, dict(settings), model)
+                        executor.submit(self._scoped_sample(self.execution.auto_optimize_process_label_sample()), task_id, pending, dict(settings), model)
                         for pending in pending_samples
                     ]
                     for future in self.execution.as_completed()(futures):
@@ -136,3 +145,16 @@ class AutoOptimizationLabelProcessing:
                 state = self.state.load_auto_optimize_state()(task_id)
                 state["last_label_error"] = self.artifacts.bounded_text()(str(exc), 240)
                 self.state.save_auto_optimize_state()(state)
+
+    def _scoped_sample(self, selected: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+        if self.model_resolver is None:
+            raise RuntimeError("Model profile resolver is not configured for mask batches")
+        bound = bind_current(self.model_resolver, selected)
+        # Only the model binding crosses threads; connections stay thread-local.
+        def run(*args, **kwargs):
+            with self.runtime.scope():
+                return bound(*args, **kwargs)
+        return run
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

@@ -14,6 +14,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 
 
 def capture_image_provider_window(api, Fixture, provider_name, site, mode='ordinary'):
@@ -28,9 +30,9 @@ def capture_image_provider_window(api, Fixture, provider_name, site, mode='ordin
                 def callback(label):
                     def invoke(*a,**kw):events.append(label);return action(*a,**kw)
                     return invoke
-                callbacks=[callback(label) for label in 'ABC'];setattr(owner,name,callbacks[0])
-                def prior():events.append('prior');setattr(owner,name,callbacks[1] if mode=='prior' else None if mode=='missing' else callbacks[0])
-                def argument():events.append('argument');setattr(owner,name,callbacks[2])
+                callbacks=[callback(label) for label in 'ABC'];set_provider_capability(owner,name,callbacks[0])
+                def prior():events.append('prior');set_provider_capability(owner,name,callbacks[1] if mode=='prior' else None if mode=='missing' else callbacks[0])
+                def argument():events.append('argument');set_provider_capability(owner,name,callbacks[2])
                 return prior,argument
             if site=='open':
                 original=f.open;prior,argument=install(api,'ai_urlopen',lambda *a,**kw:original(*a,**kw));ticks=[]
@@ -156,7 +158,33 @@ class ImageProviderContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from dataclasses import replace
+        from local_inspection_service.model_providers.image_ports import ImageTransportIO, ImageTransportErrors
+        from local_inspection_service.model_providers.transport_composition import ProviderTransports
+        # Exercise the native transport composition with explicit, replaceable
+        # capabilities. Reassigning the compatibility entry cannot redirect it.
+        api = SimpleNamespace(requests=server.requests, time=server.time,
+            bounded_text=server.bounded_text, decode_b64_image=server.decode_b64_image,
+            masked_url_for_status=server.masked_url_for_status, ai_urlopen=server.ai_urlopen,
+            AiProviderError=server.AiProviderError, AiProviderAuthError=server.AiProviderAuthError,
+            AiProviderOverloaded=server.AiProviderOverloaded, AiProviderConfigError=server.AiProviderConfigError,
+            AiProviderTimeout=server.AiProviderTimeout, model_profile_service=None)
+        image_io = ImageTransportIO(lambda: api.ai_urlopen, lambda: api.bounded_text,
+            lambda: api.decode_b64_image, lambda: api.masked_url_for_status, lambda: api.requests.get)
+        image_errors = ImageTransportErrors(lambda: api.AiProviderConfigError,
+            lambda: api.AiProviderTimeout, lambda: api.AiProviderError,
+            lambda: api.AiProviderAuthError, lambda: api.AiProviderOverloaded,
+            lambda: api.requests.RequestException)
+        inputs = replace(server._provider_transports.inputs,
+            image_io=lambda: image_io, image_errors=lambda: image_errors,
+            agnes_image_size=lambda: os.environ.get('VANTALINE_AGNES_IMAGE_SIZE', '1024x1024'),
+            qwen_image_size=lambda: os.environ.get('VANTALINE_QWEN_IMAGE_SIZE', '1024*1024'))
+        api.resolve_model_profiles = lambda: api.model_profile_service
+        api._provider_transports = ProviderTransports(inputs,
+            api.resolve_model_profiles, cache_ttl_seconds=server.AI_PROFILE_CACHE_TTL_SECONDS)
+        api.AgnesImageProvider = api._provider_transports.agnes
+        api.QwenImageProvider = api._provider_transports.qwen
+        cls.api=api
 
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
@@ -166,8 +194,8 @@ class ImageProviderContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
         self.settings=dict(configured=True,model='synthetic-image',base_url='https://fixture.invalid/generate',api_key='synthetic-key',timeout_seconds='12.5')
-        self.record=Mock();self.stack.enter_context(patch.object(self.api,'model_profile_service',SimpleNamespace(record_call=self.record)))
-        self.open=self.stack.enter_context(patch.object(self.api,'ai_urlopen'))
+        self.record=Mock();self.stack.enter_context(patch_profile_service(self.api, SimpleNamespace(record_call=self.record)))
+        self.open=self.stack.enter_context(patch_provider_capability(self.api, 'ai_urlopen'))
         self.body={'data':[{'b64_json':'eA=='}]}
         self.response=Mock();self.response.__enter__=Mock(return_value=self.response);self.response.__exit__=Mock(return_value=False)
         self.response.read=Mock(side_effect=lambda:json.dumps(self.body).encode());self.open.return_value=self.response
@@ -293,7 +321,7 @@ class ImageProviderContracts(unittest.TestCase):
 
     def test_legacy_environment_sizes_and_generation_metadata(self):
         for name,key,value in [('Agnes','VANTALINE_AGNES_IMAGE_SIZE','1536x1536'),('Qwen','VANTALINE_QWEN_IMAGE_SIZE','1536*1536')]:
-            with self.subTest(name=name),patch.dict(os.environ,{key:value}),patch.object(self.api,'masked_url_for_status',return_value='masked') as mask:
+            with self.subTest(name=name),patch.dict(os.environ,{key:value}),patch_provider_capability(self.api, 'masked_url_for_status', return_value='masked') as mask:
                 p=self.provider(name);p.settings.update(proxy_url_raw='synthetic-proxy',proxy_source_name='synthetic',proxy_auto_local=True)
                 result=p.generate_image('p',[],model='')
                 payload=json.loads(self.open.call_args.args[0].data)
@@ -328,7 +356,7 @@ class ImageProviderContracts(unittest.TestCase):
 
     def test_missing_bound_resolver_prevents_all_io(self):
         for name in self.names:
-            with self.subTest(name=name),patch.object(self.api,'model_profile_service',None),self.assertRaises(RuntimeError) as caught:self.provider(name,True).generate_image('p',[],model='m')
+            with self.subTest(name=name),patch_profile_service(self.api, None),self.assertRaises(RuntimeError) as caught:self.provider(name,True).generate_image('p',[],model='m')
             self.assertEqual(str(caught.exception),'Model profile resolver is not configured')
         self.open.assert_not_called();self.download.assert_not_called();self.record.assert_not_called()
 
@@ -460,7 +488,7 @@ class ImageProviderContracts(unittest.TestCase):
                 p = self.provider(name, True); first = Mock(); second = Mock()
                 with patch.object(self.api, 'resolve_model_profiles', side_effect=AssertionError('must retain composition resolver')) as replacement:
                     for record in (first, second):
-                        with patch.object(self.api, 'model_profile_service', SimpleNamespace(record_call=record)):
+                        with patch_profile_service(self.api, SimpleNamespace(record_call=record)):
                             self.assertEqual(p.generate_image('p', [], model='m')['bytes'], b'image')
                     replacement.assert_not_called()
                 first.assert_called_once(); second.assert_called_once()

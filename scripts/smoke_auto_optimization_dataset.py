@@ -18,6 +18,7 @@ import uuid
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_DATASET_BASELINE_SOURCE')
 NAMES=('auto_optimize_bbox_training_entries','build_auto_optimize_dataset')
@@ -136,7 +137,7 @@ class DatasetContract(unittest.TestCase):
             for f in fields(group):assert_capability_owner(self, group, f.name, server)
         for name,args in zip(NAMES,(({},),('t',{},[]))):
             mock=Mock(return_value=object())
-            with patch.object(server,'_auto_optimization_dataset',SimpleNamespace(**{name:mock})):self.assertIs(getattr(server,name)(*args),mock.return_value)
+            with auto_method(self,server._auto_optimization_dataset,name,mock):self.assertIs(getattr(server,name)(*args),mock.return_value)
             mock.assert_called_once_with(*args)
         subprocess.run([sys.executable,"-c","import sys; import local_inspection_service.training.auto_optimization_dataset; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)
 

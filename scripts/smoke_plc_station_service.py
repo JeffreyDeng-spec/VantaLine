@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 NAMES = {
     "_plc_web_serial_token_hash", "plc_web_serial_station_from_request",
     "require_plc_web_serial_station", "plc_web_serial_current_lease",
@@ -33,7 +34,11 @@ class HttpError(Exception):
 
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
-    tree = ast.parse(source.read_text(encoding="utf-8-sig"))
+    raw = read_checked_application_source(source, encoding='utf-8-sig')
+    if not BASELINE:
+        from application_integration_source_contract import restore_plc_domain_root
+        raw = restore_plc_domain_root(raw)
+    tree = ast.parse(raw)
     nodes = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
@@ -206,6 +211,8 @@ class StationContracts(unittest.TestCase):
         count = 0
         for group in (service.storage, service.identity, service.policy, service.projection):
             for name in group.__dataclass_fields__:
+                if name == "clock":
+                    continue
                 a, b = object(), object()
                 setattr(self.api, name, a)
                 self.assertIs(getattr(group, name)(), a)
@@ -215,6 +222,12 @@ class StationContracts(unittest.TestCase):
                 self.assertIs(getattr(group, name)(), a)
                 count += 1
         self.assertEqual(count, 32)
+        a, b = object(), object()
+        for value in (a, b, a):
+            self.api.time = types.SimpleNamespace(time=value)
+            self.assertIs(service.policy.clock(), value)
+        self.assertEqual(sum(len(group.__dataclass_fields__) for group in
+                             (service.storage, service.identity, service.policy, service.projection)), 33)
         api = load_target()
         calls = []
         class Fake:

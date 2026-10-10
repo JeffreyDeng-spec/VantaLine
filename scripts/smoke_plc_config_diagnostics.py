@@ -15,6 +15,45 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 NAMES = ("plc_config_response", "get_plc_config", "update_plc_config")
 
 
+def build_diagnostics_fixture():
+    """Connect current native diagnostics to only this fixture's capabilities."""
+    from canonical_application_source_contract import verify_actual_sources
+    from local_inspection_service.plc.config_diagnostics import ConfigDiagnostics
+    from local_inspection_service.plc.config_diagnostics_ports import (
+        ConfigAccess, ConfigDisplay, ConfigErrors, ConfigRuntime, ConfigSources)
+    from local_inspection_service.plc.dispatch_runtime_state import PlcDispatchRuntimeState
+    from local_inspection_service.plc.dispatch_runtime_state_ports import (
+        DispatchRuntimePolicy, DispatchRuntimeRecords, DispatchRuntimeState)
+
+    verify_actual_sources()
+    api = types.SimpleNamespace()
+    state = PlcDispatchRuntimeState(
+        DispatchRuntimeState(lambda: {}, lambda: 10, lambda: api._config_io_lock,
+                             lambda: api._plc_active_attempts,
+                             lambda: state._plc_runtime_entry,
+                             lambda: state._hydrate_plc_runtime_entry),
+        DispatchRuntimeRecords(lambda: api.load_config,
+                               lambda: api.plc_dispatch_audit_records,
+                               lambda: None),
+        DispatchRuntimePolicy(lambda: None, lambda: None))
+    service = ConfigDiagnostics(
+        ConfigSources(lambda: api.load_config, lambda: api.raw_plc_namespace,
+                      lambda: api.normalize_plc_config, lambda: api.DEFAULT_PLC_CONFIG,
+                      lambda: api.plc_activation_errors, lambda: api.plc_dispatch_audit_records),
+        ConfigDisplay(lambda: api.logical_device_address,
+                      lambda: api.plc_device_profile_verified, lambda: api.plc_read_profile_verified),
+        ConfigRuntime(lambda: state._plc_active_attempts_snapshot,
+                      lambda: api.PLC_DISPATCH_AUDIT_LIMIT, lambda: api.PLC_PROTOCOL_ID,
+                      lambda: api.PLC_CONTROL_GENERATION_KEY, lambda: api.PLC_QUEUE_WAIT_SECONDS,
+                      lambda: api.PLC_WORKER_TOTAL_TIMEOUT_SECONDS),
+        ConfigAccess(lambda: api.require_permission),
+        ConfigErrors(lambda: api.PlcConfigError, lambda: api.HTTPException))
+    api.plc_config_response = service.response
+    api.get_plc_config = lambda: api.plc_config_response()
+    api.update_plc_config = service.update
+    return api
+
+
 class ConfigError(Exception):
     pass
 
@@ -49,8 +88,7 @@ class ConfigDiagnosticsContract(unittest.TestCase):
             cls.api.__dict__.update(Any=Any, PlcConfigRequest=object)
             exec(compile(ast.Module(body=functions, type_ignores=[]), baseline, "exec"), cls.api.__dict__)
         else:
-            from local_inspection_service import server
-            cls.api = server
+            cls.api = build_diagnostics_fixture()
 
     @classmethod
     def tearDownClass(cls):
@@ -104,6 +142,22 @@ class ConfigDiagnosticsContract(unittest.TestCase):
 
     def replace(self, name, value):
         self.stack.enter_context(patch.object(self.api, name, value, create=True))
+
+    def test_actual_http_endpoints_select_native_receiver(self):
+        if os.environ.get("VANTALINE_PLC_CONFIG_DIAG_BASELINE_SOURCE"):
+            self.skipTest("candidate composition only")
+        from local_inspection_service.runtime.default_application import default_application as application
+        from local_inspection_service.plc.config_diagnostics import ConfigDiagnostics
+        owner = application.plc._plc_config_diagnostics
+        for method, verb, args in (("response", "GET", ()), ("update", "POST", (object(),))):
+            endpoint = next(route.endpoint for route in application.app.routes
+                            if getattr(route, "path", None) == "/api/plc/config"
+                            and verb in getattr(route, "methods", set()))
+            marker = object()
+            with patch.object(ConfigDiagnostics, method, autospec=True, return_value=marker) as receiver:
+                self.assertIs(endpoint(*args), marker)
+                receiver.assert_called_once_with(owner, *(args if args else (None,)))
+                self.assertIs(receiver.call_args.args[0], owner)
 
     def test_get_and_supplied_config_preserve_projection(self):
         result = self.api.get_plc_config()

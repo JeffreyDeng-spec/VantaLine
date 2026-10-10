@@ -1,13 +1,15 @@
 """Sprite dimension metadata without application imports."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import ExistingAccessoryFiles
 from typing import Any
 import numpy as np
 from .sprite_metadata_ports import SpriteRenderOperations, SpriteImageReads
 
 
 class SpriteRenderMetadata:
-    def __init__(self, operations: SpriteRenderOperations, images: SpriteImageReads) -> None:
+    def __init__(self, operations: SpriteRenderOperations, images: SpriteImageReads, *, files: ExistingAccessoryFiles) -> None:
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self._operations = operations
         self._images = images
 
@@ -34,7 +36,7 @@ class SpriteRenderMetadata:
             except (TypeError, ValueError):
                 pass
         path = self._images.path()(str(asset.get("path") or ""))
-        if _business_files.exists(path):
+        if self.files.exists(path):
             image = self._images.decode()(str(path), self._images.unchanged_mode())
             if image is not None and image.ndim == 3 and image.shape[2] >= 4:
                 bbox = self._operations.bounds()(image[:, :, 3])

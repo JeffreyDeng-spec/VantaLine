@@ -10,6 +10,10 @@ VantaLine is a production visual-inspection platform for defining inspection tas
 - `main` is the only production source. CI builds an immutable release and deploys it automatically after merge.
 - `/api/version` is the runtime source for release and protocol consistency.
 
+## Backend structure
+
+The backend is a modular monolith assembled by `local_inspection_service/runtime/application.py`. Business services use narrow typed dependencies; `server:app` remains the stable entry. The label worker starts independently from the same immutable release. See the [module boundaries and lifecycle](docs/architecture.md#canonical-web-application-construction) and [verification matrix](docs/testing.md#canonical-application-acceptance).
+
 ## Start here
 
 - **Human maintainers:** [Documentation index](docs/README.md)

@@ -14,13 +14,14 @@ import cv2
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_ACCESSORY_REFERENCE_MEDIA_BASELINE_SOURCE')
 NAMES=('frame_detail_score','frame_histogram','extract_video_reference_frames','write_thumbnail')
 
 
 def create(bindings):
     source=Path(BASELINE) if BASELINE else ROOT/'local_inspection_service/server.py'
-    tree=ast.parse(source.read_text(encoding='utf-8-sig'));nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in NAMES];assert len(nodes)==4
+    tree=ast.parse(read_checked_application_source(source, encoding='utf-8-sig'));nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in NAMES];assert len(nodes)==4
     constant=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='MAX_VIDEO_REFERENCE_FRAMES' for t in n.targets))
     bindings.update(Any=Any,Path=Path,np=np,cv2=cv2)
     if not BASELINE:
@@ -105,7 +106,7 @@ class ReferenceMediaContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_accessory_reference_media' for t in n.targets));getters=binding.args[0].keywords;self.assertEqual(len(getters),4)
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_accessory_reference_media' for t in n.targets));getters=binding.args[0].keywords;self.assertEqual(len(getters),4)
         for kw in getters:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id)
         for name in NAMES:
             node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==name);self.assertEqual(len(node.body),1);self.assertIsInstance(node.body[0],ast.Return);self.assertEqual(node.body[0].value.func.attr,name)

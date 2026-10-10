@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 Codex comparison task-list and event-history repository reads now use short PostgreSQL transactions without the global comparison advisory lock. The SELECT, owner filter, ordering, limits and response projection are unchanged. Detail `get`, submission, claim, cancellation, report writes and worker prechecks still use the original serialized transaction; the HTTP events endpoint first performs a locked ownership/detail lookup, so this change does not make that whole request lock-free. No worker mode, model policy or paid-call retry changes.
 
 # Codex label inspection beta
@@ -296,3 +298,16 @@ In opt-in COS mode, comparison execution uses the shared exclusive work reservat
 ## Separate training reviewer launcher
 
 The bubblewrap launcher now accepts explicit alternative tool/skill roots for the independent training-review service. Omitted parameters retain the existing label inspection CLI and skill mounts. No training-review operation is added to the label queue or broker, and the training child receives no label mutation tools.
+The Web API receives a required artifact-runtime provider and passes it into each request MediaStore. Existing content hashes, owner checks, CAS publication and evidence permissions remain unchanged. The worker and shared MediaStore default are not migrated by this HTTP-only change.
+
+This offline Codex HTTP replay follows transport candidate 0beaefc. Owned source/test blobs and ordered entry match reviewed 42fcded. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v233 selects 528 sources. Authorization, media exception mapping and partial publication ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, isolated PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+MediaStore requires an explicit provider, including CLI construction. Worker work-budget selection uses media.runtime_provider instead of independently resolving process-default storage; budget error settlement, sandboxing and terminal-state rules are unchanged.
+
+This offline comparison media replay follows current-history label candidate f447c5d. Owned source/test blobs match reviewed 552cea1; the entry remains unchanged. Current native history and its explicit-provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v235 selects 528 sources. Worker budget and reservation settlement ordering, ambiguous paid outcomes and CLI selection remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Codex API register requires explicit environment and artifact-runtime inputs. Each registration reads only its supplied live environment for allowed owners, configured-model checks and capabilities; permission/repository/ownership/media ordering, reports and all routes stay unchanged. The Web passes its existing process mapping; the worker passes its own process mapping for claim admission. No paid execution, retry, task recovery, model selection or 600-second policy changes.
+
+The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.
+
+Canonical text graph wiring preserves Codex task/event projections, credentials, provider selection, queue/state and existing native lifetimes. HTTP registration receives the app-owned graph at the original position. The standalone CLI/worker topology is unchanged, and business callbacks do not import default Web compatibility. This assembly adds no model call, retry or prompt change; retain comparison contracts and complete-package rollback.

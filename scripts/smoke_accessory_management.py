@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from accessory_application_test_ports import accessory_callback
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -24,6 +25,8 @@ class ManagementContracts(unittest.TestCase):
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
         cls.server = server
+        from scripts.accessory_default_dependency_contract import assert_default_accessory_dependencies
+        assert_default_accessory_dependencies(server)
         cls.admin = TestClient(server.app, base_url='https://testserver')
         assert cls.admin.post('/api/auth/bootstrap', json={'username':'fixture-admin','password':'fixture-password-only'}).status_code == 200
         cls.clients, cls.users = {}, {}
@@ -108,7 +111,7 @@ class ManagementContracts(unittest.TestCase):
             'remove_pipeline_pending_candidate_id': lambda identifier: self.events.append(('pending_remove', identifier, self.depth)),
             'pipeline_accessories_payload': lambda config, user=None: {'fixture_owner':user['id'] if user else None},
         }
-        for name, value in callbacks.items(): self.stack.enter_context(patch.object(self.server, name, value))
+        for name, value in callbacks.items(): self.stack.enter_context(accessory_callback(self.server, name, value))
 
     def seed(self, identifier='cand_fixture', kind='object', **extra):
         candidate = {'id':identifier, 'class_id':-1, 'name':'Fixture part', 'material_type':kind,
@@ -128,7 +131,7 @@ class ManagementContracts(unittest.TestCase):
             response = client.post('/api/accessories', data=data)
             self.assertEqual((response.status_code, response.json()), (400, {'detail':detail}))
         self.assertEqual(self.events, [])
-        with patch.object(self.server, 'candidate_has_active_image_jobs', return_value=True):
+        with accessory_callback(self.server, 'candidate_has_active_image_jobs', return_value=True):
             response = client.post('/api/accessories', data={'name':'Object', 'material_alpha_policy':'opaque', 'pipeline_context':' YES '})
         self.assertEqual(response.status_code, 200, response.text)
         item = self.state['accessories'][0]
@@ -153,7 +156,7 @@ class ManagementContracts(unittest.TestCase):
         def ensure_jobs(item):
             item['codex_image_job'] = {'status':'completed'}
             return True
-        with patch.object(self.server, 'ensure_pose_collection_image_jobs', side_effect=ensure_jobs):
+        with accessory_callback(self.server, 'ensure_pose_collection_image_jobs', side_effect=ensure_jobs):
             response = self.clients['alice'].post('/api/accessories/preview', data={'name':'Preview','material_alpha_policy':'opaque','pipeline_context':'pipeline'})
         self.assertEqual(response.status_code, 200, response.text)
         candidate = response.json()['candidate']
@@ -167,7 +170,7 @@ class ManagementContracts(unittest.TestCase):
         def fail_profile(*args, **kwargs):
             self.assertEqual(kwargs, {'allow_provider':True})
             raise RuntimeError('synthetic profile failure')
-        with patch.object(self.server, 'ensure_accessory_ai_profile', side_effect=fail_profile):
+        with accessory_callback(self.server, 'ensure_accessory_ai_profile', side_effect=fail_profile):
             response = self.clients['alice'].post('/api/accessories',
                 data={'name':'Partial object', 'material_alpha_policy':'opaque'},
                 files={'files':('fixture.txt', b'synthetic media')})
@@ -249,9 +252,9 @@ class ManagementContracts(unittest.TestCase):
         def ensure_pose(item):
             self.events.append(('pose',self.depth))
             return False
-        with patch.object(self.server, 'ensure_candidate_image_job_task_ids', side_effect=ensure_ids), \
-             patch.object(self.server, 'ensure_pose_collection_image_jobs', side_effect=ensure_pose), \
-             patch.object(self.server, 'refresh_codex_image_job', side_effect=lambda job:{**job,'status':'running','completed_at':22}):
+        with accessory_callback(self.server, 'ensure_candidate_image_job_task_ids', side_effect=ensure_ids), \
+             accessory_callback(self.server, 'ensure_pose_collection_image_jobs', side_effect=ensure_pose), \
+             accessory_callback(self.server, 'refresh_codex_image_job', side_effect=lambda job:{**job,'status':'running','completed_at':22}):
             response = self.confirm()
         self.assertEqual(response.status_code, 409)
         self.assertEqual([event[0] for event in self.events],
@@ -260,7 +263,7 @@ class ManagementContracts(unittest.TestCase):
         self.assertEqual(self.candidates['cand_fixture']['codex_image_jobs'][0]['completed_at'], 22)
         self.seed(codex_image_jobs=[{'status':'queued'}])
         self.events.clear()
-        with patch.object(self.server, 'refresh_codex_image_job', side_effect=lambda job:{**job,'progress':40}):
+        with accessory_callback(self.server, 'refresh_codex_image_job', side_effect=lambda job:{**job,'progress':40}):
             response = self.confirm()
         self.assertEqual(response.status_code, 409)
         self.assertEqual([event[0] for event in self.events], ['enter','load_candidate','store_job','worker','exit'])
@@ -268,7 +271,7 @@ class ManagementContracts(unittest.TestCase):
 
     def test_text_confirmation_failure_restores_candidate_identity(self):
         self.seed(kind='text')
-        with patch.object(self.server, 'canonical_text_assets_complete', return_value=False):
+        with accessory_callback(self.server, 'canonical_text_assets_complete', return_value=False):
             response = self.confirm()
         self.assertEqual(response.status_code, 422, response.text)
         candidate = self.candidates['cand_fixture']
@@ -277,7 +280,7 @@ class ManagementContracts(unittest.TestCase):
         self.assertEqual(self.state['accessories'], [])
         self.assertEqual(self.events[-2:], [('save_candidate',1,'candidate_review'),('exit',1)])
         self.events.clear()
-        with patch.object(self.server, 'accessory_ai_profile_rejected', return_value=True):
+        with accessory_callback(self.server, 'accessory_ai_profile_rejected', return_value=True):
             response = self.confirm()
         self.assertEqual(response.status_code, 422, response.text)
         self.assertEqual(len([event for event in self.events if event[0]=='profile']), 1)
@@ -288,7 +291,7 @@ class ManagementContracts(unittest.TestCase):
         def failure(*args):
             self.events.append(('save_candidate_failed',self.depth))
             raise RuntimeError('synthetic candidate write failure')
-        with patch.object(self.server, 'save_accessory_candidate', side_effect=failure):
+        with accessory_callback(self.server, 'save_accessory_candidate', side_effect=failure):
             response = self.confirm()
         self.assertEqual(response.status_code, 500)
         self.assertEqual(len(self.state['accessories']), 1)
@@ -318,10 +321,10 @@ class ManagementContracts(unittest.TestCase):
         isolated = FastAPI()
         isolated.delete('/api/accessories/{accessory_id}')(self.server.delete_accessory)
         with TestClient(isolated) as client, \
-             patch.object(self.server, 'current_auth_user', return_value=self.users['alice']), \
-             patch.object(self.server, 'runtime_postgres_repository_or_none', return_value=object()), \
-             patch.object(self.server, 'delete_accessory_item', side_effect=delete), \
-             patch.object(self.server, 'save_app_config', side_effect=save_config):
+             accessory_callback(self.server, 'current_auth_user', return_value=self.users['alice']), \
+             accessory_callback(self.server, 'runtime_postgres_repository_or_none', return_value=object()), \
+             accessory_callback(self.server, 'delete_accessory_item', side_effect=delete), \
+             accessory_callback(self.server, 'save_app_config', side_effect=save_config):
             response = client.delete('/api/accessories/acc_remove')
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.state['accessories'], [])

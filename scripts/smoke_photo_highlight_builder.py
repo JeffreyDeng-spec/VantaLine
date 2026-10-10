@@ -8,6 +8,10 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
+import cv2
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class PhotoHighlightBuilderContracts(unittest.TestCase):
     @classmethod
@@ -21,7 +25,8 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             cls.lifetime.enter_context(patch(name,side_effect=AssertionError('External operation forbidden')))
         from local_inspection_service import server
-        cls.api=server
+        from scripts.photo_highlight_builder_test_fixture import photo_highlight_builder_fixture
+        cls.api=photo_highlight_builder_fixture(server,cls.builder_capability_groups)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):
@@ -66,7 +71,7 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         self.laying=self.replace('apply_laying_standard_render_size_hints',side_effect=lambda assets:self.events.append('laying'))
         self.complete=self.replace('clean_sprites_policy_complete',return_value=True)
         self.stack.enter_context(patch.object(self.api.time,'time',return_value=123.9))
-    def replace(self,name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+    def replace(self,name,**kwargs):return self.stack.enter_context(patch_pose_capability(self.api,name,**kwargs))
     def build(self,**kwargs):return self.api.build_clean_sprites_from_photo_highlight_masks(self.task,self.item,self.provider,'model',**kwargs)
     def statuses(self):return [(x['item_type'],x['status']) for c in self.publish.call_args_list for x in c.kwargs['items']]
     def test_text_skips_sources_and_all_work(self):
@@ -253,19 +258,19 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         groups = self.builder_capability_groups
         capabilities=[]
         for name,type_name,bindings in groups:
-            selected={field:(self.api.time.time if source=='time.time' else getattr(self.api,source)) for field,source in bindings.items()}
+            selected={field:(self.api.time.time if source=='time.time' else getattr(*pose_capability_target(self.api,source))) for field,source in bindings.items()}
             if second and name=='runtime':
                 selected.update(identifier=lambda item:'second-uid',root=self.directory/'second-normalized',output=lambda kind,owner:self.directory/'second-output')
             if second and name=='policy':selected['complete']=lambda item,assets:False
             if second and name=='artifacts':selected['write']=lambda path,image,mask,metadata:{'kind':'clean_object_sprite','instance':'second'}
             capabilities.append(getattr(ports,type_name)(**{field:(lambda value=value:value) for field,value in selected.items()}))
-        return PhotoHighlightSpriteBuilder(*capabilities)
+        return PhotoHighlightSpriteBuilder(*capabilities, files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
     def test_constructor_reads_no_capability(self):
         from local_inspection_service.agent import photo_highlight_builder_ports as ports
         from local_inspection_service.agent.photo_highlight_builder import PhotoHighlightSpriteBuilder
         groups=self.builder_capability_groups
         forbidden=Mock(side_effect=AssertionError('eager capability read'))
-        instance=PhotoHighlightSpriteBuilder(*[getattr(ports,type_name)(**{field:forbidden for field in bindings}) for name,type_name,bindings in groups])
+        instance=PhotoHighlightSpriteBuilder(*[getattr(ports,type_name)(**{field:forbidden for field in bindings}) for name,type_name,bindings in groups], files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
         self.assertIsInstance(instance,PhotoHighlightSpriteBuilder);forbidden.assert_not_called()
     def test_independent_builders_first_second_first_success_with_root_poisoned(self):
         first=self.independent_builder();second=self.independent_builder(second=True)

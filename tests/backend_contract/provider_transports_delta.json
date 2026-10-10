@@ -1,0 +1,64 @@
+{
+  "parent_sha": "041a7a3908b3d0e98dabe83dce675893890ccab3",
+  "parent_ast_sha256": "7d164adacb63906fd954a4ca825fd5b85a6f4e6fcae36fcfe480f5596d353aed",
+  "integrated_ast_sha256": "25d8488929cfb2897f4dc9622b1fade19e54e881f43c2d2c54177b9e57b9ab12",
+  "actual_owner_ast_sha256": {
+    "local_inspection_service/model_providers/transport_composition.py": "be7e35400340bf3359a94b80bf34031a8d3492c1870f5a543c914aa30c2a0751"
+  },
+  "unchanged_business_sha256": {
+    "local_inspection_service/model_providers/openai_transport.py": "10f10ded9ea3df565032dfadb5f247a46647a7110f6822531cd744aab186a788",
+    "local_inspection_service/model_providers/gemini_transport.py": "788d18aa021fb3cedeaa7834a482cc29c22fe593a0fa8a1e2cf351e4059696d7",
+    "local_inspection_service/model_providers/agnes_transport.py": "924c091d82e63455f822de3aef92ec49f34f8727e9bff6089f6b64dec662a459",
+    "local_inspection_service/model_providers/qwen_image_transport.py": "3ad884847b022456a46765306366401a82a2a7e8633e93c3cb93de2baeec9409",
+    "local_inspection_service/model_providers/openai_ports.py": "31c8a280f80019b6bdd6d49dd156f71edd54c90c501d991c5095afbea439676e",
+    "local_inspection_service/model_providers/gemini_ports.py": "43105d41dda2f4e38d48cdaf2f4b25144c169ffb845d4d9150fc92af81847c34",
+    "local_inspection_service/model_providers/image_ports.py": "15abe61d19a18a7f8be1660fd6d504b25032c7eda1b15f87de628b6490ad774b",
+    "local_inspection_service/model_providers/selection.py": "92ca1aa438f15f6904443f60def796f246049c0676e943def176f3bbfdae7b8e",
+    "local_inspection_service/model_profiles/audit.py": "9696ea040e6bc339ea6cec3767737e6488209d209d561d6c37a67fbe57917f83",
+    "local_inspection_service/model_profiles/dependencies.py": "11f8399ed26d8bd57fab9c8f3fd0fd4fbaeba04ea9ace384111b85ca707396e3"
+  },
+  "regions": [
+    {
+      "start": 1192,
+      "end": 1195,
+      "expected": [
+        "from .model_providers.transport_composition import ProviderTransports, TransportInputs",
+        "_provider_transports = ProviderTransports(TransportInputs(openai_io=lambda: _openai_transport_io, openai_errors=lambda: _openai_transport_errors, gemini_io=lambda: _gemini_transport_io, gemini_errors=lambda: _gemini_transport_errors, image_io=lambda: _image_transport_io, image_errors=lambda: _image_transport_errors, agnes_image_size=lambda: os.environ.get('VANTALINE_AGNES_IMAGE_SIZE', '1024x1024'), qwen_image_size=lambda: os.environ.get('VANTALINE_QWEN_IMAGE_SIZE', '1024*1024'), image_candidates=lambda: cursor_image2_response_candidates), resolve_model_profiles, cache_ttl_seconds=AI_PROFILE_CACHE_TTL_SECONDS)",
+        "OpenAICompatibleAiProvider = _provider_transports.openai"
+      ],
+      "original": [
+        "class OpenAICompatibleAiProvider(_OpenAICompatibleAiProvider):\n\n    def __init__(self, settings: dict[str, Any]):\n        super().__init__(settings, _openai_transport_io, _openai_transport_errors, _openai_profile_resolver)"
+      ]
+    },
+    {
+      "start": 1201,
+      "end": 1202,
+      "expected": [
+        "GeminiAiProvider = _provider_transports.gemini"
+      ],
+      "original": [
+        "class GeminiAiProvider(_GeminiAiProvider):\n\n    def __init__(self, settings: dict[str, Any]):\n        super().__init__(settings, _gemini_transport_io, _gemini_transport_errors, _gemini_profile_resolver)\n\n    def create_cached_content(self, system_prompt: str, user_content: list[dict[str, Any]], *, display_name: str, ttl_seconds: int=AI_PROFILE_CACHE_TTL_SECONDS) -> dict[str, Any]:\n        return super().create_cached_content(system_prompt, user_content, display_name=display_name, ttl_seconds=ttl_seconds)"
+      ]
+    },
+    {
+      "start": 1208,
+      "end": 1209,
+      "expected": [
+        "AgnesImageProvider = _provider_transports.agnes"
+      ],
+      "original": [
+        "class AgnesImageProvider(_AgnesImageProvider):\n\n    def __init__(self, settings: dict[str, Any]):\n        super().__init__(settings, _image_transport_io, _image_transport_errors, _agnes_profile_resolver, lambda: os.environ.get('VANTALINE_AGNES_IMAGE_SIZE', '1024x1024'), lambda: cursor_image2_response_candidates)"
+      ]
+    },
+    {
+      "start": 1210,
+      "end": 1211,
+      "expected": [
+        "QwenImageProvider = _provider_transports.qwen"
+      ],
+      "original": [
+        "class QwenImageProvider(_QwenImageProvider):\n\n    def __init__(self, settings: dict[str, Any]):\n        super().__init__(settings, _image_transport_io, _image_transport_errors, _qwen_image_profile_resolver, lambda: os.environ.get('VANTALINE_QWEN_IMAGE_SIZE', '1024*1024'))"
+      ]
+    }
+  ]
+}

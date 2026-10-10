@@ -15,6 +15,8 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.training_resource_mutation_test_ports import bind_training_resource_mutations, assert_default_training_resource_mutations, bind_resource_marker_database
 PG_CHECK = '--postgres' in sys.argv
 if PG_CHECK: sys.argv.remove('--postgres')
 
@@ -47,12 +49,14 @@ class ResourceMutationContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_resource_mutations(server)
 
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_resource_mutations(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-mutations-'))).resolve()
         self.user = {'id': 'alice'}
         self.events = []
@@ -486,7 +490,7 @@ class ResourceMutationContracts(unittest.TestCase):
                 ResourceWriteCatalog(find, specs, lambda: resolve, payload),
                 ResourceRetirement(lambda identifier, user, **options: mutations.delete_training_dataset_resource(identifier, user, **options),
                     lambda identifier, user, **options: mutations.delete_training_model_resource(identifier, user, **options),
-                    training.mark_training_task_dataset_deleted, linked.mark_pipeline_dataset_deleted, linked.mark_pipeline_model_deleted))
+                    training.mark_training_task_dataset_deleted, linked.mark_pipeline_dataset_deleted, linked.mark_pipeline_model_deleted), files=BusinessFiles())
             app = FastAPI(); routes = register_writes(app, mutations)
             for name in routes.__dataclass_fields__:
                 self.assertEqual([r.endpoint for r in app.routes if r.name == name], [getattr(routes, name)])
@@ -537,6 +541,7 @@ class ResourceMutationContracts(unittest.TestCase):
             control.execute(postgres_ddl(schema))
             try:
                 with psycopg.connect(dsn) as connection, ExitStack() as stack:
+                    bind_resource_marker_database(api,stack)
                     repo = PostgresRuntimeRepository(connection, 'test', schema)
                     writes = []
                     def upsert(table, row, **kwargs):

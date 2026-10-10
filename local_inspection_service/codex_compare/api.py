@@ -1,8 +1,9 @@
 """Owner-scoped website API. Agent writes are exposed only by the worker's task socket."""
 from __future__ import annotations
 import json
-import os
 import re
+from collections.abc import Callable, Mapping
+from ..storage.artifacts.runtime import ArtifactRuntime
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from .dependencies import (ComparisonAccess, StandardLibrary, ComparisonMedia, DocumentImports, RepositoryFactory)
 from fastapi.responses import Response
@@ -14,12 +15,12 @@ from .contracts import MAX_BYTES, digest, box
 from .media import MediaStore
 
 
-def enabled_owners():
-    return {x.strip() for x in os.environ.get('VANTALINE_CODEX_COMPARE_ACCOUNTS', '').split(',') if x.strip()}
+def enabled_owners(environment: Mapping[str, str]):
+    return {x.strip() for x in environment.get('VANTALINE_CODEX_COMPARE_ACCOUNTS', '').split(',') if x.strip()}
 
 
-def configured():
-    return bool(os.environ.get('VANTALINE_CODEX_COMPARE_MODEL', '').strip())
+def configured(environment: Mapping[str, str]):
+    return bool(environment.get('VANTALINE_CODEX_COMPARE_MODEL', '').strip())
 
 
 def public(task, detail=True):
@@ -42,7 +43,12 @@ def public(task, detail=True):
 
 
 def register(app: FastAPI, access: ComparisonAccess, repository_factory: RepositoryFactory,
-             standards: StandardLibrary, media_dependencies: ComparisonMedia, documents: DocumentImports):
+             standards: StandardLibrary, media_dependencies: ComparisonMedia, documents: DocumentImports, *,
+             runtime_provider: Callable[[], ArtifactRuntime | None], environment: Mapping[str, str]):
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
+    if environment is None:
+        raise TypeError("environment is required")
 
     def context():
         access.require_permission('inspection')
@@ -50,12 +56,12 @@ def register(app: FastAPI, access: ComparisonAccess, repository_factory: Reposit
         repository = repository_factory()
         if repository is None:
             raise HTTPException(503, 'Codex Beta 需要 PostgreSQL')
-        return owner, CodexComparisonsRepository(repository), MediaStore(media_dependencies.data_directory() / 'codex_comparisons' / 'media')
+        return owner, CodexComparisonsRepository(repository), MediaStore(media_dependencies.data_directory() / 'codex_comparisons' / 'media', runtime_provider=runtime_provider)
 
     def enabled(owner):
-        if owner not in enabled_owners():
+        if owner not in enabled_owners(environment):
             raise HTTPException(403, '此账号尚未启用 Codex Beta')
-        if not configured():
+        if not configured(environment):
             raise HTTPException(503, 'Codex Beta 模型尚未固定配置')
 
     def owned(repo, owner, identifier):
@@ -83,7 +89,7 @@ def register(app: FastAPI, access: ComparisonAccess, repository_factory: Reposit
     def capabilities():
         access.require_permission('inspection')
         owner = access.owner()[0]
-        return {'enabled': owner in enabled_owners() and configured(), 'model': os.environ.get('VANTALINE_CODEX_COMPARE_MODEL', ''), 'timeout_seconds': 600, 'concurrency': 1}
+        return {'enabled': owner in enabled_owners(environment) and configured(environment), 'model': environment.get('VANTALINE_CODEX_COMPARE_MODEL', ''), 'timeout_seconds': 600, 'concurrency': 1}
 
     @app.post(PREFIX + '/tasks')
     async def create(captured_file: UploadFile = File(...), standard_asset_id: str = Form(...),

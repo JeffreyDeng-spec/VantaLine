@@ -11,6 +11,9 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
+from scripts.agent_pose_render_application_test_ports import bind_pose_render, assert_default_pose_render
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseRenderContracts(unittest.TestCase):
     @classmethod
@@ -22,6 +25,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_pose_render(cls.api)
 
     @classmethod
     def tearDownClass(cls):
@@ -31,12 +35,13 @@ class AgentPoseRenderContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        bind_pose_render(self.api,self.stack)
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir=self.root.name)))
         for name in ('requests.sessions.Session.request', 'urllib.request.urlopen', 'subprocess.Popen', 'os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
 
     def settings(self, value):
         self.replace('image_generation_settings', return_value=value)
@@ -235,11 +240,11 @@ class AgentPoseRenderContracts(unittest.TestCase):
     def test_artifact_output_resolver_selected_before_effectful_call_lookup(self):
         output = self.artifact(); api = self.api
         later = Mock(return_value=self.directory / 'unexpected.png')
-        first = api.agent_mcp_pose_output_path
+        first = getattr(*pose_capability_target(api, "agent_mcp_pose_output_path"))
         class ChangingCall(dict):
             def get(self, key, default=None):
                 if key == 'accessory_id':
-                    api.agent_mcp_pose_output_path = later
+                    setattr(*pose_capability_target(api, "agent_mcp_pose_output_path"), later)
                     return 'part'
                 return super().get(key, default)
         api.write_agent_mcp_pose_artifact({}, ChangingCall(pose_id='top'), {'bytes': b'image'}, prompt='prompt', reference_assets=[])
@@ -288,8 +293,8 @@ class AgentPoseRenderContracts(unittest.TestCase):
             getters.extend(values.values())
             return port_type(**values)
         PoseRenderConfiguration(group(ports.PoseRenderConfigurationSources), group(ports.PoseRenderConfigurationDefaults))
-        PoseRenderContent(group(ports.PoseRenderReferences), group(ports.PoseRenderPresentation))
-        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation))
+        PoseRenderContent(group(ports.PoseRenderReferences), group(ports.PoseRenderPresentation), files=BusinessFiles())
+        PoseArtifactStore(group(ports.PoseRenderPaths), group(ports.PoseRenderArtifacts), group(ports.PoseRenderPresentation), files=BusinessFiles())
         for getter in getters:
             getter.assert_not_called()
 
@@ -311,7 +316,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
                 key_environment=lambda: lambda value: name)
             defaults = ports.PoseRenderConfigurationDefaults(**{field.name: (lambda: 60.0) if field.name == 'timeout' else (lambda: name) for field in fields(ports.PoseRenderConfigurationDefaults)})
             presentation = group(ports.PoseRenderPresentation, screen=lambda: lambda value: {'rgb': [0, 255, 0], 'hex': '#00FF00', 'label': name})
-            content = PoseRenderContent(group(ports.PoseRenderReferences), presentation)
+            content = PoseRenderContent(group(ports.PoseRenderReferences), presentation, files=BusinessFiles())
             owner = self.directory / name
             paths = group(ports.PoseRenderPaths, owner_root=lambda: lambda *args: owner, sanitize=lambda: lambda value: value)
             holder = {}
@@ -322,7 +327,7 @@ class AgentPoseRenderContracts(unittest.TestCase):
                 bounded=lambda: lambda value, limit: str(value)[:limit],
                 now=lambda: lambda: len(name),
                 dumps=lambda: json.dumps)
-            holder['store'] = PoseArtifactStore(paths, artifacts, presentation)
+            holder['store'] = PoseArtifactStore(paths, artifacts, presentation, files=BusinessFiles())
             return PoseRenderConfiguration(sources, defaults), content, holder['store'], owner
         instances = {name: make(name) for name in ('first', 'second')}
         with patch.object(self.api, 'image_generation_settings', side_effect=AssertionError('root settings')), patch.object(self.api, 'normalize_chroma_screen', side_effect=AssertionError('root screen')), patch.object(self.api, 'output_write_dir_for_owner', side_effect=AssertionError('root paths')), patch.object(self.api, 'file_sha256', side_effect=AssertionError('root hash')):

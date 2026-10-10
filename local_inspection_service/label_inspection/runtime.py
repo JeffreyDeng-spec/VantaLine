@@ -3,6 +3,8 @@ import argparse
 import logging
 import os
 from pathlib import Path
+from collections.abc import Callable
+from ..storage.artifacts.runtime import ArtifactRuntime
 import signal
 import threading
 
@@ -20,14 +22,16 @@ from .worker import LabelWorker
 
 class LabelProcess:
     def __init__(self, identity, configuration, data_directory, repositories, control_repositories,
-                 *, models=None, control_directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0):
+                 *, runtime_provider: Callable[[], ArtifactRuntime | None], models=None, control_directory=Path("/opt/vantaline/shared/data/runtime-control"), allowed_uid=0):
+        if runtime_provider is None:
+            raise TypeError("runtime_provider is required")
         if identity.mode != "external" or configuration.revision != identity.config_revision:
             raise RuntimeUnavailable("Standalone label runtime identity mismatch")
         self._stop_requested = False
         self.repositories = repositories
         self.models = models if models is not None else create_models(repositories, data_directory)
         self.worker = LabelWorker(repositories, lambda: data_directory, lambda: self.models,
-                                  stopping=lambda: self._stop_requested)
+                                  stopping=lambda: self._stop_requested, runtime_provider=runtime_provider)
         self.control = LabelRuntimeControl(identity, control_repositories, self.worker, role="label",
             directory=control_directory, allowed_uid=allowed_uid, configuration=configuration)
         self.stopping = threading.Event()
@@ -90,7 +94,7 @@ def bootstrap(config: Path, *, root=None, current=Path("/opt/vantaline/current")
     controls = create_control_factory()
     return LabelProcess(identity, configuration, data_directory,
         RepositoryLifecycle(lambda: factory.selection().repository, factory.clear),
-        RepositoryLifecycle(lambda: controls.selection().repository, controls.clear))
+        RepositoryLifecycle(lambda: controls.selection().repository, controls.clear), runtime_provider=artifact_runtime)
 
 
 def main():

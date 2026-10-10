@@ -8,6 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_retired_worker_flows
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 
 class PoisonValue:
@@ -31,7 +34,7 @@ class RetiredFlowFixture:
         for name in ['windows_worker_base_url','masked_url_for_status','windows_worker_request_with_retry','worker_training_payload','post_worker_training_bundle',
                      'public_path_sanitized','windows_worker_request','_start_transfer_progress_thread','windows_worker_get_json_streamed','worker_training_upload_timeout_seconds',
                      'worker_training_artifact_summary','import_worker_training_artifacts']:
-            self.hidden.append(stack.enter_context(patch.object(api,name,side_effect=AssertionError('unreachable historical capability'))))
+            self.hidden.append(stack.enter_context(patch_provider_capability(api, name, side_effect=AssertionError('unreachable historical capability'))))
         stack.enter_context(patch.object(api,'IMAGE_JOB_ACTIVE_STATUSES',PoisonValue()))
 
 
@@ -42,11 +45,11 @@ class TrainingRetiredWorkerFlowContracts(unittest.TestCase):
         root=Path(cls.runtime.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        cls.api=server;assert_default_legacy_worker(cls.api)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.f=self.fixture()
+        self.stack=ExitStack();self.addCleanup(self.stack.close);bind_retired_worker_flows(self.api,self.stack);self.f=self.fixture()
         for target in ['requests.request','requests.get','requests.post','time.sleep','subprocess.Popen','os.kill','threading.Thread','threading.Event']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))
     def fixture(self):f=RetiredFlowFixture();f.bind(self.api,self.stack);return f
@@ -153,7 +156,7 @@ class TrainingRetiredWorkerFlowContracts(unittest.TestCase):
             for callback in [f.update,replacement,provider,f.public,f.clock,*forbidden]:callback.assert_not_called()
             self.assertEqual(f.events,[]);instances.append((owner,f,replacement,provider,forbidden,tasks,refresh))
         for name in ['run_worker_dataset_generation_task','run_worker_training_task','refresh_worker_training_task','update_training_task','public_training_task']:
-            self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         self.stack.enter_context(patch('time.time',side_effect=AssertionError('unexpected global clock')));counts=[0,0]
         for index in [1,0,1,0]:
             owner,f,replacement,provider,forbidden,tasks,refresh=instances[index];before=copy.deepcopy(f.task);nested=f.public_value['nested']

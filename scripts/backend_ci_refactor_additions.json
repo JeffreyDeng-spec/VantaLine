@@ -1,0 +1,1111 @@
+{
+  "schema": 1,
+  "source_commit": "8083e14f967c5881a9b39db7dfa597378fad5e6d",
+  "source_workflow_sha256": "ba83d87ad4441e54aaf878466e4eee76ccb302b8ddf90218c2e0c54979a05512",
+  "replace": [
+    {
+      "old": {
+        "id": "check-295",
+        "run": "git show 'HEAD^:local_inspection_service/label_inspection/api.py' > \"$RUNNER_TEMP/label_legacy_parent_api.py\"",
+        "env": {},
+        "cwd": ".",
+        "group": "label-baselines",
+        "step": "Verify text inspection comparison and document contracts",
+        "shard": 7
+      },
+      "new": [
+        {
+          "id": "refactor-baseline-0",
+          "run": "git fetch --no-tags --depth=1 origin 0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd",
+          "env": {},
+          "cwd": ".",
+          "group": "label-baselines",
+          "step": "Verify text inspection comparison and document contracts",
+          "shard": 7
+        },
+        {
+          "id": "refactor-baseline-1",
+          "run": "test \"$(git rev-parse '0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd:local_inspection_service/label_inspection/api.py')\" = 'fab9c59d49a6f1f1864479981b29ffb8bd766567'",
+          "env": {},
+          "cwd": ".",
+          "group": "label-baselines",
+          "step": "Verify text inspection comparison and document contracts",
+          "shard": 7
+        },
+        {
+          "id": "refactor-baseline-2",
+          "run": "git show '0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd:local_inspection_service/label_inspection/api.py' > \"$RUNNER_TEMP/label_legacy_parent_api.py\"",
+          "env": {},
+          "cwd": ".",
+          "group": "label-baselines",
+          "step": "Verify text inspection comparison and document contracts",
+          "shard": 7
+        }
+      ]
+    }
+  ],
+  "add": [
+    {
+      "id": "refactor-001",
+      "run": "python scripts/smoke_application_factory.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-001",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-002",
+      "run": "APPLICATION_FACTORY_TEST_DATABASE_URL=\"$VANTALINE_POSTGRES_DSN\" python scripts/smoke_application_factory_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-002",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-003",
+      "run": "python scripts/smoke_canonical_application_source_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-003",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-004",
+      "run": "python scripts/smoke_web_shell_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-004",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-005",
+      "run": "python scripts/smoke_retired_entry_tails.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-005",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-006",
+      "run": "python scripts/smoke_repository_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-006",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-007",
+      "run": "python scripts/smoke_manual_history_baseline.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-007",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-008",
+      "run": "python scripts/smoke_legacy_list_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-008",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-009",
+      "run": "python scripts/smoke_label_beta_summaries.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-009",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-010",
+      "run": "python scripts/smoke_label_beta_benchmark.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-010",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-011",
+      "run": "python scripts/smoke_plc_activation_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-011",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-012",
+      "run": "python scripts/smoke_plc_runtime_coordination.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-012",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-013",
+      "run": "python scripts/smoke_plc_dispatch_records.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-013",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-014",
+      "run": "python scripts/smoke_plc_legacy_operations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-014",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-015",
+      "run": "python scripts/smoke_record_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-015",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-016",
+      "run": "python scripts/smoke_application_foundation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-016",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-017",
+      "run": "python scripts/smoke_infrastructure.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-017",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-018",
+      "run": "python scripts/smoke_training_persistence_graph.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-018",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-019",
+      "run": "python scripts/smoke_account_visibility.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-019",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-020",
+      "run": "python scripts/smoke_provider_transports_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-020",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-021",
+      "run": "python scripts/smoke_real_photo_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-021",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-022",
+      "run": "python scripts/smoke_http_application.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-022",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-023",
+      "run": "python scripts/smoke_http_upload_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-023",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-024",
+      "run": "python scripts/smoke_http_artifact_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-024",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-025",
+      "run": "python scripts/smoke_incoming_artifact_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-025",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-026",
+      "run": "python scripts/smoke_background_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-026",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-027",
+      "run": "python scripts/smoke_background_image_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-027",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-028",
+      "run": "python scripts/smoke_background_generation_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-028",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-029",
+      "run": "python scripts/smoke_training_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-029",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-030",
+      "run": "python scripts/smoke_training_image_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-030",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-031",
+      "run": "python scripts/smoke_training_resource_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-031",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-032",
+      "run": "python scripts/smoke_accessory_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-032",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-033",
+      "run": "python scripts/smoke_accessory_evidence_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-033",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-034",
+      "run": "python scripts/smoke_accessory_catalog_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-034",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-035",
+      "run": "python scripts/smoke_accessory_gallery_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-035",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-036",
+      "run": "python scripts/smoke_accessory_edit_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-036",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-037",
+      "run": "python scripts/smoke_accessory_preprocessor_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-037",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-038",
+      "run": "python scripts/smoke_agent_reference_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-038",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-039",
+      "run": "python scripts/smoke_agent_pose_storage_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-039",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-040",
+      "run": "python scripts/smoke_agent_photo_image_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-040",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-041",
+      "run": "python scripts/smoke_agent_background_image_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-041",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-042",
+      "run": "python scripts/smoke_artifact_runtime_provider.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-042",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-043",
+      "run": "python scripts/smoke_web_artifact_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-043",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-044",
+      "run": "python scripts/smoke_bootstrap_locations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-044",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-045",
+      "run": "python scripts/smoke_mcp_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-045",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-046",
+      "run": "python scripts/smoke_mcp_warmup_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-046",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-047",
+      "run": "python scripts/smoke_image_worker_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-047",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-048",
+      "run": "python scripts/smoke_model_configuration_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-048",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-049",
+      "run": "python scripts/smoke_plc_legacy_worker_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-049",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-050",
+      "run": "python scripts/smoke_application_configuration_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-050",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-051",
+      "run": "python scripts/smoke_path_configuration_graph.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-051",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-052",
+      "run": "python scripts/smoke_stream_config.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-052",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-053",
+      "run": "python scripts/smoke_model_tools_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-053",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-054",
+      "run": "python scripts/smoke_accessory_image_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-054",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-055",
+      "run": "python scripts/smoke_auto_optimization_core_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-055",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-056",
+      "run": "python scripts/smoke_auto_optimization_execution_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-056",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-057",
+      "run": "python scripts/smoke_auto_optimization_workflow_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-057",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-058",
+      "run": "python scripts/smoke_plc_lease_diagnostic_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-058",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-059",
+      "run": "python scripts/smoke_plc_workstation_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-059",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-060",
+      "run": "python scripts/smoke_plc_active_lease.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-060",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-061",
+      "run": "python scripts/smoke_plc_capture_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-061",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-062",
+      "run": "python scripts/smoke_cost_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-062",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-063",
+      "run": "python scripts/smoke_label_media_runtime_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-063",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-064",
+      "run": "python scripts/smoke_pdf_import_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-064",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-065",
+      "run": "python scripts/smoke_codex_api_runtime_port.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-065",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-066",
+      "run": "python scripts/smoke_codex_environment.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-066",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-067",
+      "run": "python scripts/smoke_comparison_media_owner.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-067",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-068",
+      "run": "python scripts/smoke_text_cleanup_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-068",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-069",
+      "run": "python scripts/smoke_extraction_thread_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-069",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-070",
+      "run": "python scripts/smoke_text_job_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-070",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-071",
+      "run": "python scripts/smoke_comparison_cleanup.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-071",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-072",
+      "run": "python scripts/smoke_comparison_thread_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-072",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-073",
+      "run": "python scripts/smoke_text_media_runtime_port.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-073",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-074",
+      "run": "python scripts/smoke_text_standard_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-074",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-075",
+      "run": "python scripts/smoke_text_comparison_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-075",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-076",
+      "run": "python scripts/smoke_text_storage_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-076",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-077",
+      "run": "python scripts/smoke_incoming_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-077",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-078",
+      "run": "python scripts/smoke_detection_artifact_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-078",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-079",
+      "run": "python scripts/smoke_detection_media_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-079",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-080",
+      "run": "python scripts/smoke_agent_state_graph.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-080",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-081",
+      "run": "python scripts/smoke_agent_planning_graph.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-081",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-082",
+      "run": "python scripts/smoke_agent_execution_graph.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-082",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-083",
+      "run": "python scripts/smoke_pipeline_status_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-083",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-084",
+      "run": "python scripts/smoke_pipeline_execution_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-084",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-085",
+      "run": "python scripts/smoke_pipeline_query_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-085",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-086",
+      "run": "python scripts/smoke_agent_pipeline_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-086",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-087",
+      "run": "python scripts/smoke_pipeline_stage_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-087",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-088",
+      "run": "python scripts/smoke_pipeline_task_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-088",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-089",
+      "run": "python scripts/smoke_pipeline_runtime_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-089",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-090",
+      "run": "python scripts/smoke_pipeline_thread_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-090",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-091",
+      "run": "python scripts/smoke_real_photo_dispatcher_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-091",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-092",
+      "run": "python scripts/smoke_web_shutdown.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-092",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-093",
+      "run": "python scripts/smoke_detection_workflows_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-093",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-094",
+      "run": "python scripts/smoke_yolo_warmup_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-094",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-095",
+      "run": "python scripts/smoke_model_catalog_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-095",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-096",
+      "run": "python scripts/smoke_application_integration_source_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-096",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-097",
+      "run": "python scripts/smoke_training_state_workflows_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-097",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-098",
+      "run": "python scripts/smoke_training_task_workflows_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-098",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-099",
+      "run": "python scripts/smoke_training_runner_file_port.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-099",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "refactor-100",
+      "run": "python scripts/smoke_training_thread_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-100",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "refactor-101",
+      "run": "python scripts/smoke_codex_background_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-101",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "refactor-102",
+      "run": "python scripts/smoke_transfer_progress_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-102",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "refactor-103",
+      "run": "python scripts/smoke_auto_optimization_thread_drain.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-103",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "refactor-104",
+      "run": "python scripts/smoke_auto_optimization_pool_scope.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-104",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "refactor-105",
+      "run": "python scripts/smoke_auto_optimization_model_binding.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-105",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "refactor-106",
+      "run": "python scripts/smoke_runpod_transport_runtime_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-106",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "refactor-107",
+      "run": "python scripts/smoke_runpod_artifact_runtime_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-107",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "refactor-108",
+      "run": "python scripts/smoke_training_catalog_file_ports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-108",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "refactor-109",
+      "run": "python scripts/smoke_pipeline_persistence_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-109",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "refactor-110",
+      "run": "python scripts/smoke_label_runtime_observation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-110",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "refactor-111",
+      "run": "python scripts/smoke_label_runtime_observation_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-111",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    }
+  ],
+  "performance": [
+    {
+      "id": "check-034",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_history_statistics.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-034",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "refactor-performance-beta",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_beta_summaries.py",
+      "env": {},
+      "cwd": ".",
+      "group": "refactor-050",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-055",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_summary_reads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-055",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-059",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-059",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-300",
+      "run": "VANTALINE_LABEL_LIST_BASELINE_SOURCE=\"$RUNNER_TEMP/label_legacy_v550_api.py\" python scripts/benchmark_label_legacy_index.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-300",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-310",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_run_batch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-310",
+      "step": "Verify text inspection comparison and document contracts"
+    }
+  ],
+  "performance_plan": [
+    "check-002",
+    "check-297",
+    "check-298",
+    "check-299",
+    "check-034",
+    "refactor-performance-beta",
+    "check-055",
+    "check-059",
+    "check-300",
+    "check-310",
+    "check-352"
+  ]
+}

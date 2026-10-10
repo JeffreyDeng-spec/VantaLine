@@ -47,3 +47,4 @@ class ProfileApiDependencies:
     cursor_api_url: Callable[[str, str], str]
     cursor_auth_headers: Callable[[str], dict[str, str]]
     model_options_from_items: Callable[..., list[Record]]
+    codex_compare_model: Callable[[], str]

@@ -13,6 +13,7 @@ import numpy as np
 APP_DIR = Path(__file__).resolve().parents[1]
 ROOT = APP_DIR.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from local_inspection_service.incoming_text_inspection import (  # noqa: E402
     FAIL,
@@ -127,11 +128,14 @@ def main() -> None:
     assert 'UNIQUE ("owner_user_id", "task_id", "capture_id")' in ddl
     assert "uq_incoming_text_reference_active" in ddl
 
-    server_text = (APP_DIR / "server.py").read_text(encoding="utf-8")
+    from scripts.canonical_application_source_contract import read_checked_application_source
+    from scripts.application_integration_source_contract import restore_plc_domain_root
+    server_text = read_checked_application_source(APP_DIR / "server.py",encoding="utf-8")
+    registration_text = restore_plc_domain_root(server_text)
     task_create_text = (APP_DIR / "pipeline" / "task_create.py").read_text(encoding="utf-8")
     assert 'task_kind = str(request.task_kind or "product_inspection")' in task_create_text
     assert 'detection_method = "label_text_compare"' in task_create_text
-    assert 'create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)' in server_text
+    assert 'create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)' in registration_text
     assert "def _duplicate_incoming_capture" in server_text
     assert "review_incoming_text_inspection" in server_text
     analysis_text = (APP_DIR / "text_inspection" / "incoming_analysis.py").read_text(encoding="utf-8")
@@ -148,8 +152,11 @@ def main() -> None:
     assert '@app.get("/api/incoming-text/tasks/{task_id}")' in incoming_api
     assert '@app.post("/api/incoming-text/tasks/{task_id}/inspect")' in incoming_api
     assert '@app.post("/api/incoming-text/inspections/{inspection_id}/review")' in incoming_api
-    assert '_incoming_catalog_routes = register_incoming_catalog(app, _incoming_catalog)' in server_text
-    assert '_incoming_inspection_routes = register_incoming_inspections(app, _incoming_execution, _incoming_reviews)' in server_text
+    assert '_incoming_catalog_routes = _incoming_workflows.register_catalog(app)' in server_text
+    assert '_incoming_inspection_routes = _incoming_workflows.register_inspections(app)' in server_text
+    composition = (APP_DIR / "text_inspection/incoming_composition.py").read_text(encoding="utf-8")
+    assert "return register_catalog(app, self.catalog, files=lambda: self.files)" in composition
+    assert "return register_inspections(app, self.execution, self.reviews, files=lambda: self.files)" in composition
     assert "normalize_ocr_text" not in server_text[server_text.index("# Package-material incoming text inspection"):]
     assert "normalize_ocr_text" not in analysis_text
     assert "normalize_ocr_text" not in beta_text

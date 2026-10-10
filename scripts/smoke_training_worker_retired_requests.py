@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
 
 RETIRED='Windows Worker execution is retired. Production training uses RunPod.'
 
@@ -32,7 +33,7 @@ class TrainingWorkerRetiredRequestContracts(unittest.TestCase):
         root=Path(cls.runtime.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        cls.api=server;assert_default_legacy_worker(cls.api)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
@@ -88,12 +89,12 @@ class TrainingWorkerRetiredRequestContracts(unittest.TestCase):
 
     def test_independent_instances_never_resolve_capabilities_and_direct_status_is_fresh(self):
         from local_inspection_service.training.legacy_worker_requests import LegacyWorkerSettings, LegacyWorkerRequests, windows_worker_status
-        names=['windows_worker_request','windows_worker_form_request','windows_worker_request_with_retry'];signatures={name:inspect.signature(getattr(self.api,name)) for name in names};instances=[]
+        names=['windows_worker_request','windows_worker_form_request','windows_worker_request_with_retry'];signatures={name:inspect.signature(getattr(self.api,name),eval_str=True) for name in names};instances=[]
         for owner in ['alice','bob']:
             ports=[Mock(side_effect=AssertionError('unexpected '+owner+' capability')) for unused in range(6)]
             service=LegacyWorkerRequests(LegacyWorkerSettings(*ports[:3]),*ports[3:]);instances.append((service,ports))
             for port in ports:port.assert_not_called()
-            for name in names:self.assertEqual(inspect.signature(getattr(service,name)),signatures[name])
+            for name in names:self.assertEqual(inspect.signature(getattr(service,name),eval_str=True),signatures[name])
         for name in names+['windows_worker_status']:
             self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('unexpected root request dependency')))
         value=PoisonValue()

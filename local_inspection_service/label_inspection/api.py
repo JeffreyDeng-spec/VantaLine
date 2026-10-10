@@ -7,13 +7,14 @@ import time
 from pathlib import Path
 from PIL import Image
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from ..storage.artifacts.runtime import ArtifactRuntime
 from collections.abc import Callable
 from .dependencies import LabelAccess, RepositoryLifecycle, LabelImports, ModelProvider, Record, require_models
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
 from . import model, pdf_import, manual, manual_history
 from .projection import public
-from .history_summary import RunHistorySummary
+from .history_summary import RunHistorySummary, BetaHistoryRead, count_or_length
 from ..storage.label_inspection import LabelRepository, RUN_BATCH_SIZE
 from ..storage.agent_operations import OperationConflict
 from ..storage.label_runtime import LabelMaintenance
@@ -72,8 +73,11 @@ def asset(media, owner, data, identity, ordinal, metadata=None):
 
 
 def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycle,
-             imports: LabelImports, models: ModelProvider, configuration: Callable[[], Record]):
-    pdf_import.register(app, repositories, imports.data_directory)
+             imports: LabelImports, models: ModelProvider, configuration: Callable[[], Record], *,
+             runtime_provider: Callable[[], ArtifactRuntime | None]):
+    if runtime_provider is None:
+        raise TypeError("runtime_provider is required")
+    pdf_import.register(app, repositories, imports.data_directory, runtime_provider=runtime_provider)
 
     def context():
         access.require_permission("inspection")
@@ -85,7 +89,7 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             owner,
             (LabelRepository(raw, runtime_identity=label_worker.runtime_identity, metrics=label_worker.runtime_control.metrics)
              if label_worker.runtime_identity is not None else LabelRepository(raw)),
-            MediaStore(imports.data_directory() / "label_inspection" / "media"),
+            MediaStore(imports.data_directory() / "label_inspection" / "media", runtime_provider=runtime_provider),
         )
 
     @app.get(PREFIX + "/runtime")
@@ -277,19 +281,22 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
             if cursor:
                 return repo.page(owner, [], filters, limit, cursor)
             current = repo.list(owner, "task")
-            standards, records = legacy_data(repo, owner)
-            extended = {x.get("legacy_id") for x in current}
-            ids = set(standards) | {
-                x.get("standard_id") or "orphan-" + x["id"] for x in records
-            }
+            legacy_summary = repo.list_legacy_summary(owner, current) if isinstance(repo, LabelRepository) else None
             legacy_records = {}
-            for record in records:
-                sid = record.get("standard_id") or "orphan-" + record["id"]
-                legacy_records.setdefault(sid, []).append(record)
-            indexed = standards, records, legacy_records
-            current += [
-                legacy_task(repo, owner, "legacy:" + sid, indexed) for sid in ids - extended
-            ]
+            if legacy_summary is None:
+                standards, records = legacy_data(repo, owner)
+                extended = {x.get("legacy_id") for x in current}
+                ids = set(standards) | {
+                    x.get("standard_id") or "orphan-" + x["id"] for x in records
+                }
+                legacy_records = {}
+                for record in records:
+                    sid = record.get("standard_id") or "orphan-" + record["id"]
+                    legacy_records.setdefault(sid, []).append(record)
+                indexed = standards, records, legacy_records
+                current += [
+                    legacy_task(repo, owner, "legacy:" + sid, indexed) for sid in ids - extended
+                ]
             rows = []
             for offset in range(0, len(current), RUN_BATCH_SIZE):
                 batch = current[offset : offset + RUN_BATCH_SIZE]
@@ -326,7 +333,8 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         }
                     )
                 del native_runs
-            for task in manual_history.rows(repo, owner):
+            rows.extend(legacy_summary or [])
+            for task in (manual_history.rows(repo, owner, indexed=True) if legacy_summary is None else []):
                 history = task["manual_history"]
                 records = history["pages"]
                 latest = max(records, key=lambda v: v.get("created_at", 0), default={})
@@ -342,7 +350,9 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         "status": "read_only",
                     }
                 )
-            for beta in repo.legacy(owner, "beta"):
+            for item in repo.list_beta_history(owner):
+                read = item if isinstance(item, BetaHistoryRead) else BetaHistoryRead(item, None, None)
+                beta = read.payload
                 inputs = beta.get("inputs") or {}
                 batch = beta.get("report_version") == "label-batch-v3"
                 rows.append(
@@ -353,9 +363,9 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
                         "updated_at": beta.get("updated_at")
                         or beta.get("created_at", 0),
                         "standard_count": (
-                            len(inputs.get("references", {})) if batch else 1
+                            count_or_length(inputs.get("references", {}), read.reference_count) if batch else 1
                         ),
-                        "run_count": len(beta.get("labels", {})) if batch else 1,
+                        "run_count": count_or_length(beta.get("labels", {}), read.label_count) if batch else 1,
                         "decision": (beta.get("summary") or {}).get(
                             "decision", "REVIEW_REQUIRED"
                         ),
@@ -792,4 +802,4 @@ def register(app: FastAPI, access: LabelAccess, repositories: RepositoryLifecycl
 
     from .worker_api import register as register_worker
 
-    label_worker = register_worker(app, repositories, imports.data_directory, models)
+    label_worker = register_worker(app, repositories, imports.data_directory, models, runtime_provider=runtime_provider)

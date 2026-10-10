@@ -11,6 +11,9 @@ import unittest
 from unittest.mock import Mock, call, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_remote_training
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 
 def _capture_remote_window(ns,site,mode,directory=None):
@@ -89,7 +92,7 @@ class RemoteFixture:
     def bind(self,api,stack):
         for name,value in {'remote_training_endpoint':self.endpoint,'resolve_service_path':self.resolve,'masked_url_for_status':self.mask,
                            'update_training_task':self.update,'package_training_dataset':self.package,'remote_training_timeout_seconds':self.timeout}.items():
-            stack.enter_context(patch.object(api,name,value))
+            stack.enter_context(patch_provider_capability(api, name, value))
         stack.enter_context(patch.object(requests,'post',self.post)); stack.enter_context(patch('time.time',self.clock))
         stack.enter_context(patch.dict(os.environ,{api.REMOTE_TRAINING_API_KEY_ENV:'  synthetic-key  '}))
 
@@ -101,11 +104,11 @@ class TrainingRemoteCompatibilityContracts(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        cls.api=server;assert_default_legacy_worker(cls.api)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack(); self.addCleanup(self.stack.close); self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='remote-training-')))
+        self.stack=ExitStack(); self.addCleanup(self.stack.close); bind_remote_training(self.api,self.stack); self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='remote-training-')))
         self.f=RemoteFixture(self.root/'base'); self.f.bind(self.api,self.stack)
         for target in ['requests.request','subprocess.Popen','os.kill']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))
@@ -292,7 +295,7 @@ class TrainingRemoteCompatibilityContracts(unittest.TestCase):
         instances=[build('alice',111),build('bob',222)]
         for name in ['remote_training_endpoint','resolve_service_path','masked_url_for_status','update_training_task','package_training_dataset',
                      'remote_training_timeout_seconds','public_path_sanitized','run_remote_training_task','worker_training_artifact_summary']:
-            self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('unexpected root dependency')))
+            self.stack.enter_context(patch_provider_capability(self.api, name, side_effect=AssertionError('unexpected root dependency')))
         self.stack.enter_context(patch.object(requests,'post',side_effect=AssertionError('unexpected network')))
         for index in [1,0,1,0]:
             f,owner,stamp,environment,transport,service,summary=instances[index]

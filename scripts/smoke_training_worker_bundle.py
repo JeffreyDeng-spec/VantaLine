@@ -10,6 +10,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_worker_bundle
 
 
 def _capture_worker_bundle_window(ns,site,mode,directory=None):
@@ -139,11 +141,11 @@ class TrainingWorkerBundleContracts(unittest.TestCase):
         root=Path(cls.runtime.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server;cls.metadata_fn=staticmethod(server.worker_training_bundle_metadata);cls.timeout_fn=staticmethod(server.worker_training_upload_timeout_seconds)
+        cls.api=server;assert_default_legacy_worker(cls.api);cls.metadata_fn=staticmethod(server.worker_training_bundle_metadata);cls.timeout_fn=staticmethod(server.worker_training_upload_timeout_seconds)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-bundle-')));self.sequence=0
+        self.stack=ExitStack();self.addCleanup(self.stack.close);bind_worker_bundle(self.api,self.stack);self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-bundle-')));self.sequence=0
         self.f=self.fixture()
         for target in ['requests.request','requests.get','requests.post','subprocess.Popen','os.kill','threading.Thread','threading.Event']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))

@@ -6,6 +6,11 @@ set -euo pipefail
 if [[ "${1:-}" == --capabilities && $# -eq 1 ]]; then runtime_controller capabilities; exit 0; fi
 
 usage() { echo "usage: $0 --archive /opt/vantaline/incoming/ID.tar.gz --archive-sha256 HEX --release ID --commit SHA --apply" >&2; exit 2; }
+if [[ "${1:-}" == --observe-runtime ]]; then
+  [[ $# -eq 5 && "$2" == --release && "$4" == --commit ]] || usage
+  runtime_controller observe "$3" "$5"
+  exit 0
+fi
 archive=""; archive_sha256=""; release=""; commit=""; apply=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -53,6 +58,11 @@ verify_application() {
     python3 "$target/scripts/configure_pdf_proxy.py"
   elif [[ -f "$target/RUNTIME_TOPOLOGY.json" ]]; then
     return 1
+  fi
+  # Old immutable packages have no observer. New artifacts require both modules.
+  # Run from the candidate package; success is still before accept/commit.
+  if [[ -f "$target/local_inspection_service/runtime/observe_label_runtime.py" ]]; then
+    (cd "$target" && exec "$target/.venv/bin/python" -m local_inspection_service.runtime.observe_label_runtime --commit "$commit" --release "$release")
   fi
 }
 promote_installer() {

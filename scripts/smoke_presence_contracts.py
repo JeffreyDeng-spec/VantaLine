@@ -41,7 +41,16 @@ class PresenceContractTests(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from types import SimpleNamespace
+        from local_inspection_service.detection.presence_payload import PresencePayload
+        from scripts.presence_projection_test_fixture import assert_default_projections
+        assert_default_projections(server)
+        assert type(server._presence_payload) is PresencePayload
+        cls.api=SimpleNamespace(string_list=server.string_list,bounded_text=server.bounded_text,
+            coerce_detection_count=server.coerce_detection_count,
+            ai_detection_parsed_covers_required=server.ai_detection_parsed_covers_required)
+        cls.payload_owner=PresencePayload(lambda:cls.api.string_list,lambda:cls.api.bounded_text)
+        cls.api.ai_detection_task_payload=cls.payload_owner.ai_detection_task_payload
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):

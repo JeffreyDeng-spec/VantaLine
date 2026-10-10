@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 from typing import Any, Protocol
-from ..storage.artifacts.files import BusinessFiles
+from .file_ports import DatasetCatalogFiles
 
 Record = dict[str, Any]
 
@@ -45,10 +45,12 @@ def clean_training_resource_id(value: str) -> str:
 
 class DatasetCatalog:
     def __init__(self, paths: DatasetPaths, read: Callable[[Path], Any], audit: DatasetAudit,
-                 access: DatasetAccess, item: DatasetItem, *, files=None):
+                 access: DatasetAccess, item: DatasetItem, *, files: DatasetCatalogFiles):
         self.paths, self.read, self.audit = paths, read, audit
         self.access, self.item = access, item
-        self.files = files if files is not None else BusinessFiles()
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
 
     def dataset_resource_item(self, dataset_dir, *, include_samples=True):
         if self.files.runtime_provider() is None:

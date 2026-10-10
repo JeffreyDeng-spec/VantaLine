@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from accessory_application_test_ports import accessory_callback
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
@@ -23,6 +24,8 @@ class RoutingContracts(unittest.TestCase):
                           VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
         cls.server = server
+        from scripts.accessory_default_dependency_contract import assert_default_accessory_dependencies
+        assert_default_accessory_dependencies(server)
         cls.admin = TestClient(server.app,base_url='https://testserver',raise_server_exceptions=False)
         assert cls.admin.post('/api/auth/bootstrap',json={'username':'fixture-admin','password':'fixture-password-only'}).status_code==200
         cls.users,cls.clients = {},{}
@@ -73,7 +76,7 @@ class RoutingContracts(unittest.TestCase):
             return {'id':item['id'],'route':item['detection_route'],'task_marker':item.get('task_marker')}
         for name,fn in [('load_config',load),('ensure_accessory_ai_profile',profile),('save_accessory_item',save),
                         ('upsert_dashboard_ai_task',upsert),('serialize_accessory',serialize)]:
-            self.stack.enter_context(patch.object(self.server,name,fn))
+            self.stack.enter_context(accessory_callback(self.server,name,fn))
 
     def post(self,route='ai',apply=True,client='alice',identifier='part'):
         return self.clients[client].post(f'/api/accessories/{identifier}/route',json={'route':route,'apply':apply})
@@ -134,7 +137,7 @@ class RoutingContracts(unittest.TestCase):
             self.events.append('profile')
             item['partial_profile']='preserved'
             raise error
-        with patch.object(self.server,'ensure_accessory_ai_profile',side_effect=failing_profile):
+        with accessory_callback(self.server,'ensure_accessory_ai_profile',side_effect=failing_profile):
             response=self.post()
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json()['profile_status'],'failed')
@@ -142,13 +145,13 @@ class RoutingContracts(unittest.TestCase):
         self.assertEqual(self.state['accessories'][0]['partial_profile'],'preserved')
         self.assertEqual(self.events,['load','profile','save','upsert','serialize'])
         self.events.clear()
-        with patch.object(self.server,'save_accessory_item',side_effect=RuntimeError('synthetic save failure')) as save_failure:
+        with accessory_callback(self.server,'save_accessory_item',side_effect=RuntimeError('synthetic save failure')) as save_failure:
             response=self.post()
         save_failure.assert_called_once()
         self.assertEqual(response.status_code,500)
         self.assertEqual(self.events,['load','profile'])
         self.events.clear()
-        with patch.object(self.server,'upsert_dashboard_ai_task',side_effect=RuntimeError('synthetic task failure')) as task_failure:
+        with accessory_callback(self.server,'upsert_dashboard_ai_task',side_effect=RuntimeError('synthetic task failure')) as task_failure:
             response=self.post()
         task_failure.assert_called_once()
         self.assertEqual(response.status_code,500)
@@ -156,7 +159,7 @@ class RoutingContracts(unittest.TestCase):
         self.assertEqual(self.state['accessories'][0]['detection_route'],'ai')
         self.assertEqual(self.state['accessories'][0]['ai_profile'],{'fixture':True})
         self.events.clear()
-        with patch.object(self.server,'serialize_accessory',side_effect=RuntimeError('synthetic projection failure')) as projection_failure:
+        with accessory_callback(self.server,'serialize_accessory',side_effect=RuntimeError('synthetic projection failure')) as projection_failure:
             response=self.post()
         projection_failure.assert_called_once()
         self.assertEqual(response.status_code,500)

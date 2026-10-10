@@ -7,6 +7,8 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class PhotoHighlightWorkflowContracts(unittest.TestCase):
     @classmethod
@@ -17,7 +19,8 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
         (Path(cls.root.name) / 'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.photo_highlight_workflow_test_fixture import photo_highlight_workflow_fixture
+        cls.api = photo_highlight_workflow_fixture(server)
     @classmethod
     def tearDownClass(cls):
         cls.root.cleanup()
@@ -29,7 +32,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
     def source_fixture(self):
         self.resolve = self.replace('resolve_service_path', side_effect=lambda value: self.directory / value)
         self.replace('IMAGE_REFERENCE_SUFFIXES', new={'.png'})
@@ -208,7 +211,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
     def test_skip_refreshes_clock_for_eager_existing_policy_default(self):
         task,config,state=self.state_fixture();state['photo_highlight_sprite_policy']={};later=Mock(return_value=202)
         def first():
-            self.api.agent_mcp_now=later
+            setattr(*pose_capability_target(self.api, 'agent_mcp_now'), later)
             return 101
         self.clock.side_effect=first
         self.api.mark_legacy_pose_flow_skipped_for_photo_highlight(task,config,state)
@@ -242,7 +245,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
             values={f.name:Mock(return_value=None) for f in fields(port_type)}
             getters.extend(values.values())
             return port_type(**values)
-        PhotoHighlightSources(group(ports.PhotoSourceMedia),group(ports.PhotoSpriteLimits),group(ports.PhotoSpriteReadiness))
+        PhotoHighlightSources(group(ports.PhotoSourceMedia),group(ports.PhotoSpriteLimits),group(ports.PhotoSpriteReadiness), files=BusinessFiles())
         PhotoHighlightSelection(group(ports.PhotoObjectSelection))
         PhotoHighlightWorkflow(group(ports.PhotoWorkflowObjects),group(ports.PhotoSpriteLimits),group(ports.PhotoWorkflowState),group(ports.PhotoWorkflowModels))
         for getter in getters:getter.assert_not_called()
@@ -258,7 +261,7 @@ class PhotoHighlightWorkflowContracts(unittest.TestCase):
             state={'owner':name};events=[];path=self.directory/(name+'.png');path.write_bytes(b'synthetic')
             media=group(ports.PhotoSourceMedia,resolve=lambda:lambda value:path,suffixes=lambda:{'.png'})
             limits=group(ports.PhotoSpriteLimits,minimum=lambda:2,version=lambda:4)
-            sources=PhotoHighlightSources(media,limits,group(ports.PhotoSpriteReadiness))
+            sources=PhotoHighlightSources(media,limits,group(ports.PhotoSpriteReadiness), files=BusinessFiles())
             selection=PhotoHighlightSelection(group(ports.PhotoObjectSelection,normalize=lambda:lambda value:name,training=lambda:lambda value:events.append(value) or False))
             workflow=PhotoHighlightWorkflow(group(ports.PhotoWorkflowObjects,items=lambda:lambda *args:[]),limits,group(ports.PhotoWorkflowState,current=lambda:lambda task:state,photo_flow=lambda:lambda *args:True,skip_legacy=lambda:lambda *args:state),group(ports.PhotoWorkflowModels))
             return sources,selection,workflow,state,events,path

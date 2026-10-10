@@ -145,19 +145,22 @@ class StoreContracts(unittest.TestCase):
             root=Path(folder); (root/'local_inspection_service/static').mkdir(parents=True)
             os.environ.update(LOCAL_INSPECTION_ROOT=folder,VANTALINE_DATA_STORE='json',VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
             from local_inspection_service import server
+            from local_inspection_service.runtime.wiring import text as text_wiring
+            from text_application_test_ports import text_value, text_repository
+            values=server._default_application.values
             from unittest.mock import patch
             self.assertIs(server._text_records.dependencies.guard(),server._incoming_text_store_lock)
             self.assertIs(server.TEXT_INSPECTION_TABLES,TEXT_INSPECTION_TABLES)
             self.assertIs(server._text_v2_row,record_row)
-            with patch.object(server,'runtime_postgres_repository_or_none',return_value=None) as factory:
+            with text_repository(self,server,return_value=None) as factory:
                 self.assertTrue(server._text_v2_save('records',sample()))
                 self.assertEqual(server._text_v2_owned('records','first','alice'),sample())
                 self.assertGreaterEqual(factory.call_count,3)
             repository=Mock(spec=PostgresRuntimeRepository); repository.fetch_all.return_value=[]
-            with patch.object(server,'runtime_postgres_repository_or_none',return_value=repository), patch.object(server,'TEXT_INSPECTION_TABLES',{**TEXT_INSPECTION_TABLES,'records':'alternate_records'}):
+            with text_repository(self,server,return_value=repository), patch.object(text_wiring,'TEXT_INSPECTION_TABLES',{**TEXT_INSPECTION_TABLES,'records':'alternate_records'}):
                 self.assertEqual(server._text_v2_load('records'),[])
                 repository.fetch_all.assert_called_once_with('alternate_records')
-            with patch.object(server,'TEXT_INSPECTION_JSON_DIR',root/'other-json'):
+            with text_value(values,'TEXT_INSPECTION_JSON_DIR',root/'other-json'):
                 self.assertEqual(server._text_v2_json_path('records'),root/'other-json'/'records.json')
             for mode in ('read','write','missing-reader','missing-writer'):
                 events=[]
@@ -168,10 +171,10 @@ class StoreContracts(unittest.TestCase):
                 class Kind(str):
                     def __format__(self,spec):
                         events.append('path')
-                        if mode in {'read','missing-reader'}:server._incoming_text_json_list=reader_b
-                        elif events.count('path')==2:server._save_incoming_text_json_list=writer_b
+                        if mode in {'read','missing-reader'}:text_wiring._incoming_text_json_list=reader_b
+                        elif events.count('path')==2:text_wiring._save_incoming_text_json_list=writer_b
                         return str(self)
-                with patch.object(server,'runtime_postgres_repository_or_none',return_value=None),patch.object(server,'_incoming_text_json_list',None if mode=='missing-reader' else reader_a),patch.object(server,'_save_incoming_text_json_list',None if mode=='missing-writer' else writer_a):
+                with text_repository(self,server,return_value=None),patch.object(text_wiring,'_incoming_text_json_list',None if mode=='missing-reader' else reader_a),patch.object(text_wiring,'_save_incoming_text_json_list',None if mode=='missing-writer' else writer_a):
                     def invoke():
                         if mode in {'read','missing-reader'}:return server._text_v2_load(Kind('records'))
                         return server._text_v2_save(Kind('records'),sample())
@@ -186,11 +189,11 @@ class StoreContracts(unittest.TestCase):
                 rows_a=lambda rows:events.append('rowsA') or rows
                 rows_b=lambda rows:events.append('rowsB') or rows
                 def fetch(*args):
-                    events.append('fetch');server.row_raw_json_list=rows_b
+                    events.append('fetch');text_wiring.row_raw_json_list=rows_b
                     return [] if mode in {'load','missing-decoder'} else None if mode=='missing' else {'id':'r'}
                 repository=Mock(spec=PostgresRuntimeRepository)
                 repository.fetch_all.side_effect=fetch;repository.fetch_one_by_columns.side_effect=fetch
-                with patch.object(server,'runtime_postgres_repository_or_none',return_value=repository),patch.object(server,'row_raw_json_list',None if mode=='missing-decoder' else rows_a):
+                with text_repository(self,server,return_value=repository),patch.object(text_wiring,'row_raw_json_list',None if mode=='missing-decoder' else rows_a):
                     if mode=='missing-decoder':
                         with self.assertRaises(TypeError):server._text_v2_load('records')
                     elif mode=='load':server._text_v2_load('records')
@@ -210,25 +213,25 @@ class StoreContracts(unittest.TestCase):
                 def factory():
                     events.append('factory')
                     if mode!='writer' and events.count('factory')==1:
-                        setattr(server,attribute,callbacks['B'])
+                        setattr(text_wiring,attribute,callbacks['B'])
                     return repository if mode=='decoder' else None
                 def read(path):
                     events.append('read')
-                    if events.count('read')==1:setattr(server,attribute,callbacks['B'])
+                    if events.count('read')==1:setattr(text_wiring,attribute,callbacks['B'])
                     return []
                 def fetch(*args):
-                    events.append('fetch');setattr(server,attribute,callbacks['C'])
+                    events.append('fetch');setattr(text_wiring,attribute,callbacks['C'])
                     return []
                 class Kind(str):
                     def __format__(self,spec):
                         events.append('path')
                         if mode=='reader' or events.count('path')%2==0:
-                            setattr(server,attribute,callbacks['C'])
+                            setattr(text_wiring,attribute,callbacks['C'])
                         return str(self)
                 repository.fetch_all.side_effect=fetch
-                with patch.object(server,'runtime_postgres_repository_or_none',side_effect=factory),patch.object(server,attribute,callbacks['A']):
+                with text_repository(self,server,side_effect=factory),patch.object(text_wiring,attribute,callbacks['A']):
                     if mode=='writer':
-                        with patch.object(server,'_incoming_text_json_list',side_effect=read):
+                        with patch.object(text_wiring,'_incoming_text_json_list',side_effect=read):
                             for _ in range(2):server._text_v2_save(Kind('records'),sample())
                     else:
                         for _ in range(2):server._text_v2_load(Kind('records'))

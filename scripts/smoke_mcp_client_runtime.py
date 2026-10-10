@@ -44,15 +44,30 @@ class Contracts(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE), 'new explicit client construction')
     def test_actual_entry_constructor_has_only_explicit_dependencies(self):
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        nodes = [n for n in tree.body if
-                 (isinstance(n, ast.ImportFrom) and n.module == 'model_providers.mcp_client') or
-                 (isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_ai_mcp_client' for t in n.targets))]
-        self.assertEqual(len(nodes), 2)
+        entry = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        aliases = [n for n in entry.body if isinstance(n, ast.Assign) and
+                   any(isinstance(t, ast.Name) and t.id == '_ai_mcp_client' for t in n.targets)]
+        self.assertEqual(len(aliases), 1)
+        self.assertEqual(ast.dump(aliases[0].value), ast.dump(ast.parse(
+            '_default_application.inspection._ai_mcp_client', mode='eval').body))
+        tree = ast.parse((ROOT / 'local_inspection_service/runtime/wiring/inspection.py').read_text(encoding='utf-8'))
+        nodes = [n for n in ast.walk(tree) if
+                 isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_ai_mcp_client' for t in n.targets)]
+        self.assertEqual(len(nodes), 1)
         ns = dict(__package__='local_inspection_service', ROOT=Path('/first'), AiProviderError=ProviderError, AI_MCP_RUNTIME_STDIO='stdio')
+        alias = nodes[0]
+        self.assertEqual(ast.dump(alias.value), ast.dump(ast.parse('_model_tools.client', mode='eval').body))
+        owned = ast.parse((ROOT / 'local_inspection_service/model_providers/tool_composition.py').read_text())
+        imports = [n for n in owned.body if isinstance(n, ast.ImportFrom) and n.module == 'mcp_client']
+        self.assertEqual(len(imports), 1)
+        self.assertEqual([(n.name, n.asname) for n in imports[0].names], [('LocalAiMcpClient', None)])
+        calls = [n for n in ast.walk(owned) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'LocalAiMcpClient']
+        self.assertEqual(len(calls), 1)
+        self.assertEqual({k.arg: ast.dump(k.value) for k in calls[0].keywords}, {k: ast.dump(ast.parse(v, mode='eval').body) for k,v in {'root':'runtime.root','error':'errors.AiProviderError','runtime':'runtime.stdio'}.items()})
+        from local_inspection_service.model_providers.mcp_client import LocalAiMcpClient
+        ns.update(LocalAiMcpClient=LocalAiMcpClient, runtime=SimpleNamespace(root=lambda: ns['ROOT'], stdio=lambda: ns['AI_MCP_RUNTIME_STDIO']), errors=SimpleNamespace(AiProviderError=lambda: ns['AiProviderError']))
         with patch.object(subprocess, 'Popen', side_effect=AssertionError('constructor must not spawn')):
-            exec(compile(ast.Module(body=nodes, type_ignores=[]), '<entry construction>', 'exec'), ns)
-        client = ns['_ai_mcp_client']
+            client = eval(compile(ast.Expression(calls[0]), '<owned client construction>', 'eval'), ns)
         self.assertIsNone(client.process)
         self.assertEqual(client.root(), Path('/first'))
         ns['ROOT'] = Path('/second')

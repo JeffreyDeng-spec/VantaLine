@@ -7,7 +7,7 @@ import json
 from typing import Any, Protocol
 from urllib.parse import quote
 from .runpod_submission import RunPodRequest
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 from ..storage.artifacts.types import ArtifactConflict
 
 Record = dict[str, Any]
@@ -52,9 +52,11 @@ class RunPodFlowResults:
 
 class RunPodFlow:
     def __init__(self, settings: RunPodFlowSettings, records: RunPodFlowRecords,
-                 inputs: RunPodFlowInputs, results: RunPodFlowResults, *, runtime_provider=get_runtime):
+                 inputs: RunPodFlowInputs, results: RunPodFlowResults, *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.settings, self.records = settings, records
         self.inputs, self.results = inputs, results
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
     def _submit_once(self, job_id, payload):

@@ -1,9 +1,11 @@
 """Owner-scoped read-only manual history projection; never rewrites old decisions."""
 
+import math
+
 PREFIX = "legacy-manual:"
 
 
-def rows(repo, owner):
+def rows(repo, owner, *, indexed=False):
     standards = {
         s["id"]: s
         for s in repo.legacy(owner, "standards")
@@ -25,21 +27,22 @@ def rows(repo, owner):
         or "orphan-" + str(p.get("session_id") or p["id"])
         for p in pages
     }
+    indexes = _indexes(repo, owner, standards, sessions, pages, keys) if indexed and len(keys) > 1 else None
     output = []
     for key in keys:
         standard = standards.get(key, {})
-        selected = [
+        selected = indexes[0].get(key, []) if indexes is not None else [
             s for s in sessions if (s.get("standard_id") or "orphan-" + s["id"]) == key
         ]
         ids = {s["id"] for s in selected}
-        selected_pages = [
+        selected_pages = indexes[1].get(key, []) if indexes is not None else [
             p
             for p in pages
             if p.get("session_id") in ids
             or (p.get("standard_id") or "orphan-" + str(p.get("session_id") or p["id"]))
             == key
         ]
-        assets = [
+        assets = indexes[2].get(key, []) if indexes is not None else [
             a for a in repo.legacy(owner, "assets") if a.get("standard_id") == key
         ]
         fields = (
@@ -112,3 +115,47 @@ def resolve(repo, owner, identity):
         ):
             return task
     raise KeyError(identity)
+
+
+def _number(value):
+    # Avoid converting arbitrary-size JSON integers to float during proof.
+    return type(value) is int or (type(value) is float and math.isfinite(value))
+
+
+def _references(value, names):
+    return type(value) is dict and type(value.get("id")) is str and all(
+        value.get(name) is None or type(value.get(name)) is str for name in names)
+
+
+def _timestamps(value):
+    return _number(value.get("created_at", 0)) and _number(value.get("updated_at", value.get("created_at", 0)))
+
+
+def _indexes(repo, owner, standards, sessions, pages, keys):
+    """Index only proven ordinary rows from the request-cached repository.
+
+    Unsupported shapes use the original projection and its original errors.
+    The caller keeps original key discovery and set iteration unchanged.
+    """
+    if not all(_references(v, ()) and _timestamps(v) for v in standards.values()):
+        return None
+    if not all(_references(v, ("standard_id",)) and _timestamps(v) for v in sessions):
+        return None
+    if not all(_references(v, ("standard_id", "session_id")) and _timestamps(v) for v in pages):
+        return None
+    assets = repo.legacy(owner, "assets")
+    if not all(_references(v, ("standard_id",)) and _number(v.get("ordinal", 0)) for v in assets):
+        return None
+    sessions_by_key, session_keys, pages_by_key, assets_by_key = {}, {}, {}, {}
+    for value in sessions:
+        key = value.get("standard_id") or "orphan-" + value["id"]
+        sessions_by_key.setdefault(key, []).append(value)
+        session_keys.setdefault(value["id"], set()).add(key)
+    for value in pages:
+        fallback = value.get("standard_id") or "orphan-" + str(value.get("session_id") or value["id"])
+        destinations = session_keys.get(value.get("session_id"), set()) | {fallback}
+        for key in destinations & keys:
+            pages_by_key.setdefault(key, []).append(value)
+    for value in assets:
+        assets_by_key.setdefault(value.get("standard_id"), []).append(value)
+    return sessions_by_key, pages_by_key, assets_by_key

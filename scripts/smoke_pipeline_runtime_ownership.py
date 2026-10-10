@@ -2,6 +2,8 @@
 import ast,os,sys,threading,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
+from application_integration_source_contract import restore_plc_domain_root
 BASELINE=os.environ.get('VANTALINE_PIPELINE_OWNER_BASELINE_SOURCE')
 NAMES={'_pipeline_tasks_lock':'task_lock','_pipeline_state_lock':'state_lock','_pipeline_auto_agent_lock':'auto_agent_lock','_pipeline_auto_agent_inflight':'auto_agent_inflight','_pipeline_recommendation_lock':'recommendation_lock','_pipeline_recommendation_inflight':'recommendation_inflight','_pipeline_advance_registry_lock':'advance_registry_lock','_pipeline_advance_inflight':'advance_inflight','_pipeline_advance_cancel':'advance_cancel','_pipeline_tasks_sync_last_at':'last_sync_at'}
 def create():
@@ -40,5 +42,5 @@ class Contracts(unittest.TestCase):
  def test_setter_no_conversion_and_live_entry_clock(self):
   from local_inspection_service.pipeline.runtime_state import PipelineRuntimeState
   a,b=PipelineRuntimeState(),PipelineRuntimeState();value=object();a.set_last_sync_at(value);self.assertIs(a.last_sync_at,value);self.assertEqual(b.last_sync_at,0.0)
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());self.assertFalse(any(isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_tasks_sync_last_at' for t in n.targets) for n in tree.body));self.assertTrue(any(isinstance(n,ast.Lambda) and ast.unparse(n.body)=='_pipeline_runtime.last_sync_at' for n in ast.walk(tree)))
+  tree=ast.parse(restore_plc_domain_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py')));self.assertFalse(any(isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_tasks_sync_last_at' for t in n.targets) for n in tree.body));self.assertTrue(any(isinstance(n,ast.Lambda) and ast.unparse(n.body)=='_pipeline_runtime.last_sync_at' for n in ast.walk(tree)))
 if __name__=='__main__':unittest.main()

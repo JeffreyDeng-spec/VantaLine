@@ -285,9 +285,8 @@ def prepare_batch_input(task, directory, media):
         'deadline': task['deadline'], 'path_rule': '/input/media/{image_sha256}.png'}))
 
 
-def execute(task, token, config, media):
-    from ..storage.artifacts.runtime import get_runtime
-    runtime = get_runtime()
+def execute(task, token, config, media: MediaStore):
+    runtime = media.runtime_provider()
     if runtime is None:
         return _execute(task, token, config, media)
     budget = runtime.store.budget
@@ -487,6 +486,7 @@ def load_config():
 
 
 def main():
+    from ..storage.artifacts.runtime import get_runtime
     parser = argparse.ArgumentParser()
     parser.add_argument('--check', action='store_true', help='Validate installed runtime without claiming work')
     args = parser.parse_args()
@@ -497,12 +497,12 @@ def main():
     if args.check:
         print(encode({'runtime': version, 'model': config['model'], 'isolation': 'bubblewrap available; task launch still requires commissioning'}))
         return
-    media = MediaStore(config['media_root'])
+    media = MediaStore(config['media_root'], runtime_provider=get_runtime)
     while True:
         try:
             with_repo(lambda r: r.recover())
             cleanup_finished(config)
-            claimed = with_repo(lambda r: r.claim(enabled_owners(), config['model'], version))
+            claimed = with_repo(lambda r: r.claim(enabled_owners(os.environ), config['model'], version))
             if claimed:
                 execute(*claimed, config, media)
             else:

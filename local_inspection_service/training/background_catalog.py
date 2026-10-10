@@ -2,8 +2,6 @@
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
 import re
 from typing import Any
 
@@ -15,19 +13,23 @@ def safe_background_set_id(value: str | None) -> str:
     return raw or "green_conveyor"
 
 
+from .background_file_ports import BackgroundImageListingFiles
 
 
 class BackgroundImageFiles:
-    def __init__(self, suffixes: Callable[[], Collection[str]]):
+    def __init__(self, suffixes: Callable[[], Collection[str]], *, files: BackgroundImageListingFiles):
         self.suffixes = suffixes
+        if files is None:
+            raise TypeError("explicit background files are required")
+        self.files = files
 
     def image_file_list(self, path: Path) -> list[Path]:
-        if not _business_files.exists(path) or not _business_files.is_dir(path):
+        if not self.files.exists(path) or not self.files.is_dir(path):
             return []
         return sorted(
             item
-            for item in _business_files.iterdir(path)
-            if _business_files.is_file(item) and item.suffix.lower() in self.suffixes()
+            for item in self.files.iterdir(path)
+            if self.files.is_file(item) and item.suffix.lower() in self.suffixes()
         )
 
 

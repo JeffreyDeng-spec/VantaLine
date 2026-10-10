@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -68,7 +69,7 @@ class CodexDependencyContracts(unittest.TestCase):
         def unused(*args,**kwargs):raise AssertionError('unexpected document write or extraction')
         api.register(app,ComparisonAccess(permission,lambda:(identity.get(),'fixture-'+name)),repository,
                      StandardLibrary(owned,unused,unused),
-                     ComparisonMedia(lambda:self.root/name,asset_bytes,unused,unused),DocumentImports(unused,unused))
+                     ComparisonMedia(lambda:self.root/name,asset_bytes,unused,unused),DocumentImports(unused,unused),runtime_provider=get_runtime,environment=os.environ)
         self.assertEqual(state.events,[])
         state.client=TestClient(app,raise_server_exceptions=False)
         self.addCleanup(state.client.close);state.app=app

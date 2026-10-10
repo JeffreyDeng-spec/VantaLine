@@ -80,7 +80,7 @@ def assert_json_default_probe_does_not_connect() -> None:
     os.environ.pop("VANTALINE_DATA_STORE", None)
     os.environ.pop("DATABASE_URL", None)
     connector = RecordingConnector()
-    server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = connector
+    server._runtime_repository_owner.connector = connector
     try:
         bootstrap_admin()
         payload = server.runtime_store_probe_payload()
@@ -95,13 +95,13 @@ def assert_json_default_probe_does_not_connect() -> None:
         if connector.calls:
             raise AssertionError(f"JSON-default probe must not connect to PostgreSQL: {connector.calls}")
     finally:
-        server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = None
+        server._runtime_repository_owner.connector = None
 
 
 def assert_postgres_missing_url_fails_closed() -> None:
     os.environ["VANTALINE_DATA_STORE"] = "postgres"
     os.environ.pop("DATABASE_URL", None)
-    server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = RecordingConnector()
+    server._runtime_repository_owner.connector = RecordingConnector()
     try:
         try:
             server.load_auth_store()
@@ -114,7 +114,7 @@ def assert_postgres_missing_url_fails_closed() -> None:
         else:
             raise AssertionError("postgres selection without DATABASE_URL must fail before auth JSON fallback")
     finally:
-        server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = None
+        server._runtime_repository_owner.connector = None
         os.environ.pop("VANTALINE_DATA_STORE", None)
 
 
@@ -123,7 +123,7 @@ def assert_postgres_connector_failure_is_redacted() -> None:
     os.environ["VANTALINE_DATA_STORE"] = "postgres"
     os.environ["DATABASE_URL"] = raw_url
     connector = RecordingConnector(fail=True)
-    server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = connector
+    server._runtime_repository_owner.connector = connector
     try:
         try:
             server.load_auth_store()
@@ -143,7 +143,7 @@ def assert_postgres_connector_failure_is_redacted() -> None:
         if connector.calls != [raw_url]:
             raise AssertionError(f"connector call mismatch: {connector.calls}")
     finally:
-        server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = None
+        server._runtime_repository_owner.connector = None
         os.environ.pop("VANTALINE_DATA_STORE", None)
         os.environ.pop("DATABASE_URL", None)
 
@@ -153,7 +153,7 @@ def assert_postgres_thread_cache_reuses_and_rebuilds_connections() -> None:
     os.environ["VANTALINE_DATA_STORE"] = "postgres"
     os.environ["DATABASE_URL"] = raw_url
     connector = CloseTrackingConnector()
-    server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = connector
+    server._runtime_repository_owner.connector = connector
     server.reset_runtime_repository_cache()
     try:
         first = server.runtime_repository_selection()
@@ -196,7 +196,7 @@ def assert_postgres_thread_cache_reuses_and_rebuilds_connections() -> None:
             raise AssertionError("clearing the current thread selection should force a reconnect")
     finally:
         server.clear_thread_runtime_repository_selection()
-        server.RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS = None
+        server._runtime_repository_owner.connector = None
         os.environ.pop("VANTALINE_DATA_STORE", None)
         os.environ.pop("DATABASE_URL", None)
         server.reset_runtime_repository_cache()

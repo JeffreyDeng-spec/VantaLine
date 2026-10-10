@@ -10,6 +10,7 @@ from typing import Any
 import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_READINESS_BASELINE_SOURCE")
 NAMES={"auto_optimize_phase_name","auto_optimize_completed_model_id","auto_optimize_linked_pipeline_model_id","auto_optimize_stop_capture_for_model_locked","auto_optimize_capture_enabled"}
@@ -126,7 +127,7 @@ class ReadinessContract(unittest.TestCase):
         for field in fields(service.ports):assert_capability_owner(self, service.ports, field.name, server)
         for name in NAMES:
             expected=object();method=Mock(return_value=expected);args=({},"m") if name=="auto_optimize_stop_capture_for_model_locked" else ({},);kw={"reason":"r"} if len(args)==2 else {}
-            with patch.object(server,"_auto_optimization_readiness",SimpleNamespace(**{name:method})):
+            with auto_method(self,server._auto_optimization_readiness,name,method):
                 self.assertIs(getattr(server,name)(*args,**kw),expected);method.assert_called_once_with(*args,**kw)
         barrier=threading.Barrier(2,timeout=10)
         def find(job):
@@ -134,7 +135,7 @@ class ReadinessContract(unittest.TestCase):
         async def request(user):
             with server._request_user.bind({"id":user}):return await run_in_threadpool(server.auto_optimize_completed_model_id,{"candidate_models":[{"model_id":user,"job_id":user}]})
         async def both():return await asyncio.gather(request("alpha"),request("beta"))
-        with patch.object(server,"find_training_task",side_effect=find):self.assertEqual(asyncio.run(both()),["alpha","beta"])
+        with patch.object(type(server._training_state_workflows),"find_training_task",autospec=True,side_effect=lambda receiver,task:self.assertIs(receiver,server._training_state_workflows) or find(task)):self.assertEqual(asyncio.run(both()),["alpha","beta"])
         self.assertIsNone(server._request_user.get())
 
     @unittest.skipIf(BASELINE,"candidate-only import")

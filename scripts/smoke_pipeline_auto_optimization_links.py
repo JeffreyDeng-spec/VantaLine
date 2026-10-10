@@ -86,11 +86,19 @@ class LinkContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_links
         for group in (service.state,service.projection,service.matching):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),getattr(server,f.name))
+            from pipeline_query_test_ports import QUERY_METHODS, assert_native_query_relay
+            for f in fields(group):
+                if assert_native_query_relay(self,server,group,f.name):continue
+                actual=getattr(group,f.name)(); expected=getattr(server._pipeline_queries if f.name in QUERY_METHODS else server,f.name)
+                if f.name in QUERY_METHODS:
+                    self.assertIs(actual.__self__,expected.__self__);self.assertIs(actual.__func__,expected.__func__)
+                else:self.assertIs(actual,expected)
         for name,args,kwargs in zip(NAMES,(({},),('t',),([],),({},{})),({}, {'source':'direct','state':{}},{},{'auto_optimize_states':[],'auto_optimize_states_by_id':{}})):
-            mock=Mock(return_value=object())
-            with patch.object(server,'_auto_optimization_links',SimpleNamespace(**{name:mock})):self.assertIs(getattr(server,name)(*args,**kwargs),mock.return_value)
-            mock.assert_called_once_with(*args,**kwargs)
+            with patch.object(type(service),name,autospec=True) as mock:
+                mock.return_value=object()
+                self.assertIs(getattr(server,name)(*args,**kwargs),mock.return_value)
+                mock.assert_called_once_with(service,*args,**kwargs)
+                self.assertIs(mock.call_args.args[0],service)
         subprocess.run([sys.executable,'-c',"import sys; import local_inspection_service.pipeline.auto_optimization_links; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)
 
 if __name__=='__main__':unittest.main()

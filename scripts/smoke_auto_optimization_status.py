@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method,auto_port
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_STATUS_BASELINE_SOURCE")
 NAMES={"public_auto_optimize_state","auto_optimize_update_settings"}
@@ -126,7 +127,7 @@ class StatusContract(unittest.TestCase):
             for field in fields(port):assert_capability_owner(self, port, field.name, server)
         for name,args,kw in [("public_auto_optimize_state",("t",),{"user":{"id":"a"}}),("auto_optimize_update_settings",("t",{}),{})]:
             expected=object();method=Mock(return_value=expected)
-            with patch.object(server,"_auto_optimization_status",SimpleNamespace(**{name:method})):
+            with auto_method(self,server._auto_optimization_status,name,method):
                 self.assertIs(getattr(server,name)(*args,**kw),expected);method.assert_called_once_with(*args,**kw)
         states={u:{"task_id":u,"settings":{}} for u in ("alpha","beta")};barrier=threading.Barrier(2,timeout=10);saved=[]
         def who():return server._request_user.get()["id"]
@@ -136,7 +137,7 @@ class StatusContract(unittest.TestCase):
         async def request(user):
             with server._request_user.bind({"id":user}):return await run_in_threadpool(server.auto_optimize_update_settings,user,{})
         async def both():return await asyncio.gather(request("alpha"),request("beta"))
-        with patch.object(server,"load_auto_optimize_state",side_effect=load),patch.object(server,"save_auto_optimize_state",side_effect=save),patch.object(server,"_auto_optimization_status",replace(server._auto_optimization_status, policy=replace(server._auto_optimization_status.policy, default_auto_optimize_settings=lambda:{"enabled":False}))),patch.object(server,"auto_optimize_completed_model_id",return_value=""),patch.object(server,"current_auth_user",side_effect=lambda:server._request_user.get()),patch.object(server,"public_auto_optimize_state",side_effect=public):results=asyncio.run(both())
+        with patch.object(server._auto_optimization_core,"store",SimpleNamespace(load_auto_optimize_state=load,save_auto_optimize_state=save)),auto_port(service,"policy",replace(service.policy,default_auto_optimize_settings=lambda:{"enabled":False})),patch.object(server._auto_optimization_core,"readiness",SimpleNamespace(auto_optimize_completed_model_id=lambda state:"")),patch.object(server._auto_optimization_core,"public_auto_optimize_state",side_effect=public):results=asyncio.run(both())
         self.assertEqual(results,[{"owner":"alpha"},{"owner":"beta"}]);self.assertCountEqual(saved,["alpha","beta"]);self.assertIsNone(server._request_user.get())
 
     @unittest.skipIf(BASELINE,"candidate-only import")

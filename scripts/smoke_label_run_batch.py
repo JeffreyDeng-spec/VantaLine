@@ -1,5 +1,7 @@
 """Accepted-main/candidate label-list projection and bounded query-count contract."""
 import ast
+import functools
+import inspect
 import copy
 import json
 import os
@@ -13,6 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.label_inspection import api, worker, worker_api
 
 
@@ -82,6 +85,9 @@ class FakeRepository:
     def list_run_history_for_tasks(self, owner, task_ids, *, summary_task_ids):
         return self.list_run_payloads_for_tasks(owner, task_ids)
 
+    def list_beta_history(self, owner):
+        return self.legacy(owner, "beta")
+
     def legacy(self, owner, kind):
         self.calls.append(("legacy", owner, kind))
         return copy.deepcopy(self.legacy_rows[kind]) if owner == self.owner else []
@@ -105,6 +111,13 @@ class FakeRepository:
                 "next_cursor": f"{identity}.{next_offset}" if next_offset < len(rows) else None}
 
 
+class FixtureLabelRepository:
+    """Construct the raw fixture while retaining a real type for API checks."""
+
+    def __new__(cls, raw):
+        return raw
+
+
 def baseline_register():
     source = os.environ.get("VANTALINE_LABEL_LIST_BASELINE_SOURCE")
     if not source:
@@ -126,14 +139,16 @@ def list_client(register, repo, root, expected_status=200):
     # Frozen pre-lifecycle API sources import the old Web adapter location.
     # Adapt only that dependency while replaying the unchanged accepted list
     # function; no lifespan is entered and the production consumer stays Web-free.
-    with patch.object(worker, "register", worker_api.register, create=True), \
-         patch.object(api.pdf_import, "register", lambda *_: None), \
+    fixture_worker = functools.partial(worker_api.register, runtime_provider=get_runtime)
+    with patch.object(worker, "register", fixture_worker, create=True), \
+         patch.object(worker_api, "register", fixture_worker), \
+         patch.object(api.pdf_import, "register", lambda *_, runtime_provider=None: None), \
          patch.dict(register.__globals__, {
-             "LabelRepository": lambda raw: raw,
-             "MediaStore": lambda *_: object(),
+             "LabelRepository": FixtureLabelRepository,
+             "MediaStore": lambda *_, runtime_provider=None: object(),
          }):
         register(app, access, repositories, imports, lambda: None,
-                 lambda: {"enabled": True})
+                 lambda: {"enabled": True}, **({"runtime_provider": get_runtime} if "runtime_provider" in inspect.signature(register).parameters else {}))
         client = TestClient(app)
         first = client.get(api.PREFIX + "/tasks", params={"limit": 100})
         assert first.status_code == expected_status, first.text[:300]

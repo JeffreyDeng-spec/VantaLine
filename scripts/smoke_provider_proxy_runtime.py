@@ -1,4 +1,5 @@
 """Proxy selection and transport dispatch with no real network I/O."""
+from application_integration_source_contract import restore_infrastructure_root
 import ast,contextlib,os,sys,unittest
 from dataclasses import fields
 from pathlib import Path
@@ -8,6 +9,7 @@ from urllib.parse import urlsplit
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PROVIDER_PROXY_BASELINE_SOURCE')
 NAMES=('ai_proxy_url_from_environment','local_proxy_available','env_flag_enabled','ai_proxy_url_from_config','ai_urlopen')
 def create(b):
@@ -60,8 +62,17 @@ class Contracts(unittest.TestCase):
   self.b['urllib'].request.ProxyHandler=handler;self.assertEqual(self.s.ai_urlopen(object(),{'proxy_url':'proxy'},timeout=1),'proxied');original.assert_called_once_with('handler')
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets));count=0
-  for group in binding.keywords:
+  tree=ast.parse(restore_infrastructure_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py')));alias=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets))
+  self.assertEqual(ast.unparse(alias),'_provider_configuration.proxy')
+  binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_configuration' for t in n.targets));count=0
+  for group in [k for k in binding.keywords if k.arg in ('proxy_settings','proxy_calls','proxy_transports')]:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,10)
+  from scripts.smoke_model_configuration_composition import provider_inputs
+  from local_inspection_service.model_providers.configuration_composition import ProviderConfiguration
+  inputs,poison=provider_inputs();owner=ProviderConfiguration(**inputs)
+  for name in ('validate_ai_proxy_url','ai_proxy_url_from_environment','env_flag_enabled','local_proxy_available'):
+   selected=getattr(owner.proxy.calls,name)();expected=getattr(owner,name)
+   self.assertIs(selected.__self__,owner);self.assertIs(selected.__func__,expected.__func__)
+  poison.assert_not_called()
 if __name__=='__main__':unittest.main()

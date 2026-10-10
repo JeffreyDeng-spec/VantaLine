@@ -25,7 +25,8 @@ class OCRContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.detection_ocr_test_fixture import detection_ocr_fixture
+        cls.api=detection_ocr_fixture(server)
     @classmethod
     def tearDownClass(cls): cls.temporary.cleanup()
 

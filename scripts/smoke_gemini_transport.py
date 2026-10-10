@@ -13,6 +13,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability, get_provider_capability
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 
 
 def capture_gemini_window(api, Fixture, site, mode='ordinary'):
@@ -32,10 +34,10 @@ def capture_gemini_window(api, Fixture, site, mode='ordinary'):
                 def maker(label):
                     def call(*a,**kw):events.append(label);return result(*a,**kw)
                     return call
-                callbacks=[maker(label) for label in 'ABC'];setattr(api,name,callbacks[0])
+                callbacks=[maker(label) for label in 'ABC'];set_provider_capability(api, name, callbacks[0])
                 def prior():
-                    events.append('prior');setattr(api,name,callbacks[1] if mode=='prior' else None if mode=='missing' else callbacks[0])
-                def argument():events.append('argument');setattr(api,name,callbacks[2])
+                    events.append('prior');set_provider_capability(api, name, callbacks[1] if mode == 'prior' else None if mode == 'missing' else callbacks[0])
+                def argument():events.append('argument');set_provider_capability(api, name, callbacks[2])
                 return prior,argument
             if site=='data_url':
                 direct_parts=True;prior,argument=install('data_url_payload',lambda value:('image/png','eA=='))
@@ -117,7 +119,7 @@ def capture_gemini_window(api, Fixture, site, mode='ordinary'):
                 api.bounded_text=formatter
             elif site=='cache:http_error' or site.startswith('image:http_'):
                 table={'cache:http_error':('AiProviderError',401,0,1),'image:http_auth':('AiProviderAuthError',401,3,4),'image:http_config':('AiProviderConfigError',404,5,6),'image:http_error':('AiProviderError',500,5,6),'image:http_overloaded':('AiProviderOverloaded',429,4,5)}
-                name,status,prior_index,argument_index=table[site];expected_class=getattr(api,name);prior,argument=install(name,expected_class)
+                name,status,prior_index,argument_index=table[site];expected_class=get_provider_capability(api, name);prior,argument=install(name,expected_class)
                 class HTTPFailure(urllib.error.HTTPError):
                     armed=False
                     def __getattribute__(self,key):
@@ -210,7 +212,8 @@ class GeminiTransportContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from scripts.provider_transport_test_fixture import transport_fixture
+        cls.api=transport_fixture(server)
 
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
@@ -221,8 +224,8 @@ class GeminiTransportContracts(unittest.TestCase):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
         self.settings=dict(configured=True,model='gemini-3-synthetic',base_url='https://fixture.invalid/v1/',
                            api_key='synthetic-key',timeout_seconds='12.5')
-        self.record=Mock();self.stack.enter_context(patch.object(self.api,'model_profile_service',SimpleNamespace(record_call=self.record)))
-        self.open=self.stack.enter_context(patch.object(self.api,'ai_urlopen'))
+        self.record=Mock();self.stack.enter_context(patch_profile_service(self.api, SimpleNamespace(record_call=self.record)))
+        self.open=self.stack.enter_context(patch_provider_capability(self.api, 'ai_urlopen'))
         self.body={'candidates':[{'content':{'parts':[{'text':'{"answer":42}'}]},'finishReason':'STOP'}],'usageMetadata':{'totalTokenCount':7}}
         self.response=Mock();self.response.__enter__=Mock(return_value=self.response);self.response.__exit__=Mock(return_value=False)
         self.response.read=Mock(side_effect=lambda:json.dumps(self.body).encode());self.open.return_value=self.response
@@ -230,6 +233,10 @@ class GeminiTransportContracts(unittest.TestCase):
     def provider(self,bound=False):
         if bound:self.settings['profile_id']='synthetic-profile'
         return self.api.GeminiAiProvider(self.settings)
+
+    def test_actual_default_application_transport(self):
+        from scripts.provider_default_transport_contract import assert_default_transport
+        assert_default_transport(self, 'gemini')
 
     def test_constructor_and_content_parts(self):
         p=self.provider();self.assertIs(p.settings,self.settings);self.assertEqual(p.last_usage_metadata,{});self.assertEqual(p.last_raw_text,'')
@@ -308,7 +315,7 @@ class GeminiTransportContracts(unittest.TestCase):
     def test_image_returns_first_decoded_image_and_preceding_text(self):
         self.body['candidates'][0]['content']['parts']=[{'text':'first'},'ignored',{'inline_data':{'data':'eA==','mime_type':'image/custom'}},{'text':'later'}]
         p=self.provider(True)
-        with patch.object(self.api,'decode_b64_image',return_value=b'synthetic-image') as decode,patch.object(self.api,'masked_url_for_status',return_value='masked') as mask:
+        with patch.object(self.api,'decode_b64_image',return_value=b'synthetic-image') as decode,patch_provider_capability(self.api, 'masked_url_for_status', return_value='masked') as mask:
             result=p.generate_image('prompt',[{'type':'text','text':'user'}],model='override-model',system_prompt='system')
         self.assertEqual(result['bytes'],b'synthetic-image');self.assertEqual(result['mime_type'],'image/custom')
         self.assertEqual(result['text'],'first');self.assertEqual(p.last_raw_text,'first');self.assertEqual(result['model'],'override-model')
@@ -344,7 +351,7 @@ class GeminiTransportContracts(unittest.TestCase):
 
     def test_bound_json_and_image_missing_resolver_fail_before_request(self):
         for method in ('json','image'):
-            with self.subTest(method=method),patch.object(self.api,'model_profile_service',None),self.assertRaises(RuntimeError) as caught:self.invoke(self.provider(True),method)
+            with self.subTest(method=method),patch_profile_service(self.api, None),self.assertRaises(RuntimeError) as caught:self.invoke(self.provider(True),method)
             self.assertEqual(str(caught.exception),'Model profile resolver is not configured')
         self.open.assert_not_called();self.record.assert_not_called()
 
@@ -387,7 +394,7 @@ class GeminiTransportContracts(unittest.TestCase):
         self.settings.update(proxy_url_raw='synthetic-proxy',proxy_url='ignored',proxy_source_name='synthetic',proxy_auto_local=True)
         self.body['candidates'][0]['content']['parts']=[{'text':'text-first','inlineData':{'data':'ignored'}},{'inlineData':{'data':'eA=='}}]
         p=self.provider(True)
-        with patch.object(self.api,'decode_b64_image',return_value=b'image') as decode,patch.object(self.api,'masked_url_for_status',return_value='masked') as mask:
+        with patch.object(self.api,'decode_b64_image',return_value=b'image') as decode,patch_provider_capability(self.api, 'masked_url_for_status', return_value='masked') as mask:
             result=p.generate_image('p',[],model='m')
         decode.assert_called_once_with('eA==');mask.assert_called_once_with('synthetic-proxy')
         self.assertEqual((result['text'],result['proxy_used'],result['proxy_source_name'],result['proxy_url'],result['proxy_auto_local']),('text-first',True,'synthetic','masked',True))
@@ -473,7 +480,7 @@ class GeminiTransportContracts(unittest.TestCase):
         first=self.record;second=Mock();p=self.provider(True)
         original=self.open.side_effect
         def open_response(*args,**kwargs):
-            self.api.model_profile_service=SimpleNamespace(record_call=second)
+            set_profile_service(self.api, SimpleNamespace(record_call=second))
             return self.response
         self.open.side_effect=open_response
         with patch.object(self.api,'resolve_model_profiles',side_effect=AssertionError('late resolver function lookup')):

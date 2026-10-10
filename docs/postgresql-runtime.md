@@ -1,3 +1,7 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
+The script-only migration DDL export trims outer LF characters on the complete derived legacy-projection block before joining components. Tables, triggers, quoted function bodies and runtime migration behavior remain unchanged; the generated-schema and CSV-import single-user PostgreSQL checks retain strict input framing and error detection.
+
 Codex comparison list and event-history repository SELECTs use short read transactions without the global advisory fence. Writes, claims, cancellation, report settlement and detail `get` retain the existing transaction lock. PostgreSQL committed visibility, decode rollback and reverse write-lock waits are required CI contracts. No schema or migration changes.
 
 The first-page label legacy-record index is in-process only: it groups references from the already owner-filtered `records` JSON returned by the existing short read transaction. It creates no index, table, write or additional connection. Detail and cursor paths still use their old code; legacy assets/manual/Beta aggregation and full run JSON remain separate later work.
@@ -211,6 +215,14 @@ scopes must open and close on the execution thread, including exception paths.
 This extraction changes no SQL, advisory-lock scope, pagination snapshot or schema.
 
 **Status: Authoritative**
+
+The release runtime observer uses an explicitly read-only PostgreSQL connection,
+repeatable-read transactions and a two-second statement timeout. Control state,
+queue counts and both actual heartbeat records come from one database snapshot;
+subsequent polls begin new snapshots. It never takes the label mutation advisory
+lock, initializes tables or writes heartbeat records. The synthetic PostgreSQL
+contract interleaves a writer between reads to reject mixed-generation evidence
+and verifies that the observer's connection cannot execute a DELETE.
 
 Document review uses existing asset status and JSONB fields; no migration is
 needed. `review` transitions to `needs_confirmation` under the standard advisory
@@ -579,6 +591,195 @@ The CI benchmark-only PostgreSQL 16 service has a 2 GiB tmpfs at its actual PGDA
 Migration `2026_10_08_real_photo_feedback.sql` adds owner/task-scoped states, idempotent jobs and append-only events. Existing JSON runtime records are retained; this opt-in workflow requires PostgreSQL and never rewrites historical masks/models/datasets. Claims and publication use a transaction advisory lock, per-attempt tokens and version epochs. Interrupted/expired attempts become terminal uncertainty, not queued retries. Late parent receipts retain costs/evidence without granting admission. The SQL migration and generated schema have matching queue columns and keys; test against a disposable database before enablement.
 
 Review scheduling serializes claims across workers, prioritizes initialization, and blocks automatic paid work after failed/incomplete initialization. Reports carry exact sample/review versions; heartbeats never revive revoked tokens. A parent-only receipt write may retain a late attempt outcome, but cannot accept images, enqueue a replay, or change a completed report. Explicit restart cancels never-started obsolete review jobs and preserves successful image-version decisions.
+Moving active-lease validation into the station service does not move database transaction or lease mutation boundaries. Rebind and diagnostic contracts still validate commit/rollback behavior with an isolated PostgreSQL schema. No schema, advisory lock, retry or lease timing changes are introduced.
+
+The retained PLC readiness check still treats any non-None repository as authoritative and only inspects whether mutate_plc_fenced_attempt_with_db_time is callable. It never invokes that method as a probe. This structural extraction changes no database transaction, lock or owner-fencing primitive.
+
+LegacyRuntimeCoordination mutates only the existing PLC runtime app_config row through mutate_app_config_namespace, preserving the advisory transaction lock and absent-row serialization. JSON fallback still uses protected app-config mutation. A claimed owner performs the original fresh repository check before selecting the heartbeat callback; callback failure after persistence does not undo or replay the committed claim.
+
+PLC legacy record projection still delegates configuration reads to the existing store. The extraction introduces no SQL, lock, transaction or consistency change: returned audit records remain shallow copies and persisted validation occurs after the original configuration read guard. It does not establish a new atomic read/verify transaction.
+
+LegacyPlcOperations delegates to the existing configuration, ownership, record and settlement services. Extraction adds no SQL or transaction and does not strengthen the original multi-read consistency or application-clock ownership guarantees. Error paths and already-persisted evidence keep their prior semantics.
+
+Repository ownership is per application graph; a reset of one owner cannot close a different owner’s connection. Cross-thread reset still invalidates by generation without closing another active thread’s connection, and the thread closes its old selection at its next access/scope exit. JSON selection, PostgreSQL failure without JSON fallback, transaction semantics and probe responses are unchanged. Two owners sharing the same environment mapping still observe its changes; libpq process environment and database state are not made application-private.
+
+Each build_foundation call creates its own RuntimeRepositories factory. Connection acquisition stays lazy and thread-local, cache keys still observe live store/DSN/connector values, and one foundation reset cannot close another foundation connection. The builder neither connects nor migrates the database; statement locking and transaction behavior remain unchanged.
+
+ArtifactRuntimeProvider isolates the lazy artifact-runtime cache and configuration signature within one owner. Its default owner retains the existing database URL validation and restart-on-configuration-change behavior. The underlying artifact location connector and transaction policies are unchanged; this adds no schema, migration, connection pool or database lock policy. Independently supplied builders remain responsible for their actual resource sharing.
+
+Ordered Web drain waits for owned background thread scopes to finish on their own threads. It does not close another thread's connection, sweep a global connection registry or infer commit/cleanup success merely from thread completion. Existing repository scope and exception cleanup contracts remain in force.
+
+This offline shutdown replay follows lifecycle candidate 7d7886a and preserves current native history, readiness, model/tail and canonical LF fixes. Four owned runtime/test/contract blobs match reviewed 82313c5. Manifest v205 lists 524 sources. The 480-second shutdown allowance remains cooperative and requires ASGI request quiescence; complete independent application composition is still pending. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The three explicit detection storage suppliers preserve the existing ArtifactStore publication, generation and transaction rules. This composition change adds no database migration, connection owner, retry or lock-policy change.
+
+This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Detection image codecs, reference sheets, video materialization and local-model loading now receive storage dependencies explicitly. Object publication, generation checks, database transactions and existing cache lifetimes are unchanged; no migration or additional retry is introduced.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+HTTP artifact injection changes response composition only. Artifact database lookups, read-cache leases, generations, storage modes and database connection/transaction ownership retain existing behavior. Explicit dependency failure does not retry a lookup in a process-global store.
+
+This offline HTTP artifact replay follows detection media candidate f2b4519 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 301b6c1. Manifest v208 lists 524 sources. Explicit missing file dependencies fail closed while genuinely omitted legacy arguments retain their documented default. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Training resource/archive storage injection preserves artifact generation checks and repository transaction ownership. Existing model/dataset retirement markers still use their original repository methods; no SQL, advisory-lock, migration or cross-resource transaction is changed. Integration fixtures now pass the strict digest file port directly instead of replacing its module global.
+
+This offline training resource replay follows image candidate 9063ace and preserves current history, readiness, model/tail, shutdown, corrected boundary documentation and canonical LF guards. Production and test blobs match reviewed fbf5434. At this replay boundary manifest v215 selects 526 sources. Explicit resource and archive capabilities preserve file operation ordering, strict digest failures, partial publication and archive formats. Current source changes require actual-main rebind, independent review and full CI/release acceptance before publication.
+
+Accessory explicit file capabilities preserve artifact generation checks and repository transaction behavior. The guide provenance integration fixture supplies the files port directly; this refactor changes no SQL, connection lifetime, locks or schema.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Training model, dataset and resource catalog file ownership is explicit; repository selection, training-task lookup aliases and snapshot reads are unchanged. Validate the original trained-model catalog suite with --postgres against an isolated disposable database, including schema cleanup. This storage-injection change adds no SQL, migration or database lock policy.
+
+This offline training catalog replay follows text cleanup candidate 1199028. Owned source/test blobs and ordered entry match reviewed 8f0715d. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v228 selects 528 sources. Local and indexed selection, permission ordering and repeated reads remain unchanged. Exact-source neighbor evidence is reused; current targeted, real PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+A Web artifact composition owns the lazy artifact selector but does not change PostgresLocations connection allocation, transaction scope or schema. Independent builders remain responsible for physical resource sharing; logical owner isolation does not make multi-store writes atomic.
+
+This offline Web artifact composition replay follows comparison candidate d2ae509. Owned source/test blobs and ordered entry match reviewed a0fa2ed, including the Python 3.10 structural source guard. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v236 selects 529 sources. The Web graph owns a fresh lazy runtime provider and two focused views; this is not a complete application factory or proof of independent underlying resources. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+StreamConfiguration uses existing load/save capabilities and adds no repository, connection, transaction or advisory lock. A failed save retains the original in-memory mutation; this structural extraction adds no transactional guarantee.
+
+This offline stream configuration replay follows Web artifact candidate f2e481b. Owned source/test blobs and ordered entry match reviewed 14f6504. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v237 selects 530 sources. Existing load, mutation, save and post-save response ordering remain unchanged; configuration is not given a new transaction or lock. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+IncomingTextStore now resolves JSON single-record lookups through its own list methods. The two callbacks through the application entry have been removed; narrow repository, guard, path and row-adapter inputs remain. Tests replace the owning store method and cover two independent stores, preserving missing-loader errors, call-time repository selection and lock behavior. TextStorage allocates both text stores and their shared write lock per composition, without opening a connection or retaining a user. Manifest v238 selects 531 source paths, including text_inspection/storage_composition.py. This closes the store self-reference only; full application factory and route/lifecycle instance isolation remain unfinished.
+
+The text storage lock belongs to `TextStorage` and its public lock property cannot be rebound. The entry lock alias initially references it; replacing that private entry alias no longer replaces either store guard. Remaining route/write adapters still use their existing inputs until their domain composition is migrated. This intentional narrowing of private test seams does not change configured runtime behavior.
+
+Incoming workflow composition resolves its repository through the selected store on the calling thread and holds no connection or account. Duplicate lookup keeps the existing owner/task/capture query, missing-row decoder behavior, JSON fallback order and exceptions. It introduces no schema, transaction, cache, lock removal or retry. JSON mutation guards share the selected TextStorage lock.
+
+The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+
+Model catalog composition resolves its repository factory when each lookup operation starts, then creates and consumes the lookup snapshot on that caller thread. No repository connection or current account is captured during graph construction. The thread-bound fake regression verifies factory/fetch/decode identity and owner-isolated failure; it is not evidence of real PostgreSQL connection release. Existing real PostgreSQL catalog and runtime connection-lifecycle checks remain required. This structural change adds no table, migration, transaction or lock-policy modification.
+
+The text standard graph selects the supplied TextRecordStore repository factory and guard for document/preparation mutation and standard edits. Store ownership is explicit; no connection or current user is retained by the domain. Existing transactions, native-thread cleanup and PostgreSQL versus JSON selection stay in their original implementations. This slice adds no SQL, migration, index or lock-policy change.
+
+Text comparison history and extraction select the repository factory from the supplied standards TextRecordStore. Submission/review/prepared jobs use that same store and verified media owner. Construction retains no connection or current user. SQL, transaction boundaries, JSON fallback, expiry behavior and claim/update rules remain in the original modules; this structural change adds no index or lock policy.
+
+Training state assembly selects the existing repository factory per operation and uses the same supplied RLock in record persistence and lifecycle updates. It introduces no migration, query rewrite or lock removal. Visibility-filtered task lists retain existing stopped-state writes; they are not pure reads. Validate record upsert and canonical/alias deletion in an isolated PostgreSQL database.
+
+The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+The consolidated offline integration now starts from accepted main e1cfee3
+(real-photo feedback and independent review worker). DetectionWorkflows receives
+narrow analysis/capture feedback callbacks; both original capture gates and
+provenance scopes remain. Compatibility aliases select the composed owners.
+The real-photo routes, purpose bindings, incremental tables and review worker
+remain present. Manifest v253 contains 557 actual sources at this checkpoint;
+historical task snapshots are not rewritten. Full factory, combined CI and
+release acceptance are separate remaining gates.
+
+Beta list history uses one bound-account SELECT in the existing unlocked short read transaction. SQL aggregates label keys only to compact individually proven flat string/bool/null entry objects; empty objects remain objects and non-object labels stay unchanged. All fields capable of numeric or nested JSON decoding failure stay present. Full details use the original legacy method. Snapshot writes retain their existing transaction fence; no cache write or migration is introduced.
+
+The Beta list SELECT now also computes nullable reference and label counts from that same row, under the existing bound account predicate and short read transaction. No table/index migration or write-lock change is introduced. Unknown fields and unsafe JSON evidence stay present for original decode-error behavior; this does not eliminate all JSON transfer.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+Privileged restores and repairs must not bypass legacy invalidation triggers
+while serving requests. A restore that independently replaces source and derived
+tables is not a coherent ready generation. Keep producers stopped and invalidate
+all readiness in one transaction before reopening requests: increment every
+existing legacy_projection_epoch.sequence and delete legacy_projection_ready
+rows in the configured runtime schema. Retain epochs and derived/source tables;
+never reset sequences. Restore/reapply the canonical trigger definitions and
+verify ordinary INSERT/UPDATE/DELETE/TRUNCATE invalidation before optional
+explicit republishing. PostgreSQL superuser operations remain an operator trust
+boundary; the application does not detect disabled triggers automatically.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.
+
+
+Application configuration is now composed by config/application_composition.py.
+Each owner allocates its own reentrant guard and protected-write ContextVar;
+training configuration selects that same owner lazily. Construction performs no
+file or repository access. PostgreSQL protected writes retain their existing
+transaction/advisory-lock behavior. Two real PostgreSQL owner fixtures cover
+concurrent protected writes, training-state persistence and rollback after a
+partial write. Run scripts/smoke_application_configuration_composition.py with
+VANTALINE_POSTGRES_DSN to execute all six cases. JSON-only mode skips that one
+PostgreSQL case. PostgreSQL fixture markers use JSON objects because the existing
+record decoder treats strings as serialized JSON; this increment does not change
+the decoder or rewrite stored configuration. Full application factory, PLC and
+pipeline ownership and hosted/release gates remain open.
+The combined Beta benchmark accounts explicitly for one legacy schema catalog
+probe and one generation/eligibility query when the derived schema is installed
+but no cohort is ready. A/A has neither probe. All other query counts must stay
+fixed, the total remains at most 12, and original 31 samples, three memory
+samples, P95 and peak-memory limits remain. Full combined CI is still required.
+
+Static PostgreSQL persistence checks read the current business modules. Their
+old-location oracle runs only after the actual 26 composition modules and
+complete integrated root pass immutable AST bindings. Two explicitly reviewed
+deltas restore the older assembly for its retained assertions; they do not
+represent current source locations. Positive and adverse checks cover changed
+repository timing/owner/import, missing or reordered nodes, route/shutdown order
+and corrupted delta regions. This is test adaptation, with no production change.
 
 
 Accepted-real-photo training reservation uses the same durable PostgreSQL fence as screening. Dataset members, split assignments, base configuration and deterministic training identity are persisted before submission. A restarted Web process observes an existing training record without paid resubmission; absent/uncertain records pause for reconciliation. Changing class/profile definitions revokes queued/running old-epoch work rather than leaving it silently queued.
@@ -589,6 +790,56 @@ Assessment inputs freeze the initialization decision, current approved-real targ
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
 
+
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.
+
+PipelinePersistence supplies the existing operation-time PostgreSQL repository to TaskStore and StateStore. Model snapshots still freeze before a task write, and state-key updates keep their original transactional commit behavior. The state RLock and task Lock remain distinct; no schema migration, database lock removal or additional task-store lock is included. Actual graph validation uses two disposable schemas with simultaneous state updates, terminal synchronization and exception-before-write checks.
+
+PipelineExecution retains ThreadRepositoryFactory scope around every actual native thread, including the model-binding loader before runtime.run and scope exit after identity/model restoration. Two-schema tests exercise all three runtime types and auto-to-advance handoff with identical IDs and independent account snapshots, and verify every created connection closes. No schema or advisory-lock changes are introduced.
+
+PipelineQueries reuses the original candidate repository and PipelinePersistence state update paths. Candidate refresh holds the existing candidate guard and confirmed-candidate pruning goes through the state owner; no transaction or advisory-lock policy changes are included. The composition smoke uses two isolated schemas and releases all thread-owned connections.
+
+PostgreSQL endpoint source verification now uses the established composite replay in dependency order, rather than reversing configuration before newer owner graphs. Actual repository modules and the complete original endpoint persistence assertions are still inspected; no database behavior, SQL, permission or locking change is involved.
+
+AgentPipelineWorkflows has no connection or current-user field. Model bindings use the supplied resolver scope; persistence stays with PipelinePersistence and native execution retains thread repository scopes. Agent decision work runs outside the task guard; actual turn commit and record save run inside, followed by scheduling outside. No SQL or advisory-lock policy changes are included.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.
+
+Real-photo assembly routes repository acquisition and dispatcher thread scopes through explicit supplied capabilities. Graph allocation does not acquire a connection. Feedback repository operations retain their original `finally` close, and dispatcher algorithms and database fencing/transactions are unchanged. The bridge resolves the training account per operation and restores the request identity on every exit. This assembly change adds no schema migration or new database lock behavior.
+
+Canonical Web construction gives each app its own repository owner and optional typed connector. Selections remain thread-owned; asynchronous work uses scopes inside the dispatched thread. Failed construction releases the assembling thread's selection; normal requests/workers release their own selections and stale connections rebuild through the existing factory. Real-photo feedback uses the same app's explicit environment/connector and its existing independent finally-close. This assembly adds no SQL, schema migration, transaction merger or lock change. Preserve all prior read/write, pagination and paid-call concurrency rules.
 
 Migration 2026_10_10_artifact_prefix_index is additive and idempotent. idx_artifact_prefix_c indexes logical_path under explicit C collation and descending generation. Literal descendants use the byte interval [prefix + slash, prefix + zero); latest-generation state is resolved before ready filtering. Directory reads return distinct first relative components only when a descendant slash exists, without decoding all artifact rows. Historical versions and tombstones remain intact. Existing per-operation transactions and CAS/advisory writer fencing are unchanged.
 
@@ -610,10 +861,10 @@ durability assertions are unchanged; tests within one shard remain serial. The
 storage-isolation dependency group also inspects the separate bounded synthetic
 benchmark instance and retains final capacity evidence after assertion failure.
 
-The five complete performance matrices execute in `Backend performance`, rather
-than the required backend gate. The four SQL benchmarks still override only their
-individual command DSNs to the bounded second instance; the fake legacy benchmark
-keeps its prior environment. Both workflows enforce fsync, synchronous_commit
+The six complete label performance matrices execute in the required CI
+`backend-performance` job. The five SQL benchmarks override only their individual
+command DSNs to the bounded second instance; the fake legacy benchmark retains
+its prior environment. CI and scheduled performance enforce fsync, synchronous_commit
 and full_page_writes, distinct instance identities and original capacity limits.
 Exact-tree main reuse validates the complete PR database evidence; it does not restore
 a test database. No database contents are cached or shared between runners; production storage,
@@ -627,3 +878,28 @@ Explicit source edits on disabled legacy states reuse the same round-archive hel
 ## Real-photo source confirmation
 
 Real-photo source confirmation uses additive fields in the existing fenced state JSON: group confirmation, source version, actor/time and prior group history. No DDL or historical-state rewrite is required. Group edits run under the existing owner/task mutation fence, preserve active/frozen guards, and return without version/history/recheck changes for an identical save. A changed reviewed source schedules at most one explicit recheck ID; it does not insert a paid job. Approved queries and frozen dataset validation independently exclude pending sources, including historical accepted records.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
+
+Only fixed silent Git preparation checks `check-298` and `check-299` may record zero-byte logs with the empty-content SHA-256. PostgreSQL benchmark/storage logs remain nonempty and retain all complete numeric and durability checks; database behavior and performance thresholds are unchanged.

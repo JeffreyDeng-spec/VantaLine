@@ -137,7 +137,12 @@ class DispatchStateContracts(unittest.TestCase):
     @unittest.skipIf(BASELINE, 'Original root functions have no extracted port assembly')
     def test_actual_root_getters_and_forwarding(self):
         from local_inspection_service.scripts import smoke_plc_phase1_hardening as fixture
-        server = fixture.server; service = server._plc_dispatch_runtime_state
+        from canonical_application_source_contract import verify_actual_sources
+        from plc_legacy_test_composition import build
+        verify_actual_sources()
+        default = fixture.server
+        server = build(default); service = server._plc_dispatch_runtime_state
+        self.addCleanup(server._plc_io_executor.shutdown, wait=True)
         for group in ('state', 'records', 'policy'):
             ports = getattr(service, group)
             for field in fields(ports):
@@ -160,6 +165,11 @@ class DispatchStateContracts(unittest.TestCase):
             with patch.object(server, '_plc_dispatch_runtime_state', SimpleNamespace(**{name: callback})):
                 self.assertIs(getattr(server, name)(*args, **kwargs), callback.return_value)
                 callback.assert_called_once_with(*args, **kwargs)
+            actual = default._plc_dispatch_runtime_state
+            with patch.object(type(actual), name, autospec=True, return_value=callback.return_value) as receiver:
+                self.assertIs(getattr(default, name)(*args, **kwargs), callback.return_value)
+                receiver.assert_called_once_with(actual, *args, **kwargs)
+                self.assertIs(receiver.call_args.args[0], actual)
 
 
 if __name__ == '__main__':

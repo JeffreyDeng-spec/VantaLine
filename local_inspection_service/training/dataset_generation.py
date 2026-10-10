@@ -1,6 +1,5 @@
 """Dataset file orchestration; rendering and configuration remain explicit dependencies."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingTextWriter
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -50,7 +49,10 @@ class DatasetRendering:
 
 class DatasetGenerator:
     def __init__(self, records: DatasetRecords, plan: DatasetPlanning, render: DatasetRendering,
-                 output: Callable[[], Callable[[str, str], Path]], update_provider: Callable[[], DatasetProgress]):
+                 output: Callable[[], Callable[[str, str], Path]], update_provider: Callable[[], DatasetProgress], *, files: TrainingTextWriter):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.records, self.plan, self.render = records, plan, render
         self.output, self.update_provider = output, update_provider
 
@@ -105,7 +107,7 @@ class DatasetGenerator:
                 )
                 if line:
                     lines.append(line)
-            _business_files.write_text(label_path, "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+            self.files.write_text(label_path, "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
             annotated_path = preview_dir / split / f"sample_{idx + 1:06d}_boxed.jpg"
             annotated_url = self.render.annotation()(image_path, rendered.get("labels", []), annotated_path)
             rendered_labels = rendered.get("labels", [])
@@ -215,5 +217,5 @@ class DatasetGenerator:
             "owner_username": str(task.get("owner_username") or ""),
         }
         manifest_path = dataset_dir / "manifest.json"
-        _business_files.write_text(manifest_path, json.dumps(manifest, indent=2), encoding="utf-8")
+        self.files.write_text(manifest_path, json.dumps(manifest, indent=2), encoding="utf-8")
         return {"dataset_dir": str(dataset_dir), "dataset_yaml": str(yaml_path), "manifest_path": str(manifest_path)}

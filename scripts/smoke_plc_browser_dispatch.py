@@ -17,6 +17,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service import plc_web_serial as protocol
 from local_inspection_service.plc_fx_ascii import PlcConfigError
 
@@ -29,7 +30,11 @@ BASELINE = os.environ.get("VANTALINE_PLC_BROWSER_DISPATCH_BASELINE_SOURCE")
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    for n in ast.parse(source.read_text(encoding="utf-8-sig")).body:
+    raw = read_checked_application_source(source, encoding='utf-8-sig')
+    if not BASELINE:
+        from application_integration_source_contract import restore_plc_domain_root
+        raw = restore_plc_domain_root(raw)
+    for n in ast.parse(raw).body:
         if isinstance(n, ast.FunctionDef) and n.name in NAMES:
             nodes.append(n)
         elif not BASELINE and isinstance(n, ast.ImportFrom) and n.module in {"plc.browser_dispatch", "plc.browser_dispatch_ports"}:

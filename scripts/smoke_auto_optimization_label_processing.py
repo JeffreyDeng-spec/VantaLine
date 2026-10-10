@@ -13,6 +13,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock, patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_LABEL_PROCESSING_BASELINE_SOURCE')
 NAMES=('start_auto_optimize_label_worker','auto_optimize_process_label_sample','auto_optimize_label_worker')
@@ -26,7 +27,9 @@ def create(bindings):
     from local_inspection_service.training.auto_optimization_label_processing import AutoOptimizationLabelProcessing
     from local_inspection_service.training.auto_optimization_label_processing_ports import ProcessingState,ProcessingArtifacts,ProcessingExecution
     def ports(cls):return cls(**{f.name:test_capability(bindings, f.name) for f in fields(cls)})
-    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution));bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
+    from contextlib import nullcontext
+    resolver=SimpleNamespace(current_snapshot=lambda:{},scope=lambda snapshot:nullcontext())
+    service=AutoOptimizationLabelProcessing(ports(ProcessingState),ports(ProcessingArtifacts),ports(ProcessingExecution),model_resolver=lambda:resolver);bindings.update({n:getattr(service,n) for n in NAMES});return service,bindings
 
 class ProcessingContract(unittest.TestCase):
     def fixture(self):
@@ -68,12 +71,18 @@ class ProcessingContract(unittest.TestCase):
         with self.assertRaises(ValueError):f.service.auto_optimize_process_label_sample('t',sample,{},'m')
 
     def test_starter_sanitization_existing_live_and_start_failure_state(self):
-        f=self.fixture();existing=Mock();existing.is_alive.return_value=True;f.threads['task']=existing
+        f=self.fixture();f.b['auto_optimize_label_worker']=Mock();existing=Mock();existing.is_alive.return_value=True;f.threads['task']=existing
         with patch.object(threading,'Thread',side_effect=AssertionError('unexpected')):
             f.service.start_auto_optimize_label_worker(' ');f.service.start_auto_optimize_label_worker(' task ')
         existing.is_alive.return_value=False;thread=Mock();error=RuntimeError('start');thread.start.side_effect=error
         with patch.object(threading,'Thread',return_value=thread) as factory,self.assertRaises(RuntimeError) as caught:f.service.start_auto_optimize_label_worker('task')
-        self.assertIs(caught.exception,error);self.assertIs(f.threads['task'],thread);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=f.b['auto_optimize_label_worker'],args=('task',),name='auto-opt-label-task',daemon=True)
+        self.assertIs(caught.exception,error);self.assertIs(f.threads['task'],thread);self.assertEqual(f.depth,[0]);factory.assert_called_once_with(target=factory.call_args.kwargs['target'],args=('task',),name='auto-opt-label-task',daemon=True)
+        if BASELINE:self.assertIs(factory.call_args.kwargs['target'],f.b['auto_optimize_label_worker'])
+        else:
+            self.assertIsNot(factory.call_args.kwargs['target'],f.b['auto_optimize_label_worker'])
+            factory.call_args.kwargs['target'](*factory.call_args.kwargs['args'])
+            f.b['auto_optimize_label_worker'].assert_not_called()
+            self.assertFalse(f.service.close(0))  # Failed start is still owned; invoked late target was revoked.
 
     def test_not_configured_completed_disabled_and_empty(self):
         f=self.fixture();f.settings['configured']=False;self.run_worker(f);self.assertEqual(f.events,[])
@@ -123,10 +132,12 @@ class ProcessingContract(unittest.TestCase):
         for name,args in zip(NAMES,(('t',),('t',{}, {},'m'),('t',))):
             mock=Mock(return_value=object());fn=getattr(server,name)
             if hasattr(fn,'__wrapped__'):fn=fn.__wrapped__
-            with patch.object(server,'_auto_optimization_label_processing',SimpleNamespace(**{name:mock})):self.assertIs(fn(*args),mock.return_value)
-            mock.assert_called_once_with(*args)
+            with patch.object(type(service), name, autospec=True, return_value=mock.return_value) as receiver:
+                self.assertIs(fn(*args),mock.return_value)
+                receiver.assert_called_once_with(service, *args)
+                self.assertIs(receiver.call_args.args[0], service)
         self.assertTrue(hasattr(server.auto_optimize_label_worker,'__wrapped__'))
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[-1]);self.assertEqual(ast.unparse(node.decorator_list[0]),'pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))')
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[-1]);self.assertEqual(ast.unparse(node.decorator_list[0]),'pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))')
         subprocess.run([sys.executable,'-c',"import sys; import local_inspection_service.training.auto_optimization_label_processing; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)
 
 if __name__=='__main__':unittest.main()

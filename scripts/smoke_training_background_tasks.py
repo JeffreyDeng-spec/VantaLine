@@ -12,6 +12,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_task_application_test_ports import bind_training_background_tasks, assert_default_training_background_tasks
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 from scripts.smoke_training_runner import Resolver
 from local_inspection_service.model_profiles.snapshots import freeze_record
 
@@ -48,7 +52,7 @@ class BackgroundFixture:
                 'create_background_variants_from_source': self.local, 'image_file_list': self.images, 'safe_background_set_id': self.safe,
                 'current_owner_fields': self.owner, 'save_training_task': self.save, 'public_training_task': self.public,
                 '_training_task_threads': self.threads}
-        for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+        for name, value in values.items(): stack.enter_context(patch_fixture_capability(api, name, value))
         stack.enter_context(patch('time.time', self.clock)); stack.enter_context(patch('uuid.uuid4', self.uuid))
         stack.enter_context(patch.object(threading, 'Thread', self.factory))
 
@@ -61,10 +65,12 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_training_background_tasks(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_tasks(self.api,self.stack)
         self.f=BackgroundFixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-task-'))); self.f.bind(self.api,self.stack)
         self.name=self.stack.enter_context(patch.object(self.api,'safe_name',side_effect=lambda value:value.replace(' ','_')))
         self.which=self.stack.enter_context(patch.object(shutil,'which',return_value='fake-codex'))
@@ -123,9 +129,13 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         self.assertEqual(self.api.run_codex_background_generation(f.source,f.root/'spawn','x'),[])
         self.popen.assert_called_once(); self.process.communicate.assert_not_called(); self.process.kill.assert_not_called()
     def test_start_codex_thread_exact_target_args_name_and_start_failure(self):
-        f=self.f; self.api.start_codex_background_generation(f.source,f.sets,'raw id',3)
-        f.factory.assert_called_once_with(target=self.api.run_codex_background_generation,args=(f.source,f.sets,'raw id',3),name='codex-background-worker-raw_id',daemon=True)
-        f.thread.start.assert_called_once(); self.popen.assert_not_called()
+        f=self.f; selected=Mock()
+        with patch.object(self.api,'run_codex_background_generation',selected):
+            self.api.start_codex_background_generation(f.source,f.sets,'raw id',3)
+        f.factory.assert_called_once(); self.assertEqual({k:v for k,v in f.factory.call_args.kwargs.items() if k!='target'},dict(args=(f.source,f.sets,'raw id',3),name='codex-background-worker-raw_id',daemon=True))
+        f.thread.start.assert_called_once(); self.popen.assert_not_called(); selected.assert_not_called()
+        f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args'])
+        selected.assert_called_once_with(f.source,f.sets,'raw id',3)
         f.factory.reset_mock(); f.thread.start.reset_mock(); f.thread.start.side_effect=[OSError('start'),None]
         with self.assertRaisesRegex(OSError,'start'): self.api.start_codex_background_generation(f.source,f.sets,'raw id')
         f.factory.assert_called_once(); f.thread.start.assert_called_once()
@@ -144,7 +154,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
             {'status':'ready','generation_method':'queued_codexcli_imgworker_plus_local_same_environment_fallback','image_count':11,'completed_at':33,'updated_at':44}])
     def test_runner_missing_dependencies_and_load_failure_stay_outside_failure_settlement(self):
         f=self.f
-        with patch.object(self.api,'model_profile_service',None):
+        with patch_profile_service(self.api, None):
             with self.assertRaisesRegex(RuntimeError,'Model profile resolver is not configured'): self.run_task()
         f.find.assert_not_called(); f.load.assert_not_called()
         f.find.side_effect=[OSError('find'),f.binding]
@@ -193,7 +203,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
             'note':'背景生成任务已加入队列；完成前该背景集不会进入可选列表。','owner_user_id':'alice','owner_username':'Alice',
             'model_profiles':{'pipeline':{'version':1}}}
         self.assertEqual(result,expected); self.assertEqual([e[0] for e in f.events],['owner','save','thread','start','public'])
-        f.factory.assert_called_once_with(target=self.api.run_background_set_task,args=(identifier,),daemon=True,name='background-set-task-'+identifier)
+        f.factory.assert_called_once(); self.assertEqual({k:v for k,v in f.factory.call_args.kwargs.items() if k!='target'},dict(args=(identifier,),daemon=True,name='background-set-task-'+identifier))
         self.assertIs(f.threads[identifier],f.thread); self.assertEqual(f.events[3][1],({identifier:f.thread},))
         f.clock.side_effect=None; f.resolver.version=99; f.events.clear()
         with patch.object(self.api,'run_codex_background_generation',f.codex): f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args'])
@@ -238,11 +248,12 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         with self.assertRaisesRegex(KeyboardInterrupt,'kill-cancel'): self.api.run_codex_background_generation(f.source,directory,'x')
         self.process.kill.assert_called_once()
     def test_thread_targets_and_registry_are_read_at_original_evaluation_points(self):
-        f=self.f; original=self.api.run_codex_background_generation; replacement=Mock()
+        f=self.f; original=Mock(); replacement=Mock()
         def naming(value): self.api.run_codex_background_generation=replacement; return 'late-name'
         with patch.object(self.api,'run_codex_background_generation',original):
             self.name.side_effect=naming; self.api.start_codex_background_generation(f.source,f.sets,'raw')
-        self.assertIs(f.factory.call_args.kwargs['target'],original); replacement.assert_not_called()
+        original.assert_not_called(); replacement.assert_not_called()
+        f.factory.call_args.kwargs['target'](*f.factory.call_args.kwargs['args']); original.assert_called_once_with(f.source,f.sets,'raw',5); replacement.assert_not_called()
         f.factory.reset_mock(); f.thread.start.reset_mock(); original_save=f.save.side_effect
         target=Mock(); newer_target=Mock(); replacement_registry={}
         def save(task): original_save(task); self.api.run_background_set_task=target
@@ -250,8 +261,9 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         with patch.object(self.api,'run_background_set_task',self.api.run_background_set_task),patch.object(self.api,'_training_task_threads',f.threads):
             f.save.side_effect=save; f.factory.side_effect=factory
             self.api.enqueue_background_set_task('set','name',f.source)
-        self.assertIs(f.factory.call_args.kwargs['target'],target); self.assertEqual(f.threads,{})
+        self.assertEqual(f.threads,{})
         self.assertEqual(replacement_registry,{'background_101_abcdef':f.thread}); f.thread.start.assert_called_once(); target.assert_not_called(); newer_target.assert_not_called()
+        f.factory.call_args.kwargs['target']('selected-background'); target.assert_called_once_with('selected-background'); newer_target.assert_not_called()
     def test_runner_each_stage_error_preserves_settlement_order_without_retry(self):
         f=self.f
         stages=['start','generating','local','progress','codex','images','ready','completed']
@@ -368,12 +380,12 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 def kill(self): raise AssertionError('unexpected signal')
             self_outer=self
             clock=port(lambda:stamp); uuid=port(lambda:UUID('abcdef00-0000-0000-0000-000000000000'))
-            manifest=BackgroundManifest(port(lambda:root),port(lambda:root/'manifest.json'))
-            images=BackgroundImageFiles(port(lambda:{'.png'})); local=BackgroundVariants(clock)
-            writes=BackgroundWrites(port(safe_background_set_id),port(manifest.load_background_sets_manifest),port(manifest.write_background_sets_manifest),port(lambda:sets),uuid,clock)
-            codex=CodexBackgroundGeneration(port(lambda command:'fake-'+owner),CodexBackgroundPaths(port(lambda:logs),port(lambda:root)),port(lambda identifier:owner),port(lambda:FakeProcess))
+            manifest=BackgroundManifest(port(lambda:root),port(lambda:root/'manifest.json'), files=BusinessFiles(lambda: None))
+            images=BackgroundImageFiles(port(lambda:{'.png'}), files=BusinessFiles(lambda: None)); local=BackgroundVariants(clock, images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
+            writes=BackgroundWrites(port(safe_background_set_id),port(manifest.load_background_sets_manifest),port(manifest.write_background_sets_manifest),port(lambda:sets),uuid,clock, files=BusinessFiles(lambda: None))
+            codex=CodexBackgroundGeneration(port(lambda command:'fake-'+owner),CodexBackgroundPaths(port(lambda:logs),port(lambda:root)),port(lambda identifier:owner),port(lambda:FakeProcess), files=BusinessFiles(lambda: None))
             runner=BackgroundTaskRunner(BackgroundTaskRecords(port(lambda identifier:read(path(identifier))),port(path),port(lambda:read),port(lambda: update)),
-                BackgroundTaskGeneration(port(lambda:sets),port(safe_background_set_id),port(lambda: writes.update_background_set_manifest),port(local.create_background_variants_from_source),port(codex.run_codex_background_generation),port(images.image_file_list)),clock,port(lambda:resolver))
+                BackgroundTaskGeneration(port(lambda:sets),port(safe_background_set_id),port(lambda: writes.update_background_set_manifest),port(local.create_background_variants_from_source),port(codex.run_codex_background_generation),port(images.image_file_list)),clock,port(lambda:resolver), files=BusinessFiles(lambda: None))
             factory=port(FakeThread)
             starter=CodexBackgroundThread(port(lambda:factory),port(lambda:codex.run_codex_background_generation),port(lambda identifier:owner))
             submission=BackgroundTaskSubmission(TrainingSubmissionRecords(port(save),port(lambda task:task)),
@@ -413,7 +425,8 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         for item in instances:
             item.starter.start_codex_background_generation(item.source,item.sets,item.owner,2)
             started=item.factory.call_args.kwargs
-            self.assertEqual(started['target'],item.codex.run_codex_background_generation)
+            before=len(item.processes); started['target'](*started['args']); self.assertEqual(len(item.processes),before+1)
+            self.assertEqual(item.processes[-1].kwargs['cwd'],str(item.root))
             self.assertEqual(started['args'],(item.source,item.sets,item.owner,2)); self.assertEqual(started['name'],'codex-background-worker-'+item.owner)
 
 
@@ -527,7 +540,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 tasks=Mock(side_effect=task_provider); metas=Mock(side_effect=meta_provider)
                 if stage.startswith('failed'): f.local.side_effect=RuntimeError('unknown generation')
                 runner=BackgroundTaskRunner(BackgroundTaskRecords(f.find,f.path,lambda:f.load,tasks),
-                    BackgroundTaskGeneration(lambda:f.sets,f.safe,metas,f.local,f.codex,f.images),f.clock,lambda:f.resolver)
+                    BackgroundTaskGeneration(lambda:f.sets,f.safe,metas,f.local,f.codex,f.images),f.clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                 tasks.assert_not_called(); metas.assert_not_called(); f.find.assert_not_called(); f.clock.assert_not_called()
                 if stage in ['failed-meta','failed-task','base-error']:
                     with self.assertRaises(type(error)) as caught: runner.run_background_set_task('job')
@@ -638,10 +651,10 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                 f=self.f; error=RuntimeError(stage); selected=Mock(); getter=Mock(side_effect=[error,selected])
                 if stage=='load':
                     service=BackgroundTaskRunner(BackgroundTaskRecords(f.find,f.path,getter,lambda:f.update),
-                        BackgroundTaskGeneration(lambda:f.sets,f.safe,lambda:f.meta,f.local,f.codex,f.images),f.clock,lambda:f.resolver)
+                        BackgroundTaskGeneration(lambda:f.sets,f.safe,lambda:f.meta,f.local,f.codex,f.images),f.clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                     action=lambda:service.run_background_set_task('job')
                 elif stage=='process':
-                    service=CodexBackgroundGeneration(self.which,CodexBackgroundPaths(lambda:f.logs,lambda:f.root),self.name,getter)
+                    service=CodexBackgroundGeneration(self.which,CodexBackgroundPaths(lambda:f.logs,lambda:f.root),self.name,getter, files=BusinessFiles(lambda: None))
                     action=lambda:service.run_codex_background_generation(f.source,f.sets,'x',0)
                 else:
                     service=CodexBackgroundThread(getter,lambda:self.api.run_codex_background_generation,self.name)
@@ -691,7 +704,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                         return fail(path) if matched else original(path)
                     stack.enter_context(patch.object(Path,'exists',autospec=True,side_effect=exists))
                 if stage=='timeout-outputs': process.communicate.side_effect=subprocess.TimeoutExpired('fake',900)
-                generation=CodexBackgroundGeneration(which,CodexBackgroundPaths(logs,root),name,start)
+                generation=CodexBackgroundGeneration(which,CodexBackgroundPaths(logs,root),name,start, files=BusinessFiles(lambda: None))
                 thread=CodexBackgroundThread(lambda:factory,target,name)
                 action=(lambda:thread.start_codex_background_generation(f.source,f.sets,'x')) if stage in ['name-thread','thread-create','target'] else (lambda:generation.run_codex_background_generation(f.source,f.sets,'x',1))
                 caught=None
@@ -729,7 +742,7 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
                     original=Path.exists; fail=first(original)
                     stack.enter_context(patch.object(Path,'exists',autospec=True,side_effect=lambda value:fail(value) if value==f.source else original(value)))
                 runner=BackgroundTaskRunner(BackgroundTaskRecords(f.find,path,lambda:f.load,tasks),
-                    BackgroundTaskGeneration(sets,f.safe,metas,f.local,f.codex,f.images),clock,lambda:f.resolver)
+                    BackgroundTaskGeneration(sets,f.safe,metas,f.local,f.codex,f.images),clock,lambda:f.resolver, files=BusinessFiles(lambda: None))
                 caught=None
                 try: runner.run_background_set_task('job')
                 except BaseException as exc: caught=exc

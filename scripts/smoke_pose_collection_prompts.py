@@ -15,6 +15,7 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_POSE_COLLECTION_PROMPTS_BASELINE_SOURCE')
 NAMES = ('pose_collection_dimension_text', 'tabletop_scene_text', 'pose_collection_camera_grid_text',
          'pose_collection_position_specs', 'pose_collection_camera_batch_text', 'upright_spatial_relation_text',
@@ -118,7 +119,7 @@ class PosePromptContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE), 'candidate assembly only')
     def test_actual_root_forwarders_and_light_import(self):
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in NAMES]
         self.assertEqual(len(functions), 9)
         for node in functions:

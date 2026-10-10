@@ -1,5 +1,6 @@
 """Process-local warmup status and threads, without importing the application."""
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 import os
 import threading
@@ -21,8 +22,15 @@ class WarmupOperations:
 
 
 class YoloWarmup:
-    def __init__(self, operations: WarmupOperations):
+    def __init__(self, operations: WarmupOperations, *,
+                 scope: Callable[[], AbstractContextManager] = nullcontext):
         self.operations = operations
+        self.scope = scope
+        self._condition = threading.Condition()
+        self._closing = False
+        self._pending = 0
+        self._threads: list[threading.Thread] = []
+        self._uncertain_starts: list[threading.Thread] = []
         self.lock = threading.RLock()
         self.state: Record = {
             "enabled": True,
@@ -96,6 +104,65 @@ class YoloWarmup:
             with self.lock:
                 self.state.update({"enabled": False, "status": "disabled", "error": ""})
             return
-        thread = threading.Thread(target=worker(), args=(reason, model_ids), name=f"yolo-warmup-{reason}", daemon=True)
-        thread.start()
+        with self._condition:
+            if self._closing:
+                return
+            if not self._pending:
+                self._threads = [thread for thread in self._threads if thread.is_alive()]
+            self._pending += 1
+        try:
+            factory = threading.Thread
+            target = worker()
+            entered = False
+            cancelled = False
+            def run(*args):
+                nonlocal entered
+                with self._condition:
+                    if cancelled:
+                        return
+                    entered = True
+                with self.scope():
+                    target(*args)
+            thread = factory(target=run, args=(reason, model_ids), name=f"yolo-warmup-{reason}", daemon=True)
+            with self._condition:
+                self._threads.append(thread)
+            try:
+                thread.start()
+            except BaseException:
+                with self._condition:
+                    if not entered:
+                        cancelled = True
+                    self._uncertain_starts.append(thread)
+                raise
+        finally:
+            with self._condition:
+                self._pending -= 1
+                self._condition.notify_all()
+
+    def close(self, timeout: float) -> bool:
+        """Stop new starts and join owned warmups including thread-scope cleanup.
+
+        An admitted start may finish construction after closing begins. Timeout
+        does not cancel inference, clear another thread's connection or restart
+        the owner; a subsequent close can finish draining.
+        """
+        deadline = time.monotonic() + max(0.0, timeout)
+        with self._condition:
+            self._closing = True
+            while self._pending:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._condition.wait(remaining)
+            threads = list(self._threads) + list(self._uncertain_starts)
+        for thread in threads:
+            if thread is threading.current_thread():
+                return False
+            try:
+                thread.join(max(0.0, deadline - time.monotonic()))
+            except RuntimeError:
+                return False
+            if thread.is_alive():
+                return False
+        return True
 

@@ -7,15 +7,20 @@ import threading
 import time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'scripts'))
+from scripts.provider_configuration_test_ports import set_provider_capability
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server, TestClient, PASSWORD, picture, assert_status
 
 
+from scripts.text_endpoint_application_test_ports import with_text_endpoint_test_ports,set_text_external_enabled
+
+@with_text_endpoint_test_ports(server,'document')
 def main():
     admin = TestClient(server.app, base_url='https://testserver')
     user = admin.post('/api/auth/bootstrap', json={'username': 'admin', 'password': PASSWORD}).json()['user']
     owner = user['id']
     os.environ['VANTALINE_DOCUMENT_CLASSIFICATION_ACCOUNTS'] = owner
-    server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = True
+    set_text_external_enabled(server,True)
     server.ai_detection_settings = lambda *args: dict(provider='qwen', model='fixture-vl', api_key='never-log-this', base_url='https://fixture.invalid',
         profile_id='synthetic-profile', profile_version=1, profile_purpose='document')
     recorded = []
@@ -29,7 +34,7 @@ def main():
         calls.append(1)
         category = 'label_design' if len(calls) % 2 else 'physical_photo'
         return io.BytesIO(json.dumps(dict(choices=[dict(finish_reason='stop', message=dict(content=json.dumps(dict(category=category, reason='visible fixture evidence'))))])).encode())
-    server.ai_urlopen = transport
+    set_provider_capability(server, 'ai_urlopen', transport)
     def upload(version):
         response = admin.post('/api/text-inspection/standards/import', data=dict(name='Test', material_code='TEST', version_label=version), files={'file': ('test.doc', b'fixture-doc', 'application/msword')})
         assert_status(response, 200, 'DOC import')
@@ -70,7 +75,7 @@ def main():
     def delayed(*args, **kwargs):
         entered.set(); assert release.wait(10)
         return transport(*args, **kwargs)
-    server.ai_urlopen = delayed
+    set_provider_capability(server, 'ai_urlopen', delayed)
     identity = upload('2')
     assert entered.wait(5)
     detail = admin.get('/api/text-inspection/standards/'+identity).json()

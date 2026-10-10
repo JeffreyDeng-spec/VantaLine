@@ -30,6 +30,10 @@ parser.add_argument("--output", required=True, type=Path)
 parser.add_argument("--doc-image-bundle", required=True, type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+OBSERVATION_SOURCES = (
+    "local_inspection_service/runtime/label_observation.py",
+    "local_inspection_service/runtime/observe_label_runtime.py",
+)
 source_commit = subprocess.run(
     ["git", "rev-parse", "HEAD"], cwd=root, check=True, capture_output=True, text=True
 ).stdout.strip()
@@ -40,7 +44,7 @@ release_script_diff = subprocess.run(
     ["git", "diff", "--quiet", "HEAD", "--",
      "scripts/build_release_artifact.py", "scripts/install_release.sh",
      "scripts/render_release_installer.py", "scripts/"+TEMPLATE,
-     CONFIGURATION_SOURCE, *("scripts/"+name for name in SOURCES)],
+     CONFIGURATION_SOURCE, *OBSERVATION_SOURCES, *("scripts/"+name for name in SOURCES)],
     cwd=root, check=False,
 )
 if release_script_diff.returncode != 0:
@@ -73,6 +77,9 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
     with tarfile.open(source_tar) as handle:
         handle.extractall(stage, filter="data")
 
+    for relative in OBSERVATION_SOURCES:
+        if not (stage / relative).is_file():
+            raise SystemExit("Release runtime observer source missing")
     shutil.copytree(dist, stage / "local_inspection_service/frontend/dist-production")
     doc_bundle = args.doc_image_bundle.resolve()
     manifest = json.loads((doc_bundle / "manifest.json").read_text())

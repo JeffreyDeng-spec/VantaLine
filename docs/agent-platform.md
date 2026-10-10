@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 # Agent platform implementation status
 
 Pipeline background publication retains its prompt, library-first selection, eager
@@ -370,6 +372,77 @@ Photo highlight and background-plate image reads/writes have an opt-in storage a
 In COS mode, photo-highlight ROI and mask persistence failures propagate before successful artifact publication. Optional local image-processing fallback must not hide a failed durable write.
 
 Accessory readiness, image-worker status, ID matching and first-source convenience workflows are now owned by existing accessory services. Agent capabilities continue calling those services through the current explicit interfaces; provider/tool authorization and execution topology do not change.
+
+Image-job anchor and target-guide provenance now receives its file existence/stat capability explicitly. Existing source hashes, task snapshots, legacy mtime fallback and model resolver behavior are preserved. The unrelated ImageJobMetadata management-port dataclass retains its original shape; no agent execution or provider policy changes.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Accessory reference hashes, preview decoding and background evidence now use explicit storage capabilities. Agent/provider policy, evidence selection, background score computation and existing model/task binding are unchanged; the new ports do not start any paid work.
+
+This offline accessory evidence replay follows file candidate b368404 and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed 466195b. At this replay boundary manifest v217 selects 526 sources. Decode and hashing selection, source mutation, partial publication and error propagation remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Materialized sprite/text inventory and clean-sprite decoding use explicit storage capabilities. Pose selection, alpha acceptance, evidence policy and model/provider invocation are unchanged.
+
+This offline accessory catalog replay follows evidence candidate 2d442b2. All owned production/test blobs and the complete ordered entry match reviewed 87ebec1; current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v218 selects 526 sources. Existing catalog mutation and decoder behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, assembled HTTP and fingerprint checks are distinct. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Candidate thumbnail and gallery media access use explicit storage ports. Existing profile/pose preparation callbacks retain their order and policy; synthetic tests replace those callbacks and invoke no model service.
+
+This offline accessory gallery replay follows catalog candidate 8f453b3. Owned source/test blobs and ordered entry match reviewed 7f02e9d, including the single inert ImageFiles allocation relocation. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v219 selects 526 sources. Existing partial publication and failed-write behavior are unchanged. Neighbor evidence is reused only for exact source; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Accessory file edits obtain media storage explicitly while existing profile/provider callbacks remain unchanged. Synthetic tests replace profile calls and use disposable images only.
+
+This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Object preprocessing media dependencies are explicit. AI-cutout gating, pose provenance, fallback order and model binding are unchanged; synthetic tests substitute every provider callback.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Pose-asset inventory, real-photo source selection and pose-reference byte reads use required file capabilities. Filtering, readiness policy, MIME/encoding and generation prompts are unchanged; other Agent artifact owners still require composition.
+
+This offline Agent reference replay follows accessory preprocessing candidate b1d835d. Owned source/test blobs and ordered entry match reviewed efa17b7. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v222 selects 527 sources. Reference selection, digest acceptance, path mutation and exception ordering are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Pose artifact writes and materialization existence checks use explicit file ports. Evidence fields, digest callbacks, local metadata behavior, deduplication and sprite-ready/build policy retain their prior semantics.
+
+This offline Agent pose storage replay follows reference candidate 9a90408. Owned source/test blobs and ordered entry match reviewed 11919d9. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v223 selects 527 sources. Image and metadata publication ordering, local/remote callback timing and partial mutations remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Photo-highlight source reads, model-result bytes and derived mask/ROI image writes use explicit ports. Existing provider invocation, retry counts, comparison policy and evidence records remain unchanged; tests use synthetic model output only.
+
+This offline Agent photo replay follows pose storage candidate a56b846. Owned source/test blobs and ordered entry match reviewed 6afd82e. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v224 selects 527 sources. Provider attempts, diagnostic failure handling, publication and item mutation order are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Pipeline background publication reads and writes through explicit storage and PIL ports. Library selection, generated image requests, eager reference loading, six variants and manifest/task metadata remain in the same order, including partial effects and no retry after unknown provider outcomes.
+
+This offline Agent background replay follows photo candidate 5bcd15e. Owned source/test blobs and ordered entry match reviewed e8c63a3. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v225 selects 527 sources. Existing library fallback, partial file and manifest publication, callback timing and errors remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+The backend pipeline Agent graph now owns conversation, context, policy, provider flow, actions and turn commits in agent/pipeline_composition.py. Browser/API permission boundaries and published decision fields are unchanged. Model binding failures occur before provider admission; empty pending lists collect advances for scheduling after the task guard. User/action/agent conversation ordering and partial effects on failure are preserved without paid-call replay.
+
+PipelineStages in `pipeline/stage_composition.py` now composes AI activation, AI-card synchronization, training status, stage advancement, reconciliation and recommendation cache workflows around the actual PipelineQueries and the supplied PipelineRuntimeState. Internal metadata and transition calls select named methods on that owner; reconciliation selects the same runtime advance lock/inflight set used by native execution. The entry retains original component aliases and public function signatures. Its named `advance_pipeline_task` entry is distinct from the `advance` component. Constructors do not select suppliers, launch work or call a model. Preserve save-before-public-projection failures, paused-card state, shallow sharing, cache consumption and cancellation checkpoints. This closes these six stage workflows only; pose/task/HTTP composition, complete application factory, hosted performance gates and production topology activation remain pending.
+
+PipelineTaskWorkflows in `pipeline/task_composition.py` composes the eight task-list, create, update, accessory routing, delete, Agent feedback/chat and manual advance/cancel services. It receives the actual Query, Stage, Execution and Agent owners and rejects mismatched query/persistence/runtime identities before constructing services. Internal calls select named methods; the original eight HTTP registrars execute at their original entry positions, preserving all ten endpoints and route order. Reconciliation still runs and may save before GET visibility filtering; deletion still requests cancellation before record authorization; chat still decides once outside the task guard and rechecks authorization before committing under the guard. Pose feedback remains an explicit external capability and may execute under the existing guard. Execution's own decision/advance inputs remain separate explicit ports; sharing this task graph does not complete those native cross-domain edges or the whole application factory.
+
+The actual PipelineRuntimeWorkflows now supplies Agent decisions/commits to native auto execution, stage synchronization/advancement to native execution, and mutation progress to stages. Pending advances still commit under the task guard and schedule after releasing it. Provider failures retain original fallback and unknown-call evidence; this assembly introduces no new model invocation or retry policy.
+
+Agent advancement tests replace the connected mark forwarder rather than mutating the frozen mutation instance. Restoration is checked through the actual Agent caller and a separate graph; production action ordering is unchanged.
+
+The Codex environment edge adds no Agent decision or native lifecycle behavior. Existing pipeline graph source oracles verify the Codex registration delta before restoring their fixed parent; all original assertions remain.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+Provider dependency-capture tests substitute secret-key identification on the actual ProviderConfiguration instance. The same original A/B/C argument-time mutation and missing-callable assertions remain; other provider capabilities retain their existing locations. The temporary mock is restored on exit and changes no model call, key selection or retry algorithm.
+
+Pipeline availability is owned by PipelineQueries.resources with the supplied BusinessFiles capability. Historical constructor-position tests replay only an exact accepted integration and validate the actual composition before replay; no application-entry import or new file fallback is introduced.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.
 
 Operator PLC self-pair and self-config are explicit controller exceptions in the generated API manifest. The shared local PLC controls own human confirmation, browser identity and connection release; these operations are not exposed as Agent actions.
 

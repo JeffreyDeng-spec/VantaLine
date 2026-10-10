@@ -1,0 +1,57 @@
+{
+  "base": "8daa09b",
+  "changes": {
+    "import:config.application_composition": {
+      "original": "from .config.app_store import AppConfigStore",
+      "expected": "from .config.application_composition import ApplicationConfiguration, ConfigurationFiles, ConfigurationPolicy"
+    },
+    "import:config.app_store_ports": {
+      "original": "from .config.app_store_ports import AppConfigFiles, AppConfigRows, AppConfigPolicy",
+      "expected": "from .config.app_store_ports import AppConfigRows"
+    },
+    "_app_configuration": {
+      "original": "_app_config_store = AppConfigStore(files=AppConfigFiles(_business_files=lambda: _business_files, CONFIG_PATH=lambda: CONFIG_PATH, CONFIG_BACKUP_PATH=lambda: CONFIG_BACKUP_PATH, DATA_DIR=lambda: DATA_DIR, _config_io_lock=lambda: _config_io_lock, ensure_dirs=lambda: ensure_dirs, _read_config_file=lambda: _read_config_file), rows=AppConfigRows(runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, config_from_rows=lambda: config_from_rows, app_config_rows=lambda: app_config_rows, accessory_rows=lambda: accessory_rows), policy=AppConfigPolicy(DEFAULT_CONFIG=lambda: DEFAULT_CONFIG, PLC_PROTECTED_CONFIG_KEYS=lambda: PLC_PROTECTED_CONFIG_KEYS, _plc_namespace_write_authorized=lambda: _plc_namespace_write_authorized, public_path_sanitized=lambda: public_path_sanitized))",
+      "expected": "_app_configuration = ApplicationConfiguration(files=ConfigurationFiles(files=lambda: _business_files, primary=lambda: CONFIG_PATH, backup=lambda: CONFIG_BACKUP_PATH, directory=lambda: DATA_DIR, ensure=lambda: ensure_dirs), rows=AppConfigRows(runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, config_from_rows=lambda: config_from_rows, app_config_rows=lambda: app_config_rows, accessory_rows=lambda: accessory_rows), policy=ConfigurationPolicy(defaults=lambda: DEFAULT_CONFIG, protected_keys=lambda: PLC_PROTECTED_CONFIG_KEYS, sanitize=lambda: public_path_sanitized))"
+    },
+    "_read_config_file": {
+      "original": "def _read_config_file() -> dict[str, Any] | None:\n    \"\"\"Read config.json, retrying briefly on transient partial/empty reads.\n\n    Returns the parsed dict, an empty dict when the file legitimately does not\n    exist, or ``None`` when the file is present but could not be parsed cleanly\n    (e.g. mid-write). Callers must NOT treat ``None`` as \"no accessories\" \u2014 doing\n    so would silently drop every persisted record whenever a concurrent writer\n    is in the middle of replacing the file.\n    \"\"\"\n    return _app_config_store._read_config_file()",
+      "expected": "def _read_config_file() -> dict[str, Any] | None:\n    \"\"\"Read config.json, retrying briefly on transient partial/empty reads.\n\n    Returns the parsed dict, an empty dict when the file legitimately does not\n    exist, or ``None`` when the file is present but could not be parsed cleanly\n    (e.g. mid-write). Callers must NOT treat ``None`` as \"no accessories\" \u2014 doing\n    so would silently drop every persisted record whenever a concurrent writer\n    is in the middle of replacing the file.\n    \"\"\"\n    return _app_configuration._read_config_file()"
+    },
+    "load_config": {
+      "original": "def load_config() -> dict[str, Any]:\n    return _app_config_store.load_config()",
+      "expected": "def load_config() -> dict[str, Any]:\n    return _app_configuration.load_config()"
+    },
+    "save_config": {
+      "original": "def save_config(config: dict[str, Any]) -> None:\n    return _app_config_store.save_config(config)",
+      "expected": "def save_config(config: dict[str, Any]) -> None:\n    return _app_configuration.save_config(config)"
+    },
+    "save_app_config": {
+      "original": "save_app_config = _app_config_store.save_app_config",
+      "expected": "save_app_config = _app_configuration.save_app_config"
+    },
+    "mutate_app_config_atomically": {
+      "original": "mutate_app_config_atomically = _app_config_store.mutate_app_config_atomically",
+      "expected": "mutate_app_config_atomically = _app_configuration.mutate_app_config_atomically"
+    },
+    "_training_account_state": {
+      "original": "_training_account_state = TrainingAccountState(runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope), storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)), rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)), writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)), require_access=lambda record, user, write=False: require_record_access(record, user, write=write), view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)), defaults=lambda: DEFAULT_CONFIG['training'], legacy_owner=lambda: LEGACY_OWNER_ID, access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()), configuration=TrainingConfiguration(load=lambda: load_config(), save=lambda config: save_config(config)), sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))",
+      "expected": "_training_account_state = TrainingAccountState(runtime=TrainingTaskRuntime(scope=_runtime_repositories.thread_scope), storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)), rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)), writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)), require_access=lambda record, user, write=False: require_record_access(record, user, write=write), view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)), defaults=lambda: DEFAULT_CONFIG['training'], legacy_owner=lambda: LEGACY_OWNER_ID, access=TrainingStateAccess(owner=lambda record: record_owner_id(record), visible=lambda record, user, target=None: record_visible_to_user(record, user, target), admin=lambda user: user_is_admin(user), current_owner=lambda: current_owner_fields()), configuration=TrainingConfiguration(load=lambda: _app_configuration.load_config(), save=lambda config: _app_configuration.save_config(config)), sync_pipeline=lambda task: sync_pipeline_training_state_from_task(task))"
+    }
+  },
+  "extras": {
+    "_app_config_store": "_app_config_store = _app_configuration.store",
+    "_config_io_lock": "_config_io_lock = _app_configuration.lock"
+  },
+  "removed": [
+    {
+      "index": 523,
+      "original": "_config_io_lock = threading.RLock()"
+    },
+    {
+      "index": 530,
+      "original": "_plc_namespace_write_authorized: contextvars.ContextVar[bool] = contextvars.ContextVar('plc_namespace_write_authorized', default=False)"
+    }
+  ],
+  "parent_ast_sha256": "772ee81202b766473b8f0f59e907c775170585b9b4855e27b495e868309a0f9b",
+  "composition_ast_sha256": "8e64a8410592eedfe0f139f16f00a7af22c362e01c3f58fae70ad6fd898c2382"
+}

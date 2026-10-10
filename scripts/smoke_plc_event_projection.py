@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service import plc_fx_ascii as protocol
 
 BASELINE = os.environ.get("VANTALINE_PLC_PROJECTION_BASELINE_SOURCE")
@@ -195,7 +196,7 @@ class ProjectionContract(unittest.TestCase):
     def test_import_is_lightweight_and_entry_keeps_same_symbols(self):
         child = "import sys; from local_inspection_service.plc import event_projection; assert not any(n in sys.modules for n in ('local_inspection_service.server', 'fastapi', 'psycopg', 'serial'))"
         subprocess.run([sys.executable, "-c", child], cwd=ROOT, check=True, timeout=10)
-        tree = ast.parse((ROOT / "local_inspection_service/server.py").read_text(encoding="utf-8"))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         expected = {"PlcDispatchStateConflict", "PLC_REDUCER_DERIVED_FIELDS", "PLC_FINALIZE_REASONS", "project_plc_dispatch_events"}
         bindings = [n for n in tree.body if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module in ("plc.event_projection", "plc.errors")]
         actual = {a.name for n in bindings for a in n.names if a.asname is None}

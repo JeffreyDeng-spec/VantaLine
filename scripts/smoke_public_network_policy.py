@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from unittest.mock import Mock
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PUBLIC_NETWORK_BASELINE_SOURCE')
 NAMES=('normalize_origin','same_origin','cors_origin_allowed','is_private_or_local_host','sanitize_url_for_public_user','sanitize_path_for_public_user','include_internal_runtime_details')
 def create(b):
@@ -56,8 +57,16 @@ class Contracts(unittest.TestCase):
   self.b['user_has_permission']=Mock(side_effect=AssertionError('admin bypass'));self.assertTrue(self.s.include_internal_runtime_details({'admin':True}));self.b['user_has_permission']=lambda u,p:p in u.get('permissions',[]);self.assertTrue(self.s.include_internal_runtime_details({'permissions':['system_settings']}));self.assertFalse(self.s.include_internal_runtime_details(None))
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
+  from application_integration_source_contract import restore_account_visibility_root
+  tree=ast.parse(restore_account_visibility_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
+  from application_integration_source_contract import verify_actual_compositions
+  verify_actual_compositions()
+  self.assertEqual(len(binding.keywords),3)
   for group in binding.keywords:
-   for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
+   for kw in group.value.keywords:
+    self.assertIsInstance(kw.value,ast.Lambda)
+    expected='_provider_configuration.masked_url_for_status' if kw.arg=='masked_url_for_status' else kw.arg
+    self.assertEqual(ast.dump(kw.value.body),ast.dump(ast.parse(expected,mode='eval').body))
+    self.assertFalse(kw.value.args.args);count+=1
   self.assertEqual(count,7)
 if __name__=='__main__':unittest.main()

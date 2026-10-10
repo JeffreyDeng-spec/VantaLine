@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 NAMES = {"_plc_web_serial_empty_state", "_plc_web_serial_load_local", "_plc_web_serial_save_local",
          "_plc_web_serial_record", "_plc_workstation_row", "_plc_workstation_lease_row",
          "_plc_web_serial_dispatch_row", "_plc_web_serial_upsert_row", "_plc_web_serial_mutate"}
@@ -27,7 +28,11 @@ class ConfigError(Exception):
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    for n in ast.parse(source.read_text(encoding="utf-8-sig")).body:
+    raw = read_checked_application_source(source, encoding='utf-8-sig')
+    if not BASELINE:
+        from application_integration_source_contract import restore_plc_domain_root
+        raw = restore_plc_domain_root(raw)
+    for n in ast.parse(raw).body:
         if isinstance(n, ast.FunctionDef) and n.name in NAMES: nodes.append(n)
         elif not BASELINE and isinstance(n, ast.ImportFrom) and n.module in {"plc.workstation_repository", "plc.workstation_repository_ports"}: nodes.append(n)
         elif not BASELINE and isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_plc_workstation_repository" for t in n.targets): nodes.append(n)

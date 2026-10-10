@@ -14,6 +14,7 @@ from unittest.mock import Mock,patch
 import uuid
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PIPELINE_AI_ACTIVATION_BASELINE_SOURCE')
 NAMES=('upsert_pipeline_ai_detection_task','activate_pipeline_ai_detection_task')
 
@@ -91,7 +92,8 @@ class ActivationContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_ai_activation' for t in n.targets));count=0
+        from application_integration_source_contract import restore_plc_domain_root
+        tree=ast.parse(restore_plc_domain_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_ai_activation' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,12)

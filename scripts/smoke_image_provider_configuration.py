@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_IMAGE_PROVIDER_CONFIGURATION_BASELINE_SOURCE')
 NAMES = ('image_job_prompt', 'cursor_image_model_score', 'inspect_cursor_image_models', 'cursor_image2_settings', 'public_cursor_image2_status', 'cursor_image2_payload', 'cursor_image2_response_candidates', 'extract_cursor_image2_bytes')
 
@@ -181,13 +182,17 @@ CORE
     @unittest.skipIf(BASELINE, 'candidate composition only')
     def test_assembly_and_instance_isolation(self):
         from local_inspection_service.model_providers.image_provider_configuration_ports import ImageProviderSelection, ImageProviderSettings, ImageProviderPayload
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_image_provider_configuration' for t in n.targets))
+        from application_integration_source_contract import verify_actual_compositions
+        verify_actual_compositions()
+        self.assertEqual(len(assignment.value.keywords), 3)
         for group, cls in zip(assignment.value.keywords, (ImageProviderSelection, ImageProviderSettings, ImageProviderPayload)):
             self.assertEqual({k.arg for k in group.value.keywords}, {f.name for f in fields(cls)})
             for getter in group.value.keywords:
                 self.assertIsInstance(getter.value, ast.Lambda)
-                self.assertEqual(getter.value.body.id, getter.arg)
+                expected = '_provider_configuration.'+getter.arg if getter.arg in {'masked_url_for_status','normalize_agent_model_options','normalize_agent_provider'} else getter.arg
+                self.assertEqual(ast.dump(getter.value.body), ast.dump(ast.parse(expected, mode='eval').body))
                 self.assertFalse(getter.value.args.args)
         a, ab, _ = self.fixture()
         b, bb, _ = self.fixture()

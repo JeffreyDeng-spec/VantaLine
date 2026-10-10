@@ -17,6 +17,7 @@ from unittest.mock import Mock, patch
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_APP_CONFIG_STORE_BASELINE_SOURCE')
 NAMES=('_read_config_file','load_config','save_config')
 
@@ -174,17 +175,23 @@ class StoreContract(unittest.TestCase):
 
     @unittest.skipIf(BASELINE,'Original entry has no extracted assembly')
     def test_actual_composition_getters_and_instance_isolation(self):
-        from local_inspection_service.config.app_store import AppConfigStore
-        from local_inspection_service.config.app_store_ports import AppConfigFiles,AppConfigRows,AppConfigPolicy
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_app_config_store' for t in n.targets))
-        symbols=dict(AppConfigStore=AppConfigStore,AppConfigFiles=AppConfigFiles,AppConfigRows=AppConfigRows,AppConfigPolicy=AppConfigPolicy)
+        from local_inspection_service.config.application_composition import ApplicationConfiguration,ConfigurationFiles,ConfigurationPolicy
+        from local_inspection_service.config.app_store_ports import AppConfigRows
+        from application_integration_source_contract import restore_path_configuration_root
+        tree=ast.parse(restore_path_configuration_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')))
+        node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_app_configuration' for t in n.targets))
+        symbols=dict(ApplicationConfiguration=ApplicationConfiguration,ConfigurationFiles=ConfigurationFiles,AppConfigRows=AppConfigRows,ConfigurationPolicy=ConfigurationPolicy)
         exec(compile(ast.Module(body=[node],type_ignores=[]),'<assembly>','exec'),symbols)
-        store=symbols['_app_config_store']
-        for group in ('files','rows','policy'):
-            ports=getattr(store,group)
-            for field in fields(ports):
-                marker=object();symbols[field.name]=marker;self.assertIs(getattr(ports,field.name)(),marker)
+        owner=symbols['_app_configuration'];store=owner.store
+        getters={'files':{'_business_files':'_business_files','CONFIG_PATH':'CONFIG_PATH','CONFIG_BACKUP_PATH':'CONFIG_BACKUP_PATH','DATA_DIR':'DATA_DIR','ensure_dirs':'ensure_dirs'},
+                 'rows':{field.name:field.name for field in fields(store.rows)},
+                 'policy':{'DEFAULT_CONFIG':'DEFAULT_CONFIG','PLC_PROTECTED_CONFIG_KEYS':'PLC_PROTECTED_CONFIG_KEYS','public_path_sanitized':'public_path_sanitized'}}
+        for group, bindings in getters.items():
+            for field,name in bindings.items():
+                marker=object();symbols[name]=marker;self.assertIs(getattr(getattr(store,group),field)(),marker)
+        self.assertIs(store.files._read_config_file().__self__,store)
+        self.assertIs(store.files._config_io_lock(),owner.lock)
+        self.assertIs(store.policy._plc_namespace_write_authorized(),owner._namespace_authorized)
         a,b,_=self.fixture();c,d,_=self.fixture()
         self.assertIsNot(a.policy._plc_namespace_write_authorized(),c.policy._plc_namespace_write_authorized())
         a.save_config({'a':1});c.save_config({'b':1})

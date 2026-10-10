@@ -1,12 +1,24 @@
 """Narrow capabilities for ordinary image and video uploads."""
 from collections.abc import Callable
 from dataclasses import dataclass
+from contextlib import AbstractContextManager
+from ..storage.artifacts.runtime import ArtifactRuntime
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 import numpy as np
 from .analysis_ports import AnalysisCall
 
 Record = dict[str, Any]
+
+class UploadFiles(Protocol):
+    def write_bytes(self, path: Path, contents: bytes) -> int: ...
+
+
+class VideoFiles(Protocol):
+    def runtime(self, path: Path) -> ArtifactRuntime | None: ...
+    def copy_stream(self, path: Path, source: BinaryIO, copy: Callable[[BinaryIO, BinaryIO], None]) -> None: ...
+    def local_file(self, path: Path) -> AbstractContextManager[Path]: ...
+
 
 class ImageArrays(Protocol):
     uint8: Any

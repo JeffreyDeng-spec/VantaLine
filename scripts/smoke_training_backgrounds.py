@@ -12,6 +12,9 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_render_application_test_ports import bind_training_background_render, assert_default_training_background_render
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 
 class BackgroundContracts(unittest.TestCase):
@@ -24,6 +27,7 @@ class BackgroundContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_background_render(server)
         cls.files_helper = staticmethod(server.background_set_image_files)
 
     @classmethod
@@ -31,6 +35,7 @@ class BackgroundContracts(unittest.TestCase):
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_render(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-background-')))
         self.directory = self.root / 'backgrounds'; self.directory.mkdir()
         self.default = self.root / 'default.png'
@@ -360,7 +365,7 @@ class BackgroundContracts(unittest.TestCase):
                        'suffixes': Mock(return_value={'.png', '.jpg'})}
             lookup = BackgroundSetLookup(lambda: {}, lambda _: 'green_conveyor' if mode == 'green' else 'other',
                                          lambda _: [first] if mode == 'green' else [])
-            service = TrainingBackgroundLibrary(BackgroundPaths(**getters), lookup)
+            service = TrainingBackgroundLibrary(BackgroundPaths(**getters), lookup, files=BusinessFiles(lambda: None))
             operation = service.load_training_background_manifest if mode == 'manifest' else service.training_background_library
             return getters, operation
         for mode, names in [('manifest', ['directory']), ('fallback', ['directory', 'default_image', 'suffixes']),
@@ -415,10 +420,10 @@ class BackgroundContracts(unittest.TestCase):
             directory = Mock(return_value=folder); default = Mock(return_value=folder / 'absent')
             suffixes = Mock(return_value={'.png'}); selected = Mock(return_value=str(index)); files = Mock(return_value=[path])
             manifest_port = Mock()
-            library = TrainingBackgroundLibrary(BackgroundPaths(directory, default, suffixes), BackgroundSetLookup(manifest_port, selected, files))
+            library = TrainingBackgroundLibrary(BackgroundPaths(directory, default, suffixes), BackgroundSetLookup(manifest_port, selected, files), files=BusinessFiles(lambda: None))
             manifest_port.side_effect = library.load_training_background_manifest
             renderer = rendering.TrainingBackgroundRenderer(library.training_background_library, rendering.background_candidates_for_split,
-                rendering.synthetic_training_background, rendering.fit_training_background_to_canvas, rendering.augment_training_background)
+                rendering.synthetic_training_background, rendering.fit_training_background_to_canvas, rendering.augment_training_background, images=ImageFiles(lambda: cv2, files=BusinessFiles(lambda: None)))
             for callback in [directory, default, suffixes, selected, files, manifest_port]: callback.assert_not_called()
             instances.append((renderer, directory, default, suffixes, selected, files, manifest_port))
         results = []

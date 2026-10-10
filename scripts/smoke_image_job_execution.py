@@ -22,6 +22,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.model_profiles.snapshots import pinned
 
 BASELINE = os.environ.get('VANTALINE_IMAGE_JOB_EXECUTION_BASELINE_SOURCE')
@@ -61,7 +62,7 @@ def create(b):
     service = ImageJobExecution(ports(ImageExecutionFiles), ports(ImageExecutionEvidence), ports(ImageExecutionProviders))
     b.update({name: getattr(service, name) for name in NAMES})
     b['_image_job_execution'] = service
-    tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+    tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
     wrapper = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'run_image_generation_job')
     exec(compile(ast.Module(body=[wrapper], type_ignores=[]), 'actual_pinned_entry', 'exec'), b)
     return SimpleNamespace(**{name: b[name] for name in NAMES})
@@ -256,14 +257,13 @@ class ExecutionContract(unittest.TestCase):
     @unittest.skipIf(BASELINE, 'candidate composition only')
     def test_explicit_assembly(self):
         from local_inspection_service.accessories.image_job_execution_ports import ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
-        assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_image_job_execution' for t in n.targets))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
+        from accessory_image_test_ports import binding
+        assignment = SimpleNamespace(value=binding(ROOT,'execution'))
         for group, cls in zip(assignment.value.keywords, (ImageExecutionFiles, ImageExecutionEvidence, ImageExecutionProviders)):
             self.assertEqual({k.arg for k in group.value.keywords}, {field.name for field in fields(cls)})
-            for getter in group.value.keywords:
-                self.assertIsInstance(getter.value, ast.Lambda)
-                self.assertEqual(getter.value.body.id, getter.arg)
-                self.assertFalse(getter.value.args.args)
+        from accessory_image_test_ports import edge_errors, EXECUTION_EDGES
+        self.assertEqual(edge_errors(assignment.value,EXECUTION_EDGES),[])
 
 
 if __name__ == '__main__':

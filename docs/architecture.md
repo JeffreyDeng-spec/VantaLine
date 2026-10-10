@@ -1,3 +1,11 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
+The canonical application also retains main `8195c96`'s operator-owned PLC setup and connection verification. The two self-pair/self-config routes live in `plc/workstation_self_service_api.py`, before the five management routes, and delegate to `WorkstationSelfService` with request-time identity and narrow station/transaction capabilities. Configuration still rejects an active workstation, and actual communication verification fences lease use. The current source inventory guards 25 assembly/adapter/self-service modules; the unchanged historical parent remains an independent source oracle. Prompt source manifest v278 records 614 actual files for new tasks without rewriting historical snapshots.
+
+`auth/visibility_composition.py` now assembles `PublicNetworkPolicy` and `AccountProjections` in the default entry. Four internal callbacks select the graph owner after argument evaluation; all external suppliers remain explicit. The authentication HTTP and SPA registrars keep their original positions. This closes account visibility wiring, not full application creation/lifecycle isolation.
+
+The default entry now constructs `TrainingPersistenceGraph` from explicit training-account, pipeline and candidate inputs. Its three completion edges select the retained graph owner when called. Configuration save, pipeline task lock/write and candidate guard remain separate in their existing order; this is a focused business graph, not the final Web application factory.
+
 Codex comparison `list` and `events` now have a narrow repository read transaction. It commits on success, rolls back on decode errors and closes its cursor without taking the global comparison advisory lock. `get` and every state transition retain the original serialized transaction, including worker prechecks before artifact side effects. HTTP events still performs its existing locked ownership lookup first.
 
 The label task-list first page now indexes its already loaded legacy label records by the existing standard-or-orphan key. Legacy task construction and run-history projection reuse record references in original order, removing repeated whole-record scans for each label order. Detail reads, manual/Beta grouping, asset lookup, SQL, advisory-lock boundaries and persisted page snapshots are unchanged.
@@ -1070,6 +1078,14 @@ Results remain REVIEW_REQUIRED; the synthetic experiment does not commission MAT
 
 **Status: Authoritative**
 
+`runtime/path_configuration_composition.py` owns ServicePaths, ServiceDirectories,
+LocalPathMigration and ApplicationConfiguration as one inert graph. Directory
+initialization, config save/read, sanitization and migration recursion select
+named methods on that domain owner, without calling entry forwarders. Request
+identity and PostgreSQL selection remain operation-time capabilities. The default
+entry retains explicit compatibility aliases. This closes the path/configuration
+graph, not the complete infrastructure builder or application factory.
+
 ### Qwen OCR evidence comparison — opt-in, not commissioned
 
 `VANTALINE_QWEN_OCR_ACCOUNTS` selects `qwen_evidence_jobs.py` at prepared-comparison
@@ -1769,6 +1785,472 @@ This background candidate retains native-history/readiness and detection composi
 The account-opt-in `real_photo_vlm` feedback adapter collects readable original photos independently of detector pass/fail and instance count. Task-associated AI/YOLO results use the independent `real_photo_states`, `real_photo_jobs`, and `real_photo_events` tables; original bytes are frozen under the owner and exact hashes deduplicate admission. Camera session, source-video and upload-request groups travel only as capture provenance. Initial generated-image pretraining and its shared providers are retained. See [real-photo feedback](real-photo-feedback.md) for shipped boundaries and later proposal phases.
 
 Independent review runs in `training_review.worker`, separate from Web and the label queue. A whole-image report is validated and stored before successful CLI exit grants acceptance. Source/annotation/class-version changes invalidate the review key; partial rounds never enqueue executable training. Frozen train proposals remain queued until the subsequent dispatcher batch.
+Retained legacy PLC heartbeat/reconciler/poller start helpers and their six lock/thread state slots are owned by plc/legacy_workers.py. The root keeps three bound entry aliases and supplies narrow heartbeat and loop capabilities. Each owner creates three independent ordinary Locks but starts no thread or I/O at construction. The Web Serial startup hook remains an unconditional no-op; this move does not activate historical server-side workers.
+
+The shared active browser-lease guard is owned by PlcStationService in plc/station_service.py. The entry exports the bound method; existing callers retain its name. Storage record parsing, request identity, protocol, configuration migration and the fallback clock are explicit live capabilities. No repository or request user is captured. Existing station methods and transaction ownership are unchanged.
+
+Retained server-serial activation readiness checks now live in plc/legacy_activation.py. LegacyActivationPolicy has separate source and check capabilities; the entry exports its six bound methods. Database primitive availability, device/read fingerprint selection, optional serial import and ordered activation errors keep their original semantics. No transport is opened or worker started by this module.
+
+Retained PLC runtime namespace mutation, receipt copies and process-owner lease policy now live in plc/legacy_coordination.py. LegacyRuntimeCoordination has focused storage and policy capabilities; the entry exports five bound methods. Namespace transactions remain repository-owned; the service does not cache connections, identity or claim results.
+
+Retained PLC audit projection and dispatch identity lookup now live in plc/legacy_records.py. LegacyDispatchRecords owns six methods with focused record sources and policy capabilities. The entry exports bound methods; existing repository, validation, lock and sanitization services remain their respective authorities.
+
+LegacyPlcOperations in plc/legacy_operations.py owns the two retained one-shot dispatch reconciliation and capture-poll workflows. Configuration, ownership, dispatch and capture capabilities are explicit. The entry exports bound methods, while LegacyPlcWorkers still owns the dormant loop threads. The current application startup continues to start neither legacy loop.
+
+This PLC candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows the reviewed background ownership candidate. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed a139e03. The bundled manifest is v177 with 512 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained. Browser-only physical IO, uncertain-write no-retry and inert retained startup remain unchanged.
+
+Public document responses and preview redirects are owned by runtime/web_shell.py with explicit path, file and route-policy capabilities. Entry and SPA registrars remain at their original composition positions; API routes stay ahead of the catch-all. Each shell can be bound to one application without sharing document paths. This domain composition does not yet establish a complete production application factory.
+
+This Web-shell candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows PLC candidate e73394d. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed 4b28b8e. The bundled manifest is v178 with 513 unique sources. Fixed history28 and reader19 protocols remain mandatory; earlier recorded performance failures remain retained.
+
+Seven entry functions retain their exact live prefix while unreachable code after their unconditional return/raise is removed. Current PLC config still delegates to its service; retired capture endpoints retain HTTP 410, and retired model-config mutations retain their prior admin check and HTTP 409. No route or current feature is removed. This avoids introducing module interfaces solely for inaccessible legacy code.
+
+This unreachable-tail candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows Web-shell candidate 82cc0d0. Actual-main rebind and predecessor release acceptance must precede publication. Production and the ordered entry match reviewed ed9dc91; the retained-tail test explicitly handles Python 3.10 frame cells and Python 3.11+ compiler metadata without skipping behavior checks. The bundled manifest is v179 with 513 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior performance failures remain retained. Existing endpoints and live behavior remain; only statements following unconditional exits are removed.
+
+`runtime/repository_composition.py` owns each application connection factory and HTTP repository adapter. Construction performs no connection or query. Internal selection, probe and cache-key suppliers bind that owner instead of looking back into the entry namespace. Environment values remain live inputs, and connection objects remain thread-local. Existing external entry forwarders still exist pending the remaining domain composition migration; this is not the complete production application factory.
+
+This repository candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows the reviewed tails candidate. Actual-main rebind and predecessor release acceptance must precede publication. Repository production and the ordered entry match reviewed dd74e3e. The bundled manifest is v180 with 514 unique sources. Fixed history28 and reader19 protocols remain mandatory; earlier performance failures remain retained. This is scoped connection ownership, not a complete production application factory.
+
+`AuthenticationDomain` owns a fresh request identity and the existing authentication service graph. Its HTTP composer receives the same identity/services and still registers middleware/auth/users/admin docs at the application’s original positions. Root composition binds the actual owned repository adapter and output-media policy directly. Auth paths and environment-derived settings are captured at composition; the selected repository factory continues resolving connections/configuration per operation. Authentication routes retain their existing service behavior. The rest of the application still awaits its full factory migration.
+
+This authentication candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows repository candidate 3ac769a. Actual-main rebind and predecessor release acceptance must precede publication. Authentication production/tests and ordered entry match reviewed a1933f3. The bundled manifest is v181 with 515 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit startup captures intentionally narrow private root rebinding; this is not a complete application factory.
+
+RecordServices composes ownership, audit and request-scoped access with the authentication domain identity and explicit current-user/account lookup capabilities. Entry compatibility exports bind the selected domain methods directly; they do not look up private root owner names again. The domain holds no current user or database connection. Remaining application composition is still pending.
+
+This record composition candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows authentication candidate 552944a. Actual-main rebind and predecessor release acceptance must precede publication. Record production/tests and ordered entry match reviewed f5d759e. The bundled manifest is v182 with 516 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit selected methods narrow private root rebinding; no new permission or persistence atomicity is claimed.
+
+Runtime bootstrap path selection lives in runtime/bootstrap_locations.py. RootLocator receives environment, the original entry-file anchor and directory probing explicitly; RuntimeLocations contains only the 30 original derived paths. Construction of path values does no directory creation or migration. The entry retains the original resolution point and exports existing path names while domain composition is migrated.
+
+This bootstrap candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows record candidate bdbe2fa. Actual-main rebind and predecessor release acceptance must precede publication. Bootstrap production/tests and ordered entry match reviewed 4a4733a. The bundled manifest is v183 with 517 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Existing path resolution order and errors remain; no directory creation or complete application factory is introduced.
+
+CostServices owns the existing CostRepository and CostLedger with explicit storage/timestamp capabilities. The entry binds selected repository/detection/pipeline/auto/training owners and captured CostPaths before the original admin route slot. Only the inert PipelineTaskStore import/construction and original pipeline path assignment move earlier to make those dependencies available; its existing suppliers and all business implementations remain unchanged. This removes cost root-name lookups but is not the complete application factory.
+
+This cost composition candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows bootstrap candidate f265821. Actual-main rebind and predecessor release acceptance must precede publication. Cost production/tests and ordered entry match reviewed 73a6a78. The bundled manifest is v184 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Selected source owners and paths are explicit; no atomic ledger snapshot, accounting algorithm change or complete application factory is introduced.
+
+The image worker owner now tracks coordinator admission and every child thread independently of the subprocess registry. Closing this owner rejects new lookups/launches and waits up to the supplied deadline for admitted work, thread-owned database cleanup and final persistence; timeout explicitly returns undrained. Already admitted work may start while closing. Start/prepare failures preserve existing evidence and do not requeue work or retry providers. The maximum active-child concurrency remains unchanged; immediately completed jobs may replenish capacity earlier. Scope cleanup happens on each owning thread, including model resolution inside the job callback. No store or provider callback runs under the lifecycle lock, and joins occur outside that lock. This adds the owner drain capability and wires queue/thread scopes; application shutdown/factory integration and MCP drain remain separate pending work. It does not promise full application shutdown or cancel running image providers.
+
+A successful image-owner drain proves that admitted threads and their cleanup scopes have exited. It does not prove that final persistence succeeded or that every subprocess was reaped; task failures and subprocess evidence remain governed by the execution service.
+
+This image-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows cost candidate 9ffd4a0. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 1a286c0, including retained uncertain-start handles. The bundled manifest is v185 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. This scoped owner drain does not establish whole-application shutdown or final persistence success.
+
+Image coordinator and child starts now retain uncertain-start handles even if `is_alive()` is false, child lists are pruned, or a later coordinator replaces the current handle. A failed start revokes an unentered target, and shutdown must join retained handles before reporting drained. A never-started handle may remain undrained; stored running evidence is preserved and never requeued. Deterministic interrupted-bootstrap tests cover both launch paths and later coordinator replacement.
+
+MCP operations now have a client-owned admission boundary covering the complete tool dispatch, including the existing stdio failure fallback, and warmup cleanup. New operations are rejected before transport or fallback after shutdown begins; same-thread nested work belonging to an already admitted operation can finish. Startup and request serialization share the client lock, independently of the admission condition. The bounded shutdown waits for admitted work, then terminates and reaps owned transports; an expired deadline returns undrained without cancelling a blocked call or inducing fallback. Recoverable close retains terminated processes for later reaping. Existing provider selection, prompts, wire messages and transport-failure fallback behavior are unchanged. The client retains the startup warmup thread and admits it before construction/start. Shutdown drains this reserved startup operation, joins its owned thread, then retires transports. Application shutdown registration and full production factory integration remain pending.
+
+MCP recovery retains both live and already-exited displaced processes by identity. An exited transport skips termination but still participates in final wait and stdin/stdout cleanup; EOF followed by the existing fallback cannot lose this cleanup ownership.
+
+This MCP-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows image-drain candidate f8e5dbc. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 008c167, including exited-transport ownership. The bundled manifest is v186 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. This client drain does not establish whole-application shutdown or business persistence success.
+
+MCP warmup startup retains its enabled check and original callback, thread name and daemon setting, but now starts through its client owner. Duplicate live starts and starts after closing are rejected. Thread construction/start failures release reservations exactly once; a thread that started before a start error remains tracked. Already reserved warmup may finish nested client operations after closing begins; unrelated threads cannot inherit that admission. No join occurs under admission or client locks.
+
+A failed or interrupted warmup `Thread.start()` cannot use `is_alive() == False` as proof that no OS thread exists. A target not yet entered is revoked, but its handle is retained and shutdown reports undrained until joining proves completion. A start that never actually created a thread can therefore remain conservatively undrained; no target or paid fallback is replayed. A deterministic interrupted-bootstrap regression covers the late-start window.
+
+Uncertain warmup handles are also retained across a later warmup start. Replacing the current handle cannot erase a revoked thread that has not yet confirmed startup/completion; shutdown joins every retained handle.
+
+This MCP-warmup candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows MCP-drain candidate 88cf6c3. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed ed5bda6, including all uncertain warmup handles. The bundled manifest is v187 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Warmup cleanup remains bounded and conservative; full application lifecycle acceptance is separate.
+
+YOLO warmup starts now belong to their `YoloWarmup` instance, including pending thread construction and every admitted thread. Each thread enters and releases its repository scope on that same thread. Closing rejects later starts and waits outside lifecycle/status locks; a timeout reports undrained without cancelling inference, changing model selection, or requeuing work. Existing repeated-start behavior and per-model handling remain. Application-wide lifecycle registration and per-app graph construction remain separate pending work. Prompt source manifest v188 retains the same 518 ordered files.
+
+Interrupted or failed warmup starts retain uncertain handles even across later starts. An unentered target is revoked and every retained handle must be joined; a never-started handle remains conservatively undrained. The tests cover delayed native bootstrap, interrupted startup, later thread replacement and same-thread scope exit.
+
+This YOLO-warmup candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows MCP-warmup candidate 16e6733. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4b1cfa5. The bundled manifest is v188 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Joining owned warmup threads does not prove inference success or complete application shutdown.
+
+TrainingTaskRuntime now owns admission and actual Python thread handles for both training/sample and background-set submission. One shared owner reserves before persistence, preserves save/create/register/start/public ordering, and wraps the selected target in the repository thread scope. close(timeout) closes admission and joins handles independently of mutable public registries. The application shutdown hook is not enabled by this slice.
+
+The training launch capability is valid only on the synchronous submitting thread while its reservation is active; retained or cross-thread calls fail before construction. Future application shutdown must first stop external admission, then drain training callers before closing their MCP/YOLO dependencies. These cross-owner shutdown steps are not enabled in this slice.
+
+This training-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows YOLO-warmup candidate 3325d48. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 89ea498. The bundled manifest is v189 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Native-thread drain does not certify task persistence, remote settlement or whole-application shutdown.
+
+CodexBackgroundThread owns its native threads through a separate TrainingThreadLifecycle. The same lifecycle implementation underlies TrainingTaskRuntime; task locks/registries/tombstones remain only on that derived training-state owner. Factory/target/name evaluation order is preserved, and the selected background target runs inside the injected repository scope. No application shutdown hook is added.
+
+This owner covers only threads launched by CodexBackgroundThread. Direct synchronous generation remains owned by its caller and must be drained through that caller. Extracting TrainingThreadLifecycle preserves method bodies and initialization order, but changes TrainingTaskRuntime method qualnames and MRO; class metadata equivalence is not promised.
+
+This Codex-background drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows training-drain candidate ad431e7. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 9634271. The bundled manifest is v190 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Only owner-started native threads are drained; synchronous callers and remote business settlement remain separate.
+
+TransferProgress owns its periodic reporter threads through an independent TrainingThreadLifecycle and injected repository scope. close stops admission, signals current reporters and any already admitted event construction, then waits for real thread and scope exit. It stops progress reporting only; transfer requests and counters remain owned by their callers. No app shutdown hook is added.
+
+Each reporter requires its own Event from the injected factory, matching production threading.Event. Pending starts and uncertain handles stay owned; an interrupted native bootstrap cannot authorize a late progress update.
+
+This transfer-reporter drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows Codex-background candidate bb5e844. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 5d64dfe. The bundled manifest is v191 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Reporter drain does not cancel transfers or certify task persistence or whole-application shutdown.
+
+Auto-optimization label, shadow-evaluation and delayed-training-check starters each own an independent TrainingThreadLifecycle. Existing task guards, live-thread deduplication and selected targets are retained; pending construction and native handles remain owned until repository-scope exit. Closing rejects new starts before sanitization. This slice does not enable application shutdown hooks or change worker algorithms.
+
+This auto-optimization starter-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows transfer-reporter candidate 7f3f2a7. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4e88155. The bundled manifest is v192 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Native-thread drain does not certify remote settlement or whole-application shutdown; the executor scope fix remains a separate successor.
+
+runtime/application_foundation.py constructs only three foundational owners from explicit FoundationInputs: RuntimeRepositories, AuthenticationDomain and RecordServices. Each call allocates separate identity, connection factory, auth locks/limiter and record services; callers may supply distinct live environment mappings and connectors. It performs no file creation, DB connection, route registration or worker startup. The entry still constructs one foundation; existing directory creation and routing/startup positions remain. This is a prerequisite, not the complete production application factory.
+
+This application-foundation candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows auto-optimization starter candidate d81faba. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 66697fc. The bundled manifest is v193 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Three inert foundational owners are distinct; this does not complete the application factory or lifecycle.
+
+Automatic-mask executor tasks now enter the injected repository thread scope inside the executor thread. Thread-local selections are released before their Future finishes. The existing executor context waits for all submitted work, including failures; batch selection, concurrency, algorithm and settlement remain unchanged. This change preserves bare-executor ContextVar behavior and does not copy request identity, model context, read caches or write-authorization contexts.
+
+This automatic-mask pool-scope candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows application-foundation candidate 8dd3e33. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed c84e963 and the ordered entry is unchanged. The bundled manifest is v194 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Repository cleanup is scoped to executor work; model-binding propagation remains a separate successor.
+
+Automatic-mask executor submissions explicitly bind only the already selected model snapshot through model_profiles.snapshots.bind_current. Each submission captures the injected resolver and a private copy of its current snapshot before scheduling, then restores any previous worker model scope on exit. This fixes the bare executor losing the parent binding for downstream training-vision settings. Request identity, mutable read caches and write-authorization contexts are not copied. Missing resolver or bound snapshot fails before executor submission; the existing batch error path retains claimed state without paid retry.
+
+Each pending sample receives a newly bound callback used once by its Future. Reusing that same callback would reuse its captured private snapshot; the helper does not promise a fresh copy per invocation or atomic binding of the whole batch. Mid-batch binding failure does not undo earlier submissions or imply that no provider call occurred.
+
+This automatic-mask model-binding candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows pool-scope candidate 60a094b. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed b86a647. The bundled manifest is v195 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Only the selected model snapshot is propagated; later binding failure does not undo already submitted work.
+
+DocumentJobs and PreparationJobs each own an independent TrainingThreadLifecycle, with the repository scope injected by composition. A per-acquire JobPermit transfers the existing bounded slot to an outer target wrapper: cancellation returns only an unentered permit, while an entered target retains capacity through business cleanup and repository-scope exit. This intentionally fixes startup/cleanup slot leaks and premature/double release; it is not a pure behavior-equivalent relocation. Direct synchronous run calls are caller-owned and do not acquire or release a job slot. Application shutdown registration remains separate work.
+
+This text-job ownership candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows model-binding candidate 8302940. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4491be2. The bundled manifest is v196 with 520 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Job permits retain capacity through thread and repository cleanup; direct synchronous calls remain caller-owned.
+
+The initial FastAPI transport shell is built by runtime/http_application.py from an explicit environment mapping. Each construction owns a fresh app, route collection, state and CORS list. Domain registration, authentication middleware placement, artifact runtime ownership and application startup/shutdown still belong to the surrounding composition; this focused factory does not yet provide a complete isolated production create_app.
+
+This HTTP-shell candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows text-job candidate a071786. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 5d1d582. The bundled manifest is v197 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. A fresh transport shell is not yet a complete isolated production application.
+
+create_http_application accepts an optional typed upload_runtime_provider. Omission retains UploadAdmission’s original default provider and middleware arguments. An explicit provider is selected only for multipart requests in non-local mode, and remains lazy across calls. The shell does not build or close artifact resources. Existing server composition still uses the original default; this capability alone does not provide full application or artifact-store isolation.
+
+This HTTP upload-provider candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows HTTP-shell candidate fa14007. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed 6f11bcd and the ordered entry is unchanged. The bundled manifest is v198 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit provider injection is enabled for later composition; the current entry still uses the default provider.
+
+storage.artifacts.runtime.ArtifactRuntimeProvider owns its lock, initialized runtime and configuration signature. It accepts an environment supplier and optional typed builder without creating files or clients at construction. get_runtime delegates to one default owner and resolves the normal builder at operation time. Validation and the local-mode bypass remain before locking, runtime creation stays serialized, failed construction is not cached and an initialized non-local configuration change still requires restart. Independent owners can initialize without sharing a lock or cache. This is not a new full artifact resource lifecycle or a production-wide per-app storage switch.
+
+This artifact-runtime ownership candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows HTTP upload-provider candidate 4ab91fe. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed 4c2b19e and the ordered entry is unchanged. The bundled manifest is v199 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Owners isolate selector locks and caches, not underlying paths or resources; the default entry owner remains process-scoped.
+
+Frozen HTTP constructor evidence is pinned to canonical Git LF bytes with an explicit checkout attribute. The raw SHA guard still rejects any changed fixture; this fixes platform-dependent test acceptance without changing application behavior or historical task snapshots.
+
+Frozen artifact-runtime evidence is checked out as canonical Git LF bytes. The original raw SHA and immutable fixture Git blob remain unchanged; a CRLF working-copy mismatch is a test portability failure, not a runtime regression.
+
+Pipeline advance, auto-Agent and recommendation schedulers now retain admitted preparation and native threads through a per-runtime lifecycle. Same-thread repository scopes surround the already selected pinned-model runner. close rejects new schedules and waits for scope exit; timeouts do not cancel tasks, rewrite evidence or retry providers. Registry and cancellation behavior stays with each existing scheduling capability. Auto-Agent can schedule advances, so application shutdown must drain parents before their dependencies; the final coordinated hook remains pending.
+
+Closing a pipeline owner rejects even empty or duplicate new scheduling calls before registry effects. Already admitted whole batches may finish preparation after close begins. A successful close denotes thread completion, not successful persistence or repository cleanup; scope-entry and construction failures may retain inflight evidence. Coordinated shutdown must drain auto-Agent before advance because admitted parent work can still schedule advances.
+
+Extraction registration accepts its own TrainingThreadLifecycle. After the existing authorization, upload read and normalization, the synchronous prepared-input path reserves admission before new source writes or task claims, preserving its original settings/fingerprint/deduplication order. The selected extraction worker enters the injected repository scope on its native thread. Existing resolver return values and route order remain unchanged; composition retains the owner explicitly for later application shutdown integration.
+
+Prepared local and Qwen comparison cleanup now returns an acquired semaphore slot even when final persistence, timer cancellation or repository clearing raises. Nested finally blocks guarantee each later cleanup step is attempted; they do not retry persistence, alter a model result or clear an attempting record. This fixes an existing capacity leak. If settlement and cleanup both raise, the later cleanup exception is primary and the earlier exception remains its Python context; single-fault exception identity is preserved.
+
+Prepared comparisons now receive a ComparisonRuntime owning native comparison threads, deadline timers and separate local/Qwen single-slot capacities. A per-target ComparisonSlot acquires at the original business position and returns capacity only after the outer repository scope exits, including failure. DeadlineTimers tracks pending starts and actual callback completion; cancellation is not completion. Parent drain must succeed before deadline admission closes, so active comparisons retain timeout protection. Composition injects repository scope and retains the owner; application shutdown wiring remains separate work.
+
+Each PDF import registration owns a PdfImportRuntime, exposed at app.state.label_pdf_import. Its admitted starter creates at most one consumer, including concurrent or repeated startup. The existing loop, claim token, per-iteration repository cleanup and two-second idle/recovery wait are unchanged. close(timeout) requests stop and joins admitted construction and actual thread completion; a stop request alone is not completion. The existing shutdown hook still requests stop only; coordinated application draining is separate work.
+
+This offline lifecycle integration retains native-history/readiness and detection composition from actual main dcb4805 and follows artifact-owner candidate 6b648b5. Owned production/tests and ordered entry match reviewed 28de9fa; both canonical fixture corrections are already retained. The bundled manifest is v204 with 523 unique sources; earlier paragraph counts refer to their original individual candidates. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Publication must use independently reviewed domain-scoped PRs on accepted main, with full hosted and release gates; this offline combined tree is not a blanket grouped publication approval or complete application factory.
+
+Web composition now registers a single ordered shutdown owner after domain registration. It preserves the two existing PDF-stop and label/control-stop hooks in their original order, then joins PDF, pipeline producers, auto-optimization producers, training/background/image owners, text owners, transfer reporters, YOLO warmup and finally MCP. Only explicit True acknowledges a drained native owner; a failed producer stops traversal before downstream dependencies are closed. Successful prefix steps are retained across explicit subsequent drain attempts. This changes shutdown composition only; the full independent application factory and artifact graph remain pending.
+
+Shutdown permanently closes these resource owners. The same production app instance must not be started again after teardown; process restart or a separately constructed resource graph is required. Two independently allocated HTTP shells are tested, not repeated startup of the same production graph. The native fan-out test executes actual pipeline auto-agent run and advance schedule/run methods with synthetic business ports, using the production shutdown binding order.
+
+This offline shutdown replay follows lifecycle candidate 7d7886a and preserves current native history, readiness, model/tail and canonical LF fixes. Four owned runtime/test/contract blobs match reviewed 82313c5. Manifest v205 lists 524 sources. The 480-second shutdown allowance remains cooperative and requires ASGI request quiescence; complete independent application composition is still pending. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+ImageUpload requires a narrow lazy UploadFiles supplier; DetectionAnnotation and DetectionAnalysis require an explicit runtime supplier. The entry binds these three services to its business-file selection. Other detection helpers and the complete application resource graph still use their existing compositions; this slice does not claim full per-app isolation. Shared image_backend retains call-time default runtime selection for existing callers.
+
+This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Detection media no longer constructs its own BusinessFiles or calls image_backend without an explicit runtime. ImageEncoding and InspectionImageStore resolve their supplied runtime at operation time; ReferenceSheet resolves a narrow files supplier for each existing file operation. LocalModels and VideoUpload capture an explicitly supplied files object at construction. The entry supplies its business files; replacing that entry variable later changes the lazy suppliers, but not the two captured objects. This completes explicit storage wiring within detection, not the entire application factory.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+HTTP media composition explicitly supplies files to incoming-text asset/evidence responses and training background queries, and supplies runtime selection to upload admission and the output mount. The response helper distinguishes omitted files (legacy default) from an invalid explicit None (failure). Incoming catalog/review business-path lookups still own their earlier storage dependencies; response injection alone does not complete their storage graph or the whole application factory. Background lookup intentionally reselects its files for existence and response operations, retaining their original order.
+
+This offline HTTP artifact replay follows detection media candidate f2b4519 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 301b6c1. Manifest v208 lists 524 sources. Explicit missing file dependencies fail closed while genuinely omitted legacy arguments retain their documented default. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Legacy incoming catalog, inspection execution, reviews and retention require explicit narrow file/image capabilities. Composition supplies one captured BusinessFiles object and matching ImageFiles to those four services; business modules no longer create default artifact adapters. Request identity and repository factories remain operation-time capabilities. This is a focused resource boundary, not the complete application factory.
+
+This offline incoming workflow replay follows HTTP artifact candidate 2336193 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 8e4d991. Manifest v209 lists 524 sources. Consistent captured files/images dependencies retain original partial-write, exception and retention semantics. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Training background manifest, file listing, seeding, identifier allocation, library lookup, upload and environment capture require explicit file capabilities from training/background_file_ports.py. The seven services capture their supplied adapter; production assembly supplies its existing BusinessFiles. Image rendering/validation/variant adapters and task state retain their separate composition; this slice does not claim a fully isolated training pipeline.
+
+The initial background-file candidate failed independent manifest-path validation before publication. Its path was corrected without changing business code, and the existing actual-source fingerprint contract is required in the local acceptance matrix.
+
+This offline background file replay follows incoming candidate 841c4ba and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed c80ed68. Manifest v210 lists 525 sources, with the corrected service-relative background capability path. Captured file capabilities retain original ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+TrainingBackgroundRenderer, BackgroundValidation and BackgroundVariants now require narrow image capabilities. Production assembly constructs one ImageFiles against the same captured BusinessFiles used by background metadata/upload services. Non-file OpenCV operations remain in their original modules. These three image services and the seven previously migrated background file services no longer construct default adapters. At the preceding image-only slice, background Codex generation and its task runner still used default BusinessFiles; their subsequent migration is described below. Unrelated dataset/preview services and complete application construction remain separate.
+
+CodexBackgroundGeneration and BackgroundTaskRunner require explicit file capabilities. The generation runner still selects one runtime for its remote branch before calling the unchanged native generation workflow; task execution retains its existing model-snapshot decorator and file-existence check position. Root supplies the same captured BusinessFiles as background file/image services. This closes their two remaining default-adapter sites, not the full application resource graph.
+
+This offline background image replay follows file candidate 89875c1 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 09ef623. Manifest v211 lists 525 sources. Three image services use explicit adapters; generator and runner defaults remain outside this slice. Original algorithms and golden contracts remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+This offline background generation replay follows image candidate 9a2d333 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 22986e9. Manifest v212 lists 525 sources. Generator and task runner now receive captured file adapters, retaining model snapshots, subprocess policy, partial outputs and exception behavior. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+TrainingDatasetInput, DatasetGenerator, TrainingPreviewCache, PreviewArtifactStore and TrainingPreviewApproval require explicit narrow file capabilities from training/file_ports.py. Production composition supplies its existing captured BusinessFiles. Their lookup, permission, serialization, error and partial-publication ordering stays unchanged. Rendering, dataset archives, resource mutations and other callers retain separate composition; this is not a complete application factory.
+
+This offline training file replay follows generation candidate 2fdb9ee and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 214fe9c. Manifest v213 lists 526 sources, appending training/file_ports.py. Five services capture matching file capabilities while preserving validation, cache, write ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Training preview rendering and annotation image I/O require explicit image capabilities; dataset YAML writing requires its file writer. Production composition binds both image services to one ImageFiles over its captured BusinessFiles and preserves the public entry YAML helper signature through a composition forwarder. Layout, pixel calculations and codecs are unchanged. Other training file services and full application construction remain separate.
+
+This offline training image replay follows file candidate 94c1eec and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 75d63a9. Manifest v214 lists 526 sources. Image adapters are captured and YAML selects its writer per call; arbitrary private rebinding is not preserved as an atomic hot swap. Algorithms, goldens and public signatures remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+TrainingResourceMutations and TaskBackgroundStore require explicit file capabilities, DatasetArchives requires an explicit runtime supplier, and its strict file digest requires a materialization capability. Production composition supplies the existing files/runtime and preserves the entry digest signature. Authorization, archive contents, lease scope, mutation order and partial-completion behavior remain unchanged; archive/runtime callbacks are not an atomic resource snapshot.
+
+This offline training resource replay follows image candidate 9063ace and preserves current history, readiness, model/tail, shutdown, corrected boundary documentation and canonical LF guards. Production and test blobs match reviewed fbf5434. At this replay boundary manifest v215 selects 526 sources. Explicit resource and archive capabilities preserve file operation ordering, strict digest failures, partial publication and archive formats. Current source changes require actual-main rebind, independent review and full CI/release acceptance before publication.
+
+Accessory creation uploads, image-job provenance and sprite metadata existence checks now require narrow file capabilities. Root binds its captured BusinessFiles to AccessoryCreation, the provenance ImageJobMetadata instance and SpriteRenderMetadata. The injected model resolver, hashing callback and image decoder retain their prior independent contracts; this change does not isolate the entire accessory workflow.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+BackgroundPlateDerivation, BackgroundReferenceSignatures, BackgroundCandidateCatalog, BackgroundLibraryMatcher, ReferenceEvidence and PreviewAssetLoader now receive narrow file/image capabilities. Root supplies its existing BusinessFiles and a matching captured ImageFiles. Existence checks, raw-byte hashing, decode order, source selection and matching calculations retain their existing boundaries; other accessory image workflows still require separate composition.
+
+This offline accessory evidence replay follows file candidate b368404 and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed 466195b. At this replay boundary manifest v217 selects 526 sources. Decode and hashing selection, source mutation, partial publication and error propagation remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+SpriteAssetCatalog and TextAssetCatalog require captured file and image ports; load_clean_sprite requires an image reader selected by its existing entry wrapper. Metadata mutation, dimension setdefault semantics, alpha thresholds and pixel-copy rules remain unchanged. Other accessory image workflows and complete application factory wiring remain pending.
+
+This offline accessory catalog replay follows evidence candidate 2d442b2. All owned production/test blobs and the complete ordered entry match reviewed 87ebec1; current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v218 selects 526 sources. Existing catalog mutation and decoder behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, assembled HTTP and fingerprint checks are distinct. Actual-main rebind and independent full CI/release acceptance remain required.
+
+CandidateFactory requires an image reader and AccessoryGallery requires file/image capabilities. The existing root image adapter is allocated before candidate composition and shared with the later accessory services. Candidate preparation/save order and gallery read-time publication, alpha composition and error behavior are preserved.
+
+This offline accessory gallery replay follows catalog candidate 8f453b3. Owned source/test blobs and ordered entry match reviewed 7f02e9d, including the single inert ImageFiles allocation relocation. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v219 selects 526 sources. Existing partial publication and failed-write behavior are unchanged. Neighbor evidence is reused only for exact source; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+AccessoryFiles receives narrow upload/existence/unlink and image IO capabilities. Its four existing edit workflows retain permission, validation, metadata mutation, profile refresh and save ordering. The root supplies matching file/image owners; no new retry or compensation is introduced.
+
+This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+ObjectSpritePreprocessor receives required existence and image-read ports from accessory composition. Pose discovery, cached-sprite rebuild, source fallback, cutout/provider policy, metadata and partial publication order remain unchanged. Artifact writing remains the existing explicit callback; independently supplied ports are not an atomic storage graph.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+AgentPoseAssets, PhotoHighlightSources and PoseRenderContent require narrow file readers. PoseExecutionWorkflows binds its supplied storage owner to the photo and render readers; the remaining AgentPoseAssets constructor receives that same explicit file capability at the entry. Source filtering, source metadata mutation, encoded evidence construction and prompt text remain unchanged. The source-position contract validates the actual composed owners before strictly replaying the reviewed Pose and path deltas; all original required-reader and isolation assertions remain.
+
+`build_infrastructure` in `runtime/infrastructure.py` constructs fresh foundational repository/auth/record owners, the path/configuration cycle, provider/profile configuration and three read caches. It allocates artifact services unless an already allocated artifact composition is explicitly supplied. The default entry uses this same builder and preserves its earlier artifact owner needed for root discovery. Path identity and configuration/profile repository suppliers select that foundation at operation time; local-model configuration and JSON caches select that artifact owner. Construction performs no IO, model resolution, route registration or worker start. Its typed return belongs only to the application assembler, which distributes narrow dependencies. Existing mkdir, HTTP registration, startup and shutdown positions and bound directory/migration aliases remain. Remaining domain registration and complete application lifecycle composition are separate acceptance gates. Explicit external environments and paths can intentionally be shared and are not automatically isolated by owner allocation. New tasks use manifest v272/586 with both actual construction modules; historical fingerprints remain unchanged.
+
+This offline Agent reference replay follows accessory preprocessing candidate b1d835d. Owned source/test blobs and ordered entry match reviewed efa17b7. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v222 selects 527 sources. Reference selection, digest acceptance, path mutation and exception ordering are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+PoseArtifactStore and PoseAssetMaterialization require explicit file capabilities. Root supplies its existing owner. Image-before-digest-before-metadata publication, local/remote text-write selection and incremental materialization remain unchanged; image bytes and metadata are not an atomic pair.
+
+This offline Agent pose storage replay follows reference candidate 9a90408. Owned source/test blobs and ordered entry match reviewed 11919d9. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v223 selects 527 sources. Image and metadata publication ordering, local/remote callback timing and partial mutations remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+PhotoHighlightSpriteBuilder requires byte-publication and image IO ports. Root supplies matching file and image owners. Source evidence, provider attempt policy, mask processing, diagnostics, artifact publication and metadata order are unchanged; callbacks still have independent ownership.
+
+This offline Agent photo replay follows pose storage candidate a56b846. Owned source/test blobs and ordered entry match reviewed 6afd82e. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v224 selects 527 sources. Provider attempts, diagnostic failure handling, publication and item mutation order are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+PipelineBackgroundPublication requires explicit file and PIL image ports, supplied by matching root owners. Existing library reuse, eager configuration/reference selection, provider error handling, fallback, set replacement and manifest/task publication order are preserved. This boundary does not make all callbacks or the whole application independently owned.
+
+This offline Agent background replay follows photo candidate 5bcd15e. Owned source/test blobs and ordered entry match reviewed e8c63a3. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v225 selects 527 sources. Existing library fallback, partial file and manifest publication, callback timing and errors remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+PipelineResourceStatus requires a captured file-existence port. Composition supplies the existing business-file owner; dataset/model matching, first-match order, deleted and pending states, and AI-task lookup precedence remain unchanged.
+
+This offline pipeline availability replay follows Agent background candidate 37a1265. Owned source/test blobs and ordered entry match reviewed ed60859. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v226 selects 527 sources. First-match, pending-state, bypass and storage error behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Text extraction registration and StandardEdits receive explicit cleanup-file capabilities. Root supplies the matching business-file owner; expiration selection, immutable tombstone competition, losing-revision cleanup and failed-standard-edit cleanup order remain unchanged. Other record/media callbacks retain their own boundaries.
+
+This offline text cleanup replay follows pipeline availability candidate 6f13fd9. Owned source/test blobs and ordered entry match reviewed c89fbbd. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v227 selects 528 sources. Cleanup exception precedence, tombstone-before-deletion and partial effects remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+DatasetCatalog, TrainingResources and TrainedModelCatalog require explicit narrow file adapters supplied by the composition owner. Existing local and indexed algorithms, catalog ordering, audit timestamps, task settlement and permission filters are unchanged. Record and projection callbacks are still independently supplied.
+
+This offline training catalog replay follows text cleanup candidate 1199028. Owned source/test blobs and ordered entry match reviewed 8f0715d. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v228 selects 528 sources. Local and indexed selection, permission ordering and repeated reads remain unchanged. Exact-source neighbor evidence is reused; current targeted, real PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+TextMedia now requires an explicit artifact-runtime provider from its composition owner. Local atomic replacement, remote generation checks, owner/path checks and lazy PDF publication retain their existing algorithms and order.
+
+This offline text media replay follows training catalog candidate 920904d. Owned source/test blobs and ordered entry match reviewed f71e6c4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v229 selects 528 sources. Local path, hybrid readiness, size, digest and publication rules remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+TrainingRunner requires file existence and runtime selection capabilities from its composition owner. Model binding still precedes the separate task load; executor mode, dataset lookup, work-budget reservation and execution callbacks retain their existing order.
+
+This offline training runner replay follows text media candidate da44932. Owned source/test blobs and ordered entry match reviewed 9b024f4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v230 selects 528 sources. Running-state persistence, runtime mode, repeated existence reads, failure settlement and pinned model restoration remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+RunPodExports and RunPodArtifacts require explicit artifact-runtime providers. Dataset/token metadata, checksum validation, ZIP selection and ordered artifact publication retain their existing local/COS behavior.
+
+This offline RunPod artifact replay follows training runner candidate b7b8760. Owned source/test blobs and ordered entry match reviewed 671f233. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v231 selects 528 sources. Repeated runtime selection, cleanup exception masking, publication ordering and local replacement remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+RunPodFlow, RunPodTrainingTransfer and RunPodUploadStore require explicit artifact-runtime providers. Durable submission claims, token/path validation, bounded upload and the existing polling loop remain unchanged.
+
+This offline RunPod transport replay follows artifact candidate 97a9963. Owned source/test blobs and ordered entry match reviewed 12f1743. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v232 selects 528 sources. Durable claim ordering, ambiguous submit retention, streaming limits and partial upload publication remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Codex HTTP registration requires an explicit artifact-runtime provider from the composition owner. Request context creates its MediaStore with that provider; permission, owner and repository checks retain their order. During the preceding Codex HTTP-only slice, label and CLI MediaStore callers retained their previous ownership.
+
+Label HTTP, PDF-import registration, LabelWorker and LabelProcess require explicit artifact-runtime providers. The Web root supplies its file owner; standalone bootstrap passes its own process entry provider after the existing storage startup validation. Neither domain imports the Web app.
+
+This offline Codex HTTP replay follows transport candidate 0beaefc. Owned source/test blobs and ordered entry match reviewed 42fcded. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v233 selects 528 sources. Authorization, media exception mapping and partial publication ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, isolated PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+This offline label media replay follows Codex HTTP candidate 41743d5. The original provider-only delta from reviewed b696cba is applied while retaining current native history summaries and their test adapters. All other owned source/test blobs and ordered entry match the reviewed source. At this replay boundary manifest v234 selects 528 sources. Current history, readiness, model/tail, shutdown and canonical LF guards remain. Worker claims, PDF cleanup, provider identity and error ordering remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Shared comparison MediaStore requires an explicit artifact-runtime provider. All Web, PDF, label worker and Codex CLI constructions supply it. Codex execution selects its work budget through the supplied media owner, while CLI startup retains its existing process storage validation.
+
+This offline comparison media replay follows current-history label candidate f447c5d. Owned source/test blobs match reviewed 552cea1; the entry remains unchanged. Current native history and its explicit-provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v235 selects 528 sources. Worker budget and reservation settlement ordering, ambiguous paid outcomes and CLI selection remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+The Web entry constructs ArtifactComposition, a narrow storage graph containing one lazy ArtifactRuntimeProvider and its BusinessFiles/ImageFiles views. It does not use the process-default runtime cache for those views. Each separately constructed graph owns its configuration signature and lock; this is not yet a complete application factory.
+
+This offline Web artifact composition replay follows comparison candidate d2ae509. Owned source/test blobs and ordered entry match reviewed a0fa2ed, including the Python 3.10 structural source guard. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v236 selects 529 sources. The Web graph owns a fresh lazy runtime provider and two focused views; this is not a complete application factory or proof of independent underlying resources. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Stream configuration saving is owned by config/stream.py through explicit load/save capabilities. The application entry retains the existing route and delegates to this service; load, payload-field evaluation, mutation, save and response order are preserved.
+
+This offline stream configuration replay follows Web artifact candidate f2e481b. Owned source/test blobs and ordered entry match reviewed 14f6504. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v237 selects 530 sources. Existing load, mutation, save and post-save response ordering remain unchanged; configuration is not given a new transaction or lock. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+IncomingTextStore now resolves JSON single-record lookups through its own list methods. The two callbacks through the application entry have been removed; narrow repository, guard, path and row-adapter inputs remain. Tests replace the owning store method and cover two independent stores, preserving missing-loader errors, call-time repository selection and lock behavior. TextStorage allocates both text stores and their shared write lock per composition, without opening a connection or retaining a user. Manifest v238 selects 531 source paths, including text_inspection/storage_composition.py. This closes the store self-reference only; full application factory and route/lifecycle instance isolation remain unfinished.
+
+The text storage lock belongs to `TextStorage` and its public lock property cannot be rebound. The entry lock alias initially references it; replacing that private entry alias no longer replaces either store guard. Remaining route/write adapters still use their existing inputs until their domain composition is migrated. This intentional narrowing of private test seams does not change configured runtime behavior.
+
+IncomingWorkflows now builds the incoming-text catalog, reviews, capture execution and retention graph around one explicit TextStorage owner. The graph supplies the same files/images adapters and storage lock to its relevant services. Duplicate capture lookup is shared by reviews and admission without a construction cycle. Account and repository suppliers remain operation-time ports. Complete application assembly and lifecycle isolation remain separate work.
+
+The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+Replacing the default entry business-file alias no longer redirects this incoming domain. Its response capability is selected on the owner after authorization; changing that capability does not atomically replace the separate file adapters already held by catalog/execution/retention. No whole-graph hot-swap guarantee is introduced.
+
+
+Training catalog composition is owned by training/catalog_composition.py. One inert ModelCatalog creates the task lookup, trained catalog, pipeline lookup/linkage, model selection and local cache owners. Internal query edges resolve the graph's actual services at operation time instead of calling application-entry aliases. Permissions and repository selection remain per invocation; catalog queries do not gain task write capabilities. Different graph instances have distinct model caches. This domain graph is not yet a complete application factory.
+
+Candidate image work now composes under accessories/image_composition.ImageJobs: one candidate lock, metadata, candidate repository, diagnostics, queue, execution service and native worker process/child registry belong to that graph. Internal queue/execution/diagnostic edges select that owner at operation time. External artifact, configuration, preprocessing and provider capabilities remain focused suppliers. Construction does not select a request identity, repository, model or native thread; all internal targets exist before worker admission. The entry retains existing public forwarders and route/lifecycle registration. This domain graph does not complete the full application factory or move training/image work into separate processes.
+
+ImageJobs internal operation suppliers select the domain owner directly. Existing root private lock/process aliases are views of that owner in the default application; rebinding an alias does not redirect the owned graph. Remaining legacy consumers still use their existing root suppliers until their domain composition is migrated. This is an explicit private replacement boundary, not a complete application-factory guarantee.
+
+The model-tool domain graph is owned by `model_providers/tool_composition.py`: one ModelTools owns the LocalAiMcpClient, dispatch service, PresenceInspection and the four-key semantic tool map. The client is constructed before handlers; lazy internal edges are complete before the constructor returns. The entry retains aliases and explicit accessory/provider/configuration suppliers. Internal provider-error, presence-dispatch and client/handler edges resolve this owner, so rebinding old private root aliases or wrappers no longer redirects them. External accessory wrappers remain captured as before. This is a domain graph, not two complete application factories.
+
+Presence selects the owned call wrapper before its argument effects, then that wrapper selects the dispatch method after arguments are ready, preserving the preceding two-step callback-selection order. The wrapper references only its owner, not application-entry globals.
+
+Owned MCP fallback retains admission, payload preparation, selected stdio invocation, late selected client close, then the existing single in-process handler sequence; close failure prevents fallback.
+
+DetectionWorkflows in detection/workflow_composition.py composes the analysis repository/publication, capture, ordinary detection and AI analysis services as one inert graph. Publication invokes its own capture, AI evidence invokes its own publisher, promoted-model recursion uses its own ordinary analysis, and teacher fallback uses its own pinned AI wrapper. Public entry adapters retain their existing signatures and model decorator. Construction never selects an identity, connection or model; the original external suppliers remain lazy. Capture lock, state storage and background launchers are supplied by the existing auto-optimization runtime, so this graph is not a new independent auto-optimization runtime or a complete application factory. Internal operations no longer follow arbitrary replacements of root private aliases.
+
+Text standards compose through text_inspection/standard_composition.TextStandardWorkflows. The inert domain owner holds the supplied TextRecordStore, media, revisions, standard imports/library/edits, document classification and preparation jobs. Internal storage/media/revision callbacks select that owner at operation time; each native job service has its own scoped lifecycle. Three registration methods remain at their original entry positions, preserving intervening routes. This does not complete application assembly or remove the remaining comparison/extraction/history dependencies.
+
+TextComparisonWorkflows in text_inspection/comparison_composition.py composes comparison submission, reviews, history, extraction admission and prepared comparison lifecycles around the actual text standard owner. Record/media/preparation edges select that owner; the entry retains explicit compatibility forwarders. History, extraction and inspection registration stay at their original positions. The extraction resolver has one typed field completed by extraction registration before inspection admission; an unassembled resolver fails explicitly. Remaining Codex/label interfaces and other application domains still need final assembly.
+
+AutoOptimizationCore in training/core_composition.py composes state storage, recommendations, readiness, status and shadow evaluation around the supplied settings and shared auto-optimization runtime. Internal record, recursive status/readiness and promotion callbacks select this owner at operation time. Shadow analysis selects the explicit DetectionWorkflows owner after argument evaluation, without importing the Web entry. The root keeps compatibility aliases and the original bounded shadow shutdown step. Generation, dataset, training scheduling, HTTP and pipeline collaborators still require their own final composition; this is not a complete application factory.
+
+The owned shadow native target preserves the original pinned model-profile entry through an explicit resolver provider captured at composition. Task loading and one model scope run after native repository-scope entry, using the actual core store; the public compatibility worker keeps its original single decorated call. Tests cover retained task version after configuration changes, empty and inherited snapshots, missing resolver before task I/O, exceptional restoration and one scope without retry.
+
+AutoOptimizationExecution in training/execution_composition.py composes initialization, mask prompts/visuals/verification, sprite publication, label generation/processing, scheduling, sprites/rendering, synthetic batches, dataset and requests. Its narrow external groups retain their original lazy selection; internal calls select the actual component after argument evaluation. Core, settings, shared runtime and separate label/check lifecycles are explicitly supplied. Native label/check entrypoints pin the supplied model resolver and actual task store once after repository scope entry; the public compatibility decorators remain unchanged. No model, prompt, task-state or process topology change is included. Core status selects the same workflow owner for label-start and sprite-pool callbacks. Route/lifecycle assembly and a complete application factory remain pending.
+
+AutoOptimizationWorkflows in training/workflow_composition.py composes the existing Core and Execution owners with the same explicit settings/shared runtime and three separate native lifecycle owners. The two status-to-execution edges select named workflow forwarders; those select execution after argument evaluation. It constructs both inert graphs at the former Core position, with all eager dependencies already defined and the External port imports explicitly moved before their first use. No generic registry, delayed binding slot, new process, algorithm or API change is introduced. Original aliases, public worker decorators, route order and close order remain. This closes only the automatic-optimization graph; capture, pipeline collaborators and complete application assembly still require explicit final integration.
+
+TrainingStateWorkflows in training/state_composition.py composes the existing TrainingRecordStore, TrainingTaskLifecycle and TrainingTaskViews around the supplied TrainingTaskRuntime. Records and lifecycle select the same existing RLock; lifecycle record operations and view load/refresh operations select named methods on this owner after argument evaluation. Repository factories and the two-layer model resolver remain operation-time suppliers; no user, connection or current snapshot is captured. Model freeze precedes invalidation and locking. Visibility still precedes refresh, and retired worker records remain read-only. Authorization, dual canonical/alias tombstones and partial deletion failures retain the original behavior. The entry keeps its public signatures and original component aliases. Replacing those private aliases no longer redirects owned edges; tests replace actual owner capabilities. This composes only training state, not datasets, training execution, submission, pipeline or the complete application factory.
+
+TrainingAccountState in training/account_state_composition.py combines TrainingStateWorkflows and TrainingUserState around one supplied runtime, with operation-time repository/model/identity suppliers and explicit configuration load/save and pipeline synchronization. TrainingExecution in training/native_execution_composition.py owns the original Runner and Submission with the same account records/runtime; the existing Runner model pin remains single. TrainingTaskWorkflows in training/task_composition.py owns jobs, mutations, launch, status, dataset, preview and RunPod transfer services and validates shared account/execution identity. Internal calls use named owners; five HTTP registrars stay at their original positions. The runtime remains shared with background submission, with its original shutdown owner. Launch configuration failure preserves the already-started task; upload metadata failure preserves the published artifact; a failed completion sync retains the original failed-task update and second sync attempt without repeating generation. Neighboring assets, catalogs, background workflows and pipeline services remain explicit collaborators. This is training-task domain composition, not a complete application factory.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.
+
+The model-profile engines route receives an explicit Codex-model supplier. The
+default composition reads the existing process environment at request time;
+independent registrars can supply separate environments without importing a
+process-global environment from the HTTP module. Empty and whitespace values
+retain the original truthiness behavior, and the administrator check remains
+first. This does not establish independent construction of the full Web app.
+
+The consolidated offline integration now starts from accepted main e1cfee3
+(real-photo feedback and independent review worker). DetectionWorkflows receives
+narrow analysis/capture feedback callbacks; both original capture gates and
+provenance scopes remain. Compatibility aliases select the composed owners.
+The real-photo routes, purpose bindings, incremental tables and review worker
+remain present. Manifest v253 contains 557 actual sources at this checkpoint;
+historical task snapshots are not rewritten. Full factory, combined CI and
+release acceptance are separate remaining gates.
+
+Beta list reads compact only label entries that are flat objects with string, boolean or null values, replacing each safe value-object with an empty object while retaining every label key. Numeric, nested and non-object entries and all unknown top-level fields stay intact. The original Python public projection still computes every list field; no tagged SQL row bypass remains. This avoids transferring safe unused evidence without hiding integer/depth decoding errors. Detail reads keep the complete persisted payload.
+
+Beta list reads return an internal BetaHistoryRead containing the decoded compacted payload plus nullable reference/label counts from the same owner-bound SELECT. SQL counts only object keys and array elements. The HTTP projection still evaluates original fields in original order; missing/null/scalar or encoded JSON uses the original len fallback. This type is not persisted and detail reads are unchanged.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Historical baseline-only prerequisite: manual history read optimization was not active in that commit. Its original helper is frozen independently for tests: the baseline endpoint receives a separately loaded module containing the complete original rows/resolve implementation, so later candidate helper changes cannot silently change the oracle. Production grouping, detail materialization and database reads are unchanged.
+
+The manual-history benchmark measures the complete first-page endpoint with original fixed snapshots against separately frozen tasks and manual-helper sources. That protocol-only prerequisite did not alter production grouping or activate an index. Its performance claim is limited to synthetic manual populations; existing reader/history/Beta protocols remain independent requirements.
+
+Manual history list projection now opts into request-local indexes for multiple groups with proven ordinary decoded rows. Original key discovery/set iteration and full row projection stay unchanged. Session IDs map to every selected group even when duplicate IDs make the separate discovery map last-wins; each page is appended once to both matching-session groups and its fallback group in original page-before-record order. Unsupported references, timestamps or assets use the original scans and error behavior. Default rows/resolve detail calls keep the original path. This is an intermediate in-memory read optimization, not SQL aggregation.
+
+The indexed path still scales with actual memberships: many duplicate session IDs can attach each page to many groups. It does not promise globally linear output size or universal memory bounds; homogeneous performance cases are complemented by explicit overlap/fallback tests.
+
+The manual-history index retains equal-ordinal assets in their input order. PostgreSQL fixtures derive that order from the actual cached repository source; separate synthetic fixtures verify both forward and reversed ties. This test hardening changes no production, sorting or benchmark policy.
+
+
+The initial read-batch integration at v252 combined the guarded manual index and Beta SQL consumer on business composition 2b6e9ce. The current guarded legacy cohort is described below; independent application construction remains unfinished.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.
+
+
+Application configuration is now composed by config/application_composition.py.
+Each owner allocates its own reentrant guard and protected-write ContextVar;
+training configuration selects that same owner lazily. Construction performs no
+file or repository access. PostgreSQL protected writes retain their existing
+transaction/advisory-lock behavior. Two real PostgreSQL owner fixtures cover
+concurrent protected writes, training-state persistence and rollback after a
+partial write. Run scripts/smoke_application_configuration_composition.py with
+VANTALINE_POSTGRES_DSN to execute all six cases. JSON-only mode skips that one
+PostgreSQL case. PostgreSQL fixture markers use JSON objects because the existing
+record decoder treats strings as serialized JSON; this increment does not change
+the decoder or rewrite stored configuration. Full application factory, PLC and
+pipeline ownership and hosted/release gates remain open.
+The combined Beta benchmark accounts explicitly for one legacy schema catalog
+probe and one generation/eligibility query when the derived schema is installed
+but no cohort is ready. A/A has neither probe. All other query counts must stay
+fixed, the total remains at most 12, and original 31 samples, three memory
+samples, P95 and peak-memory limits remain. Full combined CI is still required.
+
+Static PostgreSQL persistence checks read the current business modules. Their
+old-location oracle runs only after the actual 26 composition modules and
+complete integrated root pass immutable AST bindings. Two explicitly reviewed
+deltas restore the older assembly for its retained assertions; they do not
+represent current source locations. Positive and adverse checks cover changed
+repository timing/owner/import, missing or reordered nodes, route/shutdown order
+and corrupted delta regions. This is test adaptation, with no production change.
 
 
 The accepted-real-photo dispatcher exports group-disjoint original-only YOLO datasets with frozen labels/reviews and full class order. Local/RunPod held-out evaluation yields unavailable metrics for unsupported categories; candidates remain manual and collection continues. Supplemental masks use a separate explicit dispatcher and have no training admission effect. Training submission is reserved durably and never replayed after an uncertain outcome.
@@ -1782,6 +2264,120 @@ Assessment inputs freeze the initialization decision, current approved-real targ
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
 
 
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.
+
+
+Artifact port regression checks follow the actual detection workflow runtime
+provider and accessory image metadata files through their current owners. They
+retain constructor counts, exact forwarding aliases, required/None/falsey checks
+and all upload/storage behavior assertions. The current 26 composition AST
+bindings protect actual constructor edges before these source checks.
+
+
+The image-provider configuration source check retains the exact three typed port
+groups and every zero-argument supplier. The three reviewed model-option, provider and masked URL suppliers
+select their exact ProviderConfiguration methods; all other getters still
+select their original named capabilities. Actual composition AST bindings and
+existing redaction, failure ordering and instance-isolation cases remain.
+
+
+Public network policy still checks all seven original suppliers and exact
+zero-argument getters, with the reviewed masked URL method on its provider owner.
+TextMedia runtime checks follow the actual standard owner, its one constructor
+and exact StandardMediaStorage provider. Required/None/falsey and all media
+behavior tests remain; source guards reject unexpected owner edges.
+
+## Workstation domain composition
+
+`plc/workstation_composition.py` owns the existing workstation repository, station service and browser dispatch service. Seven typed external capability groups supply storage, identity and policy without selecting a connection, user, clock or file during construction. Internal calls use named methods that select the owned component after argument evaluation. The active-lease callback instead retains its original one-time station binding. Compatibility exports and route positions remain unchanged; assigning private entry aliases does not redirect owned internal edges.
+
+The original three business implementations remain byte-identical. Source contracts verify the actual owner and complete ordered root before replaying the narrowly recorded constructor relocation; original protocol assertions remain. The new actual-owner tests cover independent graphs with identical IDs, request-time identity, duplicate admission, persisted declaration before projection failure, uncertain timeout settlement and callback rollback. Manifest v259 adds the actual owner source for new task fingerprints; historical snapshots remain unchanged. This closes the three-service workstation graph, while capture collaborators, pipeline and complete application lifecycle assembly remain pending.
+
+`plc/lease_diagnostic_composition.py` composes the existing lease acquisition, maintenance and diagnostic services around the same workstation owner. Three typed external groups retain 24 lazy suppliers; four ordinary storage/token capabilities select named forwarding methods after arguments, while active-lease checks retain the initial station binding. Original component aliases, HTTP registrars and operation signatures remain in place. Claim/activate, heartbeat/rebind, diagnostic reservation/confirmation, draining release and late receipt preserve their transaction and uncertainty contracts. Six business modules remain byte-identical across these two composition increments. Capture and full application/pipeline lifecycle assembly remain separate work.
+
+PlcCaptureWorkflows owns the retained LegacyRuntimeCoordination and PlcCaptureState graph through 18 external suppliers and six internal callbacks (three captured coordination methods and two capture forwarders, with the mutation method reused). Its constructor performs no I/O or worker startup. The existing capture/generation/owner-epoch state remains separate from Web Serial workstation leases. Both business implementations are unchanged; compatibility aliases retain original fixed coordination receivers and late-selected capture helper receivers. This closes capture state assembly only; legacy worker loops, pipeline and a complete application factory remain pending.
+
+PipelinePersistence owns PipelineRuntimeState, PipelineTaskStore, PipelineStateStore and PipelineTrainingSync. Training completion reads/writes select named record forwarders; task and state guards are separate and owned by that runtime. The task store does not acquire a new lock: terminal synchronization already holds the original non-reentrant task lock. Constructors remain inert despite earlier allocation; paths, model providers and row codecs are lazy. Existing CostServices keeps its direct captured task-store reader. Native pipeline execution/pinning, HTTP registration and full application factory remain pending.
+
+PipelineExecution composes the three existing native runtimes around one PipelinePersistence. Eleven narrow input groups carry 42 external suppliers; 21 internal getter edges select owned records, guards, registries, runners and auto-to-advance scheduling. Each runtime keeps a separate native lifecycle and shutdown step; three scope arguments retain the original bound repository thread_scope. The original ResolverProvider object is captured without calling it; each scheduled entry pins exactly once inside repository scope before request identity and selects the runtime after model binding. Public decorated compatibility entries and the producer-first close order remain unchanged. Pipeline task/query/agent/pose/HTTP assembly and the complete application factory remain unfinished.
+
+PipelineQueries in pipeline/query_composition.py composes the actual metadata, candidate flow, task snapshots, resource status, auto-optimization links and public projection around PipelinePersistence. Its 46 external inputs remain narrow suppliers; 22 internal edges select named owner methods at operation time. Candidate refresh and missing-state optimization links retain protected writes and exception side effects. Resource files are captured at construction while candidate files remain operation-time suppliers. This graph introduces no new worker or whole-application factory.
+
+The PostgreSQL endpoint source oracle verifies actual composition owners and replays the reviewed deltas in one dependency-ordered restore_business_root call. This preserves its original persistence, permission and repository-reference assertions without relaxing unknown-root rejection. It changes verification only, not application architecture or database behavior.
+
+AgentPipelineWorkflows in agent/pipeline_composition.py composes the actual conversation, decision context/policy/flow, actions and turn services around PipelineQueries. Thirteen narrow input groups supply 36 external abilities, while 15 internal getters and four query forwarders select named owners at operation time. Its owned decision entry binds the directly supplied model resolver before selecting the actual flow; the root compatibility decision retains its original decorator. Settings/support/context failures remain outside rule fallback, while provider/parse/normalize exceptions retain one fallback without retry. This graph owns no worker lifecycle and does not complete the application factory.
+
+PipelineStages in `pipeline/stage_composition.py` now composes AI activation, AI-card synchronization, training status, stage advancement, reconciliation and recommendation cache workflows around the actual PipelineQueries and the supplied PipelineRuntimeState. Internal metadata and transition calls select named methods on that owner; reconciliation selects the same runtime advance lock/inflight set used by native execution. The entry retains original component aliases and public function signatures. Its named `advance_pipeline_task` entry is distinct from the `advance` component. Constructors do not select suppliers, launch work or call a model. Preserve save-before-public-projection failures, paused-card state, shallow sharing, cache consumption and cancellation checkpoints. This closes these six stage workflows only; pose/task/HTTP composition, complete application factory, hosted performance gates and production topology activation remain pending.
+
+PipelineTaskWorkflows in `pipeline/task_composition.py` composes the eight task-list, create, update, accessory routing, delete, Agent feedback/chat and manual advance/cancel services. It receives the actual Query, Stage, Execution and Agent owners and rejects mismatched query/persistence/runtime identities before constructing services. Internal calls select named methods; the original eight HTTP registrars execute at their original entry positions, preserving all ten endpoints and route order. Reconciliation still runs and may save before GET visibility filtering; deletion still requests cancellation before record authorization; chat still decides once outside the task guard and rechecks authorization before committing under the guard. Pose feedback remains an explicit external capability and may execute under the existing guard. Execution's own decision/advance inputs remain separate explicit ports; sharing this task graph does not complete those native cross-domain edges or the whole application factory.
+
+PipelineRuntimeWorkflows in `pipeline/runtime_composition.py` constructs the actual mutation, stage, Agent and native execution services in dependency order around PipelineQueries and its shared PipelineRuntimeState. The 38 narrow groups expose 117 external abilities; 21 owned edges use 18 named forwarders. Native auto decisions and commits select the actual Agent; Agent advance selects actual stage/mutation services; stage progress persists through the actual task store. Constructors select no supplier and start no work. The directly supplied model resolver and separate native lifecycles remain unchanged. This closes the native pipeline collaborators, not pose assembly or the whole application factory.
+
+Mutation progress/batch/mark test substitutions target the connected owner forwarders. The actual frozen mutation service and its class remain unchanged, preserving other application graphs. This test-seam repair changes no runtime ownership or business behavior.
+
+Codex API registration now requires a typed environment mapping alongside its runtime provider. Account admission, model readiness and capabilities read that supplied live mapping. The default Web assembly explicitly supplies os.environ; the independent Codex worker explicitly supplies its own process environment to account selection. This isolates separately assembled API configurations without changing default behavior, model execution or worker topology. It closes this environment edge only, not the full application factory.
+
+The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.
+
+The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+Provider dependency-capture tests substitute secret-key identification on the actual ProviderConfiguration instance. The same original A/B/C argument-time mutation and missing-callable assertions remain; other provider capabilities retain their existing locations. The temporary mock is restored on exit and changes no model call, key selection or retry algorithm.
+
+Pipeline resource-status file binding is now assembled by PipelineQueries. The retained source-position oracle uses the strict integrated-root inverse, which verifies the actual query owner and unchanged business files before inspecting the original binding. Runtime file-isolation and error-propagation assertions continue to exercise PipelineResourceStatus directly.
+
+Training task source contracts now enter through the central integrated-root inverse once. It verifies current domain owners, then configuration and integration layers in order before the unchanged training-specific import, owner, business-source and route/lifetime checks. A premature second configuration inverse is removed; runtime training code is unchanged.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.
+
+Provider types are constructed by `model_providers/transport_composition.py` for each composition. Each type retains its app's transport ports and captured resolver callable; transport capabilities and image sizes remain operation-time inputs. Gemini's cache TTL default is captured for that composition. The native transport algorithms and usage accounting are unchanged. This domain builder does not establish the complete independent Web application factory.
+
+`training/real_photo_composition.py` owns feedback, its training bridge, dispatchers and native runtime. Feedback registration remains at the same position in the default entry. The bridge restores the supplied request identity after nested metadata checks or submission errors, preserves task-class/rule snapshots and accessory ordering, and refuses immutable source conflicts and active legacy labeling. Startup and stop retain the existing lifecycle hooks and native dispatcher close step. Business modules do not import the application entry.
+
+## Canonical Web application construction
+
+`local_inspection_service.server:app` exposes the single result from `runtime/default_application.py`; that module calls `runtime/application.py:create_application`. The same constructor creates independent applications without importing the default entry. `runtime/wiring/` statically composes infrastructure, inspection, training/pipeline, analytics, PLC and text owners, then registers the fresh HTTP graph in its original interleaved order. Business constructors receive their existing narrow typed ports, never the complete `Application` result or a global registry.
+
+`ApplicationValues` contains composition-time values only. Its mutable defaults are fresh for each application. Identity remains a per-app `ContextVar`; repositories remain per-thread selections with scoped release. The optional constructor connector belongs to that application's repository owner. Real-photo feedback now explicitly selects that owner's environment and connector instead of referencing an undefined legacy test global.
+
+`ApplicationLifetime` runs native startup hooks once in order and delegates drain to `WebShutdown` in the existing producer-before-dependency order. Close fences later startup even when waiting for a running hook times out. Failed startup/initialization preserves its original exception; construction failure releases the assembling thread's repository selection. An interrupted or unsuccessful drain stays closed to startup and permits another bounded close. Build a fresh application to restart a closed instance.
+
+`compatibility/` preserves historical default-call function signatures and fixed names. These are API compatibility exports, not business dependency adapters: business and canonical wiring cannot import them or the process-default application. Reassigning a private `server` name no longer redirects owned graphs; replace a component's explicit ports or actual receiver in tests. Process-wide third-party environment behavior and the real-photo allowlist remain process-wide; the factory does not promise arbitrary process isolation.
+
 COS child-directory enumeration now projects distinct immediate child names from latest ready artifact rows in PostgreSQL, rather than decoding every descendant file. Literal prefix reads use explicit C byte ordering and the additive idx_artifact_prefix_c index; the outside list ordering, generations, ownership projections and hybrid local-directory union remain unchanged. Real-photo VLM input bounds resize references to at most 1024 pixels on the longest edge and originals to at most 2048, without cropping or EXIF rotation. Normalized boxes still map to original dimensions; receipts retain input dimensions and the explicit source-to-input scale. Preparation failures become failed annotation versions with a bounded stage code and no external-call receipt, requiring explicit relabeling.
 
 独立训练审核 worker 的报告 broker 在原有鉴权、版本与完整报告约束下记录固定拒绝分类。CLI 完成但报告缺失/被拒绝、非零退出或失败 turn 均阻塞训练；诊断不授予接纳或重试权限，不保存 CLI/异常原文。
@@ -1793,6 +2389,8 @@ Real-photo provider copies use fixed JPEG90 4:4:4 after 1024/2048 longest-edge b
 **Status: Authoritative**
 
 The detection workbench and ordinary-user device settings share `LocalPlcControls` and the browser Web Serial controller. Detector accounts self-register a cookie-bound workstation and save its confirmed local configuration without global settings permissions; they cannot list or take over other workstations. Local name changes preserve the cookie and do not rotate another browser's binding. Configuration edits disconnect first and reject live leases. A connecting lease supplies a read-only check for both configured D registers; activation validates bounded browser evidence. Current-generation communication verification gates active leases and production attempts while ordinary image/video detection stays available without PLC. Model selection may follow connection, but model binding and camera readiness gate production. Verification state extends existing raw JSON records without a schema migration; see the PLC contract for evidence limits and reconnect behavior.
+
+The final application batch also preserves main cd57cc7c real-photo prefix caching, upload-timeout, versioned annotation and paused-cohort recovery byte-for-byte. Its feedback API delta has a fixed single-path upstream/previous/actual source contract; historical migration oracles remain unchanged. New tasks use source manifest v282/616, adding the actual cache and transport modules without rewriting existing task snapshots. PLC composition fixtures now supply the upstream read-verification evidence and retain explicit unverified-lease rejection checks.
 
 The real-photo Responses transport applies a bounded 30-second connection/upload budget, since urllib3 uses the connect socket timeout while writing image bodies. It retires pools after 30 seconds idle and on failure, preserving recent successful pooling and zero POST retries. Shared label/pretraining transport is unchanged.
 
@@ -1808,7 +2406,10 @@ Real-photo preparation settlement is version-aware: old terminal annotation evid
 
 Paused-state compatibility allows explicit source editing to archive a revoked legacy round in the same fenced state transaction, without an enable/pause detour or new paid job. Active enabled rounds and frozen splits retain their existing guards.
 
+The main288 API delta extends the previous fixed single-path source chain; both original and main284 source oracles stay immutable. Its actual upstream API, repository and scheduling code are retained byte-for-byte, and the combined manifest is v282/616 without rewriting existing snapshots.
 
 ## Real-photo source confirmation
 
 Real-photo capture provenance now includes an explicit confirmation flag and versioned group history. Pending placeholder groups and explicitly unconfirmed sources cannot pass Agent acceptance, approved-count aggregation or dataset export. Legacy non-placeholder groups retain their existing semantics without rewriting JSON. A source edit changes the review identity once; unchanged saves do not cause repeated paid review. The frontend exposes pending counts and an explicit source confirmation checkbox; appearance/upload frequency cannot establish capture provenance.
+
+The exact main289 source-confirmation behavior and optional strict-boolean HTTP contract are retained. The fixed current source delta follows the original, main284 and main288 API hash chain; prior source oracles remain immutable. New task provenance uses combined manifest v282/616, including upstream v183, without rewriting historical task snapshots.

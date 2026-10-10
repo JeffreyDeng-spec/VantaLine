@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 NAMES = {"_run_pipeline_auto_agent_step", "schedule_pipeline_auto_agent"}
 
 
@@ -43,6 +44,8 @@ class AutoAgentRuntimeContract(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'auto')
 
     @classmethod
     def tearDownClass(cls):
@@ -51,6 +54,8 @@ class AutoAgentRuntimeContract(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'auto')
         self.events = []
         self.task = {"id": "task", "stage": "training", "status": "completed", "orchestration": {"auto_steps": 1}}
         self.inflight = {"task"}
@@ -87,7 +92,7 @@ class AutoAgentRuntimeContract(unittest.TestCase):
         self.replace("sys", types.SimpleNamespace(stderr="stderr"))
 
     def replace(self, name, value):
-        self.stack.enter_context(patch.object(self.api, name, value, create=True))
+        self.stack.enter_context(patch_fixture_capability(self.api, name, value, create=True))
         return value
 
     def run_task(self, user=None):
@@ -282,21 +287,25 @@ class AutoAgentRuntimeContract(unittest.TestCase):
         self.assertEqual(self.inflight, {"task"})
 
     def test_schedule_duplicate_and_failed_start(self):
+        selected = self.replace("_run_pipeline_auto_agent_step", Mock())
         self.inflight.clear()
         made = []
         class Thread:
+            def is_alive(self): return False
             def __init__(self, **kwargs): made.append(kwargs)
             def start(self): pass
         self.replace("threading", types.SimpleNamespace(Thread=Thread))
         user = {"id": "u"}
         self.api.schedule_pipeline_auto_agent(["", "a", "a", "b"], user)
         self.assertEqual(len(made), 2)
-        self.assertIs(made[0]["target"], self.api._run_pipeline_auto_agent_step)
+        made[0]["target"](*made[0]["args"])
+        selected.assert_called_once_with(*made[0]["args"])
         self.assertEqual(made[0]["args"], ("a", user))
         self.assertIs(made[0]["daemon"], True)
         self.assertEqual(self.inflight, {"a", "b"})
         self.inflight.clear()
         class FailThread:
+            def is_alive(self): return False
             def __init__(self, **kwargs): pass
             def start(self): raise RuntimeError("start")
         self.replace("threading", types.SimpleNamespace(Thread=FailThread))
@@ -308,16 +317,20 @@ class AutoAgentRuntimeContract(unittest.TestCase):
     def test_scheduler_rebinds_decorated_root_between_items(self):
         self.inflight.clear()
         targets = []
-        def replacement(*_): pass
+        replacement = Mock()
         class Thread:
+            def is_alive(self): return False
             def __init__(inner, **kwargs): targets.append(kwargs["target"])
             def start(inner):
                 if len(targets) == 1:
                     self.replace("_run_pipeline_auto_agent_step", replacement)
         self.replace("threading", types.SimpleNamespace(Thread=Thread))
-        first = self.api._run_pipeline_auto_agent_step
+        first = self.replace("_run_pipeline_auto_agent_step", Mock())
         self.api.schedule_pipeline_auto_agent(["first", "second"], None)
-        self.assertEqual(targets, [first, replacement])
+        targets[0]("first-probe", None)
+        targets[1]("second-probe", None)
+        first.assert_called_once_with("first-probe", None)
+        replacement.assert_called_once_with("second-probe", None)
         self.assertEqual(self.inflight, {"first", "second"})
 
     def test_decorated_root_binds_model_before_identity(self):
@@ -368,6 +381,7 @@ class AutoAgentRuntimeContract(unittest.TestCase):
                 def set(self, user): effects[label].append("set"); return "token"
                 def reset(self, token): effects[label].append("reset")
             class Thread:
+                def is_alive(self): return False
                 def __init__(self, **kwargs): effects[label].append(("thread", kwargs["args"], kwargs["daemon"]))
                 def start(self): effects[label].append("start")
             def commit(task, config, user, message, decision, trigger, *, pending_advances):

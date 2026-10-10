@@ -12,6 +12,7 @@ import unittest
 import uuid
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from pipeline_store_application_test_ports import bind_pipeline_stores,assert_default_pipeline_stores
 PG_CHECK='--postgres' in sys.argv
 if PG_CHECK:sys.argv.remove('--postgres')
 
@@ -45,9 +46,10 @@ class Fixture:
     def seed(self,path,value):self.data.mkdir(exist_ok=True);path.write_text(json.dumps(value),encoding='utf-8')
     def bind(self,api,stack):
         values={'DATA_DIR':self.data,'PIPELINE_TASKS_PATH':self.tasks,'PIPELINE_STATE_PATH':self.state,
-                '_pipeline_state_lock':self.guard,'runtime_postgres_repository_or_none':self.repository,
+'runtime_postgres_repository_or_none':self.repository,
                 'resolve_model_profiles':self.provider}
         for name,value in values.items():stack.enter_context(patch.object(api,name,value))
+        stack.enter_context(patch.object(api._pipeline_persistence.runtime,"state_lock",self.guard))
 
 
 class PipelineStoreContracts(unittest.TestCase):
@@ -59,10 +61,12 @@ class PipelineStoreContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_pipeline_stores(server)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_pipeline_stores(self.api,self.stack)
         self.f=Fixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='pipeline-store-')));self.f.bind(self.api,self.stack)
 
     def test_json_reads_preserve_types_and_exception_boundaries(self):

@@ -1,5 +1,7 @@
 """Account-owned, persisted, at-most-once document classification and tombstones."""
 import copy
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
+from .job_admission import JobPermit
 import os
 import threading
 import time
@@ -12,12 +14,13 @@ from .document_ports import DocumentRecords, DocumentModels, Record
 
 class DocumentJobs:
     def __init__(self, records: DocumentRecords, models: DocumentModels,
-                 asset_bytes: Callable[[Record, str], bytes], clear_repository: Callable[[], None]):
+                 asset_bytes: Callable[[Record, str], bytes], clear_repository: Callable[[], None], *, runtime: TrainingThreadLifecycle | None = None):
         self.records = records
         self.models = models
         self.asset_bytes = asset_bytes
         self.clear_repository = clear_repository
         self.slots = threading.BoundedSemaphore(2)
+        self.runtime = runtime if runtime is not None else TrainingThreadLifecycle()
 
     def mutate(self, identity, owner, change):
         repo = self.records.repository()
@@ -47,37 +50,37 @@ class DocumentJobs:
         return settings
 
     def start(self, identity, owner):
+        return self.runtime.submit(lambda launch: self._start(identity, owner, launch))
+
+    def _start(self, identity, owner, launch: ThreadLaunch):
         # No classification or paid retry on GET, duplicate POST or document reimport.
         settings = self.settings(owner)
         if not self.slots.acquire(blocking=False):
             raise HTTPException(429, '图片分类繁忙，请稍后点击识别标签')
-        run_id = uuid.uuid4().hex
-        def claim(standard, assets):
-            if standard.get('status') != 'draft' or standard.get('standard_type') != 'label':
-                raise HTTPException(409, '仅未启用的标签订单可以识别')
-            if standard.get('classification', {}).get('id'):
-                return False
-            standard['classification'] = dict(id=run_id, state='processing', done=0, total=len(assets),
-                heartbeat=time.time(), prompt_version=classifier.VERSION, model=settings['model'])
-            standard['updated_at'] = int(time.time())
-            for asset in assets:
-                if asset.get('classification_source') != 'human':
-                    asset['status'] = 'needs_confirmation'
-                    asset['classification_reason'] = '等待视觉模型识别'
-            return True
+        permit = JobPermit(self.slots)
         try:
+            run_id = uuid.uuid4().hex
+            def claim(standard, assets):
+                if standard.get('status') != 'draft' or standard.get('standard_type') != 'label':
+                    raise HTTPException(409, '仅未启用的标签订单可以识别')
+                if standard.get('classification', {}).get('id'):
+                    return False
+                standard['classification'] = dict(id=run_id, state='processing', done=0, total=len(assets),
+                    heartbeat=time.time(), prompt_version=classifier.VERSION, model=settings['model'])
+                standard['updated_at'] = int(time.time())
+                for asset in assets:
+                    if asset.get('classification_source') != 'human':
+                        asset['status'] = 'needs_confirmation'
+                        asset['classification_reason'] = '等待视觉模型识别'
+                return True
             claimed = self.mutate(identity, owner, claim)
-        except Exception:
-            self.slots.release()
-            raise
-        if not claimed:
-            self.slots.release()
-            return
-        thread = threading.Thread(target=self.run, args=(identity, owner, run_id, settings), daemon=True)
-        try:
-            thread.start()
-        except Exception:
-            self.slots.release()
+            if not claimed:
+                permit.cancel()
+                return
+            launch(lambda wrap: threading.Thread(target=permit.wrap(wrap(self.run)),
+                args=(identity, owner, run_id, settings), daemon=True), lambda thread: None)
+        except BaseException:
+            permit.cancel()
             raise
 
     def mark_unavailable(self, identity, owner, reason):
@@ -155,7 +158,6 @@ class DocumentJobs:
             print({'event': 'document_classification_failure', 'standard_id': identity, 'error_type': type(exc).__name__}, flush=True)
         finally:
             self.clear_repository()
-            self.slots.release()
 
     def delete(self, identity, owner):
         def change(standard, assets):
@@ -167,3 +169,6 @@ class DocumentJobs:
                     standard['classification']['state'] = 'cancelled'
             return copy.deepcopy(standard)
         return self.mutate(identity, owner, change)
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

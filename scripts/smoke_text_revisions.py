@@ -203,21 +203,24 @@ class RevisionContracts(unittest.TestCase):
             (Path(folder)/'local_inspection_service/static').mkdir(parents=True)
             os.environ.update(LOCAL_INSPECTION_ROOT=folder,VANTALINE_DATA_STORE='json',VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',YOLO_AUTOINSTALL='false')
             from local_inspection_service import server
+            from local_inspection_service.runtime.wiring import text as text_wiring
+            from text_application_test_ports import text_value, text_repository
+            values=server._default_application.values
             for mode in ('capture','missing'):
                 events=[];logger=Mock()
                 def digest_a(data):events.append('A');return 'hashA'
                 def digest_b(data):events.append('B');return 'hashB'
                 def digest_c(data):events.append('C');return 'hashC'
                 class Message:
-                    def __str__(self):events.append('argument');server.sha256_bytes=digest_c;return 'synthetic message'
+                    def __str__(self):events.append('argument');text_wiring.sha256_bytes=digest_c;return 'synthetic message'
                 class Failure(dict):
                     def get(self,key,*args):
                         if key=='error_type':
                             events.append('before')
-                            if events.count('before')==1:server.sha256_bytes=None if mode=='missing' else digest_b
+                            if events.count('before')==1:text_wiring.sha256_bytes=None if mode=='missing' else digest_b
                         return super().get(key,*args)
                 record={'diagnostics':{'failure':Failure(message=Message(),error_type='synthetic')}}
-                with patch.object(server,'sha256_bytes',digest_a),patch.object(server,'TEXT_INSPECTION_DIAGNOSTIC_LOGGER',logger):
+                with patch.object(text_wiring,'sha256_bytes',digest_a),text_value(values,'TEXT_INSPECTION_DIAGNOSTIC_LOGGER',logger):
                     for _ in range(1 if mode=='missing' else 2):
                         try:server._text_v2_write_server_diagnostic(record)
                         except TypeError:self.assertEqual(mode,'missing')

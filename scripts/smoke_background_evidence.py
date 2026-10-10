@@ -17,6 +17,8 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch,call
 
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class BackgroundEvidenceContracts(unittest.TestCase):
 
@@ -48,7 +50,9 @@ class BackgroundEvidenceContracts(unittest.TestCase):
 
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
 
-        cls.api=server
+        from scripts.background_evidence_test_fixture import background_evidence_fixture
+
+        cls.api=background_evidence_fixture(server)
 
     @classmethod
 
@@ -275,7 +279,7 @@ class BackgroundEvidenceContracts(unittest.TestCase):
                 def read():reads.append((label,key));return values[key]
                 return read
             groups=[PlateSources(**{k:getter(k) for k in ('pose_assets','contexts','resolve','suffixes')}),PlatePolicy(**{k:getter(k) for k in ('time_budget','max_side','max_radius','mask_fraction')}),BackgroundMasks(getter('foreground')),SignatureSources(getter('paths'),getter('limit')),SignaturePolicy(getter('max_patches')),SignatureProjections(getter('boxes'),getter('signature'))]
-            return BackgroundPlateDerivation(*groups[:3]),BackgroundReferenceSignatures(groups[3],groups[4],groups[2],groups[5])
+            return BackgroundPlateDerivation(*groups[:3], files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles())),BackgroundReferenceSignatures(groups[3],groups[4],groups[2],groups[5], images=ImageFiles(lambda: cv2, files=BusinessFiles()))
         a=make('A');b=make('B');self.assertEqual(reads,[])
         for label,(plate,reference) in (('A',a),('B',b),('A',a)):
             start=len(reads);out=self.root/'independent'/label/'plate.png'

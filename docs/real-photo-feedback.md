@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 # Real-photo feedback
 
 **Status: Authoritative**
@@ -54,6 +56,34 @@ Assessment inputs freeze the initialization decision, current approved-real targ
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
 
+
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.
+
+The default entry now registers `RealPhotoWorkflows.feedback` from `training/real_photo_composition.py` at the original route position. Its bridge owns original-media freezing, legacy disable, owner-scoped training metadata and submission. Identity restoration, frozen class/reference/rule validation, sample counts and class order are unchanged. Dispatcher algorithms, repository transactions, allowlist policy and training/model topology are unchanged.
+
+Real-photo feedback is composed by the canonical app with explicit app-owned environment and connector selection. The previous undefined `RUNTIME_REPOSITORY_CONNECTOR_FOR_TESTS` reference is removed from the actual runtime path. Repository selections still close in the feedback service's finally boundary; account allowlist remains the existing process policy. Native training submission, model/config snapshots, provenance, locking and dispatch behavior are unchanged. Canonical lifecycle preserves startup failures and retains bounded producer-before-dependency drain.
 
 VLM 图片输入先限制长边：类别参考图 1024 像素、实拍原图 2048 像素，只等比缩放，不裁剪或隐式旋转。回执同时记录原图尺寸、输入尺寸、原图哈希、输入哈希及原图到输入的缩放矩阵；归一化框仍换算到原图像素坐标。准备阶段失败结算为失败标注版本，显示固定阶段代码，不记成已发生的付费调用；必须由用户主动重标，不自动重放。
 

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "parent": "c55b8cce91a3b60a7df965f08a5d9e4a20db2696",
+  "expressions": {
+    "records": "_text_storage.records",
+    "access": "StandardAccess(require_permission=lambda permission, **kwargs: require_permission(permission, **kwargs), owner=lambda: _text_v2_owner())",
+    "media": "StandardMediaStorage(directory=lambda: TEXT_INSPECTION_MEDIA_DIR, digest=lambda contents: sha256_bytes(contents), data_url=lambda data, mime: _text_v2_data_url(data, mime), runtime_provider=_business_files.runtime_provider, files=_business_files)",
+    "policy": "StandardPolicy(public=lambda: _text_v2_public, snapshot=lambda assets: _text_v2_confirmed_snapshot(assets), expected=lambda: _text_v2_expected_revision, bounded_text=lambda: bounded_text, prepare_image=lambda contents: _text_v2_prepare_image(contents), preparation_enabled=lambda owner: _standard_preparation_policy.enabled(owner))",
+    "parsers": "StandardParsers(doc=lambda: extract_doc_images, docx=lambda data: extract_docx_candidates(data), pdf=lambda data: inspect_pdf(data))",
+    "documents": "DocumentModels(external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, settings=lambda purpose: ai_detection_settings(purpose), transport=lambda request, settings, **kwargs: ai_urlopen(request, settings, **kwargs), record_usage=lambda settings, elapsed, ok, usage: record_model_call(settings, elapsed, ok, usage))",
+    "preparation": "PreparationModels(settings=lambda purpose: ai_detection_settings(purpose), external_enabled=lambda: TEXT_INSPECTION_EXTERNAL_VLM_ENABLED, call_tool=lambda name, payload: call_ai_mcp_tool(name, payload), diagnostics=lambda provider, settings: _text_v2_provider_diagnostics(provider, settings))",
+    "runtime": "StandardThreadScope(scope=_runtime_repositories.thread_scope, clear_repository=lambda: clear_thread_runtime_repository_selection())",
+    "raw_rows": "lambda rows: row_raw_json_list(rows)"
+  }
+}

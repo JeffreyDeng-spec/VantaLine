@@ -9,6 +9,8 @@ import cv2
 from contextlib import ExitStack
 from unittest.mock import Mock, patch, call
 sys.path.insert(0, str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class PipelineBackgroundPublicationContracts(unittest.TestCase):
     @classmethod
@@ -29,7 +31,8 @@ class PipelineBackgroundPublicationContracts(unittest.TestCase):
         from local_inspection_service import server
         cls.import_factory.assert_not_called()
         cls.import_remove.assert_not_called()
-        cls.api = server
+        from scripts.pipeline_background_test_fixture import pipeline_background_fixture
+        cls.api=pipeline_background_fixture(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -453,7 +456,7 @@ class PipelineBackgroundPublicationContracts(unittest.TestCase):
                     return values[key]
                 return get
             groups=[(BackgroundPublicationTasks,('state','ids','lookup')),(BackgroundPublicationPaths,('output','record_id','set_id','resolve','sets_directory')),(BackgroundPublicationSelection,('prompt','match','derive')),(BackgroundPublicationProviders,('config','references','settings','create','error_type')),(BackgroundPublicationCatalog,('images','variants','manifest','publish')),(BackgroundPublicationProjection,('bounded','url','digest','now','legacy_owner'))]
-            service=PipelineBackgroundPublication(*(kind(**{key:getter(key) for key in keys}) for kind,keys in groups))
+            service=PipelineBackgroundPublication(*(kind(**{key:getter(key) for key in keys}) for kind,keys in groups), files=BusinessFiles(), images=ImageFiles(pil_provider=lambda: self.api.Image, files=BusinessFiles()))
             return service,holder,set(values)
         a=make('A');b=make('B')
         self.assertEqual(all_events,[])

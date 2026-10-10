@@ -7,6 +7,9 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock,patch,call
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
+import cv2
 class ReferenceEvidenceContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -22,7 +25,8 @@ class ReferenceEvidenceContracts(unittest.TestCase):
         cls.lifetime.enter_context(patch.dict(sys.modules,{'rembg':SimpleNamespace(new_session=cls.import_factory,remove=cls.import_remove)}))
         from local_inspection_service import server
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
-        cls.api=server
+        from scripts.reference_evidence_test_fixture import reference_evidence_fixture
+        cls.api=reference_evidence_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):
@@ -298,7 +302,7 @@ class ReferenceEvidenceContracts(unittest.TestCase):
             mask=np.array([[True,False,False,False]]) if tag=='first' else np.array([[True,True,True,False]])
             ops={'resolve':Mock(return_value=path),'jobs':Mock(side_effect=lambda item:[{'output_path':'raw'}]),'default':Mock(return_value=path),'preferred':Mock(return_value=[path]),'first_source':Mock(return_value=path),'inventory':Mock(return_value=[path]),'uid':Mock(return_value=tag),'bounded':Mock(return_value=tag),'context':Mock(return_value=record),'references':Mock(return_value=[{'source_path':str(path)}]),'normalize':Mock(return_value=screen),'mask':Mock(return_value=mask)}
             getters={name:Mock(return_value=value) for name,value in {'suffixes':{'.png'},'screens':{'green':screen},**ops}.items()}
-            service=ReferenceEvidence(ReferencePolicy(getters['suffixes'],getters['screens']),ReferencePaths(*(getters[n] for n in ['resolve','jobs','default','preferred','first_source','inventory'])),ReferenceContexts(*(getters[n] for n in ['uid','bounded','context','references'])),ReferenceChroma(getters['normalize'],getters['mask']))
+            service=ReferenceEvidence(ReferencePolicy(getters['suffixes'],getters['screens']),ReferencePaths(*(getters[n] for n in ['resolve','jobs','default','preferred','first_source','inventory'])),ReferenceContexts(*(getters[n] for n in ['uid','bounded','context','references'])),ReferenceChroma(getters['normalize'],getters['mask']), files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
             for getter in getters.values():getter.assert_not_called()
             return service,ops,path,image,record,screen,float(mask.mean())
         a=build('first',30);b=build('second',70)

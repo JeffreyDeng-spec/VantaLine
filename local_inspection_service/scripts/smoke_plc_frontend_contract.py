@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "local_inspection_service" / "frontend" / "src"
+sys.path.insert(0, str(ROOT / "scripts"))
+from canonical_application_source_contract import read_checked_application_source
 
 
 def require(text: str, snippets: dict[str, str]) -> None:
@@ -18,26 +21,52 @@ def require(text: str, snippets: dict[str, str]) -> None:
 def require_detection_analysis_boundary(server: str, implementations: dict[str, str]) -> None:
     """Follow root adapters to both business bodies; do not inspect an empty shell."""
     tree = ast.parse(server)
-    for receiver, class_name, module in (
-        ("_detection_analysis", "DetectionAnalysis", "detection.analysis"),
-        ("_ai_detection_analysis", "AiDetectionAnalysis", "detection.ai_analysis"),
+    composition = ast.parse(implementations['workflow_composition.py'])
+    def binding(nodes, target):
+        found=[n for n in nodes if isinstance(n,(ast.Assign,ast.AnnAssign,ast.AugAssign))
+               and any(ast.dump(ast.parse(ast.unparse(t),mode='eval').body)==ast.dump(ast.parse(target,mode='eval').body)
+                       for t in (n.targets if isinstance(n,ast.Assign) else [n.target]))]
+        if len(found)!=1 or isinstance(found[0],ast.AugAssign):raise AssertionError('Detection binding must be unique: '+target)
+        return found[0].value
+    def require_import(nodes, name, module, level):
+        imports=[(n,a) for n in nodes if isinstance(n,(ast.Import,ast.ImportFrom))
+                 for a in n.names if (a.asname or (a.name.split('.')[0] if isinstance(n,ast.Import) else a.name))==name]
+        shadowed=any((isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)) and n.name==name)
+            or (isinstance(n,(ast.Assign,ast.AnnAssign,ast.AugAssign))
+                and any(isinstance(t,ast.Name) and t.id==name for target in
+                        (n.targets if isinstance(n,ast.Assign) else [n.target]) for t in ast.walk(target)))
+            for n in nodes)
+        if len(imports)!=1 or shadowed or not isinstance(imports[0][0],ast.ImportFrom):
+            raise AssertionError('Detection capability import must be unique and unshadowed: '+name)
+        node,alias=imports[0]
+        if node.level!=level or node.module!=module or alias.name!=name or alias.asname is not None:
+            raise AssertionError('Detection capability must come from actual inspected module: '+name)
+    def exact(value, expression, message):
+        if ast.dump(value)!=ast.dump(ast.parse(expression,mode='eval').body):
+            raise AssertionError(message)
+    owner=binding(tree.body,'_detection_workflows')
+    if not isinstance(owner,ast.Call) or not isinstance(owner.func,ast.Name) or owner.func.id!='DetectionWorkflows':
+        raise AssertionError('Detection owner must construct the inspected graph')
+    require_import(tree.body,'DetectionWorkflows','detection.workflow_composition',1)
+    resolvers=[k.value for k in owner.keywords if k.arg=='resolver']
+    if len(resolvers)!=1:raise AssertionError('Detection resolver required')
+    exact(resolvers[0],'resolve_model_profiles','Detection model binding resolver changed')
+    classes=[n for n in composition.body if isinstance(n,ast.ClassDef) and n.name=='DetectionWorkflows']
+    if len(classes)!=1:raise AssertionError('Actual detection graph class required')
+    owner_class=classes[0]
+    init=next(n for n in owner_class.body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
+    for receiver, member, cls, module in (
+        ('_detection_analysis','detection','DetectionAnalysis','analysis'),
+        ('_ai_detection_analysis','ai','AiDetectionAnalysis','ai_analysis'),
     ):
-        bindings = [node for node in tree.body if isinstance(node, (ast.Assign, ast.AnnAssign))
-                    and any(isinstance(target, ast.Name) and target.id == receiver
-                            for target in (node.targets if isinstance(node, ast.Assign) else [node.target]))]
-        if (len(bindings) != 1 or not isinstance(bindings[0].value, ast.Call)
-                or not isinstance(bindings[0].value.func, ast.Name) or bindings[0].value.func.id != class_name):
-            raise AssertionError("Detection adapter must construct the inspected class: " + receiver)
-        imports = [(node, alias) for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
-                   for alias in node.names if (alias.asname or alias.name.split('.')[0]) == class_name]
-        shadowed = any((isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == class_name)
-                       or (isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
-                           and any(isinstance(target, ast.Name) and target.id == class_name
-                                   for target in (node.targets if isinstance(node, ast.Assign) else [node.target])))
-                       for node in tree.body)
-        if (len(imports) != 1 or shadowed or not isinstance(imports[0][0], ast.ImportFrom)
-                or imports[0][0].level != 1 or imports[0][0].module != module or imports[0][1].name != class_name):
-            raise AssertionError("Detection class must come from the inspected module: " + class_name)
+        exact(binding(tree.body,receiver),'_detection_workflows.'+member,'Detection root alias must select its owner')
+        value=binding(init.body,'self.'+member)
+        if not isinstance(value,ast.Call) or not isinstance(value.func,ast.Name) or value.func.id!=cls:
+            raise AssertionError('Detection owner must construct the inspected class: '+member)
+        require_import(composition.body,cls,module,1)
+    exact(binding(init.body,'self.pinned_ai'),'pinned(resolver)(self.analyze_bgr_ai_detection)',
+          'Owned AI analysis must be pinned before routing')
+    require_import(composition.body,'pinned','model_profiles.snapshots',2)
     contracts = (
         ("analyze_bgr", "DetectionAnalysis", "analysis.py",
          "return _detection_analysis.analyze_bgr(image_bgr, request_id, model_id, image_path=image_path)", []),
@@ -58,13 +87,20 @@ def require_detection_analysis_boundary(server: str, implementations: dict[str, 
             raise AssertionError("PLC no-dispatch contract must inspect the actual implementation: " + name)
         if "dispatch_plc_for_detection" in ast.get_source_segment(source, methods[0]):
             raise AssertionError("PLC dispatch must not run inside ordinary or AI analysis")
-    routes = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
-              and isinstance(node.func, ast.Name) and node.func.id == "AnalysisRouting"]
-    if (len(routes) != 1 or len(routes[0].args) < 2 or not isinstance(routes[0].args[1], ast.Lambda)
-            or not isinstance(routes[0].args[1].body, ast.Call)
-            or not isinstance(routes[0].args[1].body.func, ast.Name)
-            or routes[0].args[1].body.func.id != "analyze_bgr_ai_detection"):
-        raise AssertionError("Ordinary analysis must delegate through the pinned AI entry")
+    routes = [n for n in ast.walk(init) if isinstance(n,ast.Call)
+              and isinstance(n.func,ast.Name) and n.func.id=='AnalysisRouting']
+    if len(routes)!=1 or len(routes[0].args)!=4:raise AssertionError('Owned analysis routing required')
+    exact(routes[0].args[0],
+        'lambda image, request_id, model_id=None, *, image_path=None: self.analyze_bgr(image, request_id, model_id, image_path=image_path)',
+        'Ordinary recursion must use its graph')
+    exact(routes[0].args[1],
+        'lambda image, request_id, spec, config, *, image_path=None: self.pinned_ai(image, request_id, spec, config, image_path=image_path)',
+        'Ordinary analysis must delegate through owned pinned AI')
+    for name,body in [('analyze_bgr','return self.detection.analyze_bgr(image_bgr, request_id, model_id, image_path=image_path)'),
+                      ('analyze_bgr_ai_detection','return self.ai.analyze_bgr_ai_detection(image_bgr, request_id, spec, config, image_path=image_path)')]:
+        method=next(n for n in owner_class.body if isinstance(n,ast.FunctionDef) and n.name==name)
+        if ast.dump(ast.Module(body=method.body,type_ignores=[]))!=ast.dump(ast.parse(body)):
+            raise AssertionError('Owned detection wrapper must forward to inspected class')
 
 
 def require_detection_upload_boundary(server: str, implementations: dict[str, str]) -> None:
@@ -120,7 +156,7 @@ def main() -> None:
     queries = (FRONTEND / "api" / "queries.ts").read_text(encoding="utf-8")
     types = (FRONTEND / "api" / "types.ts").read_text(encoding="utf-8")
     web_serial = (FRONTEND / "features" / "plc" / "webSerialClient.ts").read_text(encoding="utf-8")
-    server = (ROOT / "local_inspection_service" / "server.py").read_text(encoding="utf-8")
+    server = read_checked_application_source(ROOT / "local_inspection_service" / "server.py", encoding="utf-8")
 
     require(
         rules,
@@ -186,7 +222,7 @@ def main() -> None:
         raise AssertionError("PLC settings must not use browser-only localStorage")
     require_detection_analysis_boundary(server, {
         name: (ROOT / "local_inspection_service" / "detection" / name).read_text(encoding="utf-8")
-        for name in ("analysis.py", "ai_analysis.py")
+        for name in ("analysis.py", "ai_analysis.py", "workflow_composition.py")
     })
     upload_implementations = {name: (ROOT / "local_inspection_service" / "detection" / name).read_text(encoding="utf-8")
                              for name in ("image_upload.py", "video_upload.py", "video_results.py", "upload_ports.py")}

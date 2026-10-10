@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_SYNTHETIC_BATCH_BASELINE_SOURCE')
 NAME='auto_optimize_generate_synthetic_batch_for_sample'
@@ -114,7 +115,7 @@ class BatchContract(unittest.TestCase):
         for group in (service.configuration,service.sprites,service.publication):
             for f in fields(group):assert_capability_owner(self, group, f.name, server)
         mock=Mock(return_value=object());args=('task',{}, {})
-        with patch.object(server,'_auto_optimization_synthetic_batch',SimpleNamespace(**{NAME:mock})):self.assertIs(getattr(server,NAME)(*args),mock.return_value)
+        with auto_method(self,server._auto_optimization_synthetic_batch,NAME,mock):self.assertIs(getattr(server,NAME)(*args),mock.return_value)
         mock.assert_called_once_with(*args)
 
 if __name__=='__main__':unittest.main()

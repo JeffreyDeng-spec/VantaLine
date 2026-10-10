@@ -23,12 +23,125 @@ class EvidenceContract(unittest.TestCase):
         self.pr=dict(state='closed',merged_at=self.now.isoformat(),merge_commit_sha='main',number=2,base={'ref':'main'},head={'sha':'head','repo':{'id':1}})
         self.run=dict(id=3,event='pull_request',status='completed',conclusion='success',path='.github/workflows/ci.yml',head_repository={'id':1},head_sha='head',run_attempt=1,updated_at=self.now.isoformat())
         self.artifact=dict(name='ci-evidence-1',expired=False,workflow_run={'id':3,'head_sha':'head'})
-        self.jobs={'jobs':[dict(name=name,run_attempt=1,status='completed',conclusion='success') for name in ci.FULL_JOBS]}
+        self.jobs={'jobs':[dict(id=index+1,name=name,run_attempt=1,status='completed',conclusion='success',started_at=self.now.isoformat(),completed_at=self.now.isoformat()) for index,name in enumerate(ci.FULL_JOBS)]}
         self.reports=[dict(schema=1,manifest_sha256=ci.digest(self.manifest),shard=n,commit='tested',run_id='3',run_attempt='1',completed_at='now',status='success',environment=dict(python='3.10.22',runner_os='Linux',image='image',architecture='X64',postgresql='postgres (PostgreSQL) 16.10',lock_sha256='lock'),commands=[dict(id=e['id'],status='success',returncode=0,seconds=1) for e in self.manifest['checks'] if e['shard']==n]) for n in range(12)]
         self.receipt=dict(schema=1,event='pull_request',repository='owner/repo',repository_id=1,pr_number=2,head_sha='head',base_sha='base',tested_sha='tested',tree='tree',parent='base',policy_hash='policy',workflow_blob='workflow',manifest_sha256=ci.digest(self.manifest),run_id=3,run_attempt=1,created_at=self.now.isoformat(),jobs=ci.FULL_JOBS,environments=[r['environment'] for r in self.reports])
 
+        from backend_ci import performance_plan
+        from ci_performance_evidence import PROTOCOL_SHA256
+        from verify_refactor_performance_protocol import BASELINE, MANUAL
+        plan=performance_plan(self.manifest)
+        self.receipt['performance']=dict(schema=1,manifest_sha256=ci.digest(self.manifest),status='success',completed_at='now',not_run=[],commit='tested',run_id='3',run_attempt='1',
+            commands=[{**e,'status':'success','returncode':0,'seconds':1} for e in plan],
+            raw_logs=[dict(path=e['id']+'.log',bytes=1,sha256='a'*64) for e in plan],
+            numeric_protocols=dict(original_raw=54,original_rounded=2,beta=16,storage_snapshots=2),
+            job_id=next(j['id'] for j in self.jobs['jobs'] if j['name']=='backend-performance'))
+        files={}
+        for name,ready in [('legacy-projection.json',True),('manual-history.json',False)]:
+            cases=[]
+            for mode,rep,size in [('AA',0,1000)]+[('AB',r,n) for r in (1,2,3) for n in (1000,10000)]:
+                obs=[dict(python_cpu_seconds=0,gc_collections=[0,0,0]) for _ in range(31)]
+                cases.append(dict(mode=mode,repetition=rep,tasks=size,fixture='ManualFixture',manual_baseline_sha256=MANUAL,tasks_baseline_sha256=BASELINE,
+                    comparison='manual full first page versus frozen tasks and complete manual helper',populations={n:size for n in ('standards','sessions','pages','assets')},derived_published=ready,
+                    old_queries=10,new_queries=10 if mode=='AA' else 7 if ready else 12,samples=31,
+                    old_seconds=[1]*31,new_seconds=[1]*31,old_p95_seconds=1,new_p95_seconds=1,
+                    old_peak_bytes=100,new_peak_bytes=100,old_peak_samples=[100]*3,new_peak_samples=[100]*3,
+                    latency_limit=1.25,memory_limit=1048676,old_observations=obs,new_observations=obs))
+            rows=cases+[dict(protocol='manual-history-repeated-v1',planned_aa_cases=1,planned_ab_cases=6,groups=[{**{k:e[k] for k in ('mode','repetition','tasks')},'status':'passed'} for e in cases])]
+            files[name]=dict(rows=rows,bytes=1,sha256='b'*64)
+        self.receipt['manual']=dict(files=files,artifact=dict(id=4,name='manual-history-performance-1',digest='sha256:'+'c'*64,expired=False,workflow_run={'id':3},created_at=self.now.isoformat()),raw_log=dict(bytes=1,sha256='d'*64),job_id=next(j['id'] for j in self.jobs['jobs'] if j['name']=='manual-history-performance'))
+
     def check(self):
         ci.validate_receipt(self.receipt,self.reports,self.run,self.jobs,self.artifact,self.pr,self.context,self.now)
+
+    def test_exact_silent_preparations_can_reuse_complete_evidence(self):
+        for name in ('check-298.log', 'check-299.log'):
+            entry = next(e for e in self.receipt['performance']['raw_logs'] if e['path'] == name)
+            entry.update(bytes=0, sha256=hashlib.sha256(b'').hexdigest())
+        self.check()
+
+    def test_empty_protocol_or_wrong_empty_preparation_digest_is_rejected(self):
+        for name, value in (('check-298.log', 'a' * 64), ('check-299.log', 'a' * 64),
+                            ('check-002.log', hashlib.sha256(b'').hexdigest())):
+            self.setUp()
+            entry = next(e for e in self.receipt['performance']['raw_logs'] if e['path'] == name)
+            entry.update(bytes=0, sha256=value)
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                self.check()
+
+    def test_both_performance_jobs_are_mandatory_current_attempt(self):
+        for name in ('backend-performance','manual-history-performance'):
+            for conclusion in ('failure','cancelled','skipped',None):
+                self.setUp()
+                next(j for j in self.jobs['jobs'] if j['name']==name)['conclusion']=conclusion
+                with self.subTest(name=name,conclusion=conclusion),self.assertRaises(AssertionError):self.check()
+            self.setUp()
+            next(j for j in self.jobs['jobs'] if j['name']==name)['run_attempt']=0
+            with self.assertRaises(AssertionError):self.check()
+
+    def test_performance_commands_and_producers_fail_closed(self):
+        mutations=[lambda p:p.update(commit='old'),lambda p:p.update(run_attempt='0'),
+            lambda p:p.update(manifest_sha256='old'),lambda p:p.update(status='failed'),
+            lambda p:p.update(not_run=['benchmark']),lambda p:p['commands'].pop(),
+            lambda p:p['commands'].reverse(),lambda p:p['commands'].append(copy.deepcopy(p['commands'][0])),
+            lambda p:p['commands'][0].update(returncode=124),lambda p:p['commands'][0].update(status='skipped'),
+            lambda p:p['commands'][0].update(env={'VANTALINE_POSTGRES_DSN':'wrong'}),
+            lambda p:p['commands'][0].update(run='exit 0'),lambda p:p.update(job_id=-1),
+            lambda p:p['raw_logs'].pop(),lambda p:p['numeric_protocols'].update(beta=15)]
+        for index,mutate in enumerate(mutations):
+            self.setUp();mutate(self.receipt['performance'])
+            with self.subTest(index=index),self.assertRaises((AssertionError,KeyError)):self.check()
+
+    def test_manual_complete_raw_protocol_is_required_for_reuse(self):
+        mutations=[lambda m:m['files'].pop('manual-history.json'),
+            lambda m:m['files']['legacy-projection.json']['rows'].pop(),
+            lambda m:m['files']['legacy-projection.json']['rows'][0]['old_seconds'].pop(),
+            lambda m:m['files']['manual-history.json']['rows'][1].update(new_queries=7),
+            lambda m:m['files']['manual-history.json']['rows'][0].update(derived_published=True),
+            lambda m:m['files']['manual-history.json']['rows'][0].update(manual_baseline_sha256='old'),
+            lambda m:m.update(job_id=-1)]
+        for index,mutate in enumerate(mutations):
+            self.setUp();mutate(self.receipt['manual'])
+            with self.subTest(index=index),self.assertRaises((AssertionError,KeyError,ValueError)):self.check()
+
+    def test_actual_manual_zip_members_and_digest_are_strict(self):
+        import ci_performance_evidence as performance
+        output=io.BytesIO()
+        with zipfile.ZipFile(output,'w') as archive:
+            for name,item in self.receipt['manual']['files'].items():archive.writestr(name,json.dumps(item['rows']))
+        raw=output.getvalue();artifact={'digest':'sha256:'+hashlib.sha256(raw).hexdigest()}
+        self.assertEqual(set(performance.read_manual_artifact(raw,artifact)),performance.MANUAL_MEMBERS)
+        with self.assertRaises(AssertionError):performance.read_manual_artifact(raw+b'changed',artifact)
+        for names in [('legacy-projection.json',),('legacy-projection.json','manual-history.json','extra.json'),
+                      ('legacy-projection.json','legacy-projection.json')]:
+            output=io.BytesIO()
+            with zipfile.ZipFile(output,'w') as archive:
+                for name in names:archive.writestr(name,'[]')
+            raw=output.getvalue()
+            with self.subTest(names=names),self.assertRaises(AssertionError):
+                performance.read_manual_artifact(raw,{'digest':'sha256:'+hashlib.sha256(raw).hexdigest()})
+
+    def test_manual_artifact_cannot_predate_current_attempt_producer(self):
+        import ci_performance_evidence as performance
+        job=next(j for j in self.jobs['jobs'] if j['name']=='manual-history-performance')
+        artifact=self.receipt['manual']['artifact']
+        performance.validate_manual_producer(artifact,job,3,1)
+        for changed in ({'name':'manual-history-performance-0'},
+                        {'created_at':(self.now-timedelta(days=1)).isoformat()},
+                        {'created_at':(self.now+timedelta(days=1)).isoformat()}):
+            with self.subTest(changed=changed),self.assertRaises(AssertionError):
+                performance.validate_manual_producer({**artifact,**changed},job,3,1)
+
+    def test_manual_stdout_must_equal_both_actual_json_reports(self):
+        import ci_performance_evidence as performance
+        manual=self.receipt['manual']
+        rows=[r for name in ('legacy-projection.json','manual-history.json') for r in manual['files'][name]['rows']]
+        raw='\n'.join(json.dumps(r) for r in rows).encode()
+        with tempfile.TemporaryDirectory() as temp:
+            performance.validate_manual_raw(raw,manual,Path(temp))
+            for changed in (rows[:-1],rows[1:],rows+rows[:1],list(reversed(rows))):
+                altered='\n'.join(json.dumps(r) for r in changed).encode()
+                with self.assertRaises(AssertionError):performance.validate_manual_raw(altered,manual,Path(temp))
 
     def test_merge_and_squash_use_tree_and_first_parent_not_equal_commit_sha(self):
         self.check()

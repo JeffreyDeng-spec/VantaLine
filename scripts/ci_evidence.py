@@ -23,13 +23,17 @@ import urllib.request
 import zipfile
 
 from backend_ci import ROOT, digest, load_manifest, validate_reports
+import ci_performance_evidence as performance_evidence
 
 OTHER_JOBS = ['artifact-storage', 'doc-image-runtime', 'source-safety',
-              'release-package', 'documentation', 'frontend', 'codex-comparison', 'frontend-build']
+              'release-package', 'documentation', 'frontend', 'codex-comparison', 'frontend-build',
+              'backend-performance', 'manual-history-performance']
 FULL_JOBS = ['ci-mode', *OTHER_JOBS, *[f'backend-shard-{i}' for i in range(12)], 'backend-plc']
 POLICY_FILES = ['requirements-production.lock', 'scripts/ci_evidence.py',
     'scripts/ci_environment.py', 'scripts/backend_ci.py', 'scripts/backend_ci_manifest.json',
-    'scripts/backend_ci_baseline.sha256', 'scripts/verify_production_dependencies.py']
+    'scripts/backend_ci_baseline.sha256', 'scripts/verify_production_dependencies.py',
+    'scripts/backend_ci_refactor_additions.json', 'scripts/ci_performance_evidence.py',
+    'scripts/verify_refactor_performance_protocol.py']
 
 
 def git(*args):
@@ -75,6 +79,8 @@ def publish(directory, jobs_file, needs):
     assert git('rev-parse', 'HEAD') == sha
     validate_reports(manifest, reports, 'success', sha, os.environ['GITHUB_RUN_ID'],
                      os.environ['GITHUB_RUN_ATTEMPT'])
+    performance, manual = performance_evidence.collect(GitHub(), manifest, jobs, sha,
+        os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT'])
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
     pr = event.get('pull_request')
     receipt = dict(schema=1, repository=os.environ['GITHUB_REPOSITORY'],
@@ -86,7 +92,7 @@ def publish(directory, jobs_file, needs):
         workflow_blob=git('rev-parse', 'HEAD:.github/workflows/ci.yml'),
         run_id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT']),
         created_at=datetime.now(timezone.utc).isoformat(), jobs=FULL_JOBS,
-        environments=[r['environment'] for r in reports])
+        environments=[r['environment'] for r in reports], performance=performance, manual=manual)
     (directory/'ci-evidence.json').write_text(json.dumps(receipt, indent=2)+'\n')
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
@@ -157,6 +163,7 @@ def validate_receipt(receipt, reports, run, jobs, artifact, pr, context, now):
     assert artifact['name'] == f"ci-evidence-{run['run_attempt']}" and not artifact['expired']
     assert artifact['workflow_run']['id'] == run['id'] and artifact['workflow_run']['head_sha'] == run['head_sha']
     validate_jobs(jobs, run['run_attempt'])
+    performance_evidence.validate_reused(context['manifest'], receipt, jobs)
     validate_reports(context['manifest'], reports, 'success', receipt['tested_sha'], str(run['id']), str(run['run_attempt']))
     assert len(receipt['environments']) == 12
     assert receipt['environments'] == [r['environment'] for r in reports]
@@ -221,6 +228,7 @@ def resolve(output):
     commit = api.get(f"git/commits/{receipt['tested_sha']}")
     assert commit['tree']['sha'] == c['tree'] and commit['parents'][0]['sha'] == c['parent']
     validate_receipt(receipt, reports, run, jobs, artifact, pr, c, datetime.now(timezone.utc))
+    performance_evidence.verify_reused_artifact(api, receipt, run)
     proof = dict(mode='reuse', main_sha=c['main_sha'], policy_hash=c['policy_hash'],
         current_run=os.environ['GITHUB_RUN_ID'], current_attempt=os.environ['GITHUB_RUN_ATTEMPT'],
         source_run=run['id'], source_attempt=run['run_attempt'], tree=c['tree'], jobs=FULL_JOBS)

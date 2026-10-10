@@ -15,6 +15,7 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from local_inspection_service.training.auto_optimization_settings import normalize_expected_production_count
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_INITIALIZATION_BASELINE_SOURCE')
 NAMES={'agent_auto_optimize_initialization_recommendation','initialize_auto_optimize_for_pipeline_task'}
@@ -259,7 +260,7 @@ class InitializationContract(unittest.TestCase):
         from local_inspection_service import server
         service=server._auto_optimization_initialization
         self.assertEqual(service.negative_samples_default,server.AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE)
-        self.assertIs(service.advisor.ai_detection_settings(),server.ai_detection_settings)
+        assert_capability_owner(self,service.advisor,"ai_detection_settings",server)
         self.assertIs(service.task._auto_optimize_lock(),server._auto_optimize_lock)
         for port in (service.advisor,service.task):
             for field in fields(port):assert_capability_owner(self, port, field.name, server)
@@ -278,9 +279,9 @@ class InitializationContract(unittest.TestCase):
                 return await run_in_threadpool(server.agent_auto_optimize_initialization_recommendation,{},[],1000,{})
         async def both():return await asyncio.gather(request('alpha'),request('beta'))
         with patch.object(server.model_profile_service,'resolve',side_effect=resolve), \
-             patch.object(server,'accessory_lookup_by_id',return_value={}), \
-             patch.object(server,'generate_provider_json_with_fallback',side_effect=provider), \
-             patch.object(server,'clamp_auto_optimize_initialization_recommendation',side_effect=lambda raw,*args:dict(raw)):
+             patch.object(type(server._accessory_lookup),'accessory_lookup_by_id',autospec=True,side_effect=lambda receiver,config:self.assertIs(receiver,server._accessory_lookup) or {}), \
+             patch.object(type(server._provider_json_retry),'generate_provider_json_with_fallback',autospec=True,side_effect=lambda receiver,*args,**kwargs:self.assertIs(receiver,server._provider_json_retry) or provider(*args,**kwargs)), \
+             patch.object(server._auto_optimization_execution,'clamp_auto_optimize_initialization_recommendation',side_effect=lambda raw,*args:dict(raw)):
             results=asyncio.run(both())
         self.assertEqual([(item['owner'],item['provider']) for item in results],[('alpha','alpha'),('beta','beta')])
         self.assertIsNone(server._request_user.get());self.assertIsNone(server.model_profile_service.current_snapshot())
@@ -290,7 +291,7 @@ class InitializationContract(unittest.TestCase):
             self.assertIs(raised.exception,sentinel)
         for name,args in [('agent_auto_optimize_initialization_recommendation',({},[],1000,{})),('initialize_auto_optimize_for_pipeline_task',({},{}))]:
             result=object();method=Mock(return_value=result)
-            with patch.object(server,'_auto_optimization_initialization',types.SimpleNamespace(**{name:method})):
+            with auto_method(self,service,name,method):
                 self.assertIs(getattr(server,name)(*args),result);method.assert_called_once_with(*args)
 
     @unittest.skipIf(BASELINE,'candidate-only import')

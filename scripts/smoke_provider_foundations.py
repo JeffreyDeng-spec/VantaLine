@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import urllib.error
 from contextlib import ExitStack
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, call
 
 sys.path.insert(0, str(Path.cwd()))
@@ -96,7 +97,25 @@ class ProviderFoundationContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from local_inspection_service.model_providers.payloads import ProviderPayloadParser
+        from local_inspection_service.model_providers.http_errors import ProviderHttpErrors, ProviderErrorTypes
+        # Replace the explicit native capabilities; server reassignment cannot
+        # redirect a constructed graph. Keep every old capture/error assertion.
+        api = SimpleNamespace(json=json, bounded_text=server.bounded_text,
+            normalize_ai_json_root=server.normalize_ai_json_root,
+            ai_json_text_candidates=server.ai_json_text_candidates,
+            AiProviderError=server.AiProviderError, AiProviderAuthError=server.AiProviderAuthError,
+            AiProviderOverloaded=server.AiProviderOverloaded, AiProviderConfigError=server.AiProviderConfigError,
+            AiProviderNonRetryableError=server.AiProviderNonRetryableError, AiProviderTimeout=server.AiProviderTimeout)
+        api._provider_payloads = ProviderPayloadParser(lambda: api.ai_json_text_candidates,
+            lambda: api.normalize_ai_json_root, lambda: api.AiProviderError)
+        api._provider_http_errors = ProviderHttpErrors(lambda: api.bounded_text, ProviderErrorTypes(
+            lambda: api.AiProviderError, lambda: api.AiProviderAuthError, lambda: api.AiProviderOverloaded,
+            lambda: api.AiProviderConfigError, lambda: api.AiProviderNonRetryableError))
+        api.parse_ai_json_object = api._provider_payloads.parse_ai_json_object
+        api.data_url_payload = api._provider_payloads.data_url_payload
+        api.provider_http_error = api._provider_http_errors.provider_http_error
+        cls.api = api
 
     @classmethod
     def tearDownClass(cls):

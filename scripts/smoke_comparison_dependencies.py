@@ -180,7 +180,7 @@ class ComparisonContracts(unittest.TestCase):
         for invoke in [lambda:qwen.llm({'profile_id':'bound'}, {}, 1), lambda:qwen.ocr.recognize({'profile_id':'bound'},b'',(1,1),1)]:
             with self.assertRaisesRegex(RuntimeError,'recorder is not configured'): invoke()
 
-    def test_existing_cleanup_sequences_remain_distinct(self):
+    def test_cleanup_failures_return_acquired_slots_without_retry(self):
         f=Fixture(self); original=f.save; failures=[]; error=RuntimeError('final save failed')
         def final_save_fails(kind,value,**kwargs):
             if kind=='records' and value.get('status')=='completed':
@@ -191,8 +191,8 @@ class ComparisonContracts(unittest.TestCase):
         slot=Mock(); slot.acquire.return_value=True
         with patch.object(comparison,'_slots',slot), self.assertRaisesRegex(RuntimeError,'final save failed') as caught: f.run()
         self.assertIs(caught.exception,error);self.assertEqual(len(failures),1)
-        self.assertEqual(f.store['records',record['id']]['status'],'attempting');self.assertEqual(f.events[-1],('final-save',))
-        self.assertEqual(f.clears,0); slot.release.assert_not_called()
+        self.assertEqual(f.store['records',record['id']]['status'],'attempting');self.assertEqual(f.events[-2:],[('final-save',),('clear',)])
+        self.assertEqual(f.clears,1); slot.release.assert_called_once()
         f=Fixture(self); original=f.update; failures=[]; error=RuntimeError('final CAS failed')
         def final_cas_fails(kind,value):
             if kind=='records' and value.get('status')=='completed':
@@ -210,7 +210,7 @@ class ComparisonContracts(unittest.TestCase):
         f=Fixture(self); f.namespace['clear_thread_runtime_repository_selection']=Mock(side_effect=RuntimeError('clear failed')); f.submit(qwen_enabled=True)
         slot=Mock(); slot.acquire.return_value=True
         with patch.object(qwen,'_slots',slot), self.assertRaisesRegex(RuntimeError,'clear failed'): f.run()
-        self.assertTrue(f.timers[0].cancelled); slot.release.assert_not_called()
+        self.assertTrue(f.timers[0].cancelled); slot.release.assert_called_once()
 
     def test_unknown_mapping_outcome_is_not_retried(self):
         f=Fixture(self);f.template['elements'][0]['text']='Battery Pack';observe=f.observations

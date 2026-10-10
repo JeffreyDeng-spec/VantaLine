@@ -1,8 +1,18 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
+The retained legacy PLC deadline fixture explicitly orders its second scenario's real synthetic `write_started` event before invoking the unchanged native deadline snapshot. The 0.5-second total deadline and all snapshot, finalization, version, single-audit and single-write assertions remain; the separate two-second event bound diagnoses a missing synthetic write. This test scheduling does not claim a 0.5-second HTTP response bound. Failure releases the write barrier, drains the actual queued worker with a bounded check and restores both callbacks. Production PLC, persistence and projection code are unchanged; source review must not claim this amended fixture method is byte/AST-identical to its historical baseline.
+
+`python scripts/smoke_account_visibility.py` verifies default owner aliases and parent inverse, inert construction, distinct graph owners, account permission differences, admin same-object response and ordinary-user deep-copy redaction, private output paths, four saved callbacks and load-config/projection rebinding order. Existing network/account assertions remain and validate actual graph source before replaying the fixed old location.
+
+`python scripts/smoke_training_persistence_graph.py` checks actual default aliases, fixed parent assembly replay, inert construction, two same-ID graphs through account configuration/pipeline/candidate storage, late catalog selection and all three saved internal callbacks. Config, pipeline-save and stop-capture faults retain existing partial state and release both guards; tests use synthetic records and model specs.
+
 Codex comparison real-PostgreSQL CI now holds a writer advisory transaction while `list` and `events` read the old committed task and event rows, then checks visibility after commit. Nonempty row decoding proves an independent writer can take the fence; injected decode errors preserve the same exception, rollback to IDLE, close the cursor and allow reuse. Owner, task, before/after, ordering and 100-event bounds remain covered. Reverse tests observe an actual advisory wait for `get`, `cancel` and `write_report`, including rejection of a token revoked before commit. These tests do not measure production latency or remove the HTTP events endpoint ownership lookup lock.
 
 `scripts/smoke_label_legacy_index.py` replays the actual accepted-parent `label_inspection/api.py` in CI alongside the candidate; it checks duplicate/tied records, orphan and extended orders, batch-source exclusion, native-vs-legacy error priority, falsey orphan IDs failing before native decoding, the 120-second attempting boundary, and per-extension state recomputation. `scripts/benchmark_label_legacy_index.py` pins the v550 API blob (`36e55d6a`) and alternates five same-environment v550/candidate traversals at 1,000 and 10,000 synthetic legacy records across 100 groups, asserting full output equality, fewer standard-ID scans and latency/peak-memory guardrails. The benchmark measures the list/API Python path, not PostgreSQL query latency or production workload. Existing real PostgreSQL label smoke still covers owner, concurrency and pagination.
 
 `python scripts/smoke_label_read_transactions.py` runs on isolated PostgreSQL in CI: a writer holds the existing advisory lock and an uncommitted task update while list/batch/legacy reads complete on another connection and see the old committed value; after commit a new read sees the update. It also verifies an independent connection can acquire the write lock during nonempty result handling for all three paths, and injected decode failure in each path preserves the exact exception, rolls back to IDLE and permits another read. The existing 1,000/10,000-task benchmark now asserts batch reads do not acquire the write fence; its old/new latency compares per-task with batched SQL under the same current no-lock implementation, not the v548-to-v132 lock change. The test also proves actual `request_run` waits on the write fence and returns the committed bound model snapshot; label smoke retains repeated submission, call registration, global concurrency two and pagination contracts. No real provider or PLC is used.
+
+The shared label-list fixture uses a normal type whose constructor returns the raw fake repository. Candidate and frozen-baseline calls share this adapter; the fake remains outside the production repository type and exercises the original legacy fallback. List assertions, baseline blobs and benchmark samples and thresholds remain unchanged.
 
 `python scripts/smoke_label_run_batch.py` compares an accepted v546/v548/v550 list source when `VANTALINE_LABEL_LIST_BASELINE_SOURCE` points to its `api.py` source. It covers empty and 64/65/129-task boundaries, native/legacy/manual/Beta projection, read-only and falsey IDs, task-order JSON errors and cursor reuse. CI also runs `python scripts/benchmark_label_run_batch.py` on isolated PostgreSQL with 1,000 and 10,000 synthetic tasks, zero/long-tail runs with 2 KiB synthetic evidence, owner isolation and SQL-vs-JSON task-ID mismatch; it checks that a second connection can take the write advisory lock during batch reads, plus failure rollback and IDLE, prints expected transaction counts plus old/new latency and repository-level peak-memory metrics, and checks output identity. Existing real label smoke retains pagination, permissions, concurrency-two and paid-call protections. No real provider or PLC is contacted.
 
@@ -298,6 +308,10 @@ Synthetic snapshot scopes, task dictionaries and model responses cover retained 
 exception boundaries. The phase3d source contract now reads actual implementation methods and
 the current relative workspace route; its existing assertions remain. This source check does
 not claim full pipeline, paid model or physical-device commissioning.
+The inline `assert_react_pipeline_route` CI entry also locates the actual pipeline
+schedulers, trained-model linker, recommendation runtime and legacy worker methods.
+It checks the stale production path as an exact literal in the application value
+builder; changes in quoting or the retained entry export name are not behavior changes.
 
 `python scripts/smoke_agent_settings_api.py` covers 17 offline groups: ten original HTTP
 and handler contracts, five callback/failure-order checks and two construction/isolation checks.
@@ -1342,6 +1356,28 @@ control, raw JSON or diagnostic request, and a visible detection ID.
 
 **Status: Authoritative**
 
+`scripts/smoke_path_configuration_graph.py` checks the actual directory/config/path
+cycle, inert construction, first save and migration, independent roots/locks,
+request-owned outputs, call-time component replacement and partial failure recovery.
+Keep original service-path and app-store assertions, including isolated PostgreSQL
+mutation/rollback checks. The immutable path-composition delta validates the real
+module and unchanged business sources before replaying older assembly oracles;
+new, changed, missing and reordered nodes remain rejected. This is not a full
+application lifecycle test.
+
+Run `scripts/smoke_label_runtime_observation.py` for per-role periodic progress,
+deadline, process/admission changes and fixed-error redaction. With an isolated
+`VANTALINE_POSTGRES_DSN`, also run `scripts/smoke_label_runtime_observation_postgres.py`
+for actual driver read-only/repeatable-read settings, concurrent snapshot stability,
+missing/stale/future/wrong-generation heartbeats and unlocked monitoring. These
+checks start no application or paid inference and do not prove production health.
+The private-mount installer matrix additionally covers a synthetic observer's
+normal failure, verified/accepted journal recovery failure, no-journal installed
+retry failure without process/admission changes, success and old-package skipping.
+These exercise actual installer/controller ordering and whole-release recovery,
+using fake runtime services and an observer substitute. The separate real database
+contracts validate actual observation behavior; neither constitutes a live fault test.
+
 COS evacuation: `python scripts/smoke_cos_migrate.py` runs offline synthetic checks
 for interrupted inventories, source mutation before/during upload, same-length
 remote corruption, deduplicated resume, secret/symlink exclusion and path escape.
@@ -2092,6 +2128,8 @@ read or paid/PLC call occurs. Migration guard tests retain all previous negative
 cases and reject changes to the exact audited exception, including another
 target/schema, missing WHERE, dynamic SQL, and surrounding executable SQL.
 
+The script-only DDL assembler trims only outer LF characters from the complete derived legacy-projection component before joining it. This preserves every SQL statement and quoted trigger body while avoiding an unintended single-user command delimiter at the component boundary. The input-framing rejection and intentional SQL-error checks remain required.
+
 The generated-schema and CSV-import real-engine smokes send complete SQL blocks to `postgres --single -j`, preserving semicolons inside quoted trigger bodies. Embedded single-user input delimiters are rejected explicitly. The schema smoke verifies the installed trigger and a quoted semicolon, and proves that an intentional SQL error is rejected even when the backend process exits successfully.
 
 `python scripts/smoke_label_public_projection.py` verifies the original public run projection against the extracted pure module, including private-field omission, error and quality truthiness, shallow nested identity, import allowlists and invalid-input errors. Existing HTTP, owner isolation and pagination contracts remain required.
@@ -2287,6 +2325,479 @@ CI uses two independent PostgreSQL 16 instances. Ordinary business, migration, t
 Run `python -m pytest -q tests/test_real_photo_feedback.py` with an explicitly disposable `REAL_PHOTO_TEST_DATABASE_URL` to cover PostgreSQL competition and owner isolation; without it those database cases skip and must not be reported as passed. The fixtures test coordinate bounds, unknown/duplicate boxes, truncation, retained usage, first-frame EXIF geometry, and failed/multi-instance original capture. Run capture/detection/camera smoke checks, migration safety, backend boundaries, documentation contract and `git diff --check`. Fixture reports are not a substitute for paid VLM/Agent commissioning on private business originals.
 
 Second batch: `python -m pytest -q tests/test_real_photo_workflow.py` against a disposable database verifies ten-image chunking, frozen arrivals, missing-class training proposals, partial-round blocking and explicit retry semantics. `tests/test_training_review_tools.py` verifies alternative sandbox mounts and read-only input handling without paid sessions. Actual private-business CLI screening remains required before activation.
+smoke_plc_legacy_worker_ownership.py compares original start helpers via VANTALINE_PLC_LEGACY_WORKERS_BASELINE_SOURCE with the new state owner. Worker Thread objects, sleeps and worker callbacks are substitutes; two real caller threads test serialization. Cover alive/dead/start-failure state, ordinary Lock serialization, heartbeat exit/epoch/error paths, poll/reconcile catch and sleep ordering. Verify actual startup is still no-op and source/browser/lease contracts stay intact. No serial or live PLC is used.
+
+smoke_plc_active_lease.py replays the original root guard through VANTALINE_PLC_ACTIVE_LEASE_BASELINE_SOURCE or the owned station method. Synthetic cases retain missing-state lookup order, zero-clock fallback, every fence, short-circuit numeric errors, optional epoch, reference identity and configuration callback partial effects. Candidate checks bind the actual owner and construct separate services without IO. Existing rebind, diagnostic reservation and confirmation fixtures now resolve the real method export and retain every behavioral/PostgreSQL assertion. The original 32 lazy station ports remain checked, plus the new clock supplier; full HTTP, source and PLC contracts remain required.
+
+smoke_plc_activation_policy.py compares the original six functions through VANTALINE_PLC_ACTIVATION_BASELINE_SOURCE against the owned policy. Synthetic checks cover falsey repositories/transports, fingerprint field order and read extension, env normalization, ContextVar isolation across threads, serial ImportError versus other failures, ordered errors, disabled/capture gates and late helper selection. Candidate assembly starts nothing and the unchanged startup function remains a single return. Retain legacy dispatch/capture/worker, configuration diagnostics, HTTP, dependency and physical-I/O source guards; no real transport/provider is used.
+
+Run python scripts/smoke_plc_runtime_coordination.py for retained owner renewal/takeover, quarantine/deadline boundaries, receipt isolation, narrow row persistence, exception identity and late heartbeat selection. With an isolated VANTALINE_POSTGRES_DSN it also races independent repositories on an absent owner and verifies rollback, namespace isolation and connection closure. The original-source mode is VANTALINE_PLC_COORDINATION_BASELINE_SOURCE. All heartbeat callbacks are substitutes; this is not hardware or DB-clock fencing acceptance.
+
+Run python scripts/smoke_plc_dispatch_records.py for namespace distinctions, shallow copies, reverse lookup, exact dispatch hash/strict passed identity, guard release before verification, late validation selection and conflict evidence preservation. VANTALINE_PLC_DISPATCH_RECORDS_BASELINE_SOURCE replays the same behavior on the original entry. Existing synthetic legacy dispatch and typed mutation suites remain required; no physical PLC is used.
+
+Run python scripts/smoke_plc_legacy_operations.py for legacy single-iteration gating, malformed configuration, queued record selection/reasons, pending-slot/owner races, exception and finally behavior, stale-read rejection, and read argument/order contracts. VANTALINE_PLC_LEGACY_OPERATIONS_BASELINE_SOURCE replays the original two bodies. Tests supply synthetic read/transport callbacks and never start worker loops or contact a physical PLC.
+
+smoke_web_shell_composition.py covers original/candidate response errors, provider short-circuits, mutable path and route suppliers, query-preserving redirects and separate real ASGI route sets with API precedence. Keep the existing actual navigation/auth smoke and full application HTTP snapshot; these are distinct from startup/shutdown acceptance.
+
+`smoke_retired_entry_tails.py` freezes the seven original entry bodies and compares the retained AST prefix, signature, decoded executable instructions, flags/free variables and interpreter-supported exception tables. It explicitly permits only enumerated unused closure-cell allocations (eleven on Python 3.10, ten on Python 3.11+) to disappear, with no reachable closure/DEREF/frame access. Internal frame/code introspection therefore narrows; bytecode identity is not claimed. The full unchanged assembled HTTP contract remains, and actual ASGI requests for anonymous/member/admin identities compare validation/status/error bodies and helper calls against the frozen bodies. Unreachable helpers are poisoned. No lifespan, provider or physical PLC is started.
+
+The retained-tail compiler contract supports Python 3.10 frame-created closure cells and CO_NOFREE semantics and Python 3.11+ MAKE_CELL/exception tables explicitly. Both branches retain exact AST prefixes, enumerated cell variables, complete executable-instruction comparison and the same seven-endpoint HTTP replay; compiler-version handling does not skip behavior checks.
+
+`smoke_repository_composition.py --postgres` verifies inert construction, two independent connection owners, environment/connector invalidation, broken-connection rebuild, same-thread close, reset during another active thread, original HTTP-safe errors and native ASGI thread-pool identity/connection isolation with real PostgreSQL. Its two applications are focused fixtures, not the complete production factory. Existing endpoint probe and cutover assertions remain intact while connector replacement targets the explicit owner; the source guard now verifies the actual composition module and its bindings.
+
+The authentication composition fixture and real PostgreSQL replay now instantiate the actual AuthenticationDomain, retaining the inherited HTTP/account/session/locking assertions. Two graphs retain separate identities/locks/login caches/routes. Root binding tests verify the same identity and repository owner, direct media policy, and that rebinding private entry path/TTL/repository exports does not rewire the graph. The explicit SessionService.settings capability remains replaceable for tests; startup environment parsing and default values are unchanged. These are domain graphs, not yet two full production create_app lifecycles.
+
+smoke_record_composition.py replays all original record-access tests through the actual composer, including lazy lookup, hidden read/write denial and concurrent ASGI-to-thread identity restoration. It also checks inert separate graphs, owned access/audit identity and actual entry binding against poisoned private root aliases. Original ownership/audit/access tests remain independently required. Domain fixtures are not complete production application factories.
+
+smoke_bootstrap_locations.py compares explicit root resolution and all 30 paths with the frozen b2d6f07 bootstrap, including environment precedence, empty/relative/tilde inputs, missing roots, callback error identity and per-instance paths. It verifies the actual entry anchor and frozen-source correspondence. No files or data are migrated; domain tests do not establish complete create_app lifecycle isolation.
+
+smoke_cost_composition.py replays all original CostTests assertions; their explicitly separate CostSource/fake Ledger checks remain direct business/HTTP tests. Added contracts prove inert cost/pipeline constructors, distinct owners, exact root method/path bindings, unchanged full HTTP contract and real root 401/403 before any source capability. Authenticated synthetic replay replaces only explicit cost storage dependencies and preserves repeated source reads. Original cost tests remain separately required; this adds no production PostgreSQL capacity or atomic-ledger guarantee.
+
+The image worker owner now tracks coordinator admission and every child thread independently of the subprocess registry. Closing this owner rejects new lookups/launches and waits up to the supplied deadline for admitted work, thread-owned database cleanup and final persistence; timeout explicitly returns undrained. Already admitted work may start while closing. Start/prepare failures preserve existing evidence and do not requeue work or retry providers. The maximum active-child concurrency remains unchanged; immediately completed jobs may replenish capacity earlier. Scope cleanup happens on each owning thread, including model resolution inside the job callback. No store or provider callback runs under the lifecycle lock, and joins occur outside that lock. This adds the owner drain capability and wires queue/thread scopes; application shutdown/factory integration and MCP drain remain separate pending work. It does not promise full application shutdown or cancel running image providers.
+
+`python scripts/smoke_image_worker_drain.py` uses actual threads/events, synthetic job callbacks and fake connections to exercise admission during lookup/start, failed starts, coordinator/child exceptions, final-save contention, independent owners, and same-thread connection cleanup. Existing queue ordering, concurrency and persistence checks remain; target-call assertions now execute the scoped wrapper. No paid model, PLC or production database is used.
+
+A successful image-owner drain proves that admitted threads and their cleanup scopes have exited. It does not prove that final persistence succeeded or that every subprocess was reaped; task failures and subprocess evidence remain governed by the execution service.
+
+Image coordinator and child starts now retain uncertain-start handles even if `is_alive()` is false, child lists are pruned, or a later coordinator replaces the current handle. A failed start revokes an unentered target, and shutdown must join retained handles before reporting drained. A never-started handle may remain undrained; stored running evidence is preserved and never requeued. Deterministic interrupted-bootstrap tests cover both launch paths and later coordinator replacement.
+
+MCP operations now have a client-owned admission boundary covering the complete tool dispatch, including the existing stdio failure fallback, and warmup cleanup. New operations are rejected before transport or fallback after shutdown begins; same-thread nested work belonging to an already admitted operation can finish. Startup and request serialization share the client lock, independently of the admission condition. The bounded shutdown waits for admitted work, then terminates and reaps owned transports; an expired deadline returns undrained without cancelling a blocked call or inducing fallback. Recoverable close retains terminated processes for later reaping. Existing provider selection, prompts, wire messages and transport-failure fallback behavior are unchanged. The client retains the startup warmup thread and admits it before construction/start. Shutdown drains this reserved startup operation, joins its owned thread, then retires transports. Application shutdown registration and full production factory integration remain pending.
+
+`python scripts/smoke_mcp_drain.py` exercises blocked stdio, concurrent initialization, rejection before fallback, draining an already active fallback, nested admission, warmup failure/rejection, independent clients and timeout/reap retries. Transport callbacks use synthetic responses; one harmless local Python sleeper verifies actual terminate/wait/stream cleanup. No model provider, PLC or production database is accessed.
+
+MCP recovery retains both live and already-exited displaced processes by identity. An exited transport skips termination but still participates in final wait and stdin/stdout cleanup; EOF followed by the existing fallback cannot lose this cleanup ownership.
+
+MCP warmup startup retains its enabled check and original callback, thread name and daemon setting, but now starts through its client owner. Duplicate live starts and starts after closing are rejected. Thread construction/start failures release reservations exactly once; a thread that started before a start error remains tracked. Already reserved warmup may finish nested client operations after closing begins; unrelated threads cannot inherit that admission. No join occurs under admission or client locks.
+
+`python scripts/smoke_mcp_warmup_ownership.py` verifies ten actual-thread startup races using synthetic callbacks only: pending constructor, duplicate start, pre/post-start failures, post-completion failure, target exception, self shutdown, cross-thread rejection and independent owners. The runtime-policy suite also checks the real enabled startup callback delegates to its owner.
+
+A failed or interrupted warmup `Thread.start()` cannot use `is_alive() == False` as proof that no OS thread exists. A target not yet entered is revoked, but its handle is retained and shutdown reports undrained until joining proves completion. A start that never actually created a thread can therefore remain conservatively undrained; no target or paid fallback is replayed. A deterministic interrupted-bootstrap regression covers the late-start window.
+
+Uncertain warmup handles are also retained across a later warmup start. Replacing the current handle cannot erase a revoked thread that has not yet confirmed startup/completion; shutdown joins every retained handle.
+
+YOLO warmup starts now belong to their `YoloWarmup` instance, including pending thread construction and every admitted thread. Each thread enters and releases its repository scope on that same thread. Closing rejects later starts and waits outside lifecycle/status locks; a timeout reports undrained without cancelling inference, changing model selection, or requeuing work. Existing repeated-start behavior and per-model handling remain. Application-wide lifecycle registration and per-app graph construction remain separate pending work. Prompt source manifest v188 retains the same 518 ordered files.
+
+Interrupted or failed warmup starts retain uncertain handles even across later starts. An unentered target is revoked and every retained handle must be joined; a never-started handle remains conservatively undrained. The tests cover delayed native bootstrap, interrupted startup, later thread replacement and same-thread scope exit.
+
+Run scripts/smoke_training_thread_drain.py for real-thread pending preparation/publication, registration/start interruption, overwritten registries, uncertain native bootstrap, selected callback arguments, scope cleanup, two-thread connection isolation and native tail waits. Existing training runner/background tests retain model snapshot and original failure/evaluation-order checks; target identity checks execute the new wrapper to verify the originally selected callback. No paid model, real PLC or external process is required.
+
+Run scripts/smoke_codex_background_drain.py for closed admission, original target-before-name selection, exact argument identity, pending factory across close, scoped cleanup and separate owners. Retain the20 shared training lifecycle tests and all34 background generation/business tests; old target identity checks invoke the selected wrapper with synthetic process/provider substitutes. No physical PLC, paid inference or real Codex subprocess is required.
+
+smoke_transfer_progress_drain.py covers rejection before event construction, returned native handles, reporting blocked during close, event construction crossing close, same-thread repository cleanup, scope-entry failure cleanup and owner isolation. Existing transfer callbacks and transport tests remain required; fixtures use synthetic callbacks and no remote worker.
+
+Reporter-specific failure coverage also verifies original provider/constructor exception identity with event-registry cleanup, plus interrupted native bootstrap where close remains false until the revoked late target exits and removes its event.
+
+Run scripts/smoke_auto_optimization_thread_drain.py for all three starter types: closed admission, exact callback arguments, same-thread repository cleanup, overwritten public registries, pending construction across close and independent owners. Keep the original label-processing, shadow-evaluation and training-scheduling tests, with selected wrappers executed against synthetic callbacks. Retain shared lifecycle interrupted-start tests. No paid inference, physical PLC or remote training is used.
+
+scripts/smoke_application_foundation.py verifies two real foundation graphs, no construction I/O or workers, same-thread interleaved identities/connections, instance-local environment/connector changes, real ASGI sync-thread exception cleanup and actual-entry owner binding. With VANTALINE_POSTGRES_DSN it also verifies distinct PostgreSQL backend sessions and independent reset. Keep repository/auth/record regressions and full HTTP route/lifecycle contracts; complete create_app/startup-failure/shutdown isolation remains separate.
+
+`scripts/smoke_infrastructure.py` exercises the larger actual infrastructure builder: poison every construction-time supplier and a late model-owner failure; configure two independent path graphs; keep identical request/store cache keys separate; isolate identical remote media paths and JSON caches with real synthetic artifact stores; use the real provider secret store and separate profile snapshot scopes; and enter native repository scopes from concurrent async tasks, rebuilding invalid connections and releasing them on exceptions. It verifies call-time repository-owner replacement, explicitly supplied artifact identity and all actual default-entry aliases. No cloud or model calls are made. The strict outer source delta validates both real construction modules and unchanged business sources before replaying previous path/Pose contracts. Actual HTTP/OpenAPI/route/lifetime baseline and model-source checks remain required. This infrastructure integration does not establish complete repeated Web application lifecycle isolation.
+
+scripts/smoke_auto_optimization_pool_scope.py runs real executors with synthetic callbacks: two worker-local identities, simultaneous submissions, one reused worker, scope-entry failure, blocked exception cleanup and the actual batch orchestration. It verifies per-task connections close on the owning thread and parent ContextVars are not implicitly propagated. Existing processing contracts remain unchanged. Model snapshot propagation needs its own explicit capability and acceptance test.
+
+scripts/smoke_auto_optimization_model_binding.py includes the original bare-executor counterexample, version1 captured before version2 mutation, preserved secret reference, parallel private snapshots, empty legacy snapshot, exception restoration, missing dependency rejection, and actual batch downstream training-vision binding. A separate test confirms identity/read-cache/write-authorization ContextVars are not copied. Earlier processing and pool-cleanup tests retain all assertions with explicit synthetic resolver fixtures.
+
+The model-binding suite also fails the resolver on the second pending sample, verifies that the first callback executes exactly once and is joined, and retains the existing claimed states and batch error without any retry.
+
+Run scripts/smoke_text_job_drain.py with synthetic callbacks to verify both text-job capacities, closed admission before persistence, pending claims, same-thread scope exit, constructor failure, uncertain and post-start failure, actual interrupted native bootstrap, scope entry/exit failure and duplicate-view failure. Retain document/preparation dependency tests and shared training lifecycle regressions; the document cleanup-failure expectation now requires its acquired slot to be returned even when cleanup raises. No paid model or physical PLC is used.
+
+Run scripts/smoke_http_application.py against the frozen original constructor: middleware order and settings, actual CORS preflight/compression/error responses, disabled default docs, deferred invalid-regex errors, environment error order, inert construction and independent repeated shells. Retain full assembled HTTP/OpenAPI/order, authentication/media and artifact admission tests. Shell isolation does not establish complete domain or worker lifecycle isolation.
+
+scripts/smoke_http_upload_runtime.py verifies lazy explicit providers, two simultaneous ASGI apps with independent reservations, capacity refusal and cleanup on route failure, provider failure without fallback, and unchanged default/local behavior. Fixtures use in-memory budgets and synthetic multipart bodies without disks, cloud SDK calls, credentials, PostgreSQL or paid inference. Existing upload storage/integration and full HTTP contracts remain required.
+
+scripts/smoke_artifact_runtime_provider.py freezes the original global get_runtime and compares configuration reads, builder arguments, errors, cached/local behavior and failure retry semantics. Native-thread cases verify one build per owner and independent owners while one builder blocks. Default-provider delegation and explicit HTTP upload use retain the existing artifact/HTTP regressions. All builders are synthetic; no credentials, cloud traffic, paid models or live database are used.
+
+Frozen HTTP constructor evidence is pinned to canonical Git LF bytes with an explicit checkout attribute. The raw SHA guard still rejects any changed fixture; this fixes platform-dependent test acceptance without changing application behavior or historical task snapshots.
+
+Frozen artifact-runtime evidence is checked out as canonical Git LF bytes. The original raw SHA and immutable fixture Git blob remain unchanged; a CRLF working-copy mismatch is a test portability failure, not a runtime regression.
+
+Run scripts/smoke_pipeline_thread_drain.py for all three scheduler types: closed admission before registry effects, real thread/same-thread scope cleanup, pending constructors crossing close, constructor and post-start failures, original duplicate gates, isolated owners and callback exceptions without replay. Keep all three original pipeline runtime suites; thread doubles now expose liveness and target-selection checks execute synthetic selected callbacks. Shared training lifecycle tests retain interrupted-native-bootstrap coverage; full HTTP, model-binding and repository checks remain required.
+
+The pipeline ownership suite also exercises admitted multi-item batches spanning close, later-item constructor or post-start failure, and repository scope entry/exit failure. It distinguishes owned native-thread completion from successful persistence and registry cleanup; constructor and scope-entry failures can preserve inflight evidence.
+
+Run scripts/smoke_extraction_thread_drain.py for closed admission without new task writes, pending source writes crossing close, real worker cleanup, interrupted native bootstrap, constructor errors preserving claims, and independent owners with manual/duplicate requests. Retain every extraction dependency test; fake worker threads now expose is_alive for lifecycle pruning. Providers are synthetic and no external inference runs. Full HTTP, model binding and shared thread-lifecycle checks remain required.
+
+scripts/smoke_comparison_cleanup.py exercises real bounded semaphores for local/Qwen final-settlement failures, clear failures and combined failures, Qwen timer-cancel failure, and no-acquisition paths. Assertions retain durable attempting evidence, one settlement/model attempt, original single-fault exception identity and explicit combined-fault context. Existing comparison dependency tests intentionally replace the previous leaked-slot expectations; all other model, timeout, late-result and no-retry assertions remain.
+
+Run scripts/smoke_comparison_thread_drain.py for waiting/running timers, cancellation versus actual join, pending constructors, interrupted native bootstrap, post-start error, callback registry pruning, scope-entry/exit failure, parent-before-timer drain, distinct owners and actual local/Qwen submissions with global slots poisoned. Actual blocked repository cleanup retains each acquired capacity until scope exit, including a raised cleanup error. Preserve all cleanup, dependency, root HTTP, model and shared lifecycle tests. All providers are synthetic and network calls are prohibited.
+
+The comparison ownership smoke also resolves every shipped prompt-source path against the real service root and computes the real source fingerprint; synthetic manifests alone cannot verify packaged path correctness.
+
+scripts/smoke_pdf_import_drain.py uses real threads and synthetic repositories/rendering to test repeated and concurrent startup, independent owners, blocked processing and same-thread cleanup, pending construction across close, interrupted native bootstrap, post-start error and constructor failure without implicit replacement. Retain all original label dependency tests, actual PostgreSQL label HTTP contracts, shared lifecycle tests and complete route/order contracts.
+
+This offline lifecycle integration retains native-history/readiness and detection composition from actual main dcb4805 and follows artifact-owner candidate 6b648b5. Owned production/tests and ordered entry match reviewed 28de9fa; both canonical fixture corrections are already retained. The bundled manifest is v204 with 523 unique sources; earlier paragraph counts refer to their original individual candidates. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Publication must use independently reviewed domain-scoped PRs on accepted main, with full hosted and release gates; this offline combined tree is not a blanket grouped publication approval or complete application factory.
+
+The two frozen HTTP-constructor and artifact-runtime Python fixtures use Git-enforced LF checkout bytes. Their tests hash the actual canonical Git content before executing it, so Windows checkout conversion cannot invalidate the frozen contract. The HTTP fixture expected hash is corrected from its original CRLF working-copy digest to the committed LF blob digest; fixture source content and the artifact fixture digest are unchanged. The integration verification retained both the initial private runner filename error and the subsequent observed CRLF artifact-baseline failure.
+
+scripts/smoke_web_shutdown.py checks actual parent-to-child native-thread fan-out after an initial failed drain, same-thread scope exit, one remaining-time budget including prior hooks, exception redaction, partial progress, repeated/concurrent/reentrant close, two separate ASGI shells, registration rejection and idle teardown of the assembled production graph without startup. The frozen HTTP contract changes only shutdown callback registration; original stop-hook order is separately asserted. No paid provider, PLC or customer fixtures are used.
+
+Shutdown permanently closes these resource owners. The same production app instance must not be started again after teardown; process restart or a separately constructed resource graph is required. Two independently allocated HTTP shells are tested, not repeated startup of the same production graph. The native fan-out test executes actual pipeline auto-agent run and advance schedule/run methods with synthetic business ports, using the production shutdown binding order.
+
+The retained MCP shutdown first waits for active operations, then terminates and reaps its owned transport process. The coordinator adds no forced termination or training-subprocess cancellation. The synthetic tests do not prove live Uvicorn request quiescence, nonempty production shutdown timing, or an acyclic graph under arbitrary replacement of live dependency suppliers.
+
+This offline shutdown replay follows lifecycle candidate 7d7886a and preserves current native history, readiness, model/tail and canonical LF fixes. Four owned runtime/test/contract blobs match reviewed 82313c5. Manifest v205 lists 524 sources. The 480-second shutdown allowance remains cooperative and requires ASGI request quiescence; complete independent application composition is still pending. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run python scripts/smoke_detection_artifact_ports.py on Linux. Two real ArtifactStore graphs with synthetic object clients use identical business paths concurrently; default runtime selection is poisoned. Tests cover upload-before-analysis, byte hashes, no local fallback, failure isolation, lazy providers, selected runtime stability during argument evaluation, unused AI/retired/annotation output paths, explicit missing dependencies and late-bound shared defaults. Existing annotation, analysis, AI analysis, upload, artifact integration and PLC source contracts remain required. The first integration run caught definition-time capture of get_runtime; the corrected helper resolves that default at call time.
+
+This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run python scripts/smoke_detection_media_ports.py on Linux, plus existing detection media/upload/local-model, artifact integration and assembled HTTP/PLC contracts. Concurrent real ArtifactStore graphs use synthetic object clients, identical source/output names and independent reference caches. Tests verify image bytes, descriptor cache separation, model alias identity and constructor-failure lease cleanup, successful/failed video analysis and capture-release failure cleanup. The default image runtime is poisoned and an AST guard requires explicit providers throughout detection. InspectionImageStore retains ordinary Exception-to-None behavior while artifact errors propagate; this is not proof of uniform video cleanup, model cache rollback after lease-exit failure, or whole-app isolation.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run python scripts/smoke_http_artifact_ports.py on Linux plus existing incoming workflows, background API, artifact integrations, HTTP shell/upload and assembled HTTP contracts. New ASGI tests combine the real security middleware with synthetic catalog/review authorization ports, two independently supplied stores, 401/403/404-before-storage, successful bytes, Range, output HEAD/304, and identity cleanup. A poisoned default constructor proves response-boundary isolation. Explicit None dependency results must return an error without fallback; the initial independent counterexample is retained. This is not a claim that underlying incoming catalog/review stores are fully per-app.
+
+This offline HTTP artifact replay follows detection media candidate f2b4519 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 301b6c1. Manifest v208 lists 524 sources. Explicit missing file dependencies fail closed while genuinely omitted legacy arguments retain their documented default. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Run python scripts/smoke_incoming_artifact_ports.py on Linux, alongside the existing incoming workflows, artifact integration, HTTP media, assembled HTTP and dependency checks. Real incoming services and security middleware operate against two real ArtifactStore instances with synthetic object clients and OCR; identical paths/IDs contain different bytes. The test covers upload, canonical image, evidence generation, 401/403/404, Range, owner cleanup, retention isolation, failed publication without fallback and missing/falsey dependencies. Existing local partial-failure and algorithm assertions remain required.
+
+This offline incoming workflow replay follows HTTP artifact candidate 2336193 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 8e4d991. Manifest v209 lists 524 sources. Consistent captured files/images dependencies retain original partial-write, exception and retention semantics. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Run python scripts/smoke_background_file_ports.py on Linux and retain all five existing background suites, artifact integrations and assembled HTTP/boundary/PLC checks. Two real ArtifactStore graphs with synthetic clients exercise same-path seeding, enumeration, manifests, uploads, version conflicts and owner-local updates; capture permission and publication failures precede validation. Missing/None and falsey dependencies plus seven root bindings are checked. No real generation/training/PLC is invoked.
+
+Independent review rejected the first background-file candidate because its new manifest path repeated the service directory. The original failed head and failing actual-source test log are retained. The corrected relative path must pass the existing smoke_comparison_thread_drain.py actual-shipped fingerprint check over every selected source; synthetic placeholder manifests alone do not validate shipped paths.
+
+This offline background file replay follows incoming candidate 841c4ba and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed c80ed68. Manifest v210 lists 525 sources, with the corrected service-relative background capability path. Captured file capabilities retain original ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Run python scripts/smoke_background_image_ports.py with all existing background suites and the actual-shipped fingerprint check in smoke_comparison_thread_drain.py. Two real stores at identical paths produce distinct source/variant pixels and synthetic validation inputs. Remote read failures must propagate before generation/analysis, and a failed first variant publication must not attempt later variants. The first test run referenced a nonexistent synthetic client.put method; the corrected probe observes the real object-store put method and retains that original harness failure log.
+
+This offline background image replay follows file candidate 89875c1 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 09ef623. Manifest v211 lists 525 sources. Three image services use explicit adapters; generator and runner defaults remain outside this slice. Original algorithms and golden contracts remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run python scripts/smoke_background_generation_ports.py with existing background task/local process contracts, file/image port tests and actual-shipped fingerprint checks. Real stores and a synthetic image_job context exercise identical paths across two generators, generated PNG/log publication, nonzero exit evidence, generation conflicts without replay, owner-specific source checks and retained model binding. No actual process or paid generator is invoked.
+
+This offline background generation replay follows image candidate 9a2d333 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 22986e9. Manifest v212 lists 525 sources. Generator and task runner now receive captured file adapters, retaining model snapshots, subprocess policy, partial outputs and exception behavior. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Run scripts/smoke_training_file_ports.py alongside the existing training dataset, input/state and preview workflow/renderer suites, artifact integrations, assembled HTTP/boundary/PLC checks and actual shipped-source fingerprint verification. Synthetic object stores at identical paths exercise independent dataset/plan content, stat-based cache versions, stale approval state and publication failures. No training process, paid model, PLC or customer data is used.
+
+The initial synthetic training file test used a non-business top-level directory and correctly remained on local storage. The fixture was corrected to the production outputs/training_datasets hierarchy; its initial failure log is retained. Production storage routing was unchanged.
+
+This offline training file replay follows generation candidate 2fdb9ee and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 214fe9c. Manifest v213 lists 526 sources, appending training/file_ports.py. Five services capture matching file capabilities while preserving validation, cache, write ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run scripts/smoke_training_image_ports.py with the existing preview renderer pixel/metadata goldens, training dataset and preview workflow/input suites, artifact integrations, HTTP/boundary/PLC contracts and actual-source fingerprint verification. Synthetic real-store tests check distinct pixels at identical paths, selected-store YAML, image publication failure and missing dependencies without training or model calls.
+
+This offline training image replay follows file candidate 94c1eec and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 75d63a9. Manifest v214 lists 526 sources. Image adapters are captured and YAML selects its writer per call; arbitrary private rebinding is not preserved as an atomic hot swap. Algorithms, goldens and public signatures remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Run scripts/smoke_training_resource_ports.py with original training resource mutation, background writes and artifact/worker tests, real artifact integrations, assembled HTTP/boundary/PLC and actual-source fingerprint checks. Synthetic store graphs at identical paths verify mutation isolation, version conflicts, archive contents and digest leases; destructive test operations are confined to temporary synthetic storage.
+
+The first synthetic archive probe retained the small generic work quota and correctly failed capacity admission. Its private fixture now uses the established archive-test work allowance; production quotas and archive guards are unchanged, and the initial failure log is retained.
+
+This offline training resource replay follows image candidate 9063ace and preserves current history, readiness, model/tail, shutdown, corrected boundary documentation and canonical LF guards. Production and test blobs match reviewed fbf5434. At this replay boundary manifest v215 selects 526 sources. Explicit resource and archive capabilities preserve file operation ordering, strict digest failures, partial publication and archive formats. Current source changes require actual-main rebind, independent review and full CI/release acceptance before publication.
+
+Run scripts/smoke_accessory_file_ports.py with original accessory management, image-job metadata, sprite metadata and artifact integration tests, HTTP/boundary/PLC and actual-source fingerprint checks. Synthetic stores at identical paths verify upload bytes, guide/anchor evidence, existence-dependent dimensions and failure order without paid calls or customer files.
+
+The first accessory port draft also injected files into a later, unrelated ImageJobMetadata dataclass with the same import name; the full assembled-app regression caught this before publication. Injection is now limited to the provenance service. Synthetic failure probes were corrected to observe put_stream and assign explicit fixture mtimes instead of assuming memory-store timestamps. Initial failures remain recorded.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Run scripts/smoke_accessory_evidence_ports.py with original background evidence/library selection, reference evidence and preview asset tests, artifact integrations, HTTP/boundary/PLC and actual-source fingerprint verification. Real stores with synthetic clients exercise identical-path image/hash isolation, catalog existence checks and remote errors before fallback or matching.
+
+This offline accessory evidence replay follows file candidate b368404 and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed 466195b. At this replay boundary manifest v217 selects 526 sources. Decode and hashing selection, source mutation, partial publication and error propagation remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Run scripts/smoke_accessory_catalog_ports.py with original materialized asset and preview sprite suites, artifact integrations, assembled HTTP/boundary/PLC and actual-source fingerprint tests. Synthetic stores at identical paths verify dimensions, alpha decoding, existence ownership and mutation before remote errors.
+
+This offline accessory catalog replay follows evidence candidate 2d442b2. All owned production/test blobs and the complete ordered entry match reviewed 87ebec1; current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v218 selects 526 sources. Existing catalog mutation and decoder behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, assembled HTTP and fingerprint checks are distinct. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_accessory_gallery_ports.py with original accessory preparation/gallery regressions, artifact integrations, assembled HTTP/boundary/PLC and actual-source fingerprints. Synthetic same-path stores exercise candidate thumbnails, gallery pixels and read/publication failures without paid providers.
+
+This offline accessory gallery replay follows catalog candidate 8f453b3. Owned source/test blobs and ordered entry match reviewed 7f02e9d, including the single inert ImageFiles allocation relocation. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v219 selects 526 sources. Existing partial publication and failed-write behavior are unchanged. Neighbor evidence is reused only for exact source; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_accessory_edit_ports.py with original accessory file HTTP/pixel/permission tests, accessory management, artifact integrations and HTTP/boundary/PLC/source-fingerprint checks. Synthetic stores verify same-path uploads, crops, reference selection, deletion ownership and partial effects on failure.
+
+This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_accessory_preprocessor_ports.py with original object preprocessing and workflow ownership regressions, artifact integration, assembled HTTP/boundary/PLC and actual-source fingerprints. Two synthetic stores verify source pixels, metadata, publication isolation and failures before or after publication; no paid cutout is invoked.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_agent_reference_ports.py with original pose asset/render and photo-highlight workflow regressions, artifact integration, HTTP/boundary/PLC and actual-source fingerprint checks. Identical-path synthetic stores verify existence and encoded bytes without model calls. Its source-position assertion first verifies actual composition sources and strictly restores the reviewed Pose/path entry deltas; required, None and falsey-reader checks and all original runtime assertions remain unchanged. Run this storage suite on Linux, where its existing disk implementation uses fcntl.
+
+This offline Agent reference replay follows accessory preprocessing candidate b1d835d. Owned source/test blobs and ordered entry match reviewed efa17b7. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v222 selects 527 sources. Reference selection, digest acceptance, path mutation and exception ordering are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_agent_pose_storage_ports.py with original pose rendering/materialization contracts, Agent reference tests, artifact integration and assembled HTTP/boundary/PLC/source-fingerprint checks. Synthetic stores exercise identical output paths and metadata, materialization ownership, and failure after image publication without any provider calls.
+
+This offline Agent pose storage replay follows reference candidate 9a90408. Owned source/test blobs and ordered entry match reviewed 11919d9. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v223 selects 527 sources. Image and metadata publication ordering, local/remote callback timing and partial mutations remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_agent_photo_image_ports.py with original photo-highlight builder/image/workflow contracts, artifact integration and HTTP/boundary/PLC/source-fingerprint checks. Real synthetic stores and model substitutes verify identical-path source/mask/ROI outputs and failures without paid calls.
+
+This offline Agent photo replay follows pose storage candidate a56b846. Owned source/test blobs and ordered entry match reviewed 6afd82e. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v224 selects 527 sources. Provider attempts, diagnostic failure handling, publication and item mutation order are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_agent_background_image_ports.py with original pipeline-background publication contracts, artifact integration and HTTP/boundary/PLC/source-fingerprint checks. Synthetic stores cover matching absolute paths, pixel identity, provider payload and partial publication failures; no paid models are called.
+
+This offline Agent background replay follows photo candidate 5bcd15e. Owned source/test blobs and ordered entry match reviewed e8c63a3. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v225 selects 527 sources. Existing library fallback, partial file and manifest publication, callback timing and errors remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_pipeline_status_file_ports.py plus original pipeline resource-status and task projection/list checks, artifact integration and HTTP/boundary/PLC/source-fingerprint tests. Synthetic stores at identical paths verify isolated availability, missing resources and propagated storage failures.
+
+This offline pipeline availability replay follows Agent background candidate 37a1265. Owned source/test blobs and ordered entry match reviewed ed60859. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v226 selects 527 sources. First-match, pending-state, bypass and storage error behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_text_cleanup_file_ports.py with original extraction/standard/document-review and extraction-drain tests, artifact integration, HTTP/boundary/PLC/source-fingerprint checks. Synthetic stores verify owner isolation, tombstone-before-delete, retention of losing remote media and original failure propagation.
+
+This offline text cleanup replay follows pipeline availability candidate 6f13fd9. Owned source/test blobs and ordered entry match reviewed c89fbbd. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v227 selects 528 sources. Cleanup exception precedence, tombstone-before-deletion and partial effects remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_training_catalog_file_ports.py with original resource and trained-model catalog checks, artifact integration and full HTTP/boundary/PLC/source-fingerprint tests. Real synthetic stores verify identical-path catalog isolation, model existence, missing manifests and storage failure propagation.
+
+This offline training catalog replay follows text cleanup candidate 1199028. Owned source/test blobs and ordered entry match reviewed 8f0715d. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v228 selects 528 sources. Local and indexed selection, permission ordering and repeated reads remain unchanged. Exact-source neighbor evidence is reused; current targeted, real PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_text_media_runtime_port.py and the original smoke_text_media.py --root, artifact integrations, HTTP, dependency, PLC and fingerprint contracts. Synthetic independent stores exercise same-path isolation, hybrid fallback, checksum and availability errors, and lazy PDF partial publication without paid inference.
+
+This offline text media replay follows training catalog candidate 920904d. Owned source/test blobs and ordered entry match reviewed f71e6c4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v229 selects 528 sources. Local path, hybrid readiness, size, digest and publication rules remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_training_runner_file_port.py alongside the unchanged training runner, artifact integration, HTTP, boundary, PLC and model dependency contracts. Synthetic independent stores verify selected datasets, COS fallback rejection, reservation/error ordering and pinned snapshots without starting real training.
+
+This offline training runner replay follows text media candidate da44932. Owned source/test blobs and ordered entry match reviewed 9b024f4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v230 selects 528 sources. Running-state persistence, runtime mode, repeated existence reads, failure settlement and pinned model restoration remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_runpod_artifact_runtime_ports.py with original training artifact and storage integration regressions, HTTP/boundary/PLC and model dependency contracts. Two synthetic stores verify same-path exports/imports and partial publication/error boundaries without executing models or contacting RunPod.
+
+This offline RunPod artifact replay follows training runner candidate b7b8760. Owned source/test blobs and ordered entry match reviewed 671f233. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v231 selects 528 sources. Repeated runtime selection, cleanup exception masking, publication ordering and local replacement remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_runpod_transport_runtime_ports.py with original RunPod flow/transfer, artifact integration, HTTP/boundary/PLC and model dependency checks. Synthetic stores exercise independent same-job claims, unknown submissions, upload isolation, admission and authorization-before-runtime failures. No real provider request is made.
+
+This offline RunPod transport replay follows artifact candidate 97a9963. Owned source/test blobs and ordered entry match reviewed 12f1743. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v232 selects 528 sources. Durable claim ordering, ambiguous submit retention, streaming limits and partial upload publication remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_codex_api_runtime_port.py with original Codex dependencies, PostgreSQL API/batch tests, artifact integrations and HTTP/boundary/model/source fingerprint contracts. Independent synthetic stores and real API routes exercise evidence isolation, authorization before runtime selection and propagated read failures.
+
+This offline Codex HTTP replay follows transport candidate 0beaefc. Owned source/test blobs and ordered entry match reviewed 42fcded. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v233 selects 528 sources. Authorization, media exception mapping and partial publication ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, isolated PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_label_media_runtime_ports.py with label dependencies, lifecycle, PDF drain, summary worker, standalone bootstrap/signals, PostgreSQL process/control/deployment/readiness tests and original label API smoke. Synthetic storage owners cover HTTP and both worker media paths without model calls; no concurrency, admission, settlement or drain assertion may be removed.
+
+This offline label media replay follows Codex HTTP candidate 41743d5. The original provider-only delta from reviewed b696cba is applied while retaining current native history summaries and their test adapters. All other owned source/test blobs and ordered entry match the reviewed source. At this replay boundary manifest v234 selects 528 sources. Current history, readiness, model/tail, shutdown and canonical LF guards remain. Worker claims, PDF cleanup, provider identity and error ordering remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_comparison_media_owner.py, both HTTP media-owner suites, artifact integrations, original Codex pytest contracts against isolated PostgreSQL, full HTTP and actual-source fingerprint checks. Synthetic reservations exercise selected-owner budget admission, error settlement, local mode and cleanup without invoking a model.
+
+This offline comparison media replay follows current-history label candidate f447c5d. Owned source/test blobs match reviewed 552cea1; the entry remains unchanged. Current native history and its explicit-provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v235 selects 528 sources. Worker budget and reservation settlement ordering, ambiguous paid outcomes and CLI selection remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Run scripts/smoke_web_artifact_composition.py with original runtime-provider behavior, artifact integration, HTTP media ownership, detection storage and assembled HTTP/boundary/model/source-fingerprint checks. Synthetic independent stores test identical-path file/image views, lazy concurrent construction, owner-local configuration fencing and failure propagation.
+
+Run scripts/smoke_stream_config.py against the frozen c25e1bb handler and the service. Tests cover request defaults, two owners, late load/save bindings, evaluation order, failure partial effects and actual root route delegation. Preserve assembled HTTP, app-config, model dependency, fingerprint and PLC frontend route-order checks.
+
+Artifact composition binding guards compare parsed AST structure, including whitespace-equivalent lambda syntax and wrong-supplier negatives, so Python 3.10 and newer unparsers cannot change the outcome.
+
+This offline Web artifact composition replay follows comparison candidate d2ae509. Owned source/test blobs and ordered entry match reviewed a0fa2ed, including the Python 3.10 structural source guard. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v236 selects 529 sources. The Web graph owns a fresh lazy runtime provider and two focused views; this is not a complete application factory or proof of independent underlying resources. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+This offline stream configuration replay follows Web artifact candidate f2e481b. Owned source/test blobs and ordered entry match reviewed 14f6504. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v237 selects 530 sources. Existing load, mutation, save and post-save response ordering remain unchanged; configuration is not given a new transaction or lock. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+IncomingTextStore now resolves JSON single-record lookups through its own list methods. The two callbacks through the application entry have been removed; narrow repository, guard, path and row-adapter inputs remain. Tests replace the owning store method and cover two independent stores, preserving missing-loader errors, call-time repository selection and lock behavior. TextStorage allocates both text stores and their shared write lock per composition, without opening a connection or retaining a user. Manifest v238 selects 531 source paths, including text_inspection/storage_composition.py. This closes the store self-reference only; full application factory and route/lifecycle instance isolation remain unfinished.
+
+Run `python scripts/smoke_text_storage_composition.py` for inert construction, caller-thread repository selection, concurrent independent HTTP storage graphs, and shared-versus-distinct lock isolation. Run both existing store suites with `--root --postgres` against an isolated database; these checks do not establish full production application-factory isolation.
+
+The text storage lock belongs to `TextStorage` and its public lock property cannot be rebound. The entry lock alias initially references it; replacing that private entry alias no longer replaces either store guard. Remaining route/write adapters still use their existing inputs until their domain composition is migrated. This intentional narrowing of private test seams does not change configured runtime behavior.
+
+Run python scripts/smoke_incoming_composition.py for the actual incoming workflow builder: inert construction, shared writer lock, single duplicate query, absent-row decoder ordering, two HTTP apps with equal task/capture IDs, per-owner failure isolation and operation-time store selection on a native thread. Keep incoming workflow/store/artifact tests, the migrated source composition guard, assembled HTTP, fingerprint, documentation and PostgreSQL contracts. These domain HTTP graphs do not establish complete production create_app isolation.
+
+The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+
+Catalog graph contracts cover inert construction, equal run IDs with separate owner catalogs/model caches, concurrent ContextVar propagation into thread execution, operation-time replacement of owned query services, and real application composition aliases. Existing local-model/catalog/pipeline/media assertions remain; test replacement targets now identify their actual service methods. Real PostgreSQL catalog tests and whole HTTP/source-fingerprint contracts remain required. No real model or PLC is used.
+
+scripts/smoke_accessory_image_composition.py exercises the integrated candidate image graph with synthetic provider ports: inert construction, explicit missing-resolver failure, native thread-constructor failure before admission, final-save failure without a repeated provider call, retained model binding and independent native drain while another owner remains operational. Original queue, execution, diagnostics, ownership and drain assertions remain; operation replacement and source guards now target the actual domain owners/constructor. Synthetic per-domain evidence does not establish two complete production apps, paid inference, physical PLC operation or production capacity.
+
+The image composition source contract preserves all original external supplier expressions in tests/backend_contract/accessory_image_composition_ports.json, frozen from parent 5b61947. Parsed-expression AST checks match each exact execution/diagnostic edge and all eight root ownership aliases; mutants cover swapped provider methods, same-leaf wrong owners, wrong external groups and a substituted model resolver. The old e251 source guards accepted five wrong-binding mutants and are superseded by these stronger checks; original business assertions remain.
+
+The frozen image composition fixture stores parseable parent-source expressions rather than interpreter-specific ast.dump strings. Both expected and actual expressions are parsed and compared structurally in the running interpreter; Python 3.10 and 3.13 guards reject the same wrong-owner and wrong-method mutants.
+
+Run `python scripts/smoke_model_tools_composition.py` with the original model-tool dispatch, presence inspection, MCP runtime/drain/warmup, HTTP, boundary and shipped-fingerprint checks. Synthetic tests use actual owned presence-to-dispatch-to-provider routing, nested admission and native inflight drain with two owners. Constructors are tested with poisoned external suppliers. The old presence monkeypatch fixture replaces the actual generation call port and retains all original callback timing and budget assertions; root wiring contracts use parseable expressions derived from the preceding Git constructors.
+
+The token callback case changes dispatch during payload preparation before the call port is selected. A separate case saves the actual generation.call() wrapper first, then replaces dispatch while Python evaluates its payload argument. Only the owned wrapper selects the new dispatch afterward; an eagerly captured dispatch-method mutant fails this runtime contract. Neither case uses application-entry lookup.
+
+The ten model-tool owner cases include actual owned stdio-failure ordering and client replacement during payload argument evaluation. Failure to close the late-selected client prevents provider fallback; the focused docs contract also maps this smoke and its portable parent-derived wiring fixture.
+
+Run python scripts/smoke_detection_workflows_composition.py with the existing detection/AI analysis, analysis records/projections/composition, automatic capture, model binding, HTTP, dependency direction and PLC contracts. Nine synthetic actual-graph cases verify inert poisoned constructors, parent-Git-derived external port expressions, owned recursion, promoted success and one teacher fallback, ArtifactUnavailable/ArtifactConflict propagation without fallback, one model scope, same-ID concurrent owner separation, publication failure before capture, and capture launch failure retaining records/state without repeating inference. Capture lock/state/launchers are explicit test capabilities. The unchanged AI suite adds a public-entry single-scope assertion. PLC source guards follow the actual graph and reject shadowed classes/decorators as well as raw unpinned routing; no paid model or real PLC is accessed.
+
+Run `python scripts/smoke_text_standard_composition.py` with synthetic I/O. Its eight cases cover inert construction; nine external capability groups derived from parent Git; exact aliases/registrars and wrong-binding rejection; two concurrent actual ASGI domain graphs with identical IDs and distinct image bytes; native classification persistence and drain; native preparation through owned media/revision publication and thread cleanup; revision failure ordering; and saved-callable argument-effect selection. The preparation case preserves the original baseline then prepare revision numbering. It substitutes OCR observations and provider transport, never paid calls or a real device. Run existing text standards, revisions/media with --root, document/preparation dependencies, text storage/record-store PostgreSQL, comparison drain, whole HTTP and dependency-direction checks. Two domain graphs are not proof of two complete application factories.
+
+Run `python scripts/smoke_text_comparison_composition.py` using synthetic I/O. Eight cases exercise parent-derived capability wiring and negative alias/shadow mutations; saved-callable owner selection after argument effects; poisoned inert construction; explicit unassembled extraction failure; two actual registered domains with same IDs and distinct images, history authorization, human review and manual extraction; native uncertain extraction with one call and duplicate handling; native prepared comparison persistence/media/cleanup; and one failed draining comparison while another owner completes. Existing `smoke_text_comparison_api.py --root` keeps all fourteen cases and prepared per-call capture assertions, replacing the actual owned store and composition submit seam. Retain comparison/history/extraction, cleanup/thread-drain, standard/media/revision, real PostgreSQL store and whole HTTP contracts. No paid model or physical PLC is used; these are domain graphs, not a completed production application factory.
+
+The text cleanup source contract follows both actual domain constructors and their StandardEdits/extraction registrar file injection. Existing required-port, falsey-owner and cleanup assertions remain.
+
+Comparison registration now explicitly rejects an unassembled extraction resolver before adding inspection routes. Source guards reject wrong imports and annotated/augmented owner or lifecycle rebinding; these mutations are exercised directly.
+
+Run python scripts/smoke_auto_optimization_core_composition.py with synthetic I/O. Eleven actual graph cases cover inert poisoned construction, parent-derived ports and shadow mutants, argument-effect owner selection, same-ID store/status/account separation, native shadow persistence/scope cleanup, duplicate suppression and independent draining failure, and save failure without retry. Keep every original automatic optimization business, state-store PostgreSQL, settings/runtime ownership, model binding and drain test, plus actual HTTP/boundary/fingerprint contracts. The existing capability helper checks internal callbacks against their named core owner methods while retaining external identity and settings assertions. These are domain graphs, not two full production application factories.
+
+The owned shadow native target preserves the original pinned model-profile entry through an explicit resolver provider captured at composition. Task loading and one model scope run after native repository-scope entry, using the actual core store; the public compatibility worker keeps its original single decorated call. Tests cover retained task version after configuration changes, empty and inherited snapshots, missing resolver before task I/O, exceptional restoration and one scope without retry.
+
+Run `python scripts/smoke_auto_optimization_execution_composition.py` with synthetic I/O. Six cases cover exact parent-derived constructor/capability and unchanged HTTP wrapper guards with negative mutations, poisoned inert construction and type resolution, all saved forwarders selecting components after argument effects, two actual same-ID native graphs with distinct accounts and retained model snapshots through pool threads, missing resolver failure before task I/O, and the original public workers retaining a single pin. Preserve every original auto-optimization business test; ownership assertions now target the actual execution owner and initialization clamp replacement uses that owner. Keep real PostgreSQL store tests, core/settings/runtime ownership, drain, HTTP, dependency direction and shipped fingerprint checks. This proves domain wiring only, not full application factories or production capacity.
+
+The execution guard also checks the actual thirteen component constructors against parent-derived field expressions and all 62 internal edges, checks pinned import/entry expressions, and exercises wrong request-load and wrong sprite-owner mutations. Runtime assertions independently verify all internal getters on the actual constructed graph; a mutated requests load getter selecting save must fail even if the on-disk source is unchanged. Capability ownership helpers require the actual port instance to belong to that execution graph.
+
+Run `python scripts/smoke_auto_optimization_workflow_composition.py` with synthetic providers. Four cases cover parent-derived root argument/alias/public-wrapper checks and actual Core/Execution constructor mutations, poisoned inert construction and failure before publication, same-ID/account status update through native label execution retaining task model version7, and both saved callbacks selecting execution after argument effects. Preserve all existing Core, Execution and business tests; their root guards now follow the workflow constructor and existing ownership checks target the two actual named workflow methods. Real PostgreSQL store regressions remain required. This proves domain assembly, not two whole production application factories.
+
+Automatic-optimization workflow guards reject a different same-module constructor imported under an expected name, and duplicate or reassigned workflow owner definitions. These wrong-class/owner counterexamples are retained alongside the original successful domain contracts.
+
+Run `python scripts/smoke_training_state_workflows_composition.py` using synthetic providers. Source checks restore the three original constructors and thirteen public wrappers against the parent non-import AST, retain all three business modules, and reject internal edge, lock, resolver, import and owner-shadow mutations. Actual same-ID/account graphs check retained model snapshots, visibility before stopped-state persistence, authorization before deletion, tombstone isolation and supplied native runtime drain isolation. Preserve existing record-store and lifecycle regression assertions, replacing only migrated runtime/record capabilities at their actual owner. Run both original suites with `--postgres` against an isolated database; state-service regressions, HTTP, dependency direction and shipped fingerprint checks remain required. These are domain composition checks, not complete application factory or production capacity acceptance.
+
+Run `python scripts/smoke_training_task_workflows_composition.py` with synthetic local media and model substitutes. Eight combined cases check the immutable parent inverse and all fifteen unchanged business services, wrong-owner/import/route mutations, inert early construction/failure, concurrent member/admin/denied ASGI request identity, actual account isolation and transfer publication failure, identical-ID native model binding and independent drain, launch-save failure retaining one admitted task, and real UserState config/pipeline first-failure second-sync behavior without re-execution. Existing tests keep permission/error/call-order assertions and replace actual owner capabilities. Jobs classification replacement targets jobs_query.training.uses_worker; arbitrary root-helper rebinding is no longer its extension point. Getter timing checks replace the actual named wrapper selected before arguments; additional graph tests verify component selection after argument effects. Run one final combined domain matrix and isolated PostgreSQL regressions at the final head, then HTTP, dependency, shipped fingerprint, docs and frontend checks. Internal checkpoints do not require separate PRs or repeated unchanged full matrices.
+
+Run scripts/smoke_label_beta_summaries.py against isolated PostgreSQL for original public list/detail, owner, missing/null/falsey inputs, safe and unsafe mixed label entries, unchanged unknown fields, pre-filter errors, mapping rows and old cursors. The fixed16 benchmark keeps its original populations/order,31 alternating samples,4 warmups,3 memory passes, original P95/memory/query limits and frozen endpoint. Its internal projection contract2 checks compacted evidence rather than a removed BetaListSummary tag; timings and acceptance guards are unchanged. Both earlier failed full-projection candidates remain NoGo. Original19 reader and28 history cases remain required. Timing includes page snapshot persistence but excludes HTTP and real providers.
+
+smoke_label_beta_summaries.py additionally compares SQL object/array counts with the decoded records, checks zero without len fallback, preserves two explicit-null TypeErrors, nonbatch scalar behavior and encoded raw fallback. The fixed 16-case timing plan and original 19/28 protocols remain unchanged; only the preflight wrapper access and report projection_contract become 3.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Run scripts/smoke_manual_history_baseline.py --postgres before changing manual history reads. The exact original helper from030af6e is frozen at tests/backend_contract/manual_history_baseline.py with SHA25652b31c4afe4ba42d2bd0ee9a5b1111fe3b5390b3e528848ce557e795c0d4227e and loaded into the original endpoint namespace. Candidate-helper poisoning must break the candidate while leaving both frozen helper and frozen endpoint usable. Cases preserve duplicate session IDs, dual page membership, orphan groups, page-before-record order, asset ordering/media flags, malformed-data errors, owner/filter behavior and old cursor continuation through writes. This supplements existing reader/history/Beta fixed benchmarks; none of their guards or baseline bytes are changed. No performance improvement is claimed by the baseline.
+
+scripts/benchmark_manual_history.py fixes seven cases before optimization: A/A1000 then three A/B repetitions of1000/10000 groups. Each fresh PostgreSQL fixture proves actual standard/session/page/asset row counts, compares complete ordered results outside samples, then runs four warmup pairs,31 alternating wall-time pairs and three separate peak-memory pairs. Every call requires exactly10 reader cursor execute commands, including normal snapshot SQL; writer setup, commit and PostgreSQL internal work are outside that count. P95 must be at most max(old*1.25,old+0.01s), peak at most max(old*1.25,old+1MiB). CPU/GC observations stay outside timing. Every result pins ManualFixture and both frozen source hashes; failures stop the protocol and preserve not_run groups. scripts/smoke_manual_history_protocol.py attacks wrong bindings, missing/duplicate/reordered cases, arm selection and evidence-output failures. A separate CI job runs this protocol to avoid sharing its runner with other benchmark jobs. No pooled percentiles, guard relaxation or unchanged reruns are allowed.
+
+Protocol fault tests also execute the actual measure function with an inert fake fixture: all76 warmup/wall/memory arm selections,31 wall samples and three memory samples per arm are asserted. Both latency and memory regressions retain their primary assertion if raw-record output also fails; output failure after a successful measurement still fails acceptance. This closes the initial protocol76 test gaps without changing populations, sample counts or thresholds.
+
+scripts/smoke_manual_history_index.py compares160 seeded duplicate/orphan/overlap/order fixtures with the frozen helper, preserves malformed-data precedence, proves empty/default/detail paths skip indexing, checks asset access order/failure and arbitrary-size integer handling without float conversion. The realPG manual endpoint and inherited history-statistics contracts remain required. Run the frozen seven-case benchmark and inherited63 cases unchanged; current implementation is not accepted for publication until those performance gates and independent review pass.
+
+The indexed smoke runs with --postgres in CI. Its tracked multi-group case spies on the real LabelRepository fast path and covers duplicate raw session IDs across two groups, a page also belonging to its fallback group, page-before-record timestamp ties, distinct SQL ordinals with tied raw ordinals, exact detail order and old cursor continuation.
+
+Manual indexed-history PostgreSQL tie expectations follow the actual cached source order because the legacy query has no ORDER BY. A separate in-memory case checks both forward and reversed equal-ordinal source orders. No source, benchmark protocol or performance threshold changes accompany this fixture hardening.
+
+
+The initial read-batch integration at v252 combined the guarded manual index and Beta SQL consumer on business composition 2b6e9ce. The current guarded legacy cohort is described below; independent application construction remains unfinished.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
+The authentication HTTP smoke uses independent client cookie jars without entering
+the shared application lifespan for each permission probe. These probes retain
+all anonymous, member, over-granted member and administrator checks. Application
+startup and ordered shutdown are verified separately by `smoke_web_shutdown.py`;
+a runtime that has closed cannot be restarted by a later test client.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.
+
+The model-profile engines route receives an explicit Codex-model supplier. The
+default composition reads the existing process environment at request time;
+independent registrars can supply separate environments without importing a
+process-global environment from the HTTP module. Empty and whitespace values
+retain the original truthiness behavior, and the administrator check remains
+first. This does not establish independent construction of the full Web app.
+
+The consolidated offline integration now starts from accepted main e1cfee3
+(real-photo feedback and independent review worker). DetectionWorkflows receives
+narrow analysis/capture feedback callbacks; both original capture gates and
+provenance scopes remain. Compatibility aliases select the composed owners.
+The real-photo routes, purpose bindings, incremental tables and review worker
+remain present. Manifest v253 contains 557 actual sources at this checkpoint;
+historical task snapshots are not rewritten. Full factory, combined CI and
+release acceptance are separate remaining gates.
+Frozen label-list API tests bind both historical worker adapter locations to the
+fixture runtime explicitly. The accepted `register` body remains unchanged;
+list comparisons do not enter an application lifespan or start a worker.
+
+The legacy-index CI control is pinned to accepted main `0b22d32` and its
+verified API blob. It does not use `HEAD^`, which means different code in a PR
+merge checkout and a manual branch run. Both event types replay the same control;
+baseline updates require explicit source and contract review.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.
+
+
+Application configuration is now composed by config/application_composition.py.
+Each owner allocates its own reentrant guard and protected-write ContextVar;
+training configuration selects that same owner lazily. Construction performs no
+file or repository access. PostgreSQL protected writes retain their existing
+transaction/advisory-lock behavior. Two real PostgreSQL owner fixtures cover
+concurrent protected writes, training-state persistence and rollback after a
+partial write. Run scripts/smoke_application_configuration_composition.py with
+VANTALINE_POSTGRES_DSN to execute all six cases. JSON-only mode skips that one
+PostgreSQL case. PostgreSQL fixture markers use JSON objects because the existing
+record decoder treats strings as serialized JSON; this increment does not change
+the decoder or rewrite stored configuration. Full application factory, PLC and
+pipeline ownership and hosted/release gates remain open.
+The combined Beta benchmark accounts explicitly for one legacy schema catalog
+probe and one generation/eligibility query when the derived schema is installed
+but no cohort is ready. A/A has neither probe. All other query counts must stay
+fixed, the total remains at most 12, and original 31 samples, three memory
+samples, P95 and peak-memory limits remain. Full combined CI is still required.
+
+Static PostgreSQL persistence checks read the current business modules. Their
+old-location oracle runs only after the actual 26 composition modules and
+complete integrated root pass immutable AST bindings. Two explicitly reviewed
+deltas restore the older assembly for its retained assertions; they do not
+represent current source locations. Positive and adverse checks cover changed
+repository timing/owner/import, missing or reordered nodes, route/shutdown order
+and corrupted delta regions. This is test adaptation, with no production change.
+
+
+The Beta smoke follows the actual TextComparisonWorkflows submission and route
+registration in text_inspection/comparison_composition.py, verifies its reviewed
+constructor capability graph, and checks the root forwarding aliases. Original
+comparison decisions, revisions, read-only history and frontend diagnostics
+assertions remain. A moved constructor must not be asserted at its former root
+location. The older foundation hosted run failed this source-location assertion;
+that failure is retained as evidence and is not a performance result.
 
 
 Third batch: run `python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py` with the disposable PostgreSQL DSN. Contracts cover original-only export, exact accepted versions, fixed splits/full classes, drifted weights, single dispatch, restart observation and class-definition revocation. CI runs the same suite in its artifact-storage PostgreSQL service. Run training runner/submission/RunPod and pretraining regression smokes, frontend typecheck/build, additive application contract, docs contract and diff checks. The test suite does not execute a paid business CLI session or GPU training.
@@ -2305,6 +2816,162 @@ Assessment inputs freeze the initialization decision, current approved-real targ
 
 The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS` API and newer `Image.Resampling.LANCZOS` with identical pixel bounds and transform sidecars. Commission the actual sandbox interpreter under the final unit protections; a parent virtualenv crop or successful model exit does not verify the child tool. Keep original review receipts unchanged when fixing runtime compatibility.
 
+
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.
+RunPod storage-provider smoke verifies the one current root flow and both actual
+training/task_composition.py constructors, including required owned runtime
+providers and exact root forwarding aliases. Independent upload/download/unknown
+submission behavior cases remain; relocated constructors are not counted in the
+entry file. Actual composition AST bindings protect the owner capability edges.
+
+
+Artifact port regression checks follow the actual detection workflow runtime
+provider and accessory image metadata files through their current owners. They
+retain constructor counts, exact forwarding aliases, required/None/falsey checks
+and all upload/storage behavior assertions. The current 26 composition AST
+bindings protect actual constructor edges before these source checks.
+
+
+The image-provider configuration source check retains the exact three typed port
+groups and every zero-argument supplier. The three reviewed model-option, provider and masked URL suppliers
+select their exact ProviderConfiguration methods; all other getters still
+select their original named capabilities. Actual composition AST bindings and
+existing redaction, failure ordering and instance-isolation cases remain.
+
+
+Public network policy still checks all seven original suppliers and exact
+zero-argument getters, with the reviewed masked URL method on its provider owner.
+TextMedia runtime checks follow the actual standard owner, its one constructor
+and exact StandardMediaStorage provider. Required/None/falsey and all media
+behavior tests remain; source guards reject unexpected owner edges.
+
+### Workstation composition verification
+
+Run `python scripts/smoke_plc_workstation_composition.py --postgres` with an isolated `VANTALINE_POSTGRES_DSN`. It exercises the actual composed graph, including two isolated PostgreSQL schemas, duplicate task admission and connection release. The original station, repository, browser-dispatch and active-lease smoke assertions remain unchanged; their source adapters verify the actual owner plus the entire root delta before loading the frozen constructor oracle. Run those smokes, HTTP contracts, backend boundaries and the PLC frontend/release contracts as well. These checks use synthetic stores and do not access a physical PLC or inference provider.
+
+Run `python scripts/smoke_plc_lease_diagnostic_composition.py --postgres` against an isolated database. The actual graph tests claim/activate, heartbeat/rebind, diagnostics, disconnect draining, late receipt, token/epoch/account fencing, fixed lease binding and failure rollback. Two real schemas test simultaneous claims, activation, frame failure and thread connection release. Original lease/diagnostic test methods remain intact behind exact owner/root source guards; those oracles supplement the direct composed-graph tests.
+
+Run python scripts/smoke_plc_capture_composition.py --postgres for the actual retained graph: inert construction, six owned callbacks, all original synthetic capture state scenarios, interleaved state/receipt isolation, owner epochs, original fixed coordination receivers and capture-forwarder argument timing, strict root inverse/no-op startup, and real PostgreSQL namespace concurrency, rollback and connection release. The unchanged business modules are hash-bound before old source oracles are restored. No PLC or paid model is contacted.
+
+Run python scripts/smoke_pipeline_persistence_composition.py --postgres for actual pipeline graph inert construction, partial-constructor failure, fixed task snapshots, two retained stores with identical IDs, terminal synchronization lock ordering, callback selection after arguments, model failure before row encoding/repository access, strict root inverse, two-schema PostgreSQL state concurrency and connection cleanup. Keep smoke_pipeline_stores.py and smoke_training_state_services.py with their original assertions; replace migrated guards/record methods through actual owners.
+
+Run python scripts/smoke_pipeline_execution_composition.py --postgres for actual pipeline threads and two-schema PostgreSQL graphs. Verify single pin before identity, persisted task snapshot before outer-scope fallback, scope entry/exit and connection release, three runtimes with separate lifecycles, auto producer draining into its own advance, another graph remaining usable, fresh third graph admission, blocked scope exit returning close False, model/loader failures preserving original registry evidence, uncertain start without retry, inert/partial construction and binding-time runtime selection. Keep the original auto-agent, advance and recommendation suites; their fixture adapter replaces actual owned guards/methods while retaining public pin oracles. Provider lock assertions track the current thread instead of inferring ownership from global lock availability.
+
+Run python scripts/smoke_pipeline_query_composition.py --postgres for the actual six-service graph: inert/partial construction, falsey non-None files, two retained accounts with identical IDs, source inversion, callback selection after arguments, snapshot fallback and alias/count order, candidate refresh under its guard and save failure, refresh before visibility, confirmed-candidate state pruning, live optimization stop/save versus supplied-state projection, and two PostgreSQL schemas with connection cleanup. Preloaded model/resource data skips its loaders but linked label snapshots still use their original lookup. Original domain assertions remain; migrated private helper substitutions use pipeline_query_test_ports.py against the actual owner.
+
+The PostgreSQL endpoint source oracle calls restore_business_root once. That strict composite verifies the actual new owners and immutable graph deltas before reversing configuration and business assembly; reversing configuration first would invalidate subsequent whole-root fingerprints. smoke_protected_config_ownership.py retains all original assertions and adds unknown query/lease binding counterexamples. Keep the original hosted 0ec failure and initial repair failure as evidence; final isolated PostgreSQL replay passes all 10 tests.
+
+Run python scripts/smoke_agent_pipeline_composition.py for the actual six-service Agent graph, two actual Query graphs and real model Service scopes with forbidden storage/secret access. Verify record snapshot priority/outer restoration, one pin per owned decision entry, missing resolver before work, receiver selection after scope entry, context versus provider exception boundaries, empty pending lists versus inline None, turn partial effects, inert/partial construction, callee selection before identifier conversion and an actual native auto/advance caller deciding outside its task guard, committing/saving inside and scheduling after release. Keep all original smoke_agent_pipeline_decisions.py and smoke_agent_pipeline_actions.py assertions through agent_pipeline_test_ports.py, plus the active legacy decision contract. The native advance persists admission and completed results separately; do not mistake those writes for retries.
+
+Pipeline stage graph check: `python scripts/smoke_pipeline_stage_composition.py` constructs two actual Query/Persistence/Stage graphs. It checks alias normalization, AI activation's persisted evidence before projection, account filtering and paused-card identity, shared advance registries, one training finder per batch, actual recommendation cache consumption without paid inference, cancellation between persisted progress steps, late receiver choice and strict source inverse. Preserve the six original AI activation, AI sync, training status, stage advance, reconciliation and recommendation suites. Their dependency replacements target the actual stage owner through `pipeline_stage_test_ports.py`; source assertions replay only validated composition deltas. No real PLC, model transport or production data is used. These are focused domain checks, not full-ASGI isolation or production commissioning evidence.
+
+The retained `smoke_plc_runtime_coordination.py` source extractor validates and reverses the actual outer domain composition before selecting the original coordination constructor. Its original claim/renewal, expiry, namespace, deep-copy and PostgreSQL race assertions remain. This repairs the exact published 3839 hosted failure (undefined capture owner in an isolated old-source namespace); it changes no PLC product behavior.
+
+Run `python scripts/smoke_pipeline_task_composition.py --postgres` for actual Query/Persistence/Stage/Execution/Agent/task graphs and original HTTP registrars. Synthetic HTTP coverage includes fresh app route/schema identity, 401/403/422, same-ID account isolation, AI create persistence, old model snapshot preservation, two authorization checks around one real-Service model scope, failed public projection after committed update, cancel-before-denial, partial cleanup, real list reconciliation/throttle, and duplicate advance admission with scheduling after unlock. The PostgreSQL case runs two account/schema graphs concurrently through synchronous service entrypoints inside per-thread repository scopes and verifies committed updates, failure evidence and closed connections; it is not PostgreSQL-over-ASGI middleware coverage. Scheduling is observed at the actual runtime capability without launching paid work. The eight original pipeline task HTTP smokes and all their assertions remain, with explicit replacements on `pipeline_task_test_ports.py`. New fixture helpers accept supplied real Query/Persistence owners to avoid mismatched test graphs.
+
+`python scripts/smoke_pipeline_runtime_composition.py --postgres` exercises actual native thread -> stage -> mutation and auto thread -> Agent decision/turn -> stage chains with synthetic job/model effects. Cover same task IDs in two graphs, immutable snapshots, scope/identity restoration, progress saved before sanitized asset failures, no automatic retry, recommendation readiness, missing resolver and producer-first drain. Original domain suites remain; strict source replay validates the real runtime owner before reversing its exact reviewed delta. Ten connected cases use file stores. The additional isolated PostgreSQL case launches two native account graphs, verifies actual stage progress and failure settlement, and checks thread connection release. It is native-worker PostgreSQL coverage, not PostgreSQL-over-ASGI coverage. Test substitutions use explicit connected owner methods, preserving all original domain assertions.
+
+The connected runtime test-port helper substitutes mutation abilities on PipelineRuntimeWorkflows, whose real Stage/Agent/Mutation getters select those forwarders. PipelineTaskMutations is frozen: never patch its instance methods or a shared class. The synthetic graph suite now has eleven cases, including three mutation seams, restoration and a second unaffected graph; its separate PostgreSQL case is unchanged. The original recommendation-runtime fourteen cases remain required.
+
+`python scripts/smoke_codex_environment.py` registers two actual Codex APIs for the same account with independent environments and checks concurrent capabilities, live changes, identical OpenAPI, isolated endpoint closures, permission order, empty/falsey mappings and missing-dependency rejection before routes. The existing four dependency and five media-runtime cases remain. Original Codex PostgreSQL batch/owner/evidence and worker contracts still run; no model or actual PLC is invoked.
+
+The five environment cases also exercise actual POST admission and retry: the same account can submit only to its enabled app, the other app has no standards/media/save effects, and disabling the first app model rejects new submissions. A direct AST contract rejects missing, wrong or copied default mapping injection without changing generic inverse replay idempotence.
+
+The original pipeline runtime ownership clock oracle validates actual composed modules and replays the reviewed root assembly before its unchanged historical clock assertion. This preserves the original state/lock tests after task-list clock ownership moved into PipelineTaskWorkflows. No runtime or PLC behavior changes.
+
+The composition source guard accepts partially replayed roots only when their entire AST matches an immutable reviewed descendant checkpoint. It still validates every actual owner before replay, rejects unknown edits at each checkpoint, and ends at the exact workstation parent. Historical oracle assertions and generic single-delta semantics remain unchanged; this does not approve a missing default Codex environment binding.
+
+Provider dependency-capture tests substitute secret-key identification on the actual ProviderConfiguration instance. The same original A/B/C argument-time mutation and missing-callable assertions remain; other provider capabilities retain their existing locations. The temporary mock is restored on exit and changes no model call, key selection or retry algorithm.
+
+`python scripts/smoke_pipeline_status_file_ports.py` retains its original three cases. Its historical entry binding assertion uses `restore_plc_domain_root`, including actual owner/hash checks, rather than assuming the resource-status constructor remains in server.py. Identical paths on separate artifact owners and storage-error propagation remain direct behavior checks.
+
+The training state/task composition source oracle delegates its outer layers to `restore_integrated_root` once. Run both `smoke_training_state_workflows_composition.py` and `smoke_training_task_workflows_composition.py`; all original assertions remain, including unrelated entry/import/shutdown mutations and actual owner hashes. The original outer-replay failure is retained as evidence.
+
+
+Agent Pose domain assembly uses three inert owners: `AgentStateWorkflows`
+(state, tool-call records and render configuration), `PosePlanningWorkflows`
+(templates, policy, generation and task plans), and `PoseExecutionWorkflows`
+(photo highlight, rendering, artifact publication, call execution and sample
+preparation). Internal edges select named owners at call time and preserve
+callee/argument evaluation order. Clock/configuration refresh, nested state
+identity and partial failures retain their original behavior. Public entry
+signatures and route/lifecycle order remain unchanged; no algorithm or prompt
+change is included. This closes these domain edges, not complete application
+factory assembly. New tasks use manifest v270 with 583 actual source entries;
+historical task snapshots and secret references are unchanged.
+
+Run `smoke_agent_state_graph.py`, `smoke_agent_planning_graph.py` and
+`smoke_agent_execution_graph.py` alongside the original Agent state/planning/
+render/execution/materialization and photo-highlight checks. Graph checks use
+synthetic providers and isolated local files, including artifact publication
+followed by digest failure with a single model invocation. Original source
+oracles validate all actual owners before reversing the three immutable deltas;
+unknown roots or changed actual owners are rejected. Named owner test seams
+replace the real supplied capability rather than private component aliases.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.
+
+Run `python scripts/smoke_provider_transports_composition.py` and `python scripts/smoke_real_photo_composition.py` for the owned transport and feedback graph. These use synthetic provider responses, separate ledgers and request identities, temporary media, and the actual bounded dispatcher thread lifetime. They cover distinct per-type resolver/error/size wiring, missing resolvers, captured cache defaults, frozen metadata, rejection before enqueue, exception identity restoration, immutable originals, busy legacy rejection, fresh endpoint registration and independent drain. They do not certify the complete Web factory or performance/release Go.
+
+Retain native provider, Agent invocation, real-photo dispatcher, model dependency and HTTP contracts. The strict source contract validates both actual new modules and unchanged business files before folding their fixed deltas; all prior checks and replay checkpoints remain.
+
+CI PostgreSQL service images use the Docker Official Images ECR public mirror, pinned to the verified PostgreSQL 16 manifest `sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d`. The Docker Hub and ECR index, Linux amd64 manifest, config and layer digests were compared before switching after repeated Hub pull failures. All database versions, ports, ordinary disk versus bounded tmpfs allocation, durable settings, benchmark sizes and thresholds remain unchanged.
+
+## Canonical application acceptance
+
+Historical source-contract replay caches only immutable summaries keyed by complete source text and inverse strings keyed by complete source plus serialized fixture content. Every validation still reads and checks current product files. No validation result, path timestamp, mutable AST, module or owner is cached. Warm-cache source and in-place fixture mutations must still fail; all previous source assertions and the CI command/time budgets remain unchanged. This avoids repeating CPU-heavy inverse reconstruction in synthetic PLC lease subcases.
+
+Exact-tree evidence may contain empty logs only for the fixed `check-298` Git-blob assertion and `check-299` redirected Git export, with the actual empty-content SHA-256. Benchmark and storage logs remain nonempty, and current producers, complete numeric protocols and actual artifact checks remain mandatory.
+
+Run `python scripts/smoke_application_factory.py`, `python scripts/smoke_canonical_application_source_contract.py`, `python scripts/verify_backend_contract.py` and `python scripts/verify_backend_boundaries.py`. Factory tests use actual application construction, real ASGI auth/error/media requests, distinct mutable defaults, concurrent ContextVar transfer to threads, synthetic connector reuse/rebuild/exception release, independent idle shutdown, repeated startup/close, bounded-close admission races and startup/construction/initialization failure cleanup. They start no native worker, paid inference or device I/O.
+
+HTTP contract fixtures are unchanged. Historical source oracles first verify all 23 actual relocated product sources against the fixed canonical migration ASTs, then replay the immutable f5c9 parent as test data. Each current module mutation and incomplete/modified parent fixture is rejected. Product code never parses or executes that parent. Keep all prior native-business, model-binding, PostgreSQL, PLC, pagination, frontend, migration, documentation and release checks. Offline factory tests alone do not grant performance or production-release acceptance.
+
+Run `APPLICATION_FACTORY_TEST_DATABASE_URL=<isolated-test-database> python scripts/smoke_application_factory_postgres.py` for actual application graphs with independent PostgreSQL schemas. The two cases verify real repository-access and configuration-row ports, async request identities crossing threads, connection reuse/rebuild, exception release and neighbor independence on close. They create and remove only their uniquely named schemas, with no workers or external inference.
+
+PLC source-position fixtures use `read_checked_application_source`, retaining every original native behavior assertion and verifying all actual assembly modules before the exact parent-layout bridge. `smoke_plc_legacy_dispatch.py` runs its seven retained adversarial matrices and deadline cases through explicitly connected current native services in `plc_legacy_test_composition.py`; its 43 mutable suppliers describe that fixture. The three default-entry forwarding identities are tested against their real native receiver separately. Fixture configuration and dispatch select the same fake repository, and the synthetic executor is closed and the fixture restored even on failure. This does not claim production PLC/device acceptance.
+
+The same checked source reader covers native accessory, detection, training, pipeline, provider and media source-position fixtures. Every read rechecks the actual canonical source inventory; external historical baselines remain unchanged. Tests retain their native behavior and source mutation assertions. `plc_http_test_contract.py` witnesses all 15 actual registered workstation, lease and dispatch/diagnostic endpoints against their exact native receiver; configuration GET/POST have separate receiver checks. The native PLC fixture also runs the original strict-create transaction races and typed-handler JSON/fake-PostgreSQL audit retention checks, including the current native diagnostics projection.
+
+Ordinary detection and image/video upload fixtures temporarily replace the actual services' narrow typed input ports and restore them through `ExitStack`; they retain the real default HTTP endpoints and current native algorithms. Their callback timing, failure, projection and model-binding assertions remain required. Automatic-optimization external relays are verified only by explicit port/field receiver witnesses, including exact object identity even for equal frozen dataclasses. Internal owner and pinned-worker checks remain strict. The 24 original settings consumers exclude application assembly export records; consumer counts are not relaxed.
+
+Navigation smoke replaces only the actual WebShell path supplier and restores it on success or failure. Preparation and text HTTP model doubles patch the actual configuration/dispatch class methods with autospec and exact receiver identity; default compatibility aliases do not redirect owned callbacks. Keep fail-closed, external-only and enabled text modes, preparation OCR/incomplete/recovery variants, all original authorization and no-replay assertions, and diagnostic logger restoration. The retained PLC startup check must identify the exact registered native inert callback beneath its ordered lifetime wrapper; a same-name unrelated no-op is invalid.
+
+The original provider, geometry, sprite metadata, pose, public-status and object-preprocessing suites use finite native graphs whose suppliers can be replaced during an operation. Before those replacements, default-application witnesses verify the canonical product sources, exact native receivers, values and pure-function relays. Keep the original failure, callback-selection, metadata, permission and no-retry assertions. A passing independent graph alone does not certify the application's default wiring.
+
+Text persistence doubles enter through the real repository-access class and reject another application's receiver before invoking the zero-argument test capability. Temporary path and diagnostic replacements restore frozen application values on normal and exceptional exit. Run incoming-text and text-record root contracts with their PostgreSQL modes against an isolated database, alongside automatic-optimization state and Agent read-transaction checks. Prepared-comparison contracts also exercise the actual model service and connection-cleanup owner before substitution, and toggle the actual external-model flag in both directions to reject configuration captured too early.
 
 Regression additions: high-entropy 3000×2200 JPEG references reproduce PNG expansion and verify bounded model inputs, preserved source hashes/scales and original-space boxes. A worker preparation failure verifies one persisted failed annotation, no provider invocation and no exception-text leakage. The disposable artifact PostgreSQL suite compares literal prefixes, immediate children, Unicode/wildcard names, flat files, replacements/tombstones and retained descendants; it applies the new prefix index migration twice and retains concurrent CAS tests. Fixture correctness does not establish live provider quality or browser latency.
 
@@ -2342,18 +3009,19 @@ Frontend browser contracts remain serial within their runner to avoid shared-por
 conflicts. Agent generation checks, type checking and the production build run in
 an independent `frontend-build` job; `backend-plc` also requires that job's success.
 
-Required `CI` runs 348 ordinary backend commands in 12 isolated shards alongside
+Required `CI` runs 461 ordinary backend commands in 12 isolated shards alongside
 frontend, source safety, documentation, package and other correctness jobs. There
 is no change-path filter for ordinary PR correctness. The explicit manifest retains
 the original shell/environment variants and keeps each ordered dependency group
 on one runner. Python 3.10, PostgreSQL 16, the production lock and independent
-ordinary disk-backed databases remain mandatory. Only the five complete synthetic
-benchmarks run separately in `Backend performance`, on relevant PRs, at 03:00
-Asia/Shanghai on main, and manually; their samples, baselines, assertions and
-bounded benchmark database remain unchanged and never trigger deployment.
+ordinary disk-backed databases remain mandatory. CI includes all six complete
+label performance protocols and both complete manual-history protocols as required
+jobs. The separate `Backend performance` workflow runs at 03:00 Asia/Shanghai or
+manually; it never independently triggers deployment. Samples, baselines,
+assertions and bounded benchmark storage remain unchanged.
 
 `backend-plc`, `frontend` and `source-safety` retain their required names. Full CI's
-aggregate waits for every ordinary job. It rejects failures, cancellations, skips,
+aggregate waits for every ordinary and required performance job. It rejects failures, cancellations, skips,
 missing/duplicate commands, stale commits and partial-attempt results. Successful
 runs publish `ci-evidence.json` and all twelve reports for 30 days, bound to repository,
 PR head/base, actual tested commit/tree/first parent, run/attempt, policy hashes and
@@ -2392,11 +3060,12 @@ and `git diff --check`. Negative fixtures cover provider failures/partial reruns
 forged success, wrong head/tree/parent/policy/attempt, expired or mismatched artifacts,
 missing commands, discovery timeout and corrupt/read-only caches. Mechanically
 compare preserved ordinary job commands/environment/cwd against latest main.
-Rebalance measured ordered groups with `backend_ci.py rebalance` and commit the
-fixed assignment; do not remove assertions to meet a time target.
+Keep the baseline and refactor delta frozen. Rebalancing requires a separately
+reviewed inventory revision; do not remove assertions to meet a time target.
 
-The acceptance budget is full PR CI ≤170 s, main validation ≤30 s, immutable
-packaging/deployment/health ≤90 s, and handoff ≤10 s: ≤300 s total. Measure three
+The inherited five-minute optimization budget (170/30/90/10 seconds) is an
+unverified target. The required full refactor performance matrices remain in CI
+and currently prevent promising that budget for the complete release chain. Measure three
 consecutive final-configuration full runs plus one cold-cache run. Exclude only
 initial PR queueing and human review/merge waiting; include subsequent runner
 queueing and handoffs. Bootstrap must complete one full main run before business
@@ -2414,9 +3083,11 @@ and reconcile raw time, authorized exclusions, stage budgets and later queues.
 Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.
 
 The retained legacy-dispatch synthetic deadline regression keeps the real
-before-write timeout case. Its during-write case uses an event-controlled dispatch
-clock: expiration is triggered only after the fake transport's write-start barrier.
-This avoids treating slow runner persistence as a different test scenario. All
+before-write timeout case. Its during-write case retains the real 0.5-second
+deadline and waits for the actual fake transport write-start event before invoking
+the unchanged deadline snapshot. The fixture releases the write and waits for
+worker completion in finally; it does not replace the dispatch clock.
+This orders snapshot evidence without changing the actual asyncio scheduler. All
 uncertain-outcome, worker-continuation, newer-final-evidence, single-audit and
 exactly-one-frame assertions remain unchanged; production dispatch and the real
 asyncio scheduler are not patched or modified by this release.
@@ -2435,7 +3106,34 @@ Real PostgreSQL API mutation coverage verifies disabled legacy-round source edit
 
 Real-photo source-confirmation checks cover legacy accepted pending-source records, explicit false flags, empty groups, server rejection of accept decisions, and refusal to export old frozen datasets containing such sources. Real PostgreSQL API tests verify source history/actor/time, one review identity change, idempotent repeated saves, no paid jobs on editing, explicit confirmation and rejection of a confirmed placeholder. The assembled API baseline includes only the additive optional confirmation field; verify the full application contract after updating it. Run the seven focused real-photo feedback/workflow/review-tools/dataset/dispatch/training-config/cache suites against a disposable PostgreSQL database, plus frontend typecheck/production build, boundaries, model dependency and docs contracts.
 
-## Full-chain CI timing evidence (2026-10-11)
+The full application-factory smoke also sends real ASGI requests through its native authentication, identity, route registration and feedback owner. Only task lookup and persistence use disposable replacements. It checks anonymous 401, a different authenticated owner 403, omitted/null/false/true confirmation, rejection of numeric/string/container values with 422 before mutation, confirmed-placeholder rejection, pending counts and source-version history. These HTTP checks complement the independent real PostgreSQL mutation suite; they do not claim PostgreSQL-backed ASGI requests, worker execution or paid inference. The current five-source main289 guard preserves original API hash oracles and rejects coordinated source/hash edits to the API and its confirmation collaborators.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
+
+## Historical upstream ordinary CI timing evidence (2026-10-11)
+
+This section records the upstream 348-command ordinary CI scope before the expanded refactor gate. Its 170-second target and 22-job timings do not certify the current 461-command, 24-job suite or its required full performance protocols. The frozen baseline inventory and reviewed refactor schedule remain until the complete expanded suite has its own timing evidence; only the upstream cache-first dependency preparation is adopted here.
 
 **Acceptance in progress.** Five minutes remains an unverified target until a real
 immutable production promotion completes within the declared budgets.

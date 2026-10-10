@@ -8,6 +8,9 @@ from contextlib import ExitStack
 from unittest.mock import Mock, patch
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+import cv2
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 
 class ObjectPreprocessingContracts(unittest.TestCase):
     @classmethod
@@ -21,7 +24,8 @@ class ObjectPreprocessingContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             cls.lifetime.enter_context(patch(name,side_effect=AssertionError('External operation forbidden')))
         from local_inspection_service import server
-        cls.api=server
+        from scripts.object_preprocessing_test_fixture import object_preprocessing_fixture
+        cls.api=object_preprocessing_fixture(server, cls.preprocessing_capability_groups)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):
@@ -271,12 +275,12 @@ class ObjectPreprocessingContracts(unittest.TestCase):
             if second and name=='policy':selected['complete']=lambda item,assets:False
             if second and name=='artifacts':selected['write']=lambda path,image,mask,metadata:{'kind':'clean_object_sprite','instance':'second','path':str(path)}
             capabilities.append(getattr(ports,type_name)(**{field:(lambda value=value:value) for field,value in selected.items()}))
-        return ObjectSpritePreprocessor(*capabilities)
+        return ObjectSpritePreprocessor(*capabilities, files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
     def test_preprocessor_constructor_does_not_read_capabilities(self):
         from local_inspection_service.accessories import object_preprocessing_ports as ports
         from local_inspection_service.accessories.object_preprocessing import ObjectSpritePreprocessor
         forbidden=Mock(side_effect=AssertionError('eager capability read'))
-        instance=ObjectSpritePreprocessor(*[getattr(ports,kind)(**{field:forbidden for field in bindings}) for name,kind,bindings in self.preprocessing_capability_groups])
+        instance=ObjectSpritePreprocessor(*[getattr(ports,kind)(**{field:forbidden for field in bindings}) for name,kind,bindings in self.preprocessing_capability_groups], files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
         self.assertIsInstance(instance,ObjectSpritePreprocessor);forbidden.assert_not_called()
     def test_independent_preprocessors_first_second_first(self):
         self.paths.return_value=[self.directory/'source.png'];self.ai.return_value=(self.image,self.mask)

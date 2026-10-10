@@ -13,6 +13,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability, get_provider_capability
+from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 
 
 import json,time,urllib.error
@@ -28,7 +30,7 @@ def capture_openai_window(api,Fixture,site,mode='ordinary'):
    def factory(cls,label):
     def make(*a,**k):events.append(label);return cls(*a,**k)
     return make
-   def pick(name,a,b,c):setattr(api,name,b if mode=='prior' else None if mode=='missing' else a)
+   def pick(name,a,b,c):set_provider_capability(api, name, b if mode == 'prior' else None if mode == 'missing' else a)
    if site=='config':
     a,b,c=(factory(config,l) for l in 'ABC');api.AiProviderConfigError=a
     class Settings(dict):
@@ -42,14 +44,14 @@ def capture_openai_window(api,Fixture,site,mode='ordinary'):
     def opener(label):
      def call(*a,**k):events.append(label);return original(*a,**k)
      return call
-    a,b,c=(opener(l) for l in 'ABC');api.ai_urlopen=a;clocks=[]
+    a,b,c=(opener(l) for l in 'ABC');set_provider_capability(api, 'ai_urlopen', a);clocks=[]
     def clock():
      clocks.append(1)
      if len(clocks)==2:pick('ai_urlopen',a,b,c)
      return float(len(clocks))
     stack.enter_context(patch.object(time,'monotonic',clock))
     class Timeout:
-     def __float__(self):events.append('argument');api.ai_urlopen=c;return 13.5
+     def __float__(self):events.append('argument');set_provider_capability(api, 'ai_urlopen', c);return 13.5
     f.settings['timeout_seconds']=Timeout()
    elif site=='url_error':
     a,b,c=(factory(error_type,l) for l in 'ABC');api.AiProviderError=a
@@ -170,7 +172,8 @@ class OpenAITransportContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.provider_transport_test_fixture import transport_fixture
+        cls.api = transport_fixture(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -185,8 +188,8 @@ class OpenAITransportContracts(unittest.TestCase):
         self.settings = dict(configured=True, provider='openai', model='synthetic-model',
                              base_url='https://fixture.invalid/completions', api_key='synthetic-key', timeout_seconds='13.5')
         self.record = Mock()
-        self.stack.enter_context(patch.object(self.api, 'model_profile_service', SimpleNamespace(record_call=self.record)))
-        self.open = self.stack.enter_context(patch.object(self.api, 'ai_urlopen'))
+        self.stack.enter_context(patch_profile_service(self.api, SimpleNamespace(record_call=self.record)))
+        self.open = self.stack.enter_context(patch_provider_capability(self.api, 'ai_urlopen'))
         self.body = dict(choices=[dict(message=dict(content='{"answer":42}'), finish_reason='stop')], usage={'total_tokens':7})
         self.response = Mock()
         self.response.__enter__ = Mock(return_value=self.response)
@@ -197,6 +200,10 @@ class OpenAITransportContracts(unittest.TestCase):
     def provider(self, bound=False):
         if bound:self.settings['profile_id']='synthetic-profile'
         return self.api.OpenAICompatibleAiProvider(self.settings)
+
+    def test_actual_default_application_transport(self):
+        from scripts.provider_default_transport_contract import assert_default_transport
+        assert_default_transport(self, 'openai')
 
     def test_constructor_retains_settings_and_does_no_io(self):
         p=self.provider(True)
@@ -239,12 +246,12 @@ class OpenAITransportContracts(unittest.TestCase):
 
     def test_missing_bound_resolver_prevents_transport(self):
         p=self.provider(True)
-        with patch.object(self.api,'model_profile_service',None),self.assertRaises(RuntimeError) as caught:p.generate_json('s',[])
+        with patch_profile_service(self.api, None),self.assertRaises(RuntimeError) as caught:p.generate_json('s',[])
         self.assertEqual(str(caught.exception),'Model profile resolver is not configured')
         self.open.assert_not_called();self.record.assert_not_called()
 
     def test_unbound_missing_resolver_remains_legacy(self):
-        with patch.object(self.api,'model_profile_service',None):result=self.provider().generate_json('s',[])
+        with patch_profile_service(self.api, None):result=self.provider().generate_json('s',[])
         self.assertEqual(result[0],{'answer':42});self.open.assert_called_once();self.record.assert_not_called()
 
     def test_request_timeout_does_not_retry(self):
@@ -333,7 +340,7 @@ class OpenAITransportContracts(unittest.TestCase):
     def test_resolver_is_captured_before_transport_and_refreshed_next_call(self):
         second=Mock();p=self.provider(True)
         def open_response(*args,**kwargs):
-            self.api.model_profile_service=SimpleNamespace(record_call=second)
+            set_profile_service(self.api, SimpleNamespace(record_call=second))
             return self.response
         self.open.side_effect=open_response
         p.generate_json('s',[]);self.record.assert_called_once();second.assert_not_called()
@@ -382,7 +389,7 @@ class OpenAITransportContracts(unittest.TestCase):
         for name in cases:
             with self.subTest(name=name):
                 failure=RuntimeError('synthetic capability failure');hits=[]
-                original=getattr(self.api,name)
+                original=get_provider_capability(self.api, name)
                 def recover(*args,**kwargs):
                     hits.append(1)
                     if len(hits)==1:raise failure
@@ -392,7 +399,7 @@ class OpenAITransportContracts(unittest.TestCase):
                 if name=='provider_http_error':self.open.side_effect=urllib.error.HTTPError('https://fixture.invalid',500,'bad',{},io.BytesIO(b'detail'))
                 if name=='bounded_text':self.open.side_effect=urllib.error.URLError('bad destination')
                 if name=='sha256_bytes':self.body={'choices':[]}
-                with patch.object(self.api,name,recover),self.assertRaises(RuntimeError) as caught:self.provider().generate_json('s',[])
+                with patch_provider_capability(self.api, name, recover),self.assertRaises(RuntimeError) as caught:self.provider().generate_json('s',[])
                 self.assertIs(caught.exception,failure);self.assertEqual(hits,[1])
                 if name!='ai_urlopen':self.open.assert_called_once()
 
@@ -400,9 +407,9 @@ class OpenAITransportContracts(unittest.TestCase):
         events=[];first=Mock(return_value=self.response);second=Mock(return_value=self.response)
         class Timeout:
             def __float__(value):
-                events.append('timeout');self.api.ai_urlopen=second;return 1.0
+                events.append('timeout');set_provider_capability(self.api, 'ai_urlopen', second);return 1.0
         self.settings['timeout_seconds']=Timeout()
-        with patch.object(self.api,'ai_urlopen',first):self.provider().generate_json('s',[])
+        with patch_provider_capability(self.api, 'ai_urlopen', first):self.provider().generate_json('s',[])
         self.assertEqual(events,['timeout']);first.assert_called_once();second.assert_not_called()
 
     def test_response_enter_failure_does_not_exit_or_retry(self):

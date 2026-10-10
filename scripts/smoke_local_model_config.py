@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock,patch
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_LOCAL_MODEL_CONFIG_BASELINE_SOURCE')
 NAMES=('load_ai_local_config','ai_local_config_temp_path','save_ai_local_config')
 
@@ -102,12 +103,35 @@ class ConfigurationContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'new assembly only')
     def test_root_composition_all_getters_and_instances_are_independent(self):
-        s,a,ea=self.fixture();t,b,eb=self.fixture();tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        from application_integration_source_contract import restore_infrastructure_root
+        s,a,ea=self.fixture();t,b,eb=self.fixture();tree=ast.parse(restore_infrastructure_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')))
         nodes=[n for n in tree.body if (isinstance(n,ast.ImportFrom) and n.module in ('model_providers.local_model_config','model_providers.local_model_config_ports')) or (isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='_local_model_config' for x in n.targets)) or (isinstance(n,ast.FunctionDef) and n.name in NAMES)]
-        self.assertEqual(len(nodes),6);ns=dict(a,Any=Any,Path=Path,__package__='local_inspection_service');exec(compile(ast.Module(body=nodes,type_ignores=[]),'<assembly>','exec'),ns)
+        self.assertEqual(len(nodes),6)
+        from dataclasses import replace
+        from typing import get_type_hints
+        from local_inspection_service.model_providers.configuration_composition import ProviderConfiguration
+        from local_inspection_service.model_providers.local_model_config_ports import LocalModelConfigFiles, LocalJsonModelPolicy, LocalImageModelPolicy
+        from scripts.provider_configuration_test_ports import PROVIDER_METHODS
+        forbidden=Mock(side_effect=AssertionError('unrelated configuration capability'))
+        inputs={name:kind(**{field.name:forbidden for field in fields(kind)}) for name,kind in get_type_hints(ProviderConfiguration.__init__).items() if name!='return'}
+        for name,kind in [('local_model_config_files',LocalModelConfigFiles),('local_json_model_policy',LocalJsonModelPolicy),('local_image_model_policy',LocalImageModelPolicy)]:
+            inputs[name]=kind(**{field.name:lambda name=field.name:a[name] for field in fields(kind)})
+        owner=ProviderConfiguration(**inputs)
+        for name,value in a.items():
+            if name in PROVIDER_METHODS and name!='ai_local_config_temp_path':setattr(owner,name,value)
+        ns=dict(a,Any=Any,Path=Path,__package__='local_inspection_service',_provider_configuration=owner)
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),'<assembly>','exec'),ns)
+        self.assertIs(ns['_local_model_config'],owner.local)
+        forbidden.assert_not_called()
         assembled=ns['_local_model_config']
         for group in (assembled.files,assembled.json_policy,assembled.image_policy):
-            for f in fields(group):self.assertIs(getattr(group,f.name)(),ns[f.name])
+            for f in fields(group):
+                selected=getattr(group,f.name)()
+                expected=getattr(owner,f.name) if f.name in PROVIDER_METHODS else ns[f.name]
+                if hasattr(expected,'__self__'):
+                    self.assertIs(selected.__self__,expected.__self__)
+                    self.assertIs(selected.__func__,expected.__func__)
+                else:self.assertIs(selected,expected)
         ns['save_ai_local_config']({'model':'A'});t.save_ai_local_config({'model':'B'});self.assertEqual(ns['load_ai_local_config']()['model'],'A');self.assertEqual(t.load_ai_local_config()['model'],'B');self.assertEqual(s.load_ai_local_config()['model'],'A')
 
 

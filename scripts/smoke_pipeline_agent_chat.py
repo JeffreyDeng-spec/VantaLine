@@ -13,6 +13,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class TracedLock:
@@ -42,6 +43,8 @@ def main():
         (Path(tmp) / "local_inspection_service" / "static").mkdir(parents=True)
         os.environ.pop("VANTALINE_POSTGRES_DSN", None)
         from local_inspection_service import server
+        from scripts.pipeline_http_application_test_ports import assert_default_pipeline_http, bind_external_pipeline_http
+        assert_default_pipeline_http(server, 'chat')
         from local_inspection_service.schemas.pipeline import PipelineAgentChatRequest
 
         baseline_source = os.environ.get("VANTALINE_CHAT_BASELINE_SOURCE")
@@ -139,11 +142,11 @@ def main():
                 if mutate_snapshot:
                     snapshot["nested"]["value"] = 99
                 if rebind_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 if rebind_load:
-                    server.load_pipeline_task = lambda task_id: (events.append(("load.rebound", task_id)) or second_task)
+                    set_pipeline_task_test_port(server, 'load_pipeline_task', lambda task_id: events.append(('load.rebound', task_id)) or second_task)
                 if rebind_commit:
-                    server.commit_pipeline_agent_turn = lambda *args, **kwargs: events.append(("commit.rebound", args[3]))
+                    set_pipeline_task_test_port(server, 'commit_pipeline_agent_turn', lambda *args, **kwargs: events.append(('commit.rebound', args[3])))
                 if fail == "decide":
                     raise failure
                 return decision
@@ -164,7 +167,7 @@ def main():
             def public(task, scoped):
                 events.append(("public", reads, lock.held, alternate.held))
                 if rebind_schedule:
-                    server.schedule_pipeline_advance = lambda task_id, actor: events.append(("schedule.rebound", task_id))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda task_id, actor: events.append(('schedule.rebound', task_id)))
                 if fail == "public":
                     raise failure
                 return public_object if public_object is not None else dict(task)
@@ -173,7 +176,7 @@ def main():
                 events.append(("schedule", task_id, actor is user, lock.held, alternate.held))
                 scheduled.append(task_id)
                 if rebind_schedule_after_first and len(scheduled) == 1:
-                    server.schedule_pipeline_advance = lambda task_id, actor: events.append(("schedule.rebound.next", task_id))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_advance', lambda task_id, actor: events.append(('schedule.rebound.next', task_id)))
                 if fail == "schedule" and len(scheduled) == 1 or fail == "second_schedule" and len(scheduled) == 2:
                     raise failure
                 return False if schedule_false else True
@@ -197,8 +200,9 @@ def main():
                 "HTTPException": HTTPException,
             }
             with ExitStack() as stack:
+                bind_external_pipeline_http(server, stack, 'chat')
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = server.pipeline_agent_chat("pipe-1", PipelineAgentChatRequest(message=message))
                     error = None

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "upstream_sha": "e1c7be97b04c0f172a82baad495ecbda88a6481f",
+  "previous_candidate": "9d174642c90aed1b681148a460b1137061b9c7d1",
+  "business_sources": {
+    "local_inspection_service/training/real_photo_api.py": {
+      "previous_sha256": "c8833921d53186366de59fa97e635f5d741a1636c42edc29b4498e3ed26ce6ab",
+      "main_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496",
+      "actual_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496"
+    }
+  },
+  "scope": "Exact main284 feedback API retained; immutable historical source oracle remains unchanged"
+}

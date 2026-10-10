@@ -2,9 +2,9 @@
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import threading
 import time
 from typing import Any
+from ..runtime.image_worker import ImageWork
 from .image_job_queue_ports import ImageQueueStorage, ImageQueueMetadata, ImageQueueExecution
 
 @dataclass(frozen=True)
@@ -160,36 +160,31 @@ class ImageJobQueue:
 
 
     def image_worker_loop(self) -> None:
-        workers: list[threading.Thread] = []
-        while True:
-            workers = [worker for worker in workers if worker.is_alive()]
+        runtime = self.execution._image_worker_runtime()
+
+        def prepare():
+            queued = self.execution.next_queued_image_job()()
+            if not queued:
+                return None
+            path, candidate, job = queued
+            self.execution.update_image_worker_status()(
+                path, candidate, job, status="running",
+                progress=max(int(job.get("progress", 0) or 0), 12),
+                started_at=int(time.time()), note="系统正在处理这个图像生成任务。",
+            )
+            run = self.execution.run_image_generation_job()
+            return ImageWork(lambda: run(path, candidate, job),
+                             f"image-generation-worker-{job.get('job_id', 'job')}")
+
+        while not runtime.closing:
             launched = False
-            while len(workers) < self.execution.MAX_PARALLEL_IMAGE_WORKERS():
-                queued = self.execution.next_queued_image_job()()
-                if not queued:
+            while runtime.active_children() < self.execution.MAX_PARALLEL_IMAGE_WORKERS():
+                if not runtime.launch(prepare):
                     break
-                path, candidate, job = queued
-                self.execution.update_image_worker_status()(
-                    path,
-                    candidate,
-                    job,
-                    status="running",
-                    progress=max(int(job.get("progress", 0) or 0), 12),
-                    started_at=int(time.time()),
-                    note="系统正在处理这个图像生成任务。",
-                )
-                worker = threading.Thread(
-                    target=self.execution.run_image_generation_job(),
-                    args=(path, candidate, job),
-                    name=f"image-generation-worker-{job.get('job_id', 'job')}",
-                    daemon=True,
-                )
-                worker.start()
-                workers.append(worker)
                 launched = True
-            if not workers and not launched:
+            if not runtime.active_children() and not launched:
                 return
-            time.sleep(2)
+            runtime.wait(2)
 
 
     def update_image_worker_status(self, path: Path, candidate: dict[str, Any], job: dict[str, Any], **fields: Any) -> None:

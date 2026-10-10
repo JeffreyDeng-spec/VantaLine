@@ -14,6 +14,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 import psycopg
 from psycopg import sql
 from PIL import Image
@@ -112,7 +113,7 @@ def main():
             read_verified=missing_fixture,
         ),
         models=lambda: model_service,
-        configuration=model.legacy_settings,
+        configuration=model.legacy_settings, runtime_provider=get_runtime
     )
     # TestClient without lifespan: tests invoke worker explicitly; never call a live provider.
     client = TestClient(app)
@@ -206,7 +207,7 @@ def main():
                 "enabled"
             ]
             repo = LabelRepository(raw())
-            media = MediaStore(root / "label_inspection" / "media")
+            media = MediaStore(root / "label_inspection" / "media", runtime_provider=get_runtime)
             claimed = repo.claim()
             calls = []
 

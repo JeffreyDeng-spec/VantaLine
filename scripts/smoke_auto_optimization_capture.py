@@ -11,6 +11,7 @@ from typing import Any
 import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method,auto_port,assert_extra_auto_port
 BASELINE=os.environ.get("VANTALINE_AUTO_CAPTURE_BASELINE_SOURCE")
 NAMES={"auto_optimize_detection_candidates","record_auto_optimize_capture"}
 def create(bindings):
@@ -124,10 +125,14 @@ class CaptureContract(unittest.TestCase):
         capture()
         from local_inspection_service import server
         service=server._auto_optimization_capture
-        for field in fields(service.ports):self.assertIs(getattr(service.ports,field.name)(),getattr(server,field.name))
+        for field in fields(service.ports):
+            if field.name=='auto_optimize_detection_candidates':
+                self.assertEqual(service.ports.auto_optimize_detection_candidates(), service.auto_optimize_detection_candidates)
+            else:
+                assert_extra_auto_port(self,server,service.ports,field.name)
         for name,args in [("auto_optimize_detection_candidates",({},)),("record_auto_optimize_capture",({}, {}, "r", None))]:
             expected=object();method=Mock(return_value=expected)
-            with patch.object(server,"_auto_optimization_capture",SimpleNamespace(**{name:method})):
+            with auto_method(self,server._auto_optimization_capture,name,method):
                 self.assertIs(getattr(server,name)(*args),expected);method.assert_called_once_with(*args)
         states={u:{"settings":{"enabled":True},"samples":[]} for u in ("alpha","beta")};barrier=threading.Barrier(2,timeout=10);saved=[];started=[]
         def user():return server._request_user.get()["id"]
@@ -138,7 +143,13 @@ class CaptureContract(unittest.TestCase):
             result={"model":{"is_ai_detection":True,"task_id":who},"passed":True,"detections":[{"accessory_id":"a","present":True,"confidence":1}]}
             with server._request_user.bind({"id":who}):await run_in_threadpool(server.record_auto_optimize_capture,{"record_id":who,"source_image":{"path":"synthetic.png"}},result,who,None)
         async def both():await asyncio.gather(request("alpha"),request("beta"))
-        with patch.object(server,"load_auto_optimize_state",side_effect=load),patch.object(server,"save_auto_optimize_state",side_effect=save),patch.object(server,"auto_optimize_completed_model_id",return_value=""),patch.object(server,"auto_optimize_capture_enabled",return_value=True),patch.object(server,"current_owner_fields",side_effect=owner),patch.object(server,"start_auto_optimize_label_worker",side_effect=lambda task:started.append(("label",user(),task))),patch.object(server,"start_auto_optimize_shadow_worker",side_effect=lambda task,sample:started.append(("shadow",user(),task))):asyncio.run(both())
+        from dataclasses import replace
+        with auto_port(service,"ports",replace(service.ports,
+            load_auto_optimize_state=lambda:load,save_auto_optimize_state=lambda:save,
+            auto_optimize_completed_model_id=lambda:lambda state:"",
+            auto_optimize_capture_enabled=lambda:lambda state:True,current_owner_fields=lambda:owner,
+            start_auto_optimize_label_worker=lambda:lambda task:started.append(("label",user(),task)),
+            start_auto_optimize_shadow_worker=lambda:lambda task,sample:started.append(("shadow",user(),task)))):asyncio.run(both())
         self.assertCountEqual(saved,["alpha","beta"])
         for who in states:self.assertEqual(states[who]["samples"][0]["owner_user_id"],who)
         self.assertTrue(all(who==task for _,who,task in started));self.assertEqual(len(started),4);self.assertIsNone(server._request_user.get())

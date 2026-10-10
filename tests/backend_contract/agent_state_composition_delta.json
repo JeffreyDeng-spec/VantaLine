@@ -1,0 +1,41 @@
+{
+  "parent_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "parent_ast_sha256": "18d55c3ae0574f106c76f936712929e12d0bbc31e97202fb27fccf7a18bbc82d",
+  "integrated_ast_sha256": "44e800f2b205c7be3949924ba8f116d86cfb4877bb9d78e8a19663250ada9220",
+  "regions": [
+    {
+      "start": 2368,
+      "end": 2373,
+      "expected": [
+        "from .agent.state_composition import AgentStateWorkflows, AgentStateClock, AgentToolNames",
+        "from .agent.pose_render_ports import PoseRenderConfigurationSources, PoseRenderConfigurationDefaults",
+        "_agent_state_workflows = AgentStateWorkflows(clock=AgentStateClock(clock=lambda: time.time, version=lambda: AGENT_MCP_ORCHESTRATION_VERSION), tools=AgentToolNames(sanitize=lambda: safe_record_id, samples=lambda: AGENT_MCP_TOOL_SAMPLES, training=lambda: AGENT_MCP_TOOL_TRAINING), configuration_sources=PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: _provider_configuration.image_generation_provider_key, provider_label=lambda: _provider_configuration.image_generation_provider_label, model=lambda: _provider_configuration.default_image_generation_model, base_url=lambda: _provider_configuration.default_image_generation_base_url, key_environment=lambda: _provider_configuration.default_image_generation_api_key_env), configuration_defaults=PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV))",
+        "_agent_orchestration_state = _agent_state_workflows.state",
+        "_agent_tool_call_records = _agent_state_workflows.tools"
+      ],
+      "original": [
+        "_agent_orchestration_state = _AgentOrchestrationState(_AgentStateRuntime(clock=lambda: time.time, now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_ORCHESTRATION_VERSION, image_config=lambda: agent_mcp_gemini_image_config), _AgentStateCalls(defaults=lambda: agent_mcp_default_stages, orchestration=lambda: agent_mcp_orchestration, pause=lambda: pause_agent_mcp_task, stage=lambda: set_agent_mcp_stage))",
+        "_agent_tool_call_records = _AgentToolCallRecords(_AgentToolCallIdentity(sanitize=lambda: safe_record_id, identifier=lambda: agent_mcp_tool_call_id, samples=lambda: AGENT_MCP_TOOL_SAMPLES, training=lambda: AGENT_MCP_TOOL_TRAINING), _AgentToolCallState(now=lambda: agent_mcp_now, orchestration=lambda: agent_mcp_orchestration, upsert=lambda: upsert_agent_mcp_tool_call, stage=lambda: set_agent_mcp_stage))"
+      ]
+    },
+    {
+      "start": 2378,
+      "end": 2379,
+      "expected": [
+        "_pose_render_configuration = _agent_state_workflows.configuration"
+      ],
+      "original": [
+        "_pose_render_configuration = _PoseRenderConfiguration(_PoseRenderConfigurationSources(settings=lambda: image_generation_settings, provider_key=lambda: _provider_configuration.image_generation_provider_key, provider_label=lambda: _provider_configuration.image_generation_provider_label, model=lambda: _provider_configuration.default_image_generation_model, base_url=lambda: _provider_configuration.default_image_generation_base_url, key_environment=lambda: _provider_configuration.default_image_generation_api_key_env), _PoseRenderConfigurationDefaults(provider=lambda: IMAGE_GENERATION_DEFAULT_PROVIDER, timeout=lambda: IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS, key_environment=lambda: IMAGE_GENERATION_API_KEY_ENV, model_environment=lambda: IMAGE_GENERATION_MODEL_ENV, timeout_environment=lambda: IMAGE_GENERATION_TIMEOUT_ENV, high_fidelity_model=lambda: AGENT_MCP_GEMINI_IMAGE_HIGH_FIDELITY_MODEL, legacy_model_environment=lambda: AGENT_MCP_GEMINI_IMAGE_MODEL_ENV, legacy_timeout_environment=lambda: AGENT_MCP_GEMINI_IMAGE_TIMEOUT_ENV))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "9ffb2b43c658ec61034055b2450584357290aaf2ba53ed3c7da86b14ab68cf40",
+  "unchanged_business_sha256": {
+    "local_inspection_service/agent/orchestration_state.py": "90a6992c9031671bb7a12c9d259fdb5382ecba3f04139b7014e0e675b7e31084",
+    "local_inspection_service/agent/tool_call_records.py": "fb8745219efcc7d416b3b8991c3ee3959c8ecc1ef5b8e42ec7bff0dffa24710a",
+    "local_inspection_service/agent/pose_render_configuration.py": "6ea0a18fc8f5932bf42ddcc5c45882114bb881506fbf6851b639b81bc99623f0"
+  },
+  "baseline_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "preceding_deltas": [],
+  "parent_is_virtual_replay_checkpoint": false
+}

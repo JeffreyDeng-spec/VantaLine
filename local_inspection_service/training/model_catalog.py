@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from .task_lookup import TaskFinder
-from ..storage.artifacts.files import BusinessFiles
+from .file_ports import ModelCatalogFiles
 
 Record = dict[str, Any]
 
@@ -44,10 +44,12 @@ class TrainingAccess:
 class TrainedModelCatalog:
     def __init__(self, config: Callable[[], Record], files: TrainingFiles,
                  accessories: TrainingAccessories, pipeline: TrainingPipeline, access: TrainingAccess,
-                 rules: Callable[[Record, Record], Record], *, business_files=None):
+                 rules: Callable[[Record, Record], Record], *, business_files: ModelCatalogFiles):
         self.config, self.files, self.accessories = config, files, accessories
         self.pipeline, self.access, self.rules = pipeline, access, rules
-        self.business_files = business_files if business_files is not None else BusinessFiles()
+        if business_files is None:
+            raise TypeError('business_files is required')
+        self.business_files = business_files
 
     def list_trained_model_specs(self, config=None):
         if self.business_files.runtime_provider() is None:

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import uuid
 import pytest
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -80,7 +81,7 @@ def test_api_import_draft_freeze_and_owner(storage,tmp_path,monkeypatch):
                  StandardLibrary(owned,lambda kind:list(records[kind].values()),save),
                  ComparisonMedia(lambda:tmp_path,lambda a,o:Path(a['media_path']).read_bytes(),
                                  lambda owner,std,name:tmp_path/owner/std/name,write),
-                 DocumentImports(extract,extract))
+                 DocumentImports(extract,extract), runtime_provider=get_runtime,environment=os.environ)
     c=TestClient(app);root=api.PREFIX+'/batches'
     response=c.post(root,json={'request_id':'create-batch'});assert response.status_code==200,response.text
     bid=response.json()['id'];url=root+'/'+bid
@@ -127,7 +128,7 @@ def test_api_import_draft_freeze_and_owner(storage,tmp_path,monkeypatch):
 @pytest.mark.skipif(not os.environ.get('CODEX_TEST_DATABASE_URL'),reason='Disposable PG required')
 @pytest.mark.parametrize('count',[1,5,10])
 def test_batch_one_harness_cli_roundtrip(storage,tmp_path,monkeypatch,count):
-    media=MediaStore(tmp_path/'media');evidence=media.image('a',png())
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime);evidence=media.image('a',png())
     inputs={'references':{'a':{'id':'a','name':'标准','sources':[],'media':evidence}},'actuals':{f'L{i}':{'name':f'实拍{i}','media':evidence} for i in range(count)}}
     repo=storage();draft=repo.create('a','batch-session',inputs,report_version=b.VERSION)
     repo.edit_draft('a',draft['id'],'queue-batch','queued',{},lambda t:t.update(status='queued'))
@@ -187,7 +188,7 @@ print(json.dumps({'type':'turn.completed','usage':{'input_tokens':10}}),flush=Tr
 
 def test_scoped_source_evidence_cannot_cross_labels(tmp_path):
     import base64
-    media=MediaStore(tmp_path/'media')
+    media=MediaStore(tmp_path/'media', runtime_provider=get_runtime)
     t=model()
     t['inputs']['references']['a']['media']=media.image('owner',png())
     for lid,color in [('L0','red'),('L1','blue')]:

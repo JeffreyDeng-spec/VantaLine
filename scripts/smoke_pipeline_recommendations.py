@@ -39,7 +39,8 @@ class PipelineRecommendationContracts(unittest.TestCase):
                      "accessory_ids": ["first", 2], "params": {"train_mode": "yolo"}}
 
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        from pipeline_stage_test_ports import patch_pipeline_stage
+        return self.stack.enter_context(patch_pipeline_stage(self.api, name, **kwargs))
 
     def test_signature_uses_ordered_ids_and_training_only_count(self):
         self.assertEqual(self.api.pipeline_recommendation_signature(self.task, "samples"), "samples|first,2|0")
@@ -169,7 +170,7 @@ class PipelineRecommendationContracts(unittest.TestCase):
         events = []
         def old_normalize(raw):
             events.append(("old-normalize", raw))
-            self.api.pipeline_method_uses_training = lambda method: events.append(("new-policy", method)) or True
+            self.api._pipeline_stages.pipeline_method_uses_training = lambda method: events.append(("new-policy", method)) or True
             return "from-old"
         def late_normalize(raw):
             raise AssertionError("normalizer rebound during argument evaluation")
@@ -178,7 +179,7 @@ class PipelineRecommendationContracts(unittest.TestCase):
         class Method:
             def __str__(inner):
                 events.append(("str",))
-                self.api.normalize_pipeline_detection_method = late_normalize
+                self.api._pipeline_stages.normalize_pipeline_detection_method = late_normalize
                 return "yolo"
         self.task["detection_method"] = Method()
         self.assertEqual(self.api.pipeline_next_recommendation_stage(self.task), "samples")
@@ -190,7 +191,7 @@ class PipelineRecommendationContracts(unittest.TestCase):
             def get(inner, key, default=None):
                 if key == "signature":
                     events.append("signature-value")
-                    self.api.pipeline_recommendation_signature = lambda task, stage: "late"
+                    self.api._pipeline_stages.pipeline_recommendation_signature = lambda task, stage: "late"
                 return super().get(key, default)
         self.task["recommended_params"] = Recommendation(stage="samples", signature="late", params={})
         self.replace("pipeline_recommendation_signature", new=lambda task, stage: "early")
@@ -248,8 +249,8 @@ class PipelineRecommendationContracts(unittest.TestCase):
             return "training"
         def first_ready(task, stage):
             calls.append(("first-ready", task["id"], stage))
-            self.api.pipeline_next_recommendation_stage = second_stage
-            self.api.pipeline_recommendation_ready = lambda task, stage: calls.append(("second-ready", task["id"], stage)) or False
+            self.api._pipeline_stages.pipeline_next_recommendation_stage = second_stage
+            self.api._pipeline_stages.pipeline_recommendation_ready = lambda task, stage: calls.append(("second-ready", task["id"], stage)) or False
             return False
         self.replace("pipeline_next_recommendation_stage", new=first_stage)
         self.replace("pipeline_recommendation_ready", new=first_ready)

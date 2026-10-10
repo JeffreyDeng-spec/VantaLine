@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import base64
+from contextlib import closing
 import json
 import os
 import sys
@@ -11,6 +12,7 @@ from unittest.mock import Mock, patch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / 'scripts'))
 
 ROOT = Path(tempfile.mkdtemp(prefix="vantaline_auth_smoke_"))
 (ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
@@ -118,11 +120,12 @@ def assert_no_password_secrets(payload, label: str, *, allow_temporary: bool = F
 
 
 def assert_local_label_guards() -> None:
+    # Permission probes need separate cookies, without restarting app-owned runtimes.
     registered = {(method, route.path) for route in server.app.routes
                   if str(getattr(route, "path", "")).startswith("/api/label-inspection/")
                   for method in getattr(route, "methods", ()) if method not in {"HEAD", "OPTIONS"}}
     assert registered == LOCAL_LABEL_GUARDS, "update explicit permission probes when label routes change"
-    with TestClient(server.app, base_url="https://testserver") as reader:
+    with closing(TestClient(server.app, base_url="https://testserver")) as reader:
         login(reader, "zero_user", "zero_user-password-1")
         for method, template in sorted(LOCAL_LABEL_GUARDS):
             path = template
@@ -142,7 +145,7 @@ def assert_label_runtime_admin_guard(admin_client: TestClient) -> None:
     worker = server.app.state.label_worker
     monitor = Mock(side_effect=AssertionError("denied account reached runtime monitor"))
     with patch.object(worker, "runtime_control", SimpleNamespace(monitor=monitor)):
-        with TestClient(server.app, base_url="https://testserver") as reader:
+        with closing(TestClient(server.app, base_url="https://testserver")) as reader:
             path = "/api/label-inspection/runtime"
             assert_status(reader.get(path), 401, "anonymous runtime status")
             login(reader, "zero_user", "zero_user-password-1")
@@ -589,6 +592,9 @@ def assert_created_and_owned(items: list[dict], owner: dict[str, str] | None, la
             raise AssertionError(f"{label}: expected owner {owner['id']}, got {item.get('owner_user_id')}")
 
 
+from scripts.training_auth_application_test_ports import with_training_auth_test_ports
+
+@with_training_auth_test_ports(server)
 def main() -> None:
     assert_api_route_permissions()
     assert_timestamp_ui_hooks()

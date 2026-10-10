@@ -28,11 +28,9 @@ class IncomingTextStore:
     def __init__(self, repository: Callable[[], PostgresRuntimeRepository | None],
                  guard: Callable[[], AbstractContextManager[Any]], paths: IncomingPaths,
                  rows: IncomingRows, read_json: Callable[[Path], list[Record]],
-                 write_json: Callable[[Path, list[Record]], None], *,
-                 load_references: Callable[[], list[Record]], load_inspections: Callable[[], list[Record]]):
+                 write_json: Callable[[Path, list[Record]], None]):
         self.repository, self.guard, self.paths = repository, guard, paths
         self.rows, self.read_json, self.write_json = rows, read_json, write_json
-        self.load_references, self.load_inspections = load_references, load_inspections
 
     def load_incoming_text_references(self) -> list[dict[str, Any]]:
         repository = self.repository()
@@ -54,7 +52,7 @@ class IncomingTextStore:
             row = repository.fetch_by_primary_key("incoming_text_reference_versions", {"id": reference_id})
             values = self.rows.decode()([row]) if row else []
             return values[0] if values else None
-        return next((item for item in self.load_references() if str(item.get("id")) == reference_id), None)
+        return next((item for item in self.load_incoming_text_references() if str(item.get("id")) == reference_id), None)
 
     def load_incoming_text_inspection(self, inspection_id: str) -> dict[str, Any] | None:
         repository = self.repository()
@@ -62,7 +60,7 @@ class IncomingTextStore:
             row = repository.fetch_by_primary_key("incoming_text_inspections", {"id": inspection_id})
             values = self.rows.decode()([row]) if row else []
             return values[0] if values else None
-        return next((item for item in self.load_inspections() if str(item.get("id")) == inspection_id), None)
+        return next((item for item in self.load_incoming_text_inspections() if str(item.get("id")) == inspection_id), None)
 
     def save_incoming_text_reference(self, reference: dict[str, Any], *, insert_only: bool = False) -> bool:
         row = self.rows.reference(reference)

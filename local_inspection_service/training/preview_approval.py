@@ -1,6 +1,5 @@
 """Approved-preview validation preserving exact matching and stale-state mutation order."""
-from ..storage.artifacts.files import BusinessFiles
-_business_files = BusinessFiles()
+from .file_ports import TrainingInputFiles
 from collections.abc import Callable
 import json
 from pathlib import Path
@@ -14,7 +13,10 @@ Record = dict[str, Any]
 class TrainingPreviewApproval:
     def __init__(self, jobs: Callable[[], Path],
                  background: Callable[[], Callable[[str | None, Record | None], str | None]],
-                 cache: Callable[[list[Record]], str]):
+                 cache: Callable[[list[Record]], str], *, files: TrainingInputFiles):
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
         self.jobs, self.background, self.cache = jobs, background, cache
 
     def validate_approved_preview(self,
@@ -26,10 +28,10 @@ class TrainingPreviewApproval:
         if not request.approved_preview_id:
             return
         preview_path = self.jobs() / f"{request.approved_preview_id}.json"
-        if not _business_files.exists(preview_path):
+        if not self.files.exists(preview_path):
             raise HTTPException(status_code=409, detail="Approved preview is no longer available. Generate a fresh preview.")
         try:
-            preview = json.loads(_business_files.read_text(preview_path, encoding="utf-8"))
+            preview = json.loads(self.files.read_text(preview_path, encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise HTTPException(status_code=409, detail="Approved preview metadata is unreadable. Generate a fresh preview.") from exc
 

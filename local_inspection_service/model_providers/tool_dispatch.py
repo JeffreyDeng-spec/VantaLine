@@ -119,32 +119,33 @@ class ModelToolDispatch:
 
 
     def call_ai_mcp_tool(self, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        # Extraction point for out-of-process MCP: default is an O(1) in-process tool dispatch.
-        dispatch_start = time.monotonic()
-        arguments = payload if isinstance(payload, dict) else {}
-        runtime = self.transport.ai_mcp_runtime()()
-        fallback_error = ""
-        if runtime == self.transport.AI_MCP_RUNTIME_STDIO():
-            try:
-                result = self.transport._ai_mcp_client().call_tool(tool_name, self.transport.prepare_ai_mcp_payload()(tool_name, arguments))
-                result.setdefault("mcp_transport", "stdio")
-                result.setdefault("mcp_runtime", self.transport.AI_MCP_RUNTIME_STDIO())
-                result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
-                return result
-            except Exception as exc:
-                fallback_error = self.errors.bounded_text()(str(exc) or exc.__class__.__name__, 180)
-                self.transport._ai_mcp_client().close()
-        handler = self.transport.AI_MCP_TOOL_HANDLERS().get(tool_name)
-        if handler is None:
-            raise self.errors.AiProviderError()(f"Unknown AI MCP tool: {tool_name}")
-        result = handler(arguments)
-        if not isinstance(result, dict):
-            raise self.errors.AiProviderError()(f"AI MCP tool returned non-object result: {tool_name}")
-        result.setdefault("tool", tool_name)
-        result.setdefault("mcp_transport", "in_process")
-        result.setdefault("mcp_runtime", self.transport.AI_MCP_RUNTIME_IN_PROCESS())
-        result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
-        if fallback_error:
-            result.setdefault("mcp_fallback_from", self.transport.AI_MCP_RUNTIME_STDIO())
-            result.setdefault("mcp_fallback_error", fallback_error)
-        return result
+        with self.transport.admission()():
+            # Extraction point for out-of-process MCP: default is an O(1) in-process tool dispatch.
+            dispatch_start = time.monotonic()
+            arguments = payload if isinstance(payload, dict) else {}
+            runtime = self.transport.ai_mcp_runtime()()
+            fallback_error = ""
+            if runtime == self.transport.AI_MCP_RUNTIME_STDIO():
+                try:
+                    result = self.transport._ai_mcp_client().call_tool(tool_name, self.transport.prepare_ai_mcp_payload()(tool_name, arguments))
+                    result.setdefault("mcp_transport", "stdio")
+                    result.setdefault("mcp_runtime", self.transport.AI_MCP_RUNTIME_STDIO())
+                    result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
+                    return result
+                except Exception as exc:
+                    fallback_error = self.errors.bounded_text()(str(exc) or exc.__class__.__name__, 180)
+                    self.transport._ai_mcp_client().close()
+            handler = self.transport.AI_MCP_TOOL_HANDLERS().get(tool_name)
+            if handler is None:
+                raise self.errors.AiProviderError()(f"Unknown AI MCP tool: {tool_name}")
+            result = handler(arguments)
+            if not isinstance(result, dict):
+                raise self.errors.AiProviderError()(f"AI MCP tool returned non-object result: {tool_name}")
+            result.setdefault("tool", tool_name)
+            result.setdefault("mcp_transport", "in_process")
+            result.setdefault("mcp_runtime", self.transport.AI_MCP_RUNTIME_IN_PROCESS())
+            result.setdefault("mcp_dispatch_ms", int((time.monotonic() - dispatch_start) * 1000))
+            if fallback_error:
+                result.setdefault("mcp_fallback_from", self.transport.AI_MCP_RUNTIME_STDIO())
+                result.setdefault("mcp_fallback_error", fallback_error)
+            return result

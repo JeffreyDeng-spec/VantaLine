@@ -1,0 +1,45 @@
+{
+  "parent_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "parent_ast_sha256": "44e800f2b205c7be3949924ba8f116d86cfb4877bb9d78e8a19663250ada9220",
+  "integrated_ast_sha256": "b5a5721ae6345cd10d18ee18b018befa680f57663044f311264c75962d0a59fc",
+  "regions": [
+    {
+      "start": 1281,
+      "end": 1284,
+      "expected": [
+        "from .agent.planning_composition import PosePlanningWorkflows, PoseTemplateIdentity, PolicyPosePlanIdentityInputs, PosePlanContent, PosePlanRuntime, GenerationPosePlanIdentityInputs, PosePlanProvider, PosePlanMedia, AssemblyPosePlanIdentityInputs, AssemblyPosePlanCatalogInputs",
+        "_pose_planning_workflows = PosePlanningWorkflows(templates_identity=PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search), policy_identity=PolicyPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id), policy_content=PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile), policy_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), generation_identity=GenerationPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id), generation_content=PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile), generation_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), generation_provider=PosePlanProvider(settings=lambda: ai_detection_settings, call=lambda: call_ai_mcp_tool, dumps=lambda: json.dumps), generation_media=PosePlanMedia(path=lambda: Path, encode=lambda: image_path_data_url, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY), assembly_identity=AssemblyPosePlanIdentityInputs(uid=lambda: accessory_uid, material=lambda: accessory_material_type, sanitize=lambda: safe_record_id), assembly_runtime=PosePlanRuntime(now=lambda: _agent_state_workflows.agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), assembly_catalog=AssemblyPosePlanCatalogInputs(lookup=lambda: accessory_lookup_by_id, counts=lambda: normalize_pipeline_accessory_counts, canonical_ids=lambda: canonical_pipeline_accessory_ids))",
+        "_agent_pose_templates = _pose_planning_workflows.templates"
+      ],
+      "original": [
+        "_agent_pose_templates = _AgentPoseTemplates(_PoseTemplateIdentity(uid=lambda: accessory_uid, kind=lambda: accessory_material_type, search=lambda: re.search), _PoseTemplateCalls(request=lambda: agent_mcp_pose_request))"
+      ]
+    },
+    {
+      "start": 2394,
+      "end": 2397,
+      "expected": [
+        "_pose_plan_policy = _pose_planning_workflows.policy",
+        "_pose_plan_generation = _pose_planning_workflows.generation",
+        "_pose_plan_assembly = _pose_planning_workflows.assembly"
+      ],
+      "original": [
+        "_pose_plan_policy = _PosePlanPolicy(_PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id), _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile), _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan))",
+        "_pose_plan_generation = _PosePlanGeneration(_PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id), _PosePlanContent(size=lambda: object_physical_size_mm, sprites=lambda: clean_sprite_assets, bounded=lambda: bounded_text, optional_number=lambda: optional_float, strings=lambda: string_list, compile=lambda: re.compile), _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan), _PosePlanProvider(settings=lambda: ai_detection_settings, call=lambda: call_ai_mcp_tool, dumps=lambda: json.dumps), _PosePlanMedia(path=lambda: Path, encode=lambda: image_path_data_url, max_side=lambda: AI_PROFILE_REFERENCE_IMAGE_MAX_SIDE, quality=lambda: AI_PROFILE_REFERENCE_IMAGE_QUALITY), _PosePlanCalls(payload=lambda: accessory_pose_plan_prompt_payload, prompt=lambda: pose_plan_system_prompt, normalize=lambda: normalize_accessory_pose_plan, generate=lambda: generate_accessory_pose_plan))",
+        "_pose_plan_assembly = _PosePlanAssembly(_PosePlanIdentity(uid=lambda: accessory_uid, material=lambda: accessory_material_type, kind=lambda: agent_mcp_object_kind, sanitize=lambda: safe_record_id), _PosePlanRuntime(now=lambda: agent_mcp_now, version=lambda: AGENT_MCP_POSE_PLAN_VERSION, max_poses=lambda: AGENT_MCP_POSE_PLAN_MAX_POSES, min_confidence=lambda: AGENT_MCP_POSE_PLAN_MIN_CONFIDENCE, clock=lambda: time.time), _PosePlanTemplates(request=lambda: agent_mcp_pose_request, poses=lambda: agent_mcp_pose_templates, fallback=lambda: fallback_accessory_pose_plan), _PosePlanCatalog(lookup=lambda: accessory_lookup_by_id, counts=lambda: normalize_pipeline_accessory_counts, canonical_ids=lambda: canonical_pipeline_accessory_ids, ensure=lambda: ensure_accessory_pose_plan))"
+      ]
+    }
+  ],
+  "actual_owner_ast_sha256": "809ed5ecb0188fedc13f9fe5ae47dac9624b42b00d190a687bf9c21dd34517b1",
+  "unchanged_business_sha256": {
+    "local_inspection_service/agent/pose_templates.py": "8ee1bb955f36ab667176d7dbd5fe82c91a3a0934397292edd3d99cc98b0b9ec3",
+    "local_inspection_service/agent/pose_plan_policy.py": "79e5b6a36e9b6d57ec0b85196e9488109ab5a3ecbc1332fae2e266cb0b504dbd",
+    "local_inspection_service/agent/pose_plan_generation.py": "cdbb9adefbe8d46a5148310a61f344aa641d8287d5662dd82494a6b79b2fcb98",
+    "local_inspection_service/agent/pose_plan_assembly.py": "c611f39303c7a25ad24f12646343428936e779c0d31b784cd9e8ac8b5ad0d22e"
+  },
+  "baseline_sha": "e590ff3a2fd6458a73742ac4631fc8da6cc0e265",
+  "preceding_deltas": [
+    "agent_state"
+  ],
+  "parent_is_virtual_replay_checkpoint": true
+}

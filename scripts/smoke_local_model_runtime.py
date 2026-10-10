@@ -7,6 +7,10 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch, call
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from model_catalog_test_ports import patch_model, get_model_callback, set_model_callback
+from scripts.local_model_application_test_ports import bind_local_model, assert_default_local_model
+
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 class LocalModelContracts(unittest.TestCase):
@@ -18,10 +22,12 @@ class LocalModelContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_local_model(server)
     @classmethod
     def tearDownClass(cls):cls.temp.cleanup()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_local_model(self.api,self.stack)
         self.directory=tempfile.TemporaryDirectory(prefix='local-model-files-');self.addCleanup(self.directory.cleanup)
         self.path=Path(self.directory.name)/'fixture.pt';self.path.write_bytes(b'synthetic-not-a-model')
         self.registry={'default':{'id':'default','path':self.path}}
@@ -30,7 +36,7 @@ class LocalModelContracts(unittest.TestCase):
         for name,value in {'DEFAULT_MODEL_ID':'default','MODEL_REGISTRY':self.registry,
                 'list_ai_detection_specialized_model_specs':self.specialized,'list_trained_model_specs':self.trained,
                 'legacy_model_specs':self.legacy,'YOLO':self.factory}.items():
-            self.stack.enter_context(patch.object(self.api,name,value))
+            self.stack.enter_context(patch_model(self.api,name,value))
         # Mutate the documented compatibility objects, not root assignment hooks.
         self.models=self.api._models;self.paths=self.api._model_paths
         old_models=dict(self.models);old_paths=dict(self.paths);self.models.clear();self.paths.clear()
@@ -54,25 +60,25 @@ class LocalModelContracts(unittest.TestCase):
         self.trained.assert_not_called()
     def test_removed_feature_explicit_and_configured_fallback(self):
         api=self.api
-        with patch.object(api,'removed_phase1_feature',side_effect=api.HTTPException(410,'removed')) as removed:
+        with patch_model(api,'removed_phase1_feature',side_effect=api.HTTPException(410,'removed')) as removed:
             with self.assertRaises(api.HTTPException) as error:api.selected_model_spec('label_sheet_local_match',{})
             self.assertEqual(error.exception.status_code,410);removed.assert_called_once_with('Label Sheet')
             removed.reset_mock();self.assertIs(api.selected_model_spec(None,{'active_model_id':'label_sheet_local_match'}),self.registry['default'])
             removed.assert_not_called()
-        with patch.object(api,'removed_phase1_feature',return_value=None):
+        with patch_model(api,'removed_phase1_feature',return_value=None):
             self.assertIs(api.selected_model_spec('label_sheet_local_match',{}),self.registry['default'])
     def test_remote_model_guards_and_cached_spec_validation(self):
         api=self.api
         for flags,message in [({'is_ai_detection':True,'is_label_sheet_match':True},'AI Detection does not use a local YOLO model'),
                               ({'is_label_sheet_match':True},'Label sheet matching does not use a local YOLO model')]:
-            with patch.object(api,'selected_model_spec',return_value=flags):
+            with patch_model(api,'selected_model_spec',return_value=flags):
                 with self.assertRaises(RuntimeError) as error:api.model()
                 self.assertEqual(str(error.exception),message)
         self.factory.assert_not_called();self.assertEqual(self.models,{})
         self.models['cached']=object()
-        with patch.object(api,'selected_model_spec',return_value={'id':'cached','path':None}):
+        with patch_model(api,'selected_model_spec',return_value={'id':'cached','path':None}):
             with self.assertRaises(TypeError):api.model('cached')
-        with patch.object(api,'selected_model_spec',return_value={'id':'cached','path':self.path.parent/'missing.pt'}):
+        with patch_model(api,'selected_model_spec',return_value={'id':'cached','path':self.path.parent/'missing.pt'}):
             self.assertIs(api.model('cached'),self.models['cached'])
         self.factory.assert_not_called()
     def test_model_cache_by_id_and_resolved_path_preserves_precedence(self):
@@ -117,7 +123,7 @@ class LocalModelContracts(unittest.TestCase):
         with patch.object(Path,'resolve',side_effect=ValueError('resolve')):
             with self.assertRaisesRegex(ValueError,'resolve'):api.yolo_loaded_model_ids({})
         self.legacy.return_value=[];self.paths.clear();self.registry['other']={'id':'other','path':self.path}
-        with patch.object(api,'DEFAULT_MODEL_ID','other'):
+        with patch_model(api,'DEFAULT_MODEL_ID','other'):
             self.assertIs(api.selected_model_spec(None),self.registry['other'])
 
     def test_popped_aliases_stale_ready_and_original_factory_path(self):
@@ -146,8 +152,8 @@ class LocalModelContracts(unittest.TestCase):
         registry=Mock(return_value=self.registry);default=Mock(return_value='default');removed=Mock()
         selection=ModelSelection(specialized,trained,registry,default,removed)
         factory=Mock(side_effect=lambda path:object());legacy=Mock(return_value=[])
-        first=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
-        second=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained)
+        first=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained, files=BusinessFiles(runtime_provider=lambda: None))
+        second=LocalModels(selection.selected_model_spec,lambda:factory,legacy,trained, files=BusinessFiles(runtime_provider=lambda: None))
         for provider in (specialized,trained,registry,default,removed,factory,legacy):provider.assert_not_called()
         self.assertIs(self.api._models,self.api._local_models.models)
         self.assertIs(self.api._model_paths,self.api._local_models.paths)
@@ -179,7 +185,7 @@ class LocalModelContracts(unittest.TestCase):
                 events = []; attempts = []; error = RuntimeError('first model boundary')
                 with ExitStack() as stack:
                     for name in names:
-                        original = getattr(api, name)
+                        original = get_model_callback(api, name)
                         def invoke(*args, _name=name, _original=original, **kwargs):
                             events.append(_name)
                             if _name == target:
@@ -188,7 +194,7 @@ class LocalModelContracts(unittest.TestCase):
                                     raise error
                                 return valid
                             return _original(*args, **kwargs)
-                        stack.enter_context(patch.object(api, name, invoke))
+                        stack.enter_context(patch_model(api, name, invoke))
                     with self.assertRaises(RuntimeError) as raised:
                         operation()
                 self.assertIs(raised.exception, error)
@@ -287,7 +293,7 @@ class LocalModelContracts(unittest.TestCase):
                     if armed:
                         armed = False; events.append('str'); api.YOLO = factories['C']
                     return original_string(path)
-                with patch.object(api, 'YOLO', factories['A']), patch.object(Path, 'resolve', resolve), \
+                with patch_model(api, 'YOLO', factories['A']), patch.object(Path, 'resolve', resolve), \
                         patch.object(Path, '__str__', stringify):
                     if mode == 'missing':
                         with self.assertRaises(TypeError):
@@ -320,15 +326,15 @@ class LocalModelContracts(unittest.TestCase):
                         return super().__setitem__(key, value)
                 models, paths = Cache('models'), Cache('paths')
                 with ExitStack() as stack:
-                    stack.enter_context(patch.object(api, '_models', models))
-                    stack.enter_context(patch.object(api, '_model_paths', paths))
+                    stack.enter_context(patch_model(api, '_models', models))
+                    stack.enter_context(patch_model(api, '_model_paths', paths))
                     # Bind the actual state owner after migration; old function bodies
                     # consume the same temporary dictionaries through root aliases.
-                    owner = getattr(api, '_local_models', None)
+                    owner = get_model_callback(api, '_local_models', None)
                     if owner is not None:
                         stack.enter_context(patch.object(owner, 'models', models))
                         stack.enter_context(patch.object(owner, 'paths', paths))
-                    factory = stack.enter_context(patch.object(api, 'YOLO', return_value=instance))
+                    factory = stack.enter_context(patch_model(api, 'YOLO', return_value=instance))
                     with self.assertRaises(RuntimeError) as raised:
                         api.model('default', {})
                 self.assertIs(raised.exception, error)

@@ -1,7 +1,7 @@
 """Explicit backend CI inventory, isolated runner, evidence gate and balancing tool.
 
 Only synthetic tests are run here. The manifest preserves shell/env variants from
-7bb2475; performance protocols have their own workflow, never the release gate.
+7bb2475; performance protocols also participate in the complete release gate.
 """
 from __future__ import annotations
 
@@ -19,6 +19,39 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'scripts/backend_ci_manifest.json'
+ADDITIONS = ROOT / 'scripts/backend_ci_refactor_additions.json'
+BASE_MANIFEST_SHA256 = '697251bbb4cfee24cc379de0f53dbe12e96067810f70627a734c52420bc10145'
+ADDITIONS_SHA256 = '3d896691a07bd821505254e14fb6abd6ba6a76c28a1ab3a5d73c3fde1de38a04'
+
+
+def inventory_fingerprint(manifest):
+    inventory = [{'run':e['run'], 'env':e['env'], 'cwd':e['cwd']}
+                 for e in sorted(manifest['checks'] + manifest['performance'], key=lambda e:e['id'])]
+    return hashlib.sha256(json.dumps(inventory, sort_keys=True).encode()).hexdigest()
+
+
+def compose_manifest(manifest, extension):
+    import copy
+    result = copy.deepcopy(manifest)
+    for replacement in extension['replace']:
+        old = replacement['old']
+        matches = [i for i,e in enumerate(result['checks']) if e['id']==old['id']]
+        assert len(matches)==1 and result['checks'][matches[0]]==old, 'replacement predecessor differs'
+        result['checks'][matches[0]:matches[0]+1] = copy.deepcopy(replacement['new'])
+    result['checks'] += copy.deepcopy(extension['add'])
+    result['performance'] = copy.deepcopy(extension['performance'])
+    result['performance_plan'] = extension['performance_plan'][:]
+    result['refactor_additions_sha256'] = ADDITIONS_SHA256
+    return result
+
+
+def performance_plan(manifest):
+    entries = {e['id']:e for e in manifest['checks']+manifest['performance']}
+    if 'performance_plan' in manifest:
+        return [entries[ident] for ident in manifest['performance_plan']]
+    # Synthetic executor fault tests retain their narrow manifests.
+    return [e for e in manifest['checks'] if 'ci_benchmark_storage.py' in e['run'] and not e.get('always')] + manifest['performance'] + [e for e in manifest['checks'] if e.get('always')]
+
 BENCHMARKS = {
     'benchmark_label_history_statistics.py', 'benchmark_label_summary_reads.py',
     'benchmark_label_projection.py', 'benchmark_label_legacy_index.py',
@@ -35,7 +68,14 @@ def digest(manifest):
 
 
 def load_manifest(path=MANIFEST):
-    manifest = json.loads(Path(path).read_text())
+    raw = Path(path).read_bytes().replace(b'\r\n', b'\n')
+    assert hashlib.sha256(raw).hexdigest()==BASE_MANIFEST_SHA256, 'original inventory bytes changed'
+    manifest = json.loads(raw)
+    assert inventory_fingerprint(manifest)=='8015201086fdfd15b08202c32ebb9a570abaf5fafe311e16e9e510fe0c663b8a', 'original inventory coverage changed'
+    assert (ROOT/'scripts/backend_ci_baseline.sha256').read_text().strip()=='8015201086fdfd15b08202c32ebb9a570abaf5fafe311e16e9e510fe0c663b8a'
+    delta = ADDITIONS.read_bytes().replace(b'\r\n', b'\n')
+    assert hashlib.sha256(delta).hexdigest()==ADDITIONS_SHA256, 'refactor inventory bytes changed'
+    manifest = compose_manifest(manifest, json.loads(delta))
     assert manifest['schema'] == 1 and manifest['shard_count'] == 12
     checks = manifest['checks']
     ids = [item['id'] for item in checks + manifest['performance']]
@@ -46,21 +86,21 @@ def load_manifest(path=MANIFEST):
         groups[item['group']].add(item['shard'])
         assert item['cwd'] == '.' and '\n' not in item['run']
     assert all(len(shards) == 1 for shards in groups.values()), 'dependency group split'
-    names = {next((name for name in BENCHMARKS if name in item['run']), None)
+    names = {next((name for name in BENCHMARKS | {'benchmark_label_beta_summaries.py'} if name in item['run']), None)
              for item in manifest['performance']}
-    assert len(manifest['performance']) == 5 and names == BENCHMARKS
+    assert len(manifest['performance']) == 6 and names == BENCHMARKS | {'benchmark_label_beta_summaries.py'}
     assert not any('python scripts/benchmark_' in item['run'] for item in checks)
     return manifest
 
 
 def verify(manifest):
-    inventory = [{'run':e['run'], 'env':e['env'], 'cwd':e['cwd']}
-                 for e in sorted(manifest['checks'] + manifest['performance'], key=lambda e:e['id'])]
-    fingerprint = hashlib.sha256(json.dumps(inventory, sort_keys=True).encode()).hexdigest()
-    assert fingerprint == (ROOT/'scripts/backend_ci_baseline.sha256').read_text().strip(), 'baseline command/env coverage changed'
+    inventory = [{'run':e['run'], 'env':e['env'], 'cwd':e['cwd']} for e in manifest['checks']+manifest['performance']]
     # PyYAML is part of the unchanged production lock, not needed by the gate.
     import yaml
+    for name in ('ci.yml', 'backend-performance.yml', 'release-production.yml'):
+        validate_workflow_trigger((ROOT/'.github/workflows'/name).read_text())
     workflow = yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
+    validate_reuse_bootstrap(workflow)
     shards = workflow['jobs']['backend-shards']
     assert shards['strategy']['matrix']['shard'] == list(range(12))
     assert shards['strategy']['fail-fast'] is False
@@ -68,15 +108,12 @@ def verify(manifest):
     pr_trigger = workflow.get('on', workflow.get(True, {})).get('pull_request')
     assert pr_trigger is None or isinstance(pr_trigger, dict) and 'paths' not in pr_trigger
     for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
-                 'documentation','frontend','codex-comparison','frontend-build']:
+                 'documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance']:
         assert workflow['jobs'][name]['needs'] == ['ci-mode']
         assert workflow['jobs'][name]['if'] == ('${{ !cancelled() }}' if name in ('frontend','source-safety') else "${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}")
-    setup = next(s for s in shards['steps'] if s.get('uses') == 'actions/setup-python@v5')
-    assert 'cache' not in setup['with'], 'hot environment must not restore redundant pip downloads'
-    fallback = [s for s in shards['steps'] if s.get('name') in ('Recover existing pip cache for a full fallback','Rebuild and verify all dependencies after a cache miss')]
-    assert len(fallback) == 2 and all("steps.cached-environment.outcome != 'success'" in s['if'] and "steps.cached-environment.outputs.ready != 'true'" in s['if'] for s in fallback)
+    validate_cache_bootstrap(shards)
     gate_job = workflow['jobs']['backend-plc']
-    assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build'] and gate_job['if'] == 'always()'
+    assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
     triggers = performance.get('on', performance.get(True))
     assert triggers['schedule'] == [{'cron': '0 19 * * *'}]
@@ -88,14 +125,47 @@ def verify(manifest):
     assert release['concurrency']['cancel-in-progress'] is False
     for item in inventory:
         subprocess.run(['bash', '-n', '-c', item['run']], check=True)
-    print(f"Coverage: {len(manifest['checks'])} ordinary commands + 5 unchanged benchmarks; 12 isolated shards.")
+    print(f"Coverage: {len(manifest['checks'])} ordinary commands + 6 unchanged benchmark protocols; 12 isolated shards.")
 
 
-def execute(item, output, timeout=480):
+def validate_workflow_trigger(source):
+    import yaml
+    keys = yaml.load(source, Loader=yaml.BaseLoader)
+    assert 'on' in keys and 'true' not in keys, 'workflow trigger must be literal on key'
+
+
+def validate_reuse_bootstrap(workflow):
+    for name in ('frontend', 'source-safety', 'backend-plc'):
+        steps = workflow['jobs'][name]['steps']
+        validator = next(i for i,s in enumerate(steps) if 'assert-reuse' in s.get('run', ''))
+        prior = steps[:validator]
+        assert any(s.get('uses', '').startswith('actions/checkout@') and 'if' not in s for s in prior), f'{name}: reuse lacks checkout'
+        assert any(s.get('uses', '').startswith('actions/setup-python@') and 'if' not in s and s['with']['python-version']=='3.10' for s in prior), f'{name}: reuse lacks Python'
+
+
+def validate_cache_bootstrap(shards):
+    steps = shards['steps']
+    setup = next(s for s in steps if s.get('uses') == 'actions/setup-python@v5')
+    assert 'cache' not in setup['with'], 'hot environment must not restore redundant pip downloads'
+    preparation = [s for s in steps if s.get('id') == 'cached-environment']
+    assert len(preparation) == 1 and preparation[0].get('run') == 'python scripts/ci_environment.py prepare-cache'
+    assert preparation[0].get('continue-on-error') is True and 'if' not in preparation[0]
+    predicate = "${{ steps.cached-environment.outcome != 'success' || steps.cached-environment.outputs.ready != 'true' }}"
+    recovery = [s for s in steps if s.get('name') == 'Recover existing pip cache for a full fallback']
+    rebuild = [s for s in steps if s.get('name') == 'Rebuild and verify all dependencies after a cache miss']
+    assert len(recovery) == len(rebuild) == 1
+    assert recovery[0].get('if') == rebuild[0].get('if') == predicate, 'cache miss/failure must rebuild'
+    assert recovery[0].get('uses') == 'actions/setup-python@v5'
+    assert recovery[0]['with'] == {'python-version': '3.10', 'cache': "${{ inputs.cold-cache != true && 'pip' || '' }}", 'cache-dependency-path': 'requirements-production.lock'}
+    assert rebuild[0].get('run') == 'python scripts/ci_environment.py prepare' and not rebuild[0].get('continue-on-error', False)
+    assert steps.index(preparation[0]) < steps.index(recovery[0]) < steps.index(rebuild[0])
+
+
+def execute(item, output, timeout=900):
     env = os.environ.copy()
     env.update(item['env'])
     record = {'id':item['id'], 'group':item['group'], 'run':item['run'],
-              'started_at':timestamp(), 'status':'failed'}
+              'env':item['env'], 'cwd':item['cwd'], 'started_at':timestamp(), 'status':'failed'}
     start = time.monotonic()
     print(f"::group::{item['id']} {item['run']}", flush=True)
     try:
@@ -196,12 +266,10 @@ def summarize(manifest, reports, jobs):
     earliest = min(parse_time(j['started_at']) for j in relevant)
     # Includes any later shard queueing and the aggregate job so the wall clock
     # cannot be made smaller by adding runner concurrency delays.
-    seconds = (datetime.now(timezone.utc)-earliest).total_seconds()
+    seconds = (max(parse_time(j['completed_at']) for j in relevant)-earliest).total_seconds()
     lines = ['## Backend CI evidence',
-             f'Backend wall time through gate validation: **{seconds:.1f}s**.',
-             'Full PR CI budget: ≤170s from first CI job through completed aggregate, including artifact uploads.',
-             'Use completed GitHub job timestamps for acceptance; this live summary precedes final upload/cleanup.',
-             'Includes setup, later shard queueing and aggregation; initial GitHub queue excluded.',
+             f'Ordinary backend shard wall time: **{seconds:.1f}s** (target ≤300s).',
+             'Includes setup and later shard queueing; performance and aggregation reported separately; initial GitHub queue excluded.',
              '', '| Shard | Job seconds (setup + tests) | Test seconds |', '| --- | ---: | ---: |']
     by_shard = {r['shard']:r for r in reports}
     for job in sorted(relevant,key=lambda j:int(j['name'].rsplit('-',1)[1])):
@@ -227,18 +295,16 @@ def gate(manifest, directory, matrix_result, jobs):
 
 def performance(manifest, output):
     output.mkdir(parents=True, exist_ok=True)
-    # Frozen baseline used by the unchanged legacy benchmark is fetched and
-    # hash-verified independently of ordinary smoke preparation.
-    prep = [item for item in manifest['checks'] if item['run'].startswith('git fetch') and 'cf9c615' in item['run']
-            or item['run'].startswith(('test ', 'git show ')) and 'cf9c615' in item['run']]
-    checks = [item for item in manifest['checks'] if 'ci_benchmark_storage.py' in item['run']]
-    start_checks = [item for item in checks if not item.get('always')]
-    final_checks = [item for item in checks if item.get('always')]
-    report = {'schema':1, 'manifest_sha256':digest(manifest), 'commands':[], 'status':'failed'}
+    plan = performance_plan(manifest)
+    checks = [e for e in plan if not e.get('always')]
+    final_checks = [e for e in plan if e.get('always')]
+    report = {'schema':1, 'manifest_sha256':digest(manifest), 'commands':[], 'status':'failed',
+              'commit':os.environ.get('GITHUB_SHA',''), 'run_id':os.environ.get('GITHUB_RUN_ID',''),
+              'run_attempt':os.environ.get('GITHUB_RUN_ATTEMPT',''), 'started_at':timestamp()}
     failed = False
     try:
-        for item in start_checks + prep + manifest['performance']:
-            record = execute(item, output, timeout=3000)
+        for item in checks:
+            record = execute(item, output, timeout=7200)
             report['commands'].append(record)
             write_report(output/'performance.json',report)
             if record['status'] != 'success':
@@ -252,7 +318,10 @@ def performance(manifest, output):
             record = execute(item, output)
             report['commands'].append(record)
             failed |= record['status'] != 'success'
-        report['status'] = 'failed' if failed else 'success'
+        completed = {c['id'] for c in report['commands']}
+        report['not_run'] = [e['id'] for e in plan if e['id'] not in completed]
+        report['completed_at'] = timestamp()
+        report['status'] = 'failed' if failed or report['not_run'] else 'success'
         write_report(output/'performance.json',report)
     return int(failed)
 
@@ -268,7 +337,7 @@ def rebalance(manifest, directory):
         shard = min(range(12),key=lambda i:(loads[i],i))
         for item in items:item['shard']=shard
         loads[shard] += sum(times[e['id']] for e in items)
-    MANIFEST.write_text(json.dumps(manifest,indent=2)+'\n')
+    raise RuntimeError('Rebalancing requires a separately reviewed inventory revision; frozen baseline is immutable')
     print('Fixed shard test-second estimates:', [round(value,2) for value in loads])
 
 

@@ -8,6 +8,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_SERVICE_PATHS_BASELINE_SOURCE')
 NAMES=('service_rebased_path','rebase_stale_local_path_text','rebase_stale_local_payload_text','public_path_sanitized','migrate_json_file_paths','resolve_service_path','path_is_under','public_output_url','public_output_url_for_existing','output_write_dir','output_write_dir_for_owner','output_url')
 def create(b):
@@ -66,7 +67,8 @@ class Contracts(unittest.TestCase):
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_assembly_and_light_import(self):
   import subprocess
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_service_paths' for t in n.targets));count=0
+  from application_integration_source_contract import restore_path_configuration_root
+  tree=ast.parse(restore_path_configuration_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_service_paths' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,18)

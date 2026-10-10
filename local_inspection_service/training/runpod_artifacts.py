@@ -11,7 +11,7 @@ import time
 from typing import Any
 import zipfile
 from contextlib import nullcontext
-from ..storage.artifacts.runtime import get_runtime
+from ..storage.artifacts.runtime import ArtifactRuntime
 
 Record = dict[str, Any]
 
@@ -25,8 +25,10 @@ class RunPodArtifactPaths:
 
 class RunPodArtifacts:
     def __init__(self, paths: RunPodArtifactPaths, find: Callable[[str], Record | None],
-                 summary: Callable[[Any], Any], *, runtime_provider=get_runtime):
+                 summary: Callable[[Any], Any], *, runtime_provider: Callable[[], ArtifactRuntime | None]):
         self.paths, self.find, self.summary = paths, find, summary
+        if runtime_provider is None:
+            raise TypeError('runtime_provider is required')
         self.runtime_provider = runtime_provider
 
     def import_runpod_yolo_artifacts(self, task, output):

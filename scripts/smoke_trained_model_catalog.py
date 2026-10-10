@@ -12,6 +12,10 @@ import uuid
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from model_catalog_test_ports import patch_model, get_model_callback, set_model_callback
+from trained_catalog_application_test_ports import bind_trained_catalog, assert_default_trained_catalog
+
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 PG_CHECK = '--postgres' in sys.argv
 if PG_CHECK: sys.argv.remove('--postgres')
 
@@ -56,7 +60,7 @@ class Fixture:
             'build_ocr_accessory_profiles': self.profiles, 'apply_task_rule_override_to_spec': self.rules,
             'record_visible_to_user': self.visible, 'normalize_pipeline_detection_method': lambda method: method,
             'task_record_name': lambda task: task.get('name', '')}
-        for name, value in values.items(): stack.enter_context(patch.object(api, name, value))
+        for name, value in values.items(): stack.enter_context(patch_model(api, name, value))
 
 
 class TrainedCatalogContracts(unittest.TestCase):
@@ -70,12 +74,14 @@ class TrainedCatalogContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_trained_catalog(server)
     @classmethod
     def tearDownClass(cls):
         cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         directory = self.stack.enter_context(tempfile.TemporaryDirectory(prefix='trained-case-'))
+        bind_trained_catalog(self.api,self.stack)
         self.f = Fixture(Path(directory)); self.f.bind(self.api, self.stack)
         token = self.api._request_user.set(None); self.addCleanup(self.api._request_user.reset, token)
 
@@ -83,7 +89,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         api = self.api; f = self.f
         self.assertIs(api.training_task_finder(), f.file_loader)
         f.repository.assert_called_once_with(); f.get.assert_not_called(); f.file_loader.assert_not_called()
-        with patch.object(api, 'load_training_task', Mock()) as replacement:
+        with patch_model(api, 'load_training_task', Mock()) as replacement:
             self.assertIs(api.training_task_finder(), replacement)
         f.repository.side_effect = RuntimeError('factory')
         with self.assertRaisesRegex(RuntimeError, 'factory'): api.training_task_finder()
@@ -117,7 +123,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         self.assertIsNone(finder(Path('one.json'))); f.repo.fetch_all.assert_called_once(); f.put.assert_not_called()
         f.repo.fetch_all.side_effect = None; f.repo.fetch_all.return_value = [{'raw_json': {'id': 'one'}}, {'raw_json': {'id': 'two'}}]
         decoder = Mock(side_effect=[[{'id': 'one'}], ValueError('decode')])
-        with patch.object(api, 'row_raw_json_list', decoder):
+        with patch_model(api, 'row_raw_json_list', decoder):
             finder = api.training_task_finder()
             with self.assertRaisesRegex(ValueError, 'decode'): finder(Path('two.json'))
             self.assertEqual(finder(Path('one.json')), {'id': 'one'}); self.assertIsNone(finder(Path('two.json')))
@@ -138,12 +144,12 @@ class TrainedCatalogContracts(unittest.TestCase):
         self.assertEqual(api.pipeline_task_link_for_training_run('trained_'), {})
         f.pipeline_load.assert_not_called()
         self.assertEqual(api.pipeline_task_link_for_training_run('trained_trained_x', [{'id':'x','ai_model_id':'trained_trained_x'}])['pipeline_task_id'], 'x')
-        with patch.object(api, 'task_record_name', side_effect=ValueError('name')):
+        with patch_model(api, 'task_record_name', side_effect=ValueError('name')):
             with self.assertRaisesRegex(ValueError, 'name'): api.pipeline_task_link_for_training_run('my_run')
 
     def test_finder_event_order_put_failure_and_original_loader_capture(self):
         api=self.api; f=self.f; loader=api.training_task_finder()
-        with patch.object(api,'load_training_task',Mock()): self.assertIs(loader,f.file_loader)
+        with patch_model(api,'load_training_task',Mock()): self.assertIs(loader,f.file_loader)
         events=[]; first={'id':'first'}; second={'id':'second'}
         repo=Mock(); f.repo=repo
         repo.fetch_all.side_effect=lambda table: events.append('fetch') or [{'raw_json':first},{'raw_json':second}]
@@ -152,7 +158,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         def decode(rows): events.append('decode'); return [rows[0]['raw_json']]
         def identify(path): events.append('identifier'); return ''
         match=Mock(side_effect=lambda task,requested,row: events.append('match') or True)
-        with patch.object(api,'row_raw_json_list',side_effect=decode), patch.object(api,'file_stem_identifier',side_effect=identify), patch.object(api,'training_task_matches_identifier',match):
+        with patch_model(api,'row_raw_json_list',side_effect=decode), patch_model(api,'file_stem_identifier',side_effect=identify), patch_model(api,'training_task_matches_identifier',match):
             finder=api.training_task_finder()
             with self.assertRaisesRegex(RuntimeError,'put'): finder(Path('empty.json'))
             self.assertEqual(events,['get','fetch','decode','decode'])
@@ -198,7 +204,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         f.run('skip', 400, task={'action':'dataset'}); (f.runs/'file').write_text('not a run')
         # Tied mtimes preserve filesystem discovery order, including duplicate roots.
         ordered = [p.name for p in f.runs.iterdir() if p.is_dir() and p.name in {'first','second'}]
-        with patch.object(api, 'training_run_roots', return_value=[f.runs, f.root/'absent', f.runs]):
+        with patch_model(api, 'training_run_roots', return_value=[f.runs, f.root/'absent', f.runs]):
             values = api.list_trained_model_specs(f.config)
         self.assertEqual([v['run_id'] for v in values], ['newest','newest',*ordered,*ordered])
         self.assertEqual(len(f.read.call_args_list), 12)
@@ -300,7 +306,7 @@ class TrainedCatalogContracts(unittest.TestCase):
                     f.read,lambda:f.output,lambda:(lambda path:f.root/path)),
                 TrainingAccessories(lambda item:'generated',dict,lambda:f.uses_ocr,lambda:f.profiles),
                 TrainingPipeline(f.pipeline_load,lambda:links.pipeline_task_link_for_training_run,lambda:(lambda method:method)),
-                TrainingAccess(user.get,f.visible,lambda:f.audit),f.rules)
+                TrainingAccess(user.get,f.visible,lambda:f.audit),f.rules, business_files=BusinessFiles())
             f.repository.assert_not_called(); f.config_load.assert_not_called(); f.pipeline_load.assert_not_called()
             return catalog,lookup,user
         first,first_lookup,first_user=compose(self.f); second,second_lookup,second_user=compose(other)
@@ -314,7 +320,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         self.assertIs(first_lookup.training_task_finder(),self.f.file_loader)
         self.assertIs(second_lookup.training_task_finder(),other.file_loader)
         # Composition adapters resolve root replacements at invocation time.
-        with patch.object(self.api,'pipeline_task_link_for_training_run',return_value={'pipeline_task_id':'late'}) as link:
+        with patch_model(self.api,'pipeline_task_link_for_training_run',return_value={'pipeline_task_id':'late'}) as link:
             self.assertEqual(self.api.list_trained_model_specs(self.f.config)[0]['pipeline_task_id'],'late')
             link.assert_called_once_with('first',[])
 
@@ -355,7 +361,7 @@ class TrainedCatalogContracts(unittest.TestCase):
             'record_audit_fields', 'pipeline_task_link_for_training_run', 'accessory_uid',
             'serialize_accessory', 'accessory_uses_ocr', 'build_ocr_accessory_profiles',
             'normalize_pipeline_detection_method', 'apply_task_rule_override_to_spec', 'record_visible_to_user')
-        originals = {name: getattr(api, name) for name in names}
+        originals = {name: get_model_callback(api, name) for name in names}
         for target in names:
             with self.subTest(target=target), ExitStack() as stack:
                 error = RuntimeError('first catalog callback'); events = []; attempts = []
@@ -366,7 +372,7 @@ class TrainedCatalogContracts(unittest.TestCase):
                             attempts.append(args)
                             if len(attempts) == 1: raise error
                         return _original(*args, **kwargs)
-                    stack.enter_context(patch.object(api, name, invoke))
+                    stack.enter_context(patch_model(api, name, invoke))
                 with self.assertRaises(RuntimeError) as raised:
                     api.list_trained_model_specs(None)
                 self.assertIs(raised.exception, error)
@@ -454,20 +460,20 @@ class TrainedCatalogContracts(unittest.TestCase):
                         events.append(label)
                         if mode == 'uses_second' and first and variant != 'ordinary':
                             events.append('prior')
-                            setattr(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
+                            set_model_callback(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
                         return value(*args)
                     def swap():
                         nonlocal swapped
                         if not swapped:
                             swapped = True; events.append('arg')
-                            setattr(api, target, lambda *args: callback('C', *args))
+                            set_model_callback(api, target, lambda *args: callback('C', *args))
                     def preceding():
                         if variant != 'ordinary' and mode != 'uses_second':
                             events.append('prior')
-                            setattr(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
+                            set_model_callback(api, target, None if variant == 'missing' else lambda *args: callback('B', *args))
                         return f.pipeline
                     f.pipeline_load.side_effect = preceding
-                    stack.enter_context(patch.object(api, target, lambda *args: callback('A', *args)))
+                    stack.enter_context(patch_model(api, target, lambda *args: callback('A', *args)))
                     class Task(dict):
                         def __iter__(self): return super().__iter__()
                         def keys(self):
@@ -520,7 +526,7 @@ class TrainedCatalogContracts(unittest.TestCase):
                         class Root:
                             def exists(self): return True
                             def iterdir(self): return [run]
-                        stack.enter_context(patch.object(api, 'training_run_roots', lambda: [Root()]))
+                        stack.enter_context(patch_model(api, 'training_run_roots', lambda: [Root()]))
                     if variant == 'missing':
                         with self.assertRaises(TypeError): api.list_trained_model_specs(f.config)
                         expected = ['prior', 'arg']
@@ -539,12 +545,12 @@ class TrainedCatalogContracts(unittest.TestCase):
         for target in ('load_pipeline_tasks', 'task_record_name'):
             with self.subTest(target=target):
                 error = RuntimeError('first link boundary'); calls = []
-                original = getattr(api, target)
+                original = get_model_callback(api, target)
                 def fail_once(*args):
                     calls.append(args)
                     if len(calls) == 1: raise error
                     return original(*args)
-                with patch.object(api, target, fail_once):
+                with patch_model(api, target, fail_once):
                     with self.assertRaises(RuntimeError) as raised:
                         api.pipeline_task_link_for_training_run('run')
                 self.assertIs(raised.exception, error); self.assertEqual(len(calls), 1)
@@ -556,12 +562,12 @@ class TrainedCatalogContracts(unittest.TestCase):
         for target in ('load_json_file_mtime_cached', 'accessory_uses_ocr', 'normalize_pipeline_detection_method'):
             with self.subTest(target=target):
                 error = RuntimeError('second catalog boundary'); calls = []
-                original = getattr(api, target)
+                original = get_model_callback(api, target)
                 def fail_second(*args):
                     calls.append(args)
                     if len(calls) == 2: raise error
                     return original(*args)
-                with patch.object(api, target, fail_second):
+                with patch_model(api, target, fail_second):
                     with self.assertRaises(RuntimeError) as raised:
                         api.list_trained_model_specs(f.config)
                 self.assertIs(raised.exception, error); self.assertEqual(len(calls), 2)

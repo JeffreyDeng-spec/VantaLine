@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, patch, call
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.yolo_warmup_application_test_ports import bind_yolo_warmup, assert_default_yolo_warmup, native_warmup_start
 
 
 class WarmupContracts(unittest.TestCase):
@@ -21,10 +22,12 @@ class WarmupContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_yolo_warmup(server)
     @classmethod
     def tearDownClass(cls):cls.temp.cleanup()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_yolo_warmup(self.api,self.stack)
         self.stack.enter_context(patch.dict(os.environ,{'VANTALINE_YOLO_PREWARM':'1','VANTALINE_YOLO_PREWARM_LIMIT':'6',
             'VANTALINE_YOLO_PREWARM_MODELS':'','VANTALINE_YOLO_PREWARM_DELAY_SECONDS':'0'}))
         self.state=self.api._yolo_warmup_state;old=copy.deepcopy(self.state)
@@ -154,7 +157,11 @@ class WarmupContracts(unittest.TestCase):
         api=self.api;worker=Mock();ids=['one'];first=Mock();second=Mock()
         with patch.object(api,'yolo_warmup_worker',worker),patch.object(api.threading,'Thread',side_effect=[first,second]) as thread:
             api.start_yolo_warmup('manual',ids);api.start_yolo_warmup('manual',ids)
-            self.assertEqual(thread.call_args_list,[call(target=worker,args=('manual',ids),name='yolo-warmup-manual',daemon=True)]*2)
+            self.assertEqual(len(thread.call_args_list),2)
+            for invocation in thread.call_args_list:
+                self.assertEqual({k:v for k,v in invocation.kwargs.items() if k!='target'},
+                                 dict(args=('manual',ids),name='yolo-warmup-manual',daemon=True))
+                self.assertTrue(callable(invocation.kwargs['target']))
             self.assertIs(thread.call_args.kwargs['args'][1],ids);first.start.assert_called_once_with();second.start.assert_called_once_with();worker.assert_not_called()
         before=copy.deepcopy(self.state)
         replacement=Mock()
@@ -163,7 +170,8 @@ class WarmupContracts(unittest.TestCase):
             return True
         with patch.object(api,'yolo_warmup_worker',Mock()),patch.object(api,'yolo_warmup_enabled',side_effect=enabled),patch.object(api.threading,'Thread') as thread:
             api.start_yolo_warmup('late',ids)
-            self.assertIs(thread.call_args.kwargs['target'],replacement)
+            thread.call_args.kwargs['target'](*thread.call_args.kwargs['args'])
+            replacement.assert_called_once_with('late',ids)
         with patch.object(api.threading,'Thread') as thread:
             thread.return_value.start.side_effect=RuntimeError('start')
             with self.assertRaisesRegex(RuntimeError,'start'):api.start_yolo_warmup()
@@ -420,7 +428,7 @@ class WarmupContracts(unittest.TestCase):
         self.assertIs(raised.exception, error); default.assert_called_once_with(); tasks.assert_not_called()
         worker_error = RuntimeError('first worker getter'); worker = Mock(side_effect=[worker_error, lambda *args: None])
         before = copy.deepcopy(self.state)
-        with patch.object(api.threading, 'Thread') as thread:
+        with native_warmup_start(api), patch.object(api.threading, 'Thread') as thread:
             with self.assertRaises(RuntimeError) as raised:
                 api._yolo_warmup_runtime.start_yolo_warmup('fixture', [], worker=worker)
         self.assertIs(raised.exception, worker_error); worker.assert_called_once_with(); thread.assert_not_called()

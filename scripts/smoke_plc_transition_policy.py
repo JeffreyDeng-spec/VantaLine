@@ -12,6 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from smoke_plc_event_projection import record, stream, ack_items
 from local_inspection_service.plc.event_projection import project_plc_dispatch_events
 from local_inspection_service.plc.errors import PlcDispatchStateConflict
@@ -153,7 +154,7 @@ class TransitionContract(unittest.TestCase):
     def test_lightweight_direct_identity(self):
         child = "import sys; from local_inspection_service.plc import transition_policy; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg','serial'))"
         subprocess.run([sys.executable, "-c", child], cwd=ROOT, check=True, timeout=10)
-        source = (ROOT / "local_inspection_service/server.py").read_text(encoding="utf-8")
+        source = read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')
         imports = [n for n in ast.parse(source).body if isinstance(n,ast.ImportFrom) and n.module == "plc.transition_policy" and n.level == 1]
         self.assertEqual(len(imports), 1)
         for name in ("PlcDispatchTransitionKind", "validate_plc_dispatch_transition", "validate_plc_operation_evidence", "validate_plc_attempt_start"):

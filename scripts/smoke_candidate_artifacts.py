@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_CANDIDATE_ARTIFACT_BASELINE_SOURCE')
 NAMES=('cleanup_accessory_candidate_artifacts','existing_source_image_paths')
 
@@ -128,7 +129,7 @@ class CandidateContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE),'new assembly only')
     def test_actual_root_composition_and_independent_instances(self):
         s,a,ra,ea=self.fixture();t,b,rb,eb=self.fixture()
-        source=(ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8');tree=ast.parse(source)
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8');tree=ast.parse(source)
         nodes=[n for n in tree.body if (isinstance(n,ast.ImportFrom) and n.module in ('accessories.candidate_artifacts','accessories.candidate_artifact_ports')) or (isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='_candidate_artifacts' for x in n.targets)) or (isinstance(n,ast.FunctionDef) and n.name in NAMES)]
         self.assertEqual(len(nodes),5);ns=dict(a,Any=Any,Path=Path,__package__='local_inspection_service');exec(compile(ast.Module(body=nodes,type_ignores=[]),'<assembly>','exec'),ns)
         pa=self.write(ra/'uploads/accessory_candidates/a/x');pb=self.write(rb/'uploads/accessory_candidates/b/x')

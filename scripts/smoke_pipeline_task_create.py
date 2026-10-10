@@ -12,6 +12,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline_task_test_ports import patch_pipeline_task_test_port, set_pipeline_task_test_port
 
 
 class TracedLock:
@@ -41,6 +42,8 @@ def main():
         (Path(tmp) / "local_inspection_service" / "static").mkdir(parents=True)
         os.environ.pop("VANTALINE_POSTGRES_DSN", None)
         from local_inspection_service import server
+        from scripts.pipeline_task_application_test_ports import assert_default_task_http,bind_external_task_http
+        assert_default_task_http(server)
         from local_inspection_service.schemas.pipeline import PipelineTaskCreateRequest
 
         baseline_source = os.environ.get("VANTALINE_CREATE_BASELINE_SOURCE")
@@ -83,7 +86,7 @@ def main():
             def scope_config(value, user, target=None):
                 events.append(("config.scope", target))
                 if rebind_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 return value
 
             def save(task):
@@ -99,7 +102,7 @@ def main():
             def initialize(task, scoped):
                 events.append(("initialize", lock.held, alternate.held))
                 if rebind_second_lock:
-                    server._pipeline_tasks_lock = alternate
+                    set_pipeline_task_test_port(server, '_pipeline_tasks_lock', alternate)
                 if init_error:
                     raise init_error
 
@@ -130,7 +133,7 @@ def main():
                 if context_error:
                     raise AssertionError("context read without pregen")
                 if rebind_scheduler:
-                    server.schedule_pipeline_recommendation_pregen = lambda *args: (_ for _ in ()).throw(AssertionError("scheduler rebound too soon"))
+                    set_pipeline_task_test_port(server, 'schedule_pipeline_recommendation_pregen', lambda *args: (_ for _ in ()).throw(AssertionError('scheduler rebound too soon')))
                 return "requester"
 
             def public(task, scoped):
@@ -169,8 +172,9 @@ def main():
                 "pipeline_task_public": public,
             }
             with ExitStack() as stack:
+                bind_external_task_http(server,stack)
                 for name, value in replacements.items():
-                    stack.enter_context(patch.object(server, name, value))
+                    stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:
                     result = server.create_pipeline_task(PipelineTaskCreateRequest(**payload), user_id)
                     error = None

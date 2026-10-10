@@ -11,6 +11,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
+from scripts.training_runpod_application_test_ports import bind_training_runpod, assert_default_training_runpod
 
 
 class FlowFixture:
@@ -54,6 +56,7 @@ class FlowFixture:
         return {'status': 'replacement-state'}
 
     def bind(self, api, stack):
+        bind_training_runpod(api,stack)
         bindings = {'runpod_yolo_endpoint_id': self.endpoint, 'runpod_yolo_job_timeout_seconds': self.timeout,
                     'runpod_yolo_dataset_token_ttl_seconds': self.ttl, 'runpod_yolo_poll_interval_seconds': self.poll,
                     'runpod_yolo_inline_dataset_max_bytes': self.inline, 'create_runpod_training_artifact_upload': self.upload,
@@ -80,6 +83,7 @@ class RunPodFlowContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_runpod(server)
         cls.capture_entries()
 
     @classmethod
@@ -442,7 +446,7 @@ class RunPodFlowContracts(unittest.TestCase):
                     RunPodFlowRecords(lambda:fixture.update, fixture.sync, lambda:fixture.warmup),
                     RunPodFlowInputs(fixture.archive_create, fixture.payload, fixture.submit),
                     RunPodFlowResults(lambda:fixture.http, fixture.summary, parser.extract_runpod_worker_output,
-                                      lambda:fixture.importer, lambda:runpod_terminal_status, lambda:fixture.bound))
+                                      lambda:fixture.importer, lambda:runpod_terminal_status, lambda:fixture.bound), runtime_provider=get_runtime)
                 self.assertEqual(fixture.timeline.mock_calls, [])
                 environment.assert_not_called()
                 result = payload.runpod_training_input_payload('job', fixture.task, fixture.archive)

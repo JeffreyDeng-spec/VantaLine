@@ -20,7 +20,8 @@ class MaterialAlphaContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             cls.lifetime.enter_context(patch(name,side_effect=AssertionError('External operation forbidden')))
         from local_inspection_service import server
-        cls.api=server
+        from scripts.sprite_geometry_test_fixture import material_alpha_fixture
+        cls.api=material_alpha_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):

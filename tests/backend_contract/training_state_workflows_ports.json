@@ -1,0 +1,39 @@
+{
+  "parent": "af6529cf92779f6336ccf63d87f4d6908ba881ae",
+  "constructors": {
+    "_training_records": "_training_records = TrainingRecordStore(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, guard=lambda: _training_task_lock, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)), enrich=lambda *args: enrich_record_audit_fields(*args))",
+    "_training_lifecycle": "_training_lifecycle = TrainingTaskLifecycle(state=TrainingTaskState(guard=lambda: _training_task_lock, threads=lambda: _training_task_threads, tombstones=lambda: _training_task_delete_tombstones), records=TrainingTaskRecords(path=lambda job_id: training_task_path(job_id), load=lambda path: load_training_task(path), save=lambda task: save_training_task(task), find=lambda job_id: find_training_task(job_id)), writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)), require_access=lambda record, user, write=False: require_record_access(record, user, write=write))",
+    "_training_views": "_training_views = TrainingTaskViews(records=lambda: load_training_task_records(), refresh=lambda task: refresh_interrupted_local_training_task(task), access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)))"
+  },
+  "wrappers": {
+    "training_task_path": "def training_task_path(task_id: str) -> Path:\n    return _training_records.training_task_path(task_id)",
+    "load_training_task_records": "def load_training_task_records() -> list[dict[str, Any]]:\n    return _training_records.load_training_task_records()",
+    "save_training_task": "def save_training_task(task: dict[str, Any]) -> None:\n    return _training_records.save_training_task(task)",
+    "load_training_task": "def load_training_task(path: Path) -> dict[str, Any] | None:\n    return _training_records.load_training_task(path)",
+    "find_training_task": "def find_training_task(job_id: str) -> dict[str, Any] | None:\n    return _training_records.find_training_task(job_id)",
+    "local_training_task_is_active": "def local_training_task_is_active(task: dict[str, Any]) -> bool:\n    return _training_lifecycle.local_training_task_is_active(task)",
+    "refresh_interrupted_local_training_task": "def refresh_interrupted_local_training_task(task: dict[str, Any]) -> dict[str, Any]:\n    return _training_lifecycle.refresh_interrupted_local_training_task(task)",
+    "public_refreshed_training_task": "def public_refreshed_training_task(task: dict[str, Any], *, allow_remote_refresh: bool = False) -> dict[str, Any]:\n    return _training_views.public_refreshed_training_task(task, allow_remote_refresh=allow_remote_refresh)",
+    "list_training_tasks": "def list_training_tasks(\n    user: dict[str, Any] | None = None,\n    target_user_id: str | None = None,\n    *,\n    allow_remote_refresh: bool = False,\n) -> list[dict[str, Any]]:\n    return _training_views.list_training_tasks(user, target_user_id, allow_remote_refresh=allow_remote_refresh)",
+    "public_training_task": "def public_training_task(task: dict[str, Any]) -> dict[str, Any]:\n    return _training_views.public_training_task(task)",
+    "update_training_task": "def update_training_task(job_id: str, **updates: Any) -> dict[str, Any]:\n    return _training_lifecycle.update_training_task(job_id, **updates)",
+    "stop_training_task_process": "def stop_training_task_process(task: dict[str, Any], *, note: str) -> dict[str, Any]:\n    return _training_lifecycle.stop_training_task_process(task, note=note)",
+    "delete_training_task_record": "def delete_training_task_record(job_id: str, user: dict[str, Any], *, missing_ok: bool = False) -> dict[str, Any] | None:\n    return _training_lifecycle.delete_training_task_record(job_id, user, missing_ok=missing_ok)"
+  },
+  "parent_nonimport_ast_sha256": "661ec76586ab388125a2bac09aa44ad73b93696474ec896810d81a960c692f5b",
+  "business_sha256": {
+    "record_store.py": "fd1886e1e981c6435c264fbea6996685be9c5c712b291d4c09b2bfe13cec16f1",
+    "task_lifecycle.py": "bf024be573a5c22238fa2f2d1f239c031d81013456c2d39d082365c8c87b0fb7",
+    "task_views.py": "61c51dcca434285fc3559f1d892eedad84260ed1ec1b0d5f78546459cb406bdf"
+  },
+  "owner_constructor": "_training_state_workflows = TrainingStateWorkflows(runtime=_training_task_runtime, storage=TrainingRecordAccess(repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: TRAINING_TASKS_DIR, resolver=lambda: resolve_model_profiles, invalidate=lambda key: store_read_cache_invalidate(key), enrich=lambda *args: enrich_record_audit_fields(*args)), rows=TrainingRows(encode=lambda: training_task_row, decode=lambda: row_raw_json_list, identifier=lambda path: file_stem_identifier(path)), writes=TrainingTaskWrites(repository=lambda: runtime_postgres_repository_or_none(), row=lambda task, **kwargs: training_task_row(task, **kwargs), invalidate=lambda key: store_read_cache_invalidate(key)), require_access=lambda record, user, write=False: require_record_access(record, user, write=write), view_access=TrainingViewAccess(enrich=lambda task: enrich_record_audit_fields(task), sanitize=lambda: public_path_sanitized, visible=lambda record, user, target: record_visible_to_user(record, user, target)))",
+  "protected_imports": [
+    "from .training.record_store import TrainingRecordStore, TrainingRows",
+    "from .training.state_composition import TrainingRecordAccess, TrainingStateWorkflows",
+    "from .training.task_lifecycle import TrainingTaskWrites",
+    "from .training.task_views import TrainingViewAccess",
+    "from .training.task_lifecycle import training_task_uses_worker, TrainingTaskLifecycle, TrainingTaskRecords, TrainingTaskWrites",
+    "from .training.task_views import TrainingTaskViews, TrainingViewAccess"
+  ],
+  "composition_ast_sha256": "ccde1c15702bf156f96be1f494e725b60652a781e3b9b3d021727732c94b5f63"
+}

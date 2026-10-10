@@ -10,6 +10,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability, pose_capability_target
 
 class PhotoHighlightImageContracts(unittest.TestCase):
     @classmethod
@@ -20,7 +21,8 @@ class PhotoHighlightImageContracts(unittest.TestCase):
         (Path(cls.root.name) / 'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.photo_highlight_image_test_fixture import photo_highlight_image_fixture
+        cls.api = photo_highlight_image_fixture(server)
     @classmethod
     def tearDownClass(cls):
         cls.root.cleanup()
@@ -32,7 +34,7 @@ class PhotoHighlightImageContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))
     def replace(self, name, **kwargs):
-        return self.stack.enter_context(patch.object(self.api, name, **kwargs))
+        return self.stack.enter_context(patch_pose_capability(self.api, name, **kwargs))
     def test_prompt_exact_text_and_name_precedence(self):
         uid=self.replace('accessory_uid',return_value='identifier')
         self.assertEqual(hashlib.sha256(self.api.photo_highlight_mask_prompt({'name':'Synthetic','label':'Other'}).encode()).hexdigest(),'06f8e24b093bf09a644768a51c52069272682840b155398c0d25e7a94e6f944e')

@@ -4,7 +4,7 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
-  for scenario in managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback managed_embedded_510 managed_embedded_510_rollback managed_reject_web_499 managed_reject_web_511 managed_reject_worker_510 managed_reject_kill_mode; do
+  for scenario in managed_observe_success managed_observe_failure managed_observe_verified_recovery managed_observe_accepted_recovery managed_observe_already_installed managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback managed_embedded_510 managed_embedded_510_rollback managed_reject_web_499 managed_reject_web_511 managed_reject_worker_510 managed_reject_kill_mode; do
     if [[ "$EUID" -ne 0 ]]; then
       sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
@@ -16,7 +16,7 @@ if [[ "${1:-}" != --inside ]]; then
 fi
 scenario="${2:?scenario required}"
 source_root="$(cd "$(dirname "$0")/.." && pwd)"
-mount -t tmpfs -o size=3G tmpfs /opt
+mount -t tmpfs -o size=3G,mode=0755 tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
 base=/opt/vantaline
@@ -28,7 +28,8 @@ cp -R -P --preserve=mode,timestamps /etc/alternatives "$base/test-etc/"
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /etc
 cp -R -P --preserve=mode,timestamps "$base/test-etc/"* /etc/
 mkdir -p /etc/systemd/system /etc/vantaline
-ln -s "$(command -v python3)" "$base/venv/bin/python"
+ln -s /usr/bin/python3 "$base/venv/bin/python"
+printf 'home = /usr/bin\n' > "$base/venv/pyvenv.cfg"
 cat > "$base/testbin/sudo" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == -u ]]; then shift 2; fi
@@ -332,6 +333,36 @@ elif scenario in ('managed_paused_rollback', 'managed_legacy_queued_rollback'):
 elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').exists():
     raise SystemExit(23)
 PY_CHECKPOINT
+if [[ "$scenario" == managed_observe_* ]]; then
+  printf '%s' "$scenario" > "$base/observer-scenario"
+  mkdir -p "$work/local_inspection_service/runtime"
+  touch "$work/local_inspection_service/__init__.py" "$work/local_inspection_service/runtime/__init__.py"
+  cat > "$work/local_inspection_service/runtime/observe_label_runtime.py" <<'PY_OBSERVE'
+import argparse,json,os,pathlib,signal
+parser=argparse.ArgumentParser();parser.add_argument('--commit');parser.add_argument('--release');args=parser.parse_args()
+base=pathlib.Path('/opt/vantaline');root=pathlib.Path.cwd()
+assert root==base/'releases/v2026.10.1'
+assert root==(base/'current').resolve()
+version=json.loads((root/'VERSION.json').read_text())
+assert (args.commit,args.release)==(version['git_commit'],version['release'])
+journal=pathlib.Path('/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json')
+phase=json.loads(journal.read_text())['phase'] if journal.exists() else 'no-journal'
+if phase=='verified': assert (base/'maintenance').exists()
+with (base/'observer-events').open('a') as log:log.write(phase+'\n')
+scenario=os.environ.get('TEST_RUNTIME_SCENARIO') or (base/'observer-scenario').read_text()
+if phase=='no-journal' and scenario=='managed_observe_success':
+    import sys
+    assert sys.flags.isolated and sys.flags.no_site
+    assert not any(key in os.environ for key in ('PYTHONPATH','PYTHONSTARTUP','DATABASE_URL','LD_PRELOAD'))
+if scenario in ('managed_observe_verified_recovery','managed_observe_accepted_recovery') and not (base/'observer-interrupted').exists():
+    (base/'observer-interrupted').touch()
+    os.kill(os.getppid(),signal.SIGKILL)
+if scenario=='managed_observe_failure' or os.environ.get('TEST_OBSERVATION_FAIL')=='1' or (base/'observation-fail').exists():
+    raise SystemExit(23)
+before=[{'role':role,'instance':instance*32,'pid':pid,'sampled_at':10.0} for role,instance,pid in [('web','b',123),('label','c',456)]]
+print(json.dumps({'schema':1,'git_commit':args.commit,'release':args.release,'worker_mode':'external','config_revision':'d'*64,'maintenance':False,'paused':False,'queued_runs':0,'active_runs':0,'samples_before':before,'roles':[dict(row,sampled_at=12.0) for row in before],'periodic_progress':True}))
+PY_OBSERVE
+fi
 systemctl start vantaline
 if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff ]]; then
   # Reproduce the observed application-owned layout using real ownership.
@@ -438,6 +469,7 @@ fi
 archive="$base/incoming/v2026.10.1.tar.gz"
 tar -C "$base/build" -czf "$archive" vantaline-v2026.10.1
 archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+if [[ "$scenario" == managed_observe_* ]]; then cp "$archive" "$base/observer-package.tar.gz"; fi
 if [[ "$scenario" == managed_root_journal_handoff ]]; then
   stable_pid="$(cat "$base/vantaline.pid")"
   storage=/var/lib/vantaline-release
@@ -508,6 +540,59 @@ bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sh
   --release v2026.10.1 --commit "$commit" --apply > "$base/result.log" 2>&1
 result=$?
 set -e
+if [[ "$scenario" == managed_observe_verified_recovery || "$scenario" == managed_observe_accepted_recovery ]]; then
+  test "$result" -eq 137
+  journal=/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+  python3 - "$journal" <<'PY_PHASE'
+import json,sys
+assert json.load(open(sys.argv[1]))['phase']=='verified'
+PY_PHASE
+  if [[ "$scenario" == managed_observe_accepted_recovery ]]; then
+    PYTHONPATH="$source_root" python3 "$source_root/scripts/release_runtime_main.py" accept "$journal"
+    python3 - "$journal" <<'PY_ACCEPTED'
+import json,sys
+assert json.load(open(sys.argv[1]))['phase']=='accepted'
+PY_ACCEPTED
+  fi
+  set +e
+  TEST_OBSERVATION_FAIL=1 bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sha256 "$archive_sha" --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1
+  result=$?
+  set -e
+  test "$result" -eq 23
+  test -f "$archive"
+  python3 - "$base/observer-events" "$scenario" <<'PY_OBSERVE_CALLS'
+import pathlib,sys
+expected='accepted' if sys.argv[2]=='managed_observe_accepted_recovery' else 'verified'
+assert pathlib.Path(sys.argv[1]).read_text().splitlines()==['verified',expected]
+PY_OBSERVE_CALLS
+fi
+if [[ "$scenario" == managed_observe_already_installed ]]; then
+  if [[ "$result" != 0 ]]; then cat "$base/result.log"; exit 1; fi
+  test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+  stable_web_pid="$(cat "$base/vantaline.pid")"
+  stable_label_pid="$(cat "$base/vantaline-label-worker.pid")"
+  cp "$base/runtime-events" "$base/runtime-events.before"
+  cp "$base/control-events" "$base/control-events.before"
+  cp "$base/observer-package.tar.gz" "$archive"
+  set +e
+  TEST_OBSERVATION_FAIL=1 bash "$source_root/scripts/install_release.sh" --archive "$archive" --archive-sha256 "$archive_sha" --release v2026.10.1 --commit "$commit" --apply > "$base/already-installed.log" 2>&1
+  result=$?
+  set -e
+  test "$result" -eq 23
+  test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
+  test "$(cat "$base/vantaline.pid")" = "$stable_web_pid"
+  test "$(cat "$base/vantaline-label-worker.pid")" = "$stable_label_pid"
+  cmp "$base/runtime-events" "$base/runtime-events.before"
+  cmp "$base/control-events" "$base/control-events.before"
+  test ! -e "$base/maintenance"
+  test -f "$archive"
+  python3 - "$base/observer-events" <<'PY_NO_JOURNAL'
+import pathlib,sys
+assert pathlib.Path(sys.argv[1]).read_text().splitlines()==['verified','no-journal']
+PY_NO_JOURNAL
+  echo 'PASS no-journal observation failure leaves installed release/processes/admission and archive intact'
+  exit 0
+fi
 if [[ "$scenario" == managed_interrupt_rollback ]]; then
   test "$result" -eq 137
   test ! -e "$base/maintenance"
@@ -538,7 +623,7 @@ if [[ "$scenario" == managed_interrupted_accept || "$scenario" == managed_interr
     --release v2026.10.1 --commit "$commit" --apply > "$base/recovery.log" 2>&1 || { cat "$base/recovery.log"; exit 1; }
   result=0
 fi
-if [[ "$scenario" == managed_embedded_510 || "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
+if [[ "$scenario" == managed_observe_success || "$scenario" == managed_embedded_510 || "$scenario" == managed_interrupt_rollback || "$scenario" == managed_success || "$scenario" == managed_interrupted_accept || "$scenario" == managed_embedded_bridge || "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff || "$scenario" == managed_interrupt_stopped || "$scenario" == managed_interrupt_switched ]]; then
   if [[ "$result" != 0 ]]; then cat "$base/result.log"; exit 1; fi
   test "$(readlink -f "$base/current")" = "$base/releases/v2026.10.1"
   systemctl is-active --quiet vantaline
@@ -587,6 +672,12 @@ if [[ -n "$admin_file" ]]; then
     test ! -e /etc/systemd/system/vantaline.service.d/70-label-runtime.conf
   fi
 fi
+if [[ "$scenario" == managed_observe_failure || "$scenario" == managed_observe_verified_recovery || "$scenario" == managed_observe_accepted_recovery ]]; then
+  test "$result" -eq 23
+  test -f "$archive"
+  test -s "$base/observer-events"
+fi
+if [[ "$scenario" == managed_success ]]; then test ! -e "$base/observer-events"; fi
 if [[ "$scenario" == managed_journal_failure ]]; then
   if grep -q synthetic-customer-secret "$base/result.log"; then exit 1; fi
 fi
@@ -600,4 +691,62 @@ if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root
 fi
 test ! -e "/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json"
 test ! -e "$base/backups/.production-release.lock"
+if [[ "$scenario" == managed_observe_success ]]; then
+  # Exercise the promoted sudo-whitelisted command after accept/finish. Synthetic
+  # samples prove wiring only; actual PostgreSQL progress has separate tests.
+  site_directory="$base/venv/lib/$(/usr/bin/python3 -I -S -c 'import sys;print("python%d.%d"%sys.version_info[:2])')/site-packages"
+  mkdir -p "$site_directory"
+  printf 'import pathlib; pathlib.Path("/opt/vantaline/unsafe-site-hook").touch()\n' > "$site_directory/poison.pth"
+  printf 'import pathlib; pathlib.Path("/opt/vantaline/unsafe-site-hook").touch()\n' > "$site_directory/sitecustomize.py"
+  env PYTHONPATH=/synthetic-attacker PYTHONSTARTUP=/synthetic-secret DATABASE_URL=synthetic-secret \
+    bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/postaccept.json"
+  test "$(tail -1 "$base/observer-events")" = no-journal
+  test ! -e "$base/unsafe-site-hook"
+  python3 - "$base/postaccept.json" <<'PY_POSTACCEPT'
+import json,sys
+value=json.load(open(sys.argv[1]));assert value['periodic_progress'] is True and len(value['roles'])==2
+PY_POSTACCEPT
+  # Execute the workflow's actual preflight body as an unprivileged account.
+  python3 - "$source_root/.github/workflows/release-production.yml" "$base/preflight.py" <<'PY_PREFLIGHT_SOURCE'
+import pathlib,sys
+lines=pathlib.Path(sys.argv[1]).read_text().splitlines()
+start=lines.index('          import os, pathlib, stat, sys')
+end=lines.index('          PY_OBSERVER_ENVIRONMENT',start)
+body='\n'.join(line[10:] for line in lines[start:end])+'\n'
+compile(body,'workflow-preflight','exec')
+pathlib.Path(sys.argv[2]).write_text(body)
+PY_PREFLIGHT_SOURCE
+  /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/preflight.json"
+  events_before="$(sha256sum "$base/runtime-events" "$base/control-events")"
+  pointer_before="$(readlink "$base/current")"
+  for bad in argument commit writable config interpreter module; do
+    args=(--observe-runtime --release v2026.10.1 --commit "$commit")
+    case "$bad" in
+      argument) args+=(--apply) ;;
+      commit) args=(--observe-runtime --release v2026.10.1 --commit "${commit%?}f") ;;
+      writable) chmod 777 "$base/venv" ;;
+      module) chmod 777 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py" ;;
+      config) printf 'home = /tmp\n' > "$base/venv/pyvenv.cfg" ;;
+      interpreter) rm "$base/venv/bin/python"; ln -s /bin/sh "$base/venv/bin/python" ;;
+    esac
+    if bash /usr/local/sbin/vantaline-install-release "${args[@]}" > "$base/rejected-observation.log" 2>&1; then exit 1; fi
+    if [[ "$bad" == writable || "$bad" == config || "$bad" == interpreter ]]; then
+      if /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/rejected-preflight.log" 2>&1; then exit 1; fi
+      test "$(cat "$base/rejected-preflight.log")" = 'Runtime observation environment preflight failed'
+    fi
+    chmod 755 "$base/venv"
+    chmod 644 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py"
+    printf 'home = /usr/bin\n' > "$base/venv/pyvenv.cfg"
+    rm "$base/venv/bin/python"; ln -s /usr/bin/python3 "$base/venv/bin/python"
+    test "$(readlink "$base/current")" = "$pointer_before"
+    test "$(sha256sum "$base/runtime-events" "$base/control-events")" = "$events_before"
+    test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+  done
+  touch "$base/observation-fail"
+  if bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/failed-observation.log" 2>&1; then exit 1; fi
+  test "$(readlink "$base/current")" = "$pointer_before"
+  test "$(sha256sum "$base/runtime-events" "$base/control-events")" = "$events_before"
+  if grep -q synthetic-secret "$base/failed-observation.log"; then exit 1; fi
+  test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+fi
 echo "PASS release runtime installer $scenario"

@@ -1,8 +1,9 @@
 """Automatic training admission, submission and delayed-check orchestration."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 import os
 import threading
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 import time
 from .auto_optimization_training_scheduling_ports import SchedulingPolicy, SchedulingSubmission, SchedulingState
 
@@ -11,6 +12,8 @@ class AutoOptimizationTrainingScheduling:
     policy: SchedulingPolicy
     submission: SchedulingSubmission
     state: SchedulingState
+
+    runtime: TrainingThreadLifecycle = field(default_factory=TrainingThreadLifecycle, compare=False, repr=False, kw_only=True)
 
     def maybe_start_auto_optimize_training_locked(self, state: dict[str, Any]) -> None:
         completed_model_id = self.policy.auto_optimize_completed_model_id()(state)
@@ -118,13 +121,18 @@ class AutoOptimizationTrainingScheduling:
 
 
     def start_auto_optimize_training_check_worker(self, task_id: str, delay_seconds: float = 0.0) -> None:
+        return self.runtime.submit(lambda launch: self._start_check(task_id, delay_seconds, launch))
+
+    def _start_check(self, task_id: str, delay_seconds: float, launch: ThreadLaunch) -> None:
         clean_task_id = self.state.sanitize_ai_detection_task_id()(task_id)
         if not clean_task_id:
             return
-        thread = threading.Thread(
-            target=self.state.auto_optimize_training_check_worker(),
+        launch(lambda wrap: threading.Thread(
+            target=wrap(self.state.auto_optimize_training_check_worker()),
             args=(clean_task_id, delay_seconds),
             name=f"auto-opt-training-check-{clean_task_id}",
             daemon=True,
-        )
-        thread.start()
+        ), lambda thread: None)
+
+    def close(self, timeout: float) -> bool:
+        return self.runtime.close(timeout)

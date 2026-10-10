@@ -1,10 +1,18 @@
+The release workflow now invokes the promoted installer with fixed `--observe-runtime --release ID --commit SHA` arguments before publishing success. Before installation, an unprivileged read-only SSH preflight checks that the existing virtual environment uses the system interpreter and contains only root-owned code without group/world write access. Custom/copy interpreters and unsafe environments are rejected without changing ownership or permissions. The observer disables Python site hooks and caller environment. This read-only post-acceptance check uses the existing installer sudo rule; it verifies the immutable current package, root-owned code/interpreter, captured configuration and advancing database heartbeats for the declared Web/label roles. Caller-selected Python paths, modules and environment are not accepted. It is required on the first deployment even when the previously installed controller has no pre-acceptance observer. A failed post-acceptance check leaves the GitHub Release draft; installation has already committed and its transition journal is finished. Recover through a complete revert/release, preserving task/call evidence, secrets and incremental tables. Do not claim automatic installer rollback for this later gate or reapply an already installed non-current release ID.
+
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
+The default account visibility graph adds no schema, release topology or rollout setting. Existing authentication HTTP registration and SPA ordering remain unchanged. Its local permission/source checks are scoped evidence and do not replace final CI, performance or whole-release acceptance.
+
+The focused training completion graph is assembled by the default Web entry and adds no release topology or migration. Configuration/pipeline/candidate partial commit boundaries are retained; rollback continues to replace the whole immutable release. Local graph checks do not establish final hosted CI or production acceptance.
+
 Codex comparison list/event read-transaction separation is a schema-free, Web-compatible release. It changes no worker topology, model binding, paid-call retry or database write fence. Existing `get` and the HTTP events ownership lookup still serialize. CI requires isolated PostgreSQL visibility and lock-wait checks; restore only the previous complete immutable release on failure.
 
-The ephemeral legacy label-record index is a Web-compatible, schema-free release with source manifest v133 (341 entries). Backend shards read the exact first-parent `api.py` for projection replay. The independent Backend performance workflow fetches and verifies the immutable v550 API blob for unchanged 1,000/10,000-record same-run performance benchmarks. It changes no worker topology, cursor, write transaction, model binding or paid-call behavior. Restore the previous complete immutable release on failure; leave records and snapshots intact.
+The ephemeral legacy label-record index is a Web-compatible, schema-free release with source manifest v133 (341 entries). Backend shards fetch the fixed `0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd` API and verify blob `fab9c59d49a6f1f1864479981b29ffb8bd766567` for projection replay. The required CI performance job and scheduled Backend performance workflow fetch and verify the immutable v550 API blob for unchanged 1,000/10,000-record same-run performance benchmarks. It changes no worker topology, cursor, write transaction, model binding or paid-call behavior. Restore the previous complete immutable release on failure; leave records and snapshots intact.
 
 Label read-transaction separation is a Web-compatible release with unchanged schema, cursor format, worker topology and business API. Only three list-oriented methods lose the advisory lock; write and model-snapshot paths retain it. Source manifest v132 has 341 entries. CI requires isolated PostgreSQL lock/visibility/rollback evidence and the existing label concurrency/pagination smoke. Restore the previous complete immutable release on failure without rewriting task, snapshot or paid-call evidence.
 
-The v131 native-run batching release changed only first-page read/query grouping; at that point the advisory read lock was unchanged. The v132 release removes that lock from three pure-list reads while retaining the 15-minute cursor format, embedded worker, database schema and write lock. Accepted-source projection is replayed locally; Required CI runs candidate contract checks; the independent Backend performance workflow runs isolated PostgreSQL benchmarks for review. Roll back to the previous complete immutable release without rewriting task or call evidence.
+The v131 native-run batching release changed only first-page read/query grouping; at that point the advisory read lock was unchanged. The v132 release removes that lock from three pure-list reads while retaining the 15-minute cursor format, embedded worker, database schema and write lock. Accepted-source projection is replayed locally; Required CI runs candidate contract checks and the complete isolated PostgreSQL performance protocols; scheduled Backend performance provides additional review evidence. Roll back to the previous complete immutable release without rewriting task or call evidence.
 
 The PLC diagnostic receipt extraction ships in a complete Web-compatible release with unchanged API, PostgreSQL mutation and browser serial ownership. Source manifest v130 retains 339 actual source entries. Replay accepted-original behavior locally; CI checks candidate isolated PostgreSQL and existing PLC/HTTP contracts. Rollback restores the previous complete immutable release without rewriting lease or browser evidence.
 
@@ -664,6 +672,32 @@ adds no production flag, migration or change to the immutable deployment path.
 
 **Status: Authoritative**
 
+The backend CI runs the actual path/configuration-cycle smoke before the original
+app-store contracts. This is a composition change in the existing immutable
+package, with no runtime topology or protocol change. Whole-release rollback
+preserves configuration, task evidence and historical model snapshots. Complete
+application-factory and release acceptance remain required separately.
+
+The packaged `local_inspection_service.runtime.observe_label_runtime` command
+provides a root-only database observation for an active managed release. It reads
+the captured runtime configuration without starting Web, workers or migrations.
+Each observation uses a repeatable-read, read-only transaction and checks actual
+persisted Web/label sampling timestamps, identity, process instance, PID, control
+revision, admission flags and the global concurrency limit. Both roles must
+advance within a 30-second observation deadline; fresh means at most 15 seconds.
+The command rechecks the active package and configuration before reporting success.
+Ready/drained while fenced is evidence of periodic progress, not restored admission.
+For a package containing the observer, the installer runs that package's Python
+from its own directory after public HTTP checks and before accept/recover and the
+deployment commit. Failed observations follow the existing journal-bound joint
+rollback. A retry of an already installed package without a journal leaves its
+current processes/admission intact and retains the archive when observation fails.
+Older immutable packages lacking the observer retain their original health gate;
+new artifact builds and CI require both observer modules and checksum entries.
+Pre-accept samples establish fenced periodic progress. Admission restoration is
+still checked by the existing controller; these samples do not observe a later
+resumed consumer or establish final production commissioning.
+
 The source-safety CI job runs the offline COS evacuation smoke. The operational
 tool does not run during release installation and does not enable COS in the
 application. Merging its tooling alone cannot authorize source-file removal or
@@ -1012,7 +1046,7 @@ The derived-label list reader preserves the predecessor release topology. CI com
 
 Reader activation includes a first-startup prerequisite on the actual Web repository connection. Failed verification prevents candidate control readiness and separate-worker startup; the existing installed controller follows whole-release rollback. It runs after the ordinary switch and may extend a failed restart window. No new root-executed candidate validator or installer bridge is introduced. CI includes restricted-role startup rejection and controller rollback, and the HTTP contract baseline changes only by the explicit new first startup callback.
 
-The reader evidence revision changes benchmark/CI diagnostics only, with three mandatory complete A/B repetitions and a separate A/A control. Existing latency/memory/query gates remain unchanged. A full benchmark failure now remains independent performance review evidence; an earlier failed main run must not be described as accepted. New passing CI remains empirical evidence, not proof that the original tail-latency failure was environmental. Whole-release rollback remains the recovery unit.
+The reader evidence revision changes benchmark/CI diagnostics only, with three mandatory complete A/B repetitions and a separate A/A control. Existing latency/memory/query gates remain unchanged. A full benchmark failure remains evidence and blocks the required CI performance job; an earlier failed main run must not be described as accepted. New passing CI remains empirical evidence, not proof that the original tail-latency failure was environmental. Whole-release rollback remains the recovery unit.
 
 Package `runtime/service_paths.py` and its typed ports with callers and the updated prompt-source manifest. Require both-platform original/candidate path checks and neighboring media/auth/HTTP/model contracts, followed by exact-head review and managed complete-release validation. No independent file deployment is supported.
 
@@ -1070,7 +1104,7 @@ Image payload codecs extend the existing fingerprinted provider module under man
 
 Historical integration record (before PR266; not the current bundled architecture): That model/provider integration followed the accepted reader-readiness source manifest and retained its prerequisite. Its bundled manifest was v168 with 494 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remained mandatory; that historical candidate did not include native-history aggregation. The current integration retains the native-history implementation accepted in PR266.
 
-This model/provider integration is based on main ad1292a after PR267 and preserves the native-history and reader-readiness implementation accepted in PR266. Its production and test sources match the independently reviewed model candidate 63df072. The complete bundled manifest is v169 with495 unique sources; earlier slice counts describe isolated candidates. Both fixed reader19 and history28 protocols remain mandatory within Backend performance; their full matrices are not required release checks. Publication requires acceptance of the identity release, followed by this candidate’s own CI and independent review; the prerequisite’s first main CI AA failure remains recorded.
+This model/provider integration is based on main ad1292a after PR267 and preserves the native-history and reader-readiness implementation accepted in PR266. Its production and test sources match the independently reviewed model candidate 63df072. The complete bundled manifest is v169 with495 unique sources; earlier slice counts describe isolated candidates. Both fixed reader19 and history28 protocols remain mandatory within Backend performance; those historical matrices were independent review checks at that checkpoint; the current complete refactor CI requires both full matrices before release. Publication requires acceptance of the identity release, followed by this candidate’s own CI and independent review; the prerequisite’s first main CI AA failure remains recorded.
 
 Detection request services and typed capabilities ship together with application routes. Require original/candidate workflow contracts and existing HTTP/auth/detection/pipeline checks, then exact-head CI, independent review and whole-release verification. This structural change must not be combined with CRUD policy or concurrency changes.
 
@@ -1112,6 +1146,442 @@ CI benchmark storage isolation is an infrastructure-only candidate: product code
 The feedback foundation ships disabled by an empty account allowlist. Its CI includes disposable PostgreSQL owner/claim competition tests. Subsequent review-worker and dataset-training batches require independent commissioning and immutable release evidence; green fixture checks alone do not authorize declaring visual accuracy or enabling automatic training. Use the production-change PR template and whole-release rollback.
 
 The second feedback PR adds the independent training review service and alternative bubblewrap tool mounts. Keep account admission off until the service account, pinned runtime and real private-data session are verified. Archive terminal receipts and settle current sessions before restarting/rolling back both Web and the separate worker from one immutable release.
+Manifest v177 records the retained legacy PLC worker owner. Require fake-thread/state regression plus current PLC v4, browser/source, lease, full HTTP and release checks, followed by exact-head CI and independent complete-release acceptance. No server serial process may be started by this change.
+
+The station active-lease ownership change is a structural release under manifest v177. Require exact-head CI, independent review and complete release acceptance; existing PLC contracts and actual PostgreSQL rebind/diagnostic cases must pass before merge.
+
+The six legacy PLC readiness helpers ship under source manifest v177 with the existing topology and disabled server-serial startup. Exact-head CI, independent review and full release acceptance remain required; the readiness import stub is not a physical-device test.
+
+The PLC runtime coordination ownership slice is structure-only. Prompt source manifest 177 adds plc/legacy_coordination.py truthfully for new tasks; existing model snapshots keep their previous version and fingerprint. Publish and roll back the complete package, preserving the current external label-worker topology.
+
+PLC dispatch record logic now has its own source entry in prompt manifest 177 (512 paths). New tasks record the actual source manifest; historical snapshots remain unchanged. Deploy and roll back the complete immutable package with its existing runtime topology.
+
+Prompt manifest 177 includes plc/legacy_operations.py as the actual source of the retained workflows (512 paths). Historical task snapshots are unchanged. This ownership-only slice retains the existing installer, services and full-package rollback.
+
+This PLC candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows the reviewed background ownership candidate. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed a139e03. The bundled manifest is v177 with 512 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior recorded performance failures remain retained. Browser-only physical IO, uncertain-write no-retry and inert retained startup remain unchanged.
+
+Prompt-source manifest178/513 adds runtime/web_shell.py for new task fingerprints. Existing task snapshots remain unchanged. Shell composition requires full navigation/auth and HTTP-order regression, independent review and exact-head CI; deployment and rollback continue using the complete release.
+
+This Web-shell candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows PLC candidate e73394d. Actual-main rebind and predecessor release acceptance must precede publication. Production/tests and the ordered entry match reviewed 4b28b8e. The bundled manifest is v178 with 513 unique sources. Fixed history28 and reader19 protocols remain mandatory; earlier recorded performance failures remain retained.
+
+The unreachable-tail cleanup retains all currently reachable endpoint behavior, uses one complete release and changes no topology or migration. Its frozen-parent/compiled-prefix and actual HTTP comparison run alongside the original full application contract. CI, independent exact-head review and preceding release acceptance remain mandatory.
+
+This unreachable-tail candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows Web-shell candidate 82cc0d0. Actual-main rebind and predecessor release acceptance must precede publication. Production and the ordered entry match reviewed ed9dc91; the retained-tail test explicitly handles Python 3.10 frame cells and Python 3.11+ compiler metadata without skipping behavior checks. The bundled manifest is v179 with 513 unique sources. Fixed history28 and reader19 protocols remain mandatory; prior performance failures remain retained. Existing endpoints and live behavior remain; only statements following unconditional exits are removed.
+
+The repository composition slice binds its HTTP adapter to the same owned connection factory and migrates only test injection/source-location checks. New and existing native-thread/real-PostgreSQL/HTTP contracts remain required, as do exact-head review and serial whole-release acceptance. It is a prerequisite for per-application graph composition, not a complete create_app or lifecycle claim.
+
+This repository candidate retains native-history/readiness and detection composition from actual main dcb4805, and follows the reviewed tails candidate. Actual-main rebind and predecessor release acceptance must precede publication. Repository production and the ordered entry match reviewed dd74e3e. The bundled manifest is v180 with 514 unique sources. Fixed history28 and reader19 protocols remain mandatory; earlier performance failures remain retained. This is scoped connection ownership, not a complete production application factory.
+
+Authentication domain ownership ships as a structural composition change. It intentionally removes private entry-name rebinding as an internal wiring mechanism while retaining runtime API/settings defaults and route order. Require original/composed HTTP contracts, real PostgreSQL account/session checks, exact-head review and serial whole-release acceptance; this does not complete the full application factory.
+
+This authentication candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows repository candidate 3ac769a. Actual-main rebind and predecessor release acceptance must precede publication. Authentication production/tests and ordered entry match reviewed a1933f3. The bundled manifest is v181 with 515 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit startup captures intentionally narrow private root rebinding; this is not a complete application factory.
+
+Require unchanged record ownership/audit/access regressions plus the composed ASGI identity tests, exact-head review, full CI and serial complete-release acceptance for record composition. No source file is copied independently to production.
+
+This record composition candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows authentication candidate 552944a. Actual-main rebind and predecessor release acceptance must precede publication. Record production/tests and ordered entry match reviewed f5d759e. The bundled manifest is v182 with 516 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit selected methods narrow private root rebinding; no new permission or persistence atomicity is claimed.
+
+Bootstrap path composition requires differential checks against the frozen predecessor, original path/directory and full HTTP contracts, exact review/CI and sequential full-release acceptance. The explicit layout is a prerequisite for full application composition, not an independent runtime topology.
+
+This bootstrap candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows record candidate bdbe2fa. Actual-main rebind and predecessor release acceptance must precede publication. Bootstrap production/tests and ordered entry match reviewed 4a4733a. The bundled manifest is v183 with 517 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Existing path resolution order and errors remain; no directory creation or complete application factory is introduced.
+
+The cost composition slice packages selected-owner wiring and manifest v184/518 with the existing complete Web/label-worker release. No pricing, SQL, API, schema or topology change is introduced. Keep the original admin route order and require existing cost/HTTP and pipeline-store contracts. Rollback restores the complete preceding package while preserving task and call evidence.
+
+This cost composition candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows bootstrap candidate f265821. Actual-main rebind and predecessor release acceptance must precede publication. Cost production/tests and ordered entry match reviewed 73a6a78. The bundled manifest is v184 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Selected source owners and paths are explicit; no atomic ledger snapshot, accounting algorithm change or complete application factory is introduced.
+
+Image worker lifecycle verification now includes the owned admission/drain smoke in CI. The bundled source manifest advances to v185 with the same 518 paths. Queue workers enter their own repository scopes; owner drain reports timeout without cancellation or retry. This slice does not yet wire Web application shutdown or MCP drain, so managed release topology and stop deadlines remain unchanged. Whole-release rollback remains required.
+
+This image-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows cost candidate 9ffd4a0. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 1a286c0, including retained uncertain-start handles. The bundled manifest is v185 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. This scoped owner drain does not establish whole-application shutdown or final persistence success.
+
+Image coordinator and child starts now retain uncertain-start handles even if `is_alive()` is false, child lists are pruned, or a later coordinator replaces the current handle. A failed start revokes an unentered target, and shutdown must join retained handles before reporting drained. A never-started handle may remain undrained; stored running evidence is preserved and never requeued. Deterministic interrupted-bootstrap tests cover both launch paths and later coordinator replacement.
+
+MCP operations now have a client-owned admission boundary covering the complete tool dispatch, including the existing stdio failure fallback, and warmup cleanup. New operations are rejected before transport or fallback after shutdown begins; same-thread nested work belonging to an already admitted operation can finish. Startup and request serialization share the client lock, independently of the admission condition. The bounded shutdown waits for admitted work, then terminates and reaps owned transports; an expired deadline returns undrained without cancelling a blocked call or inducing fallback. Recoverable close retains terminated processes for later reaping. Existing provider selection, prompts, wire messages and transport-failure fallback behavior are unchanged. The client retains the startup warmup thread and admits it before construction/start. Shutdown drains this reserved startup operation, joins its owned thread, then retires transports. Application shutdown registration and full production factory integration remain pending.
+
+MCP recovery retains both live and already-exited displaced processes by identity. An exited transport skips termination but still participates in final wait and stdin/stdout cleanup; EOF followed by the existing fallback cannot lose this cleanup ownership.
+
+This MCP-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows image-drain candidate f8e5dbc. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 008c167, including exited-transport ownership. The bundled manifest is v186 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. This client drain does not establish whole-application shutdown or business persistence success.
+
+MCP warmup startup retains its enabled check and original callback, thread name and daemon setting, but now starts through its client owner. Duplicate live starts and starts after closing are rejected. Thread construction/start failures release reservations exactly once; a thread that started before a start error remains tracked. Already reserved warmup may finish nested client operations after closing begins; unrelated threads cannot inherit that admission. No join occurs under admission or client locks.
+
+A failed or interrupted warmup `Thread.start()` cannot use `is_alive() == False` as proof that no OS thread exists. A target not yet entered is revoked, but its handle is retained and shutdown reports undrained until joining proves completion. A start that never actually created a thread can therefore remain conservatively undrained; no target or paid fallback is replayed. A deterministic interrupted-bootstrap regression covers the late-start window.
+
+Uncertain warmup handles are also retained across a later warmup start. Replacing the current handle cannot erase a revoked thread that has not yet confirmed startup/completion; shutdown joins every retained handle.
+
+This MCP-warmup candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows MCP-drain candidate 88cf6c3. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed ed5bda6, including all uncertain warmup handles. The bundled manifest is v187 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Warmup cleanup remains bounded and conservative; full application lifecycle acceptance is separate.
+
+YOLO warmup starts now belong to their `YoloWarmup` instance, including pending thread construction and every admitted thread. Each thread enters and releases its repository scope on that same thread. Closing rejects later starts and waits outside lifecycle/status locks; a timeout reports undrained without cancelling inference, changing model selection, or requeuing work. Existing repeated-start behavior and per-model handling remain. Application-wide lifecycle registration and per-app graph construction remain separate pending work. Prompt source manifest v188 retains the same 518 ordered files.
+
+Interrupted or failed warmup starts retain uncertain handles even across later starts. An unentered target is revoked and every retained handle must be joined; a never-started handle remains conservatively undrained. The tests cover delayed native bootstrap, interrupted startup, later thread replacement and same-thread scope exit.
+
+This YOLO-warmup candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows MCP-warmup candidate 16e6733. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4b1cfa5. The bundled manifest is v188 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Joining owned warmup threads does not prove inference success or complete application shutdown.
+
+Training thread ownership is an in-process lifecycle prerequisite and does not change the declared Web/label-worker release topology. It cannot be used as evidence that training subprocesses or remote jobs are drained. Publish and roll back the complete immutable release; preserve task/model/call evidence and keep existing labels shutdown policy.
+
+This training-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows YOLO-warmup candidate 3325d48. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 89ea498. The bundled manifest is v189 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Native-thread drain does not certify task persistence, remote settlement or whole-application shutdown.
+
+The Codex background thread owner is a local lifecycle prerequisite. It does not change Web/label-worker topology or add a process/service. This slice does not install a shutdown hook; whole-release rollback preserves runtime records and call evidence.
+
+This Codex-background drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows training-drain candidate ad431e7. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 9634271. The bundled manifest is v190 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Only owner-started native threads are drained; synchronous callers and remote business settlement remain separate.
+
+Transfer reporter admission/drain is an offline lifecycle prerequisite, without an enabled application shutdown hook. Publish only after the new real-thread regression, retained worker-transfer/bundle/retired-flow contracts and full CI pass. Rollback remains a complete immutable release; no data migration is involved.
+
+This transfer-reporter drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows Codex-background candidate bb5e844. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 5d64dfe. The bundled manifest is v191 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Reporter drain does not cancel transfers or certify task persistence or whole-application shutdown.
+
+The three auto-optimization thread owners are a lifecycle prerequisite with unchanged Web/label-worker topology. Require new ownership tests and existing auto-optimization regressions before publication. Rollback restores the complete immutable release and preserves task/model/call records; there is no data migration.
+
+This auto-optimization starter-drain candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows transfer-reporter candidate 7f3f2a7. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4e88155. The bundled manifest is v192 with 518 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Native-thread drain does not certify remote settlement or whole-application shutdown; the executor scope fix remains a separate successor.
+
+Foundation construction is a structural composition change with no new service, migration or deployment option. Run actual-entry HTTP/auth/repository contracts and two-foundation isolation tests before publication. Continue whole-release rollback; retain existing task, call and model-secret evidence.
+
+This application-foundation candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows auto-optimization starter candidate d81faba. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 66697fc. The bundled manifest is v193 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Three inert foundational owners are distinct; this does not complete the application factory or lifecycle.
+
+Automatic-mask pool repository scoping is independently testable with model substitutes and adds no service or migration. Require the pool cleanup regression and retained batch/state tests, then publish or roll back the complete release.
+
+This automatic-mask pool-scope candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows application-foundation candidate 8dd3e33. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed c84e963 and the ordered entry is unchanged. The bundled manifest is v194 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Repository cleanup is scoped to executor work; model-binding propagation remains a separate successor.
+
+Model-only mask-pool binding is separate from prior repository cleanup. Require the old-behavior counterexample and actual batch snapshot regression plus existing model-profile tests before release. Rollback restores the entire release; stored task snapshots and immutable secret references are retained.
+
+This automatic-mask model-binding candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows pool-scope candidate 60a094b. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed b86a647. The bundled manifest is v195 with 519 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Only the selected model snapshot is propagated; later binding failure does not undo already submitted work.
+
+Text document/preparation thread ownership and slot handoff require the new native-thread regression and retained document/preparation/model contracts before publication. No service, migration or new shutdown hook is introduced. Use whole-release deployment/rollback and preserve persisted job and call evidence; never use permit release as authorization to retry an uncertain call.
+
+This text-job ownership candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows model-binding candidate 8302940. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 4491be2. The bundled manifest is v196 with 520 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Job permits retain capacity through thread and repository cleanup; direct synchronous calls remain caller-owned.
+
+HTTP construction extraction is packaged with its actual source under prompt manifest v197 (521 files). Existing model snapshots stay immutable. Full HTTP/authentication/source and existing release checks remain required; this change does not activate a new runtime topology.
+
+This HTTP-shell candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows text-job candidate a071786. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests and ordered entry match reviewed 5d1d582. The bundled manifest is v197 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. A fresh transport shell is not yet a complete isolated production application.
+
+The HTTP upload-provider capability updates the fingerprinted constructor under manifest v198 while retaining the same 521 source paths. Require original HTTP-shell parity, injected-provider ASGI isolation, existing artifact integration contracts and normal immutable release acceptance. Roll back the complete release; no storage or database migration is included.
+
+This HTTP upload-provider candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows HTTP-shell candidate fa14007. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed 6f11bcd and the ordered entry is unchanged. The bundled manifest is v198 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Explicit provider injection is enabled for later composition; the current entry still uses the default provider.
+
+Artifact runtime ownership updates the existing fingerprinted runtime module under manifest v199 with the same 521 source paths. The original selector is frozen as test evidence from the unchanged actual-main source. Require selector baseline/concurrency and existing artifact/HTTP contracts before immutable release acceptance. Internal module cache variables are replaced by the default owner and are not a supported external configuration API.
+
+This artifact-runtime ownership candidate retains native-history/readiness and detection composition from actual main dcb4805 and follows HTTP upload-provider candidate 4ab91fe. Actual-main rebind and predecessor release acceptance must precede publication. Owned production/tests match reviewed 4c2b19e and the ordered entry is unchanged. The bundled manifest is v199 with 521 unique sources. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Owners isolate selector locks and caches, not underlying paths or resources; the default entry owner remains process-scoped.
+
+Frozen HTTP constructor evidence is pinned to canonical Git LF bytes with an explicit checkout attribute. The raw SHA guard still rejects any changed fixture; this fixes platform-dependent test acceptance without changing application behavior or historical task snapshots.
+
+Frozen artifact-runtime evidence is checked out as canonical Git LF bytes. The original raw SHA and immutable fixture Git blob remain unchanged; a CRLF working-copy mismatch is a test portability failure, not a runtime regression.
+
+Pipeline scheduler ownership ships through the same immutable release and source manifest v206 (519 paths). No worker topology or automatic drain hook is activated in this slice. Parent-before-dependency shutdown wiring needs separate full-application acceptance.
+
+Extraction thread ownership preserves current Web/label-worker topology and has no database migration. Require native extraction ownership tests, retained extraction behavior and full CI; deploy/rollback complete immutable releases while retaining extraction attempt evidence. Application shutdown integration is a separate remaining step.
+
+Comparison cleanup is a bounded failure-handling fix with no migration or topology change. Require the fault/real-semaphore regression, retained comparison/model/HTTP contracts and full CI; roll back the complete release while retaining all call and task evidence.
+
+Prepared comparison thread/timer ownership is staged independently under manifest v207. Require native lifecycle and cleanup fault tests, retained actual HTTP and model contracts, dependency and documentation checks before exact-head CI/review. This change adds no service and activates no shutdown hook; whole-release rollback and the existing Web/label topology remain mandatory.
+
+PDF consumer ownership is a separate manifest v208 slice. Require its native startup/drain failure tests, unchanged label regression and real PostgreSQL HTTP checks before hosted CI and independent exact-head acceptance. It adds no service or automatic cancellation, and whole-release rollback remains the recovery path.
+
+This offline lifecycle integration retains native-history/readiness and detection composition from actual main dcb4805 and follows artifact-owner candidate 6b648b5. Owned production/tests and ordered entry match reviewed 28de9fa; both canonical fixture corrections are already retained. The bundled manifest is v204 with 523 unique sources; earlier paragraph counts refer to their original individual candidates. Fixed history28 and reader19 protocols remain mandatory; previous performance failures remain retained. Publication must use independently reviewed domain-scoped PRs on accepted main, with full hosted and release gates; this offline combined tree is not a blanket grouped publication approval or complete application factory.
+
+The two frozen HTTP-constructor and artifact-runtime Python fixtures use Git-enforced LF checkout bytes. Their tests hash the actual canonical Git content before executing it, so Windows checkout conversion cannot invalidate the frozen contract. The HTTP fixture expected hash is corrected from its original CRLF working-copy digest to the committed LF blob digest; fixture source content and the artifact fixture digest are unchanged. The integration verification retained both the initial private runner filename error and the subsequent observed CRLF artifact-baseline failure.
+
+The Web teardown candidate changes the HTTP lifecycle contract to one shutdown_application callback while preserving its original PDF-stop and label/control-stop prefix. Native drain owners share the remaining 480-second cooperative allowance. No installer/service timeout, release topology, worker build, task deadline, automatic retry or rollback behavior changes. At the shutdown replay boundary, source manifest205 includes524 actual sources. Release acceptance must include the exact new lifecycle checks; idle synthetic teardown is not a live nonempty drain or rollback exercise.
+
+This offline shutdown replay follows lifecycle candidate 7d7886a and preserves current native history, readiness, model/tail and canonical LF fixes. Four owned runtime/test/contract blobs match reviewed 82313c5. Manifest v205 lists 524 sources. The 480-second shutdown allowance remains cooperative and requires ASGI request quiescence; complete independent application composition is still pending. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The detection artifact-port smoke is an additional backend CI gate using isolated synthetic stores. Existing package, frontend, PLC and deployment gates remain mandatory; runtime topology and installation steps are unchanged.
+
+This offline detection artifact replay follows shutdown candidate 8618f7a and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 713010a. Manifest v206 lists 524 sources. Storage suppliers retain call-time selection; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The detection media-port smoke is an additional required backend command. It verifies synthetic storage graphs without a real model, paid provider, PLC or remote object service; ordinary complete-release CI and managed rollout/rollback remain required.
+
+This offline detection media replay follows artifact candidate e7e12b2 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 5e86530. Manifest v207 lists 524 sources. Explicit stores retain original cache, error and video cleanup behavior; this does not yet switch the complete application graph. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The additional HTTP artifact-port smoke exercises synthetic ASGI applications with real artifact stores and in-memory object clients. Complete CI and managed release gates remain required; it is not a live storage or production account validation.
+
+This offline HTTP artifact replay follows detection media candidate f2b4519 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 301b6c1. Manifest v208 lists 524 sources. Explicit missing file dependencies fail closed while genuinely omitted legacy arguments retain their documented default. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Incoming artifact isolation adds one synthetic backend smoke command. Existing CI, managed release and actual-main gates stay required; the local workflow checks do not attest live OCR, customer accounts, remote object storage or production retention behavior.
+
+This offline incoming workflow replay follows HTTP artifact candidate 2336193 and preserves current native history, readiness, model/tail and canonical LF fixes. Production and test blobs match reviewed 8e4d991. Manifest v209 lists 524 sources. Consistent captured files/images dependencies retain original partial-write, exception and retention semantics. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+The additional background-file-port backend smoke uses isolated synthetic storage and task callbacks. Complete hosted CI and managed rollout still gate publication; it does not verify a live generator, customer storage or nonempty shutdown.
+
+This offline background file replay follows incoming candidate 841c4ba and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed c80ed68. Manifest v210 lists 525 sources, with the corrected service-relative background capability path. Captured file capabilities retain original ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+The additional background-image capability smoke uses synthetic object clients and analysis callbacks. It retains the original image/RNG goldens, hosted regression gates and managed release acceptance; no live model/PLC is required for these tests.
+
+This offline background image replay follows file candidate 89875c1 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 09ef623. Manifest v211 lists 525 sources. Three image services use explicit adapters; generator and runner defaults remain outside this slice. Original algorithms and golden contracts remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+The background generation port smoke is an additional synthetic CI command. Hosted CI, immutable package review and managed release acceptance remain separate gates; local doubles do not attest live generation, nonempty worker shutdown or production object storage.
+
+This offline background generation replay follows image candidate 9a2d333 and preserves current native history, readiness, model/tail, shutdown documentation and canonical LF fixes. Production and test blobs match reviewed 22986e9. Manifest v212 lists 525 sources. Generator and task runner now receive captured file adapters, retaining model snapshots, subprocess policy, partial outputs and exception behavior. Actual-main rebind, independent review and full CI/release acceptance remain required before publication; complete app composition is still pending.
+
+Training file-capability injection deploys as one complete release. Verify dataset/input/preview contracts, explicit two-store ownership and the actual source manifest before merging; rollback restores the preceding whole release and keeps stored task and artifact evidence. No worker topology, migration or retry change is included.
+
+This offline training file replay follows generation candidate 2fdb9ee and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 214fe9c. Manifest v213 lists 526 sources, appending training/file_ports.py. Five services capture matching file capabilities while preserving validation, cache, write ordering and partial effects. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Training image and YAML capability injection requires the existing pixel/metadata golden tests plus explicit artifact ownership checks. Publish and roll back the complete release; image codecs, dataset formats and runtime topology remain unchanged.
+
+This offline training image replay follows file candidate 94c1eec and preserves current native history, readiness, model/tail, corrected boundary documentation and canonical LF fixes. Production and test blobs match reviewed 75d63a9. Manifest v214 lists 526 sources. Image adapters are captured and YAML selects its writer per call; arbitrary private rebinding is not preserved as an atomic hot swap. Algorithms, goldens and public signatures remain unchanged. Actual-main rebind, independent review and full CI/release acceptance remain required before publication.
+
+Training resource and archive capability injection retains the established complete-release deployment and rollback. Acceptance includes isolated mutation conflicts, partial-failure evidence, archive contents and digest leases; no production cleanup, data migration or remote training is performed by validation.
+
+This offline training resource replay follows image candidate 9063ace and preserves current history, readiness, model/tail, shutdown, corrected boundary documentation and canonical LF guards. Production and test blobs match reviewed fbf5434. At this replay boundary manifest v215 selects 526 sources. Explicit resource and archive capabilities preserve file operation ordering, strict digest failures, partial publication and archive formats. Current source changes require actual-main rebind, independent review and full CI/release acceptance before publication.
+
+Accessory creation/provenance file capabilities ship in one complete release after their original business contracts, explicit ownership checks and actual-source manifest validation pass. Roll back the whole prior release and retain artifact/task evidence; runtime topology is unchanged.
+
+This offline accessory file replay follows training resource candidate 7ae44bf and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed eccc553, including ordered constructor bindings. At this replay boundary manifest v216 selects 526 sources. Upload ordering, partial publication, provenance collisions and sprite fallbacks remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Accessory evidence and preview port changes require their existing source-order/pixel/matching contracts and explicit storage ownership tests. Publish a complete release after exact-parent documentation and source-fingerprint checks; restore the complete prior release on failure.
+
+This offline accessory evidence replay follows file candidate b368404 and retains current history, readiness, model/tail, shutdown and canonical LF guards. All production and test blobs match reviewed 466195b. At this replay boundary manifest v217 selects 526 sources. Decode and hashing selection, source mutation, partial publication and error propagation remain unchanged. Actual-main rebind and complete independent CI/release acceptance remain required before publication.
+
+Catalog and sprite storage-port changes require retained metadata and pixel regression tests, explicit dependency checks and actual-source fingerprints. Merge only after the exact commit passes CI and independent review; rollback the complete release.
+
+This offline accessory catalog replay follows evidence candidate 2d442b2. All owned production/test blobs and the complete ordered entry match reviewed 87ebec1; current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v218 selects 526 sources. Existing catalog mutation and decoder behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, assembled HTTP and fingerprint checks are distinct. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Candidate/gallery explicit storage requires original permission, image-byte and operation-order checks plus synthetic store isolation. Publish only the exact CI-reviewed commit as a complete package; restore the complete prior release on failure.
+
+This offline accessory gallery replay follows catalog candidate 8f453b3. Owned source/test blobs and ordered entry match reviewed 7f02e9d, including the single inert ImageFiles allocation relocation. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v219 selects 526 sources. Existing partial publication and failed-write behavior are unchanged. Neighbor evidence is reused only for exact source; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Accessory edit port changes require existing upload, crop, reference and deletion contracts plus real-adapter isolation tests. Publish only a CI-reviewed complete release; rollback the complete package without reversing artifact metadata or deleting evidence.
+
+This offline accessory edit replay follows gallery candidate 1b5c003. Owned source/test blobs and ordered entry match reviewed 6f78019. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v220 selects 526 sources. Authorization order, crop geometry, partial publication and deletion failure behavior remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Preprocessing reader changes require retained source/pose/fallback and pixel/metadata regressions plus explicit-storage checks. Release only an exact CI-reviewed complete package and roll back to a complete prior version.
+
+This offline accessory preprocessing replay follows edit candidate 96c7b23. Owned source/test blobs and ordered entry match reviewed dbcd8b5. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v221 selects 526 sources. Discovery, decode, publication, status and exception ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Agent reference port changes require source order, generated reference content, retained prompt contracts and new explicit-storage tests. Publish only the exact CI-reviewed complete release; preserve snapshots and evidence on rollback.
+
+This offline Agent reference replay follows accessory preprocessing candidate b1d835d. Owned source/test blobs and ordered entry match reviewed efa17b7. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v222 selects 527 sources. Reference selection, digest acceptance, path mutation and exception ordering are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Pose storage ports require existing image/metadata/source-order tests and explicit storage ownership checks. Release only an exact CI-reviewed complete package; do not roll back individual files or artifact tables.
+
+This offline Agent pose storage replay follows reference candidate 9a90408. Owned source/test blobs and ordered entry match reviewed 11919d9. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v223 selects 527 sources. Image and metadata publication ordering, local/remote callback timing and partial mutations remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Photo-highlight media ports require original attempt/pixel/metadata regression checks plus explicit-storage failure probes. Only an exact CI-reviewed complete package may be deployed; retain call and artifact evidence on rollback.
+
+This offline Agent photo replay follows pose storage candidate a56b846. Owned source/test blobs and ordered entry match reviewed 6afd82e. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v224 selects 527 sources. Provider attempts, diagnostic failure handling, publication and item mutation order are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Explicit pipeline background storage must pass original prompt/provider/order contracts and independent artifact isolation/fault probes before serial CI-reviewed publication. Roll back a complete accepted release and retain existing task/call/artifact evidence.
+
+This offline Agent background replay follows photo candidate 5bcd15e. Owned source/test blobs and ordered entry match reviewed e8c63a3. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v225 selects 527 sources. Existing library fallback, partial file and manifest publication, callback timing and errors remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Pipeline availability ownership changes require original status/order regressions and explicit-storage tests before exact-head CI and serial publication. Preserve existing deployment topology and roll back the whole accepted release.
+
+This offline pipeline availability replay follows Agent background candidate 37a1265. Owned source/test blobs and ordered entry match reviewed ed60859. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v226 selects 527 sources. First-match, pending-state, bypass and storage error behavior are unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Text cleanup dependency changes require the original conflict/expiration/worker contracts and isolated artifact failure probes before exact-head CI and serial release. Rollback restores the whole accepted package while retaining immutable revisions and artifact evidence.
+
+This offline text cleanup replay follows pipeline availability candidate 6f13fd9. Owned source/test blobs and ordered entry match reviewed c89fbbd. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v227 selects 528 sources. Cleanup exception precedence, tombstone-before-deletion and partial effects remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Training catalog file injection requires original ordering/permission regressions and explicit-storage failure tests before exact-head CI and serial release. Keep the accepted runtime topology and use complete-release rollback.
+
+This offline training catalog replay follows text cleanup candidate 1199028. Owned source/test blobs and ordered entry match reviewed 8f0715d. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v228 selects 528 sources. Local and indexed selection, permission ordering and repeated reads remain unchanged. Exact-source neighbor evidence is reused; current targeted, real PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Text media runtime injection is a structural change requiring prior media regressions and explicit runtime isolation checks. Exact-head CI and normal complete-release deployment/rollback remain required; the label-worker topology is unchanged.
+
+This offline text media replay follows training catalog candidate 920904d. Owned source/test blobs and ordered entry match reviewed f71e6c4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v229 selects 528 sources. Local path, hybrid readiness, size, digest and publication rules remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Training runner file injection requires its retained execution/no-retry regressions and explicit storage tests, followed by exact-head CI and serial whole-release deployment. No RunPod request, model, prompt or worker topology change is included.
+
+This offline training runner replay follows text media candidate da44932. Owned source/test blobs and ordered entry match reviewed 9b024f4. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v230 selects 528 sources. Running-state persistence, runtime mode, repeated existence reads, failure settlement and pinned model restoration remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+RunPod artifact runtime injection requires its original local archive/import contracts and synthetic indexed-store isolation checks. Normal exact-head CI and whole-release rollback apply with the existing runtime topology.
+
+This offline RunPod artifact replay follows training runner candidate b7b8760. Owned source/test blobs and ordered entry match reviewed 671f233. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v231 selects 528 sources. Repeated runtime selection, cleanup exception masking, publication ordering and local replacement remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+RunPod transport runtime injection requires retained submission/transfer regressions and synthetic ownership tests before exact-head CI and normal complete-release deployment. The worker package and existing service topology remain unchanged.
+
+This offline RunPod transport replay follows artifact candidate 97a9963. Owned source/test blobs and ordered entry match reviewed 12f1743. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v232 selects 528 sources. Durable claim ordering, ambiguous submit retention, streaming limits and partial upload publication remain unchanged. Exact-source neighbor evidence is reused; current targeted, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Codex HTTP storage injection requires retained API/batch PostgreSQL regressions and explicit runtime-isolation tests before exact-head CI and serial whole-release publication. Rollback restores the complete accepted release.
+
+This offline Codex HTTP replay follows transport candidate 0beaefc. Owned source/test blobs and ordered entry match reviewed 42fcded. Current history, readiness, model/tail, shutdown and canonical LF guards remain. At this replay boundary manifest v233 selects 528 sources. Authorization, media exception mapping and partial publication ordering remain unchanged. Exact-source neighbor evidence is reused; current targeted, isolated PostgreSQL, HTTP and fingerprint checks are separate. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Label media ownership is a structural change to both Web and worker package code. Validate both existing topologies and whole-release rollback through the retained isolated fault suites before normal serial CI and release; do not copy individual worker files.
+
+This offline label media replay follows Codex HTTP candidate 41743d5. The original provider-only delta from reviewed b696cba is applied while retaining current native history summaries and their test adapters. All other owned source/test blobs and ordered entry match the reviewed source. At this replay boundary manifest v234 selects 528 sources. Current history, readiness, model/tail, shutdown and canonical LF guards remain. Worker claims, PDF cleanup, provider identity and error ordering remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Strict comparison media ownership requires retained Web/worker/media regressions and isolated PostgreSQL tests before serial CI and complete-release publication. No installed unit, storage-mode or rollout topology change is introduced.
+
+This offline comparison media replay follows current-history label candidate f447c5d. Owned source/test blobs match reviewed 552cea1; the entry remains unchanged. Current native history and its explicit-provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v235 selects 528 sources. Worker budget and reservation settlement ordering, ambiguous paid outcomes and CLI selection remain unchanged. Current isolated PostgreSQL and affected integration checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Web artifact composition must pass original selector and file/image contracts plus per-owner isolation checks before exact-head CI and serial whole-release publication. This introduces no storage mode switch, media migration or installed topology change.
+
+This offline Web artifact composition replay follows comparison candidate d2ae509. Owned source/test blobs and ordered entry match reviewed a0fa2ed, including the Python 3.10 structural source guard. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v236 selects 529 sources. The Web graph owns a fresh lazy runtime provider and two focused views; this is not a complete application factory or proof of independent underlying resources. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Stream configuration extraction requires frozen-behavior, actual HTTP and existing PLC route-order contracts before serial publication. Restore a previous complete release on failure; no data migration or individual file replacement is introduced.
+
+This offline stream configuration replay follows Web artifact candidate f2e481b. Owned source/test blobs and ordered entry match reviewed 14f6504. Current native history and provider fixture, readiness, model/tail, shutdown, scoped RunPod claim documentation and canonical LF guards remain. At this replay boundary manifest v237 selects 530 sources. Existing load, mutation, save and post-save response ordering remain unchanged; configuration is not given a new transaction or lock. Current targeted, HTTP and fingerprint checks are separate from reused exact-source evidence. Actual-main rebind and independent full CI/release acceptance remain required.
+
+Text storage composition adds an inert per-composition shared lock and two record stores. CI runs the new storage composition HTTP/thread isolation suite plus the existing root and PostgreSQL store contracts. Release as one complete package with source manifest v238/531; use the previous accepted complete release and declared topology for rollback. No data migration or worker topology change is introduced. Full application factory isolation is not yet complete.
+
+The incoming-text domain builder is released with the complete Web/label-worker package. Its CI command smoke_incoming_composition.py supplements existing incoming store, workflow and artifact contracts. The prompt source manifest includes the actual two new source files. Require fresh PR CI, independent review and actual-main release verification; rollback restores the previous complete package without copying individual modules.
+
+The incoming domain owns its response-file capability and exposes separate catalog and inspection route registration methods. Application composition calls them at their original positions, preserving the intervening Beta comparison routes and the existing media authorization/error behavior. The actual domain-builder HTTP tests exercise these methods; this does not claim a completed whole-application factory.
+
+
+Catalog composition uses actual source manifest v240 (534 paths). Require catalog/model/pipeline/media regressions, exact-head CI and independent review before whole-release publication. The domain composition changes no provider, model defaults or runtime service topology and does not complete the application factory.
+
+The candidate image graph change adds its integrated ownership smoke to required backend CI. Each actual-main domain PR still needs its own complete CI and whole immutable release verification; offline domain tests do not approve an unpublished stack. Prompt source manifest version 241 includes accessories/image_composition.py as an actual new source; new task fingerprints change naturally and historical task snapshots are not rewritten.
+
+The model-tool composition slice is a structural domain change with retained HTTP contracts and synthetic inference checks. Publish only through required CI and the complete versioned frontend/backend release; rollback restores the previous complete release and topology. The independent domain graph evidence is not actual-main or managed-deployment acceptance.
+
+The detection/publication/capture graph is a structural domain change. Its integrated smoke supplements all existing HTTP, PLC, model-binding and publication/capture regression checks in required CI. Offline graph review does not approve a historical unpublished stack: publication requires an actual-main domain rebind, independent net-diff review, complete CI and managed immutable package validation. Roll back the whole previously accepted package and declared topology; do not copy individual modules.
+
+The text standard composition slice must retain the three registrar positions, route/media authorization contract and original lifecycle close sequence. Prompt source manifest v244 includes 538 actual source paths, including text_inspection/standard_composition.py; new tasks record its real fingerprint and historical snapshots are unchanged. Offline domain evidence is not actual-main or managed-release acceptance.
+
+The comparison composition source is included in prompt source manifest v245, selecting 539 real paths; historical task fingerprints are not rewritten. Release acceptance must cover the actual three registrar positions, retained prepared-submission captures and lifecycle aliases. Domain tests and offline inverse checks do not substitute for fresh actual-main CI and managed release verification.
+
+The auto-optimization core candidate adds one synthetic ownership smoke to the existing CI backend sequence. It must be rebound to actual main, independently reviewed and pass complete CI before its normal immutable release. No installer, release workflow, rollback topology or worker mode changes accompany this composition.
+
+CI includes the six synthetic AutoOptimizationExecution composition contracts alongside unchanged automatic-optimization business regressions. This adds no deployment topology or release-mode switch. Shipped fingerprint validation resolves each manifest source relative to local_inspection_service and compares prompt_source_version with fingerprint_sources on the actual files. The execution source entry is training/execution_composition.py; a repeated service-directory prefix fails this check even when the file is committed. Offline acceptance does not replace actual-main CI, independent review or whole-release production verification.
+
+CI adds four synthetic automatic-optimization workflow contracts while retaining original business/Core/Execution tests. Manifest v248 resolves the actual service-relative workflow source and records new provenance only. Deployment and rollback continue to use complete immutable releases with the same process topology.
+
+Training state composition adds one source to the versioned prompt-source manifest and one synthetic ownership check to required CI. Runtime topology, immutable packaging and whole-release rollback are unchanged. Local domain tests are not production deployment acceptance; main CI, independent review and the preceding managed release gate remain required.
+
+The training-task domain is delivered as one coherent composition batch. Account state, native execution and task API services share the original task runtime and operation-time repository factory. Background submission retains that shared runtime; no extra shutdown owner, process or database migration is added. Required CI, independent review and the preceding managed-release gate remain mandatory before merge. Whole-release rollback restores the complete previous bundle and topology; internal local checkpoints are not separate deployments.
+
+ModelConfiguration owns one actual model-profile service, its snapshot scope,
+settings projections and HTTP registrar. Construction obtains no repository,
+identity or secret. AI/image settings resolve through that owner; agent settings
+still resolve first, then merge current defaults and derive enabled from configured.
+Default server compatibility exports retain the existing API, while JSON fixtures
+replace the explicit owner service. Missing resolution fails explicitly. Source
+manifest v251 includes the actual new composition source for new task fingerprints;
+historical snapshots are unchanged. This domain owner is a prerequisite for full
+application composition, not proof that the complete application factory is finished.
+
+The default `model_profile_service` compatibility name refers to its initially
+constructed service; assigning that module alias no longer redirects resolution.
+Tests replace `ModelConfiguration.service` explicitly. Independent factories must
+supply their own repository and secret capabilities, environment mappings and
+legacy-label settings supplier. The default composition retains its existing
+process environment, secret store and label feature settings; this change does
+not claim those default resources are isolated across complete applications.
+
+ProviderConfiguration in model_providers/configuration_composition.py composes the twelve existing defaults, validation, URL, key identity, secret store, key registry, proxy, local-model and legacy JSON/image/agent configuration services. Internal callbacks select named owner methods at operation time; the default entry supplies external environment, paths, codecs and policy values explicitly. The profile owner uses that same provider configuration for secrets, validation and legacy migration. Construction performs no reads, migration or worker start; profile route registration stays at its original position. Compatibility method names forward to the owned domain, and tests replace its actual capabilities. This closes the configuration graph, not the remaining application-domain assembly or complete application lifecycle.
+
+The model-profile engines route receives an explicit Codex-model supplier. The
+default composition reads the existing process environment at request time;
+independent registrars can supply separate environments without importing a
+process-global environment from the HTTP module. Empty and whitespace values
+retain the original truthiness behavior, and the administrator check remains
+first. This does not establish independent construction of the full Web app.
+
+The consolidated offline integration now starts from accepted main e1cfee3
+(real-photo feedback and independent review worker). DetectionWorkflows receives
+narrow analysis/capture feedback callbacks; both original capture gates and
+provenance scopes remain. Compatibility aliases select the composed owners.
+The real-photo routes, purpose bindings, incremental tables and review worker
+remain present. Manifest v253 contains 557 actual sources at this checkpoint;
+historical task snapshots are not rewritten. Full factory, combined CI and
+release acceptance are separate remaining gates.
+
+The Beta list evidence optimization ships as a complete immutable release with the current worker topology. There is no new table, backfill, cache writer or schema rollback. Restore the previous complete release if necessary and preserve all task and paid-call evidence.
+
+The Beta count slice uses manifest v238 with the same 531 files. It must independently pass the fixed Beta16 plus inherited reader19/history28 latency, memory and query guards; preceding evidence-compaction timings are not acceptance evidence for the new count expressions.
+
+
+Beta summary consumer is integrated into the final read batch on business composition 2b6e9ce; manifest v251 selects 547 actual sources. This is list SQL compaction, not complete legacy SQL aggregation or release acceptance.
+
+Manual-history baseline tests add an isolated PostgreSQL CI command and a frozen test helper only. Existing native reader/history and Beta performance protocols remain unchanged; passing this baseline is not acceptance of a future optimization. Use the normal complete-release build and rollback process.
+
+The manual-history-performance CI job pins dependencies with the existing production lock and uploads all recorded benchmark groups even after failure. Passing all seven new cases supplements the existing63 reader/history/Beta cases when shipping subsequent manual-index changes; it does not waive them or approve a release on its own.
+
+The manual index is a performance-only child of the frozen test protocol. Require source/behavior review, all seven manual cases and inherited63 reader/history/Beta cases without threshold or sample changes, then all nine hosted jobs and complete-release acceptance. A local functional pass is not performance or deployment approval.
+
+Manual-index functional acceptance now includes the actual PostgreSQL multi-group indexed branch before the fixed performance protocol; a single-group fixture alone does not exercise index construction.
+
+
+The initial read-batch integration at v252 combined the guarded manual index and Beta SQL consumer on business composition 2b6e9ce. The current guarded legacy cohort is described below; independent application construction remains unfinished.
+
+## Guarded legacy list projections
+
+The final read batch combines request-local manual indexing, Beta SQL compaction/counts and a derived legacy label/manual cohort. `storage/legacy_list_projection.py` verifies complete original token streams (including discarded duplicate-key values), decoded shapes, numeric/depth bounds and the original projections before publication. Unknown shapes, decoder-incompatible tokens, negative zero, time-dependent label status, conflicting latest manual decisions and native legacy extensions retain the original raw reader. Previously cached sources are never replaced by a newer observation. Detail reads remain complete.
+
+The additive `2026_10_08_legacy_list_projection.sql` owns only epoch, ready and normalized-row tables. Old INSERT/UPDATE/DELETE writers increment affected owner epochs and invalidate readiness in their source transaction; TRUNCATE invalidates all ready cohorts without resetting epochs. Publication captures the initial epoch, verifies sources without a global advisory lock, then locks and rechecks the epoch before atomically replacing derived rows and readiness. A conflicting write rejects publication. No request backfills data, source records are never rewritten and failed publication rolls back. The exact canonical derived-cache migration is audited as a complete exception; altered SQL remains rejected by the migration guard.
+
+An operator may explicitly run `python scripts/publish_legacy_list_projection.py --owner ACCOUNT_ID` with the configured PostgreSQL runtime after the migration. The command loads no Web application, logs no account/media/payload/credentials and closes its connection. Unsupported or changed cohorts remain on the original path. Rollback restores the complete release and retains incremental tables, epochs and source/task/call evidence; never delete or reset epochs during cleanup.
+
+An eligible first page uses SQL grouped counts and latest-value selection from the matching ready generation. The result is still persisted as the original account/filter-bound 15-minute snapshot; old cursors bypass reaggregation. First-page legacy sources are sampled at the ready-read statement, while native and Beta data keep their separate sampling boundaries; this is not a database-wide snapshot. Dirty/unavailable cohorts add two bounded read probes and then execute the original source queries. The manual benchmark accounts for exactly 10 baseline queries, 12 dirty candidate queries or 7 ready candidate queries at both 1,000 and 10,000 tasks. `--projection` publishes outside timed work; A/A plus three 1,000/10,000 A/B repetitions, 31 samples, original latency/memory thresholds and frozen oracles remain.
+
+Source manifest v253 lists 549 actual files; only new task fingerprints change. Synthetic production-Python/PostgreSQL smoke covers cross-group membership, owner isolation, old writers, CAS rejection, rollback, malformed-source fallback and unchanged cursors. The initial join-based SQL failed the performance gate and is retained as evidence; the replacement grouped aggregate still requires complete final performance and independent CI/release acceptance. This does not complete independent application construction or activate a new worker topology.
+
+Final local PostgreSQL verification additionally covers INSERT and DELETE on all
+five legacy source tables, replace_all/replace_tables rollback and committed
+invalidation, competing publishers at the final epoch lock, old-writer lock
+timeout with rollback, old-ready visibility before commit, and invalidation after
+a subsequent source commit. Nonlatest label diagnostics/elapsed errors and
+manual asset sort errors retain the original exception even when filters match
+no orders. The final targeted run additionally proves partial derived insertion rollback and both ready owners on transfer; earlier failed fixture attempts
+remain evidence and are not counted as passing.
+
+`python scripts/benchmark_legacy_publication.py --output REPORT.json` measures
+explicit publication separately from first-page performance gates. It emits one
+traced sample each for 1,000 and 10,000 synthetic manual groups: elapsed time,
+Python peak allocation, an upper bound on final epoch-lock hold, and fetched
+source JSON UTF-8 bytes. These bytes exclude wire overhead; the synthetic
+eligibility ratio does not predict customer cohorts. This is not a publication
+P95 measurement. Local observations were about 0.39/3.55 seconds elapsed,
+7.7/77.2 MB Python peak, and 0.21/1.75 seconds epoch hold upper bound (including statement wait and cursor close). Ordinary
+writers may wait during this short final transaction; the original lock-timeout
+and failed-publication behavior remain, without automatic retries.
+
+The ready and dirty first-page protocols each completed their A/A and six A/B
+cases with unchanged latency/memory guards. These measurements use the frozen
+source; the corrected manual clock source inherits only the proven equivalent
+pure-manual input and hot query. This is not full application-factory, final CI,
+release or mixed-source publication performance acceptance.
+
+The current-writer lock audit distinguishes live endpoints from generic batch
+repository capability. Standard add/patch/confirm/document mutations first take
+the existing owner+standard advisory lock and prelock the standard and its
+existing assets. Single-row text persistence commits independently. Generic
+replace_all/replace_tables application callers currently target unrelated tables;
+the legacy multi-table COPY importer is an exclusive stopped-service operation.
+Do not run custom cross-standard batch transactions or legacy bulk imports
+concurrently with Web/native workers: the derived owner epoch adds a write lock
+and arbitrary source-first/epoch-first multi-statement schedules can deadlock.
+No automatic transaction retry is introduced. This is a maintenance boundary,
+not a claim that arbitrary SQL has unchanged lock behavior.
+
+The targeted PostgreSQL regression executes actual add/add, document mutation
+vs another-standard patch, same-standard patch, and lazy single-asset save.
+It observes blocking PIDs and the source row lock, then releases the first
+transaction; both operations finish without retry and return idle connections.
+Existing ready generations invalidate and republishing matches the original
+reader. The test matrix has 16 test methods with four native-writer subcases.
+This closes these concrete audited live schedules; it is not a general no-deadlock
+proof or permission to publish before final integration/CI/release review.
+
+The consolidated source manifest is v254 with 560 actual files after integrating
+the reviewed legacy/Beta read batch with main e1cfee3 and owned configuration.
+Earlier manifest counts describe their separate checkpoints. Both real-photo
+and derived-summary incremental schemas are retained; whole-head CI, complete
+application assembly and managed release/worker acceptance remain pending.
+
+
+Application configuration is now composed by config/application_composition.py.
+Each owner allocates its own reentrant guard and protected-write ContextVar;
+training configuration selects that same owner lazily. Construction performs no
+file or repository access. PostgreSQL protected writes retain their existing
+transaction/advisory-lock behavior. Two real PostgreSQL owner fixtures cover
+concurrent protected writes, training-state persistence and rollback after a
+partial write. Run scripts/smoke_application_configuration_composition.py with
+VANTALINE_POSTGRES_DSN to execute all six cases. JSON-only mode skips that one
+PostgreSQL case. PostgreSQL fixture markers use JSON objects because the existing
+record decoder treats strings as serialized JSON; this increment does not change
+the decoder or rewrite stored configuration. Full application factory, PLC and
+pipeline ownership and hosted/release gates remain open.
+The combined Beta benchmark accounts explicitly for one legacy schema catalog
+probe and one generation/eligibility query when the derived schema is installed
+but no cohort is ready. A/A has neither probe. All other query counts must stay
+fixed, the total remains at most 12, and original 31 samples, three memory
+samples, P95 and peak-memory limits remain. Full combined CI is still required.
+
+Static PostgreSQL persistence checks read the current business modules. Their
+old-location oracle runs only after the actual 26 composition modules and
+complete integrated root pass immutable AST bindings. Two explicitly reviewed
+deltas restore the older assembly for its retained assertions; they do not
+represent current source locations. Positive and adverse checks cover changed
+repository timing/owner/import, missing or reordered nodes, route/shutdown order
+and corrupted delta regions. This is test adaptation, with no production change.
 
 
 The third real-photo batch includes Web dispatch/UI and compatible local/RunPod held-out evaluation. Release code with account admission and training execution disabled. Installing code is distinct from commissioning the dedicated review login and RunPod image. Do not claim a worker image supports the new strategy until a real held-out job has returned per-class metrics; existing images fail explicitly when metrics are absent.
@@ -1121,6 +1591,78 @@ The `Build released YOLO worker` workflow accepts only a published, non-prerelea
 The released worker image uses the main repository-owned `<repository>-real-photo-yolo-worker` GHCR package, separate from the historical standalone worker package. Preserve the previous endpoint digest for whole-release reconciliation and rollback.
 
 The released real-photo GPU image inherits the existing public training runtime by immutable digest `sha256:001b40ca66148beef5cf8f76b75897ecd7207337335d0a7feb978d041096d9fc`, retaining its native libraries and controlled `/models/vantaline-yolo-base.pt` checkpoint. The build verifies checkpoint SHA-256 `646f8bc3fe0a656803d95c294f7852321748cb29d13466a1af8862e2db384a1b` and fails on a missing or changed file before publishing the new released handler. A default bare PyTorch Docker build still requires an explicitly supplied controlled checkpoint at runtime; it is not the production commissioning image.
+
+
+The combined backend batch includes main 5bd0baf real-photo feedback stage3.
+Image uploads retain capture-session grouping and exact original-byte hashes,
+while selecting the application-owned file capability. Training retains frozen
+executor, dataset and evaluation configuration checks; the runner selects its
+owned artifact runtime. The new dispatcher stop hook precedes existing shutdown
+hooks inside the ordered shutdown owner. These main changes are preserved, not
+introduced as new behavior by the composition refactor. Current manifest v256
+contains 566 actual files, including the new RunPod frozen-model settings module; historical source fingerprints are unchanged. The
+source oracle records the exact two-region main root delta and the exact updated
+runner/submission file digests. Whole current-head CI and deployment remain gates.
+
+
+Real-photo mask/training dispatcher producers are tracked by the application-owned
+DispatcherRuntime with a repository thread scope. Stop closes new loop iterations;
+the first native shutdown step joins the actual producer threads and scope exits
+before closing their training and model-MCP dependencies. A drain timeout keeps
+those dependencies available and reports failure; it does not cancel an in-flight
+call or repeat an uncertain start. Startup is once-only, including partial-start
+failure; a stopped instance cannot restart. Existing two-second polling, enable
+rules and task algorithms are retained. Synthetic lifecycle checks cover blocked
+tick, blocked scope exit, startup/close races, partial/uncertain starts and two
+independent owners. Current manifest v258 contains 568 actual sources. Complete
+application assembly and current-head hosted/release gates remain pending.
+
+Workstation composition acceptance includes `smoke_plc_workstation_composition.py --postgres` in the existing backend job. This check uses two isolated schemas and synthetic browser evidence; it does not change release topology or activate the independent label worker. Require current-head CI and independent acceptance before merging the complete immutable package.
+
+The backend job additionally runs `smoke_plc_lease_diagnostic_composition.py --postgres`. This is a synthetic graph/transaction gate, not device commissioning or label-worker activation. Preserve failed performance evidence and require complete current-head CI before immutable-release acceptance.
+
+The retained capture state graph does not change the deployment topology. It must not activate server-side PLC workers as part of application assembly. Full application factory, hosted performance acceptance and label worker production cutover remain separate unfinished checks.
+
+The pipeline persistence checkpoint is compatible with the existing single Web process topology and requires no migration or worker activation. Preserve the full immutable release for rollback; task snapshots are not rewritten. Its CI adds an isolated PostgreSQL graph regression. Hosted list performance acceptance, full application factory and production label-worker cutover remain unfinished gates.
+
+The three pipeline runtime lifecycle owners retain their existing order: close auto-agent producers before advance and recommendation consumers. A false drain result must keep following dependencies available; blocked repository scope exit and uncertain thread start are not reported as drained. This assembly checkpoint leaves deployment topology and standalone label-worker activation unchanged.
+
+PipelineQueries is an inert assembly change within the consolidated backend PR. Roll back the complete package using its existing topology; do not copy individual modules or rewrite historical model snapshots. Its PostgreSQL smoke and original domain/HTTP/source contracts are required before release; it does not establish whole-factory or standalone-worker production acceptance.
+
+AgentPipelineWorkflows ships within the existing immutable Web package. Its new prompt provenance records the real assembly file without changing prompt content or historical snapshots. Run the actual graph, original Agent and native-caller contracts; roll back the complete package. No production worker activation is part of this composition change.
+
+CI adds the focused PipelineStages actual-graph smoke to the existing backend check. This is synthetic composition validation only; it does not activate the standalone label worker, alter deployment topology, bypass hosted performance gates or constitute production commissioning. Continue to deploy and roll back complete immutable releases under the existing drain/version/heartbeat requirements.
+
+The backend CI includes the PipelineTaskWorkflows synthetic HTTP and isolated PostgreSQL composition check. Worker topology, maintenance gating and immutable release rollout are unchanged; this focused check does not authorize bypassing required CI or count as standalone-worker commissioning.
+
+The connected pipeline runtime owner ships under the existing release topology. Three native execution lifecycle owners remain separate and drain auto producers before advance/recommendation consumers. A false drain result prevents proceeding to downstream shutdown. This change does not activate the standalone label worker; deployment and rollback still use one complete immutable package after required CI and release gates.
+
+The explicit Codex environment edge is schema-free and retains the existing Web/Codex/label topology. Default registration still receives the process environment. Validation covers isolated API mappings and original PostgreSQL/worker contracts; rollback restores the complete immutable package. This wiring does not activate standalone label processing.
+
+
+All five real PostgreSQL label benchmarks, including Beta history, explicitly
+select `VANTALINE_BENCHMARK_POSTGRES_DSN` for both comparison arms. Ordinary
+functional contracts keep the separate disk-backed database. The storage-routing
+contract rejects missing, wrong and duplicate Beta overrides. Beta retains its
+complete 16-case protocol, 31 alternating latency samples, three memory samples,
+original order and latency/memory limits. The earlier disk-backed Beta failure
+remains valid evidence; corrected wiring does not diagnose that failure or prove
+production physical-storage latency. A new complete fixed-environment result and
+required CI are still necessary. No PostgreSQL write durability setting or
+production topology changes.
+
+The backend CI also runs `smoke_infrastructure.py` for the actual default and
+independent infrastructure graphs. It exercises synthetic owners, thread
+connections and artifact stores without deployment, paid inference or PLC IO.
+Passing this check does not replace the complete Web factory, performance,
+exact-head CI or whole-release runtime acceptance gates. Manifest v272 records
+the two real construction sources; historical snapshots are unchanged.
+
+The consolidated transport/feedback composition batch changes Python source ownership and versioned prompt-source inventory. New tasks fingerprint the actual new modules; historical snapshots are not rewritten. Package and deploy the complete release after required CI and independent review; local synthetic graph acceptance does not replace final application-factory, benchmark or deployment gates.
+
+The CI-only PostgreSQL image source is the official ECR mirror with an explicit content digest. This does not change production dependencies, database deployment or installer topology. A failed container initialization is not a passing database or benchmark result; required CI still must execute successfully.
+
+Canonical assembly and its compatibility exports ship together in one immutable release. The standalone label worker keeps its lightweight bootstrap and unchanged joint topology/protocol. The MCP CLI selects the canonical default tool catalog/handlers directly and no longer imports `server`. Release acceptance still requires final-head CI, full performance evidence, actual immutable source checksums and the existing fresh runtime/heartbeat/admission gates; successful local factory tests are not release approval. Roll back the full prior package and its declared topology without reversing additive state.
 
 ## PLC self-service rollout
 
@@ -1147,10 +1689,10 @@ conflicts. Agent generation checks, type checking and the production build run i
 an independent `frontend-build` job; `backend-plc` also requires that job's success.
 
 `CI` runs all ordinary jobs concurrently with twelve isolated backend shards.
-`backend-plc` waits for the full ordinary inventory and publishes commit/run/attempt
-bound receipts only after every job succeeds. Required names `backend-plc`,
-`frontend` and `source-safety` are unchanged. Full synthetic performance remains
-independent and preserves its existing protocols and assertions.
+`backend-plc` waits for the full ordinary inventory and both performance jobs,
+publishing commit/run/attempt bound receipts only after every job succeeds. Required names `backend-plc`,
+`frontend` and `source-safety` are unchanged. Full synthetic performance is required
+inside CI and preserves its existing protocols and assertions.
 
 Main may accept complete same-repository final-head PR evidence only after independent
 GitHub success checks, explicit artifact digest verification, exact tested tree and
@@ -1185,3 +1727,30 @@ to restore the prior policy; runtime rollback restores one complete immutable re
 **Status: Authoritative**
 
 The frontend CI acceptance suite includes detection without a background-photo step. Removal ships as one immutable frontend/backend release; no endpoint removal or stored-background cleanup is performed.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.
+
+The fixed silent Git preparation checks `check-298` and `check-299` may have zero-byte logs only with the empty-content SHA-256. No benchmark or storage protocol receives that exception; complete current-attempt evidence and all deployment gates remain required.
+
+The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.

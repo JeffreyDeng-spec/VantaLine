@@ -4,6 +4,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path.cwd()))
+from scripts.agent_pose_test_ports import patch_pose_capability
 
 class AgentStateContracts(unittest.TestCase):
     @classmethod
@@ -12,14 +13,18 @@ class AgentStateContracts(unittest.TestCase):
         (Path(cls.root.name)/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        from scripts.agent_state_test_ports import assert_default_state_identifier
+        assert_default_state_identifier(server)
         cls.api=server
     @classmethod
     def tearDownClass(cls):cls.root.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.agent_state_test_ports import bind_state_identifier
+        bind_state_identifier(self.api,self.stack)
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
-    def patch(self,name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+    def patch(self,name,**kwargs):return self.stack.enter_context(patch_pose_capability(self.api,name,**kwargs))
     def test_clock_truncates_wall_time(self):
         with patch.object(self.api.time,'time',return_value=12.9):self.assertEqual(self.api.agent_mcp_now(),12)
     def test_default_stages_are_fresh_and_ordered(self):
@@ -67,7 +72,7 @@ class AgentStateContracts(unittest.TestCase):
 
     def test_orchestration_refreshes_now_between_missing_timestamps(self):
         later=Mock(return_value=202)
-        def first():self.api.agent_mcp_now=later;return 101
+        def first():self.api._agent_state_workflows.agent_mcp_now=later;return 101
         first_mock=self.patch('agent_mcp_now',side_effect=first);self.patch('agent_mcp_gemini_image_config',return_value={})
         value=self.api.agent_mcp_orchestration({});self.assertEqual((value['created_at'],value['updated_at']),(101,202));first_mock.assert_called_once();later.assert_called_once()
     def test_stage_evaluates_default_even_when_existing_stages_are_present(self):

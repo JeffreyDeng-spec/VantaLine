@@ -13,14 +13,20 @@ class AgentPipelineDecisionContracts(unittest.TestCase):
         (Path(cls.root.name)/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        from scripts.agent_pipeline_application_test_ports import assert_default_external_agent_pipeline
+        assert_default_external_agent_pipeline(server)
         cls.api=server
     @classmethod
     def tearDownClass(cls):cls.root.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.agent_pipeline_application_test_ports import bind_external_agent_pipeline
+        bind_external_agent_pipeline(self.api,self.stack)
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
-    def patch(self,name,**kwargs):return self.stack.enter_context(patch.object(self.api,name,**kwargs))
+    def patch(self,name,**kwargs):
+        from agent_pipeline_test_ports import patch_agent_pipeline
+        return self.stack.enter_context(patch_agent_pipeline(self.api,name,**kwargs))
     def resolver(self):
         events=[]
         @contextmanager
@@ -29,7 +35,7 @@ class AgentPipelineDecisionContracts(unittest.TestCase):
             try:yield
             finally:events.append(('exit',snapshot))
         service=SimpleNamespace(current_snapshot=Mock(return_value=None),snapshot_for_record=Mock(return_value={'synthetic':'fresh'}),scope=scope)
-        self.patch('model_profile_service',new=service)
+        self.stack.enter_context(patch.object(self.api._model_profile_configuration,'service',service))
         return service,events
     def quality_dependencies(self,orch=None):
         self.patch('agent_mcp_orchestration',return_value=orch or {})
@@ -119,8 +125,9 @@ class AgentPipelineDecisionContracts(unittest.TestCase):
     def test_quality_canonical_callee_selected_before_identifier_conversion(self):
         self.quality_dependencies();selected=Mock(return_value=['a']);late=Mock(return_value=[]);api=self.api
         class Identifier:
-            def __str__(self):api.canonical_pipeline_accessory_ids=late;return 'a'
-        with patch.object(api,'canonical_pipeline_accessory_ids',selected):
+            def __str__(self):api._agent_pipeline_workflows.canonical_pipeline_accessory_ids=late;return 'a'
+        from agent_pipeline_test_ports import patch_agent_pipeline
+        with patch_agent_pipeline(api,'canonical_pipeline_accessory_ids',selected):
             result=api.agent_pipeline_quality_signals({'accessory_ids':[Identifier()]},{})
         self.assertEqual(result['accessory_count'],1);selected.assert_called_once_with({},['a']);late.assert_not_called()
 

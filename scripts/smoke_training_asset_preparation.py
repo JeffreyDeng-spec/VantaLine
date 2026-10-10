@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_TRAINING_ASSET_PREPARATION_BASELINE_SOURCE')
 NAMES = ('ensure_object_clean_sprites_for_selection', 'ensure_training_normalized_assets_for_selection', 'ensure_training_assets_for_request')
 
@@ -143,7 +144,7 @@ class PreparationContract(unittest.TestCase):
     @unittest.skipIf(BASELINE, 'candidate composition only')
     def test_explicit_assembly_and_isolation(self):
         from local_inspection_service.training.training_asset_preparation_ports import TrainingAssetPolicy, TrainingAssetPersistence
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         assignment = next(n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_training_asset_preparation' for t in n.targets))
         for group, cls in zip(assignment.value.keywords, (TrainingAssetPolicy, TrainingAssetPersistence)):
             self.assertEqual({k.arg for k in group.value.keywords}, {f.name for f in fields(cls)})

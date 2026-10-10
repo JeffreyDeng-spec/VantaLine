@@ -1,5 +1,8 @@
 """Run pipeline auto-Agent decisions without owning the Web process registry."""
 from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from ..runtime.training_tasks import TrainingThreadLifecycle, ThreadLaunch
 
 from .auto_agent_runtime_ports import (
     AutoAgentDecision, AutoAgentExecution, AutoAgentScheduling, AutoAgentTasks,
@@ -13,11 +16,16 @@ class PipelineAutoAgentRuntime:
         decision: AutoAgentDecision,
         execution: AutoAgentExecution,
         scheduling: AutoAgentScheduling,
+        *, scope: Callable[[], AbstractContextManager] = nullcontext,
     ) -> None:
         self.tasks = tasks
         self.decision = decision
         self.execution = execution
         self.scheduling = scheduling
+        self.lifecycle = TrainingThreadLifecycle(scope=scope)
+
+    def close(self, timeout: float) -> bool:
+        return self.lifecycle.close(timeout)
 
     def run(self, task_id: str, user: dict[str, Any] | None) -> None:
         token = self.execution.identity().set(user) if user else None
@@ -77,6 +85,9 @@ class PipelineAutoAgentRuntime:
                 self.scheduling.inflight().discard(task_id)
 
     def schedule(self, task_ids: list[str], user: dict[str, Any] | None) -> None:
+        return self.lifecycle.submit(lambda launch: self._schedule(task_ids, user, launch))
+
+    def _schedule(self, task_ids: list[str], user: dict[str, Any] | None, launch: ThreadLaunch) -> None:
         for task_id in task_ids:
             if not task_id:
                 continue
@@ -84,4 +95,4 @@ class PipelineAutoAgentRuntime:
                 if task_id in self.scheduling.inflight():
                     continue
                 self.scheduling.inflight().add(task_id)
-            self.scheduling.thread()(target=self.scheduling.runner(), args=(task_id, user), daemon=True).start()
+            launch(lambda wrap: self.scheduling.thread()(target=wrap(self.scheduling.runner()), args=(task_id, user), daemon=True), lambda thread: None)

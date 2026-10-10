@@ -9,6 +9,7 @@ from unittest.mock import Mock,patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 sys.path.insert(0,str(Path.cwd()))
+from scripts.provider_configuration_test_ports import patch_provider_capability
 
 class AgentSettingsApiContracts(unittest.TestCase):
     @classmethod
@@ -19,11 +20,15 @@ class AgentSettingsApiContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        from scripts.agent_settings_application_test_ports import assert_default_agent_settings
+        assert_default_agent_settings(cls.api, http=True)
     @classmethod
     def tearDownClass(cls):
         cls.root.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.agent_settings_application_test_ports import bind_agent_settings
+        bind_agent_settings(self.api,self.stack,http=True)
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
     @contextmanager
@@ -62,7 +67,7 @@ class AgentSettingsApiContracts(unittest.TestCase):
         config=dict(self.api.DEFAULT_AGENT_CONFIG,provider='openai_compatible',base_url='https://synthetic.invalid',api_key='synthetic-previous',model='synthetic-model')
         names=('load_agent_config','save_agent_config','set_local_secret_env','test_agent_connection','public_agent_config')
         with ExitStack() as guards:
-            spies=[guards.enter_context(patch.object(self.api,name,side_effect=lambda *args,**kwargs:dict(config))) for name in names]
+            spies=[guards.enter_context(patch_provider_capability(self.api, name, side_effect=lambda *args, **kwargs: dict(config))) for name in names]
             for role,status,detail in [('',401,'Authentication required'),('member',403,'Admin role required'),('admin',409,'请使用模型与 API 配置库；旧配置入口已停用')]:
                 for call in calls:
                     with self.subTest(role=role,call=call),self.identity(role):
@@ -84,7 +89,7 @@ class AgentSettingsApiContracts(unittest.TestCase):
                 self.assertEqual(response.status_code,status);self.assertEqual(response.json(),body)
     def test_http_retired_endpoints_return409_for_admin(self):
         client=self.client()
-        with self.identity('admin'),patch.object(self.api,'save_agent_config') as save,patch.object(self.api,'test_agent_connection') as probe:
+        with self.identity('admin'),patch_provider_capability(self.api, 'save_agent_config') as save,patch.object(self.api,'test_agent_connection') as probe:
             for path in ('/api/agent/config','/api/agent/config/test'):
                 response=client.post(path,json={})
                 self.assertEqual(response.status_code,409);self.assertEqual(response.json(),{'detail':'请使用模型与 API 配置库；旧配置入口已停用'})

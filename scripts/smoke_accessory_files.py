@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from accessory_application_test_ports import accessory_callback
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
@@ -24,6 +25,8 @@ class FileContracts(unittest.TestCase):
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
         cls.server = server
+        from scripts.accessory_default_dependency_contract import assert_default_accessory_dependencies
+        assert_default_accessory_dependencies(server)
         cls.admin = TestClient(server.app, base_url='https://testserver')
         assert cls.admin.post('/api/auth/bootstrap', json={'username':'fixture-admin','password':'fixture-password-only'}).status_code==200
         cls.users, cls.clients = {}, {}
@@ -59,14 +62,14 @@ class FileContracts(unittest.TestCase):
         def generate(item, *, allow_provider=True):
             self.assertTrue(allow_provider)
             self.events.append('generate')
-        self.stack.enter_context(patch.object(self.server,'load_config',side_effect=lambda:copy.deepcopy(self.state)))
-        self.stack.enter_context(patch.object(self.server,'save_accessory_item',side_effect=save))
-        self.stack.enter_context(patch.object(self.server,'refresh_accessory_assets_after_source_change',side_effect=refresh))
-        self.stack.enter_context(patch.object(self.server,'save_ai_profile_cache',side_effect=lambda payload:self.events.append(('cache',payload))))
-        self.stack.enter_context(patch.object(self.server,'accessory_detail_payload',side_effect=detail))
-        self.stack.enter_context(patch.object(self.server,'generate_accessory_ai_profile',side_effect=generate))
-        self.stack.enter_context(patch.object(self.server,'fallback_accessory_ai_profile',return_value={'fallback':'synthetic'}))
-        self.stack.enter_context(patch.object(self.server,'clean_sprite_assets',return_value=[{'fixture':True}]))
+        self.stack.enter_context(accessory_callback(self.server,'load_config',side_effect=lambda:copy.deepcopy(self.state)))
+        self.stack.enter_context(accessory_callback(self.server,'save_accessory_item',side_effect=save))
+        self.stack.enter_context(accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=refresh))
+        self.stack.enter_context(accessory_callback(self.server,'save_ai_profile_cache',side_effect=lambda payload:self.events.append(('cache',payload))))
+        self.stack.enter_context(accessory_callback(self.server,'accessory_detail_payload',side_effect=detail))
+        self.stack.enter_context(accessory_callback(self.server,'generate_accessory_ai_profile',side_effect=generate))
+        self.stack.enter_context(accessory_callback(self.server,'fallback_accessory_ai_profile',return_value={'fallback':'synthetic'}))
+        self.stack.enter_context(accessory_callback(self.server,'clean_sprite_assets',return_value=[{'fixture':True}]))
 
     def seed(self, name, kind='object', *, outside=False):
         base=self.root/'outside' if outside else self.server.UPLOAD_DIR/'accessories'/name
@@ -171,7 +174,7 @@ class FileContracts(unittest.TestCase):
             self.assertEqual(kwargs,{'allow_provider':True})
             self.events.append('generate_failed')
             raise RuntimeError('synthetic provider failure '+('x'*200))
-        with patch.object(self.server,'generate_accessory_ai_profile',side_effect=failure):
+        with accessory_callback(self.server,'generate_accessory_ai_profile',side_effect=failure):
             response=client.post(endpoint,json={'source_path':' '+str(path)+' '})
         self.assertEqual(response.status_code,200,response.text)
         saved=self.state['accessories'][0]
@@ -188,7 +191,7 @@ class FileContracts(unittest.TestCase):
             self.events.append('refresh_failed')
             raise RuntimeError('synthetic source refresh failure')
         path,item=self.seed('upload-refresh-fail')
-        with patch.object(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
+        with accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
             result=client.post('/api/accessories/upload-refresh-fail/files',files={'files':('new.png',self.png)})
         self.assertEqual(result.status_code,500)
         self.assertEqual(self.events,['refresh_failed'])
@@ -197,7 +200,7 @@ class FileContracts(unittest.TestCase):
         path,item=self.seed('crop-refresh-fail','text')
         self.events.clear()
         payload={'source_path':str(path),'corners':[{'x':0,'y':0},{'x':100,'y':0},{'x':100,'y':100},{'x':0,'y':100}]}
-        with patch.object(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
+        with accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
             result=client.post('/api/accessories/crop-refresh-fail/text-crop',json=payload)
         self.assertEqual(result.status_code,500)
         self.assertTrue(path.with_name('crop-refresh-fail_manual_rectified.png').exists())
@@ -205,7 +208,7 @@ class FileContracts(unittest.TestCase):
         self.assertEqual(self.state['accessories'][0]['source_files'],[str(path)])
         path,item=self.seed('delete-refresh-fail')
         self.events.clear()
-        with patch.object(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
+        with accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
             result=client.request('DELETE','/api/accessories/delete-refresh-fail/files',json={'source_path':str(path)})
         self.assertEqual(result.status_code,500)
         self.assertFalse(path.exists())
@@ -214,13 +217,13 @@ class FileContracts(unittest.TestCase):
         path,item=self.seed('reference-outer-fail')
         endpoint='/api/accessories/reference-outer-fail/ai-reference'
         self.events.clear()
-        with patch.object(self.server,'fallback_accessory_ai_profile',side_effect=RuntimeError('synthetic fallback failure')):
+        with accessory_callback(self.server,'fallback_accessory_ai_profile',side_effect=RuntimeError('synthetic fallback failure')):
             result=client.post(endpoint,json={'source_path':str(path)})
         self.assertEqual(result.status_code,500)
         self.assertEqual(self.events,['detail'])
         self.assertNotIn('ai_profile_reference_files',self.state['accessories'][0])
         self.events.clear()
-        with patch.object(self.server,'save_ai_profile_cache',side_effect=RuntimeError('synthetic cache failure')):
+        with accessory_callback(self.server,'save_ai_profile_cache',side_effect=RuntimeError('synthetic cache failure')):
             result=client.post(endpoint,json={'source_path':str(path)})
         self.assertEqual(result.status_code,500)
         self.assertEqual(self.events,['detail','generate'])

@@ -11,6 +11,7 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 
 
 def available(lock):
@@ -44,7 +45,7 @@ class Fixture:
                 '_pipeline_tasks_lock':self.pipeline_guard,'load_pipeline_task':self.pipeline_load,'save_pipeline_task':self.pipeline_save,
                 'link_pipeline_trained_model':self.link,'_auto_optimize_lock':self.auto_guard,'load_auto_optimize_state':self.auto_load,
                 'save_auto_optimize_state':self.auto_save,'auto_optimize_stop_capture_for_model_locked':self.stop,'list_trained_model_specs':self.models}.items():
-            stack.enter_context(patch.object(api,name,value))
+            stack.enter_context(patch_training_port(api,name,value))
 
 
 class TrainingStateContracts(unittest.TestCase):
@@ -56,10 +57,15 @@ class TrainingStateContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        from scripts.training_account_application_test_ports import assert_default_training_account
+        assert_default_training_account(cls.api)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.f=Fixture();self.f.bind(self.api,self.stack)
+        self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.training_account_application_test_ports import bind_training_account
+        bind_training_account(self.api,self.stack)
+        self.f=Fixture();self.f.bind(self.api,self.stack)
         token=self.api._request_user.set(None);self.addCleanup(self.api._request_user.reset,token)
         self.alice={'id':'alice','username':'Alice','role':'user'};self.admin={'id':'admin','role':'admin'}
         self.stack.enter_context(patch('requests.request',side_effect=AssertionError('unexpected network')))
@@ -111,7 +117,7 @@ class TrainingStateContracts(unittest.TestCase):
         self.assertEqual(api.training_state_for_user(config,self.admin,set(),'bob')['status'],'two')
         self.assertNotIn('training_states',api.training_state_for_user(config,self.admin,set(),' '))
         raw={' alice ':one};config={'training_by_user_id':raw}
-        with patch.object(api,'record_visible_to_user',side_effect=RuntimeError('visibility')):
+        with patch_training_port(api,'record_visible_to_user',side_effect=RuntimeError('visibility')):
             with self.assertRaisesRegex(RuntimeError,'visibility'):api.training_state_for_user(config,self.alice,set())
         self.assertIsNot(config['training_by_user_id'],raw);self.assertIs(config['training_by_user_id']['alice'],one)
 
@@ -251,7 +257,7 @@ class TrainingStateContracts(unittest.TestCase):
         api=self.api;f=self.f
         f.task={'job_id':'canonical','owner_user_id':'alice','status':'running','train_mode':'yolo','mode':'yolo_ocr','model_variant':'yolo_ocr'}
         f.config_save.side_effect=None;f.config_save.return_value=False
-        with patch.object(api,'sync_pipeline_training_state_from_task') as sync:
+        with patch_training_port(api,'sync_pipeline_training_state_from_task') as sync:
             api.sync_training_state_from_task('requested')
             f.config_save.assert_called_once_with(f.config);sync.assert_called_once_with(f.task)
         self.assertEqual(f.config['training_by_user_id']['alice']['mode'],'yolo')
@@ -332,11 +338,11 @@ class TrainingStateContracts(unittest.TestCase):
                     def callback(label):
                         def call(value):events.append(label);return 'unknown' if window=='method' else label
                         return call
-                    stack.enter_context(patch.object(api,name,callback('A')))
+                    stack.enter_context(patch_training_port(api,name,callback('A')))
                     def before():
                         events.append('before')
-                        if mode!='ordinary':setattr(api,name,callback('B') if mode=='prior' else None)
-                    def argument():events.append('argument');setattr(api,name,callback('C'))
+                        if mode!='ordinary':set_training_port(api,name,callback('B') if mode=='prior' else None)
+                    def argument():events.append('argument');set_training_port(api,name,callback('C'))
                     class Pipeline(dict):
                         def __bool__(self):
                             if window=='direct':before()
@@ -357,7 +363,7 @@ class TrainingStateContracts(unittest.TestCase):
                     elif window=='prefix':invoke=lambda:api.auto_optimize_task_id_from_pipeline_task(Identifier())
                     else:
                         self.f.pipeline=Pipeline(detection_method=DetectionMethod())
-                        stack.enter_context(patch.object(api,'training_task_model_id',return_value='model'))
+                        stack.enter_context(patch_training_port(api,'training_task_model_id',return_value='model'))
                         invoke=lambda:api.sync_pipeline_training_state_from_task({'job_id':'job','pipeline_task_id':'ordinary','status':'completed'})
                     if mode=='missing':
                         with self.assertRaises(BaseException) as error:invoke()
@@ -385,14 +391,14 @@ class TrainingStateContracts(unittest.TestCase):
                         calls.append((available(f.pipeline_guard),available(f.auto_guard)))
                         if len(calls)==(1 if stage=='pipeline-id' else 2):raise failure
                         return original(*args,**kwargs)
-                    probe=stack.enter_context(patch.object(api,'sanitize_ai_detection_task_id',side_effect=bad))
+                    probe=stack.enter_context(patch_training_port(api,'sanitize_ai_detection_task_id',side_effect=bad))
                 elif stage=='method':
                     original=api.normalize_pipeline_detection_method
                     def bad(*args,**kwargs):
                         calls.append((available(f.pipeline_guard),available(f.auto_guard)))
                         if len(calls)==1:raise failure
                         return original(*args,**kwargs)
-                    probe=stack.enter_context(patch.object(api,'normalize_pipeline_detection_method',side_effect=bad))
+                    probe=stack.enter_context(patch_training_port(api,'normalize_pipeline_detection_method',side_effect=bad))
                 else:
                     probe=mapping[stage];original=probe.side_effect
                     def bad(*args,**kwargs):
@@ -414,12 +420,12 @@ class TrainingStateContracts(unittest.TestCase):
         api=self.api
         for name in ('record_owner_id','record_visible_to_user','user_is_admin','current_owner_fields'):
             with self.subTest(name=name),ExitStack() as stack:
-                failure=OSError('first-only');original=getattr(api,name);count=[]
+                failure=OSError('first-only');original=get_training_port(api,name);count=[]
                 def bad(*args,**kwargs):
                     count.append(True)
                     if len(count)==1:raise failure
                     return original(*args,**kwargs)
-                probe=stack.enter_context(patch.object(api,name,side_effect=bad));config={'training':{'owner_user_id':'alice'}}
+                probe=stack.enter_context(patch_training_port(api,name,side_effect=bad));config={'training':{'owner_user_id':'alice'}}
                 with self.assertRaises(BaseException) as error:
                     if name=='record_owner_id':api.training_state_store(config)
                     elif name=='record_visible_to_user':api.sanitize_training_state_for_user({'owner_user_id':'alice'},self.alice,set())
@@ -437,12 +443,12 @@ class TrainingStateContracts(unittest.TestCase):
             (pipeline,'auto_optimize_task_id_from_pipeline_task',lambda:api.sync_pipeline_training_state_from_task({'job_id':'job','pipeline_task_id':'pipe_ai_ai','status':'completed'}))]
         for target,name,invoke in cases:
             with self.subTest(name=name):
-                failure=OSError('first-only');original=getattr(target,name);calls=[]
+                failure=OSError('first-only');original=get_training_port(target,name);calls=[]
                 def bad(*args,**kwargs):
                     calls.append(True)
                     if len(calls)==1:raise failure
                     return original(*args,**kwargs)
-                with patch.object(target,name,side_effect=bad) as probe:
+                with patch_training_port(target,name,side_effect=bad) as probe:
                     with self.assertRaises(BaseException) as error:invoke()
                     self.assertIs(error.exception,failure);self.assertEqual(probe.call_count,1)
                 self.assertTrue(available(self.f.pipeline_guard));self.assertTrue(available(self.f.auto_guard))
@@ -469,7 +475,7 @@ class TrainingStateContracts(unittest.TestCase):
                     target=api._pipeline_training_sync if stage=='pipeline-guard' else api._training_candidate_sync;field='guard';valid=f.pipeline_guard if stage=='pipeline-guard' else f.auto_guard
                     task={'job_id':'job','pipeline_task_id':'pipe_ai_ai','status':'completed'}
                     invoke=(lambda:api.sync_pipeline_training_state_from_task(task)) if stage=='pipeline-guard' else lambda:api.sync_auto_optimize_training_candidate_from_task(task,ai_task_id='ai',model_id='model')
-                probe=stack.enter_context(patch.object(target,field,side_effect=chain([failure],repeat(valid))))
+                probe=stack.enter_context(patch_training_port(target,field,side_effect=chain([failure],repeat(valid))))
                 with self.assertRaises(BaseException) as error:invoke()
                 self.assertIs(error.exception,failure);probe.assert_called_once_with()
                 if stage in ('direct','prefix'):self.assertEqual(events,[])
@@ -532,12 +538,12 @@ class TrainingStateContracts(unittest.TestCase):
                 self.assertTrue(available(self.f.pipeline_guard));self.assertTrue(available(self.f.auto_guard))
         for name,branch,fail_at in [('user_is_admin','second-admin',2),('record_visible_to_user','admin-filter',1),('record_visible_to_user','admin-sanitize',2),('sync_pipeline_training_state_from_task','sync',1)]:
             with self.subTest(name=name,branch=branch):
-                failure=OSError('first-only');original=getattr(api,name);calls=[]
+                failure=OSError('first-only');original=get_training_port(api,name);calls=[]
                 def bad(*args,**kwargs):
                     calls.append(args)
                     if len(calls)==fail_at:raise failure
                     return original(*args,**kwargs)
-                with patch.object(api,name,side_effect=bad) as probe:
+                with patch_training_port(api,name,side_effect=bad) as probe:
                     with self.assertRaises(BaseException) as error:
                         if branch=='sync':sync_fixture()()
                         else:api.training_state_for_user({'training_by_user_id':{'alice':{'owner_user_id':'alice'}}},self.alice if branch=='second-admin' else self.admin,set())
@@ -558,10 +564,10 @@ class TrainingStateContracts(unittest.TestCase):
                     original=api.user_is_admin;target=api;field='user_is_admin';fail_at=1
                     invoke=lambda:api.set_training_state_for_user(f.config,self.alice,{})
                 elif stage=='sync-legacy':
-                    f.task.pop('owner_user_id');target=api._training_user_state;field='legacy_owner';original=getattr(target,field);fail_at=1
+                    f.task.pop('owner_user_id');target=api._training_user_state;field='legacy_owner';original=get_training_port(target,field);fail_at=1
                     invoke=lambda:api.sync_training_state_from_task('job')
                 elif stage=='sync-owner':
-                    target=api;field='record_owner_id';original=getattr(target,field);fail_at=2
+                    target=api;field='record_owner_id';original=get_training_port(target,field);fail_at=2
                     invoke=lambda:api.sync_training_state_from_task('job')
                 elif stage=='ai-save':
                     target=api;field='save_pipeline_task';original=f.pipeline_save;fail_at=1
@@ -577,7 +583,7 @@ class TrainingStateContracts(unittest.TestCase):
                     calls.append((available(f.pipeline_guard),available(f.auto_guard)))
                     if len(calls)==fail_at:raise failure
                     return original(*args,**kwargs)
-                probe=stack.enter_context(patch.object(target,field,side_effect=bad))
+                probe=stack.enter_context(patch_training_port(target,field,side_effect=bad))
                 with self.assertRaises(BaseException) as error:invoke()
                 self.assertIs(error.exception,failure);self.assertEqual(probe.call_count,fail_at)
                 expected=(False,True) if stage in ('ai-save','yolo-clock','ai-clock') else ((True,False) if stage.startswith('candidate-') else (True,True))

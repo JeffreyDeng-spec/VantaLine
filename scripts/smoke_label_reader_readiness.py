@@ -8,6 +8,7 @@ import uuid
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 import psycopg
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -57,8 +58,8 @@ def app_fixture(repositories, events):
     with patch.object(worker_api, 'read_identity', return_value=identity), \
          patch.object(worker_api, 'create_control_factory', return_value=SimpleNamespace(clear=lambda: None)), \
          patch.object(worker_api, 'LabelRuntimeControl', return_value=control):
-        first = worker_api.register(app, repositories, directory, models)
-        assert worker_api.register(app, repositories, directory, models) is first
+        first = worker_api.register(app, repositories, directory, models, runtime_provider=get_runtime)
+        assert worker_api.register(app, repositories, directory, models, runtime_provider=get_runtime) is first
     assert [fn.__name__ for fn in app.router.on_startup] == ['verify_label_list_database', '<lambda>', 'start']
     @app.get('/ready')
     def ready():

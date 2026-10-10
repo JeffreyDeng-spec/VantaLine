@@ -11,6 +11,7 @@ import sys
 import types
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service import plc_fx_ascii as protocol
 from local_inspection_service.plc import event_projection, transition_policy
 from local_inspection_service.plc.errors import PlcDispatchStateConflict
@@ -154,7 +155,7 @@ class PersistedContract(unittest.TestCase):
     def test_lightweight_and_root_direct_aliases(self):
         code="import sys; from local_inspection_service.plc import persisted_validation; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg','serial'))"
         subprocess.run([sys.executable,'-c',code],cwd=ROOT,check=True,timeout=10)
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf8'))
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf8'))
         imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.level==1 and n.module=='plc.persisted_validation']
         self.assertEqual(len(imports),1);self.assertEqual({a.name for a in imports[0].names if a.asname is None},NAMES)
         self.assertFalse(any(isinstance(n,ast.FunctionDef) and n.name in NAMES for n in tree.body))

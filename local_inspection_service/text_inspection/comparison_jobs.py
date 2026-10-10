@@ -1,5 +1,7 @@
 """Local comparison consumes immutable prepared elements, never re-OCRs reference."""
 import copy
+from functools import partial
+from .comparison_runtime import ComparisonRuntime, ComparisonSlot
 import json
 import threading
 import time
@@ -19,7 +21,17 @@ _slots = threading.BoundedSemaphore(1)
 
 def submit(records: ComparisonRecords, media: ComparisonMedia, models: ComparisonModels,
            clear_repository: Callable[[], None], getenv: EnvironmentReader,
-           jobs, owner, username, standard, asset, snapshot, upload, request_id, extraction):
+           jobs, owner, username, standard, asset, snapshot, upload, request_id, extraction, *,
+           execution: ComparisonRuntime | None = None):
+    args = (records, media, models, clear_repository, getenv, jobs, owner, username,
+            standard, asset, snapshot, upload, request_id, extraction)
+    if execution is None:
+        return _submit(*args, execution=None, launch=None)
+    return execution.threads.submit(lambda launch: _submit(*args, execution=execution, launch=launch))
+
+
+def _submit(records, media, models, clear_repository, getenv,
+            jobs, owner, username, standard, asset, snapshot, upload, request_id, extraction, *, execution, launch):
     use_qwen = qwen_evidence_jobs.enabled(owner)
     binding = dict(standard_asset_id=asset["id"], standard_revision_id=standard.get("current_revision_id"),
         template_revision=snapshot["preparation"]["id"], reference_sha256=snapshot["preparation"]["sha256"],
@@ -69,14 +81,22 @@ def submit(records: ComparisonRecords, media: ComparisonMedia, models: Compariso
         if prior:
             return records.public(prior)
         raise HTTPException(409, "比较任务冲突")
-    threading.Thread(target=qwen_evidence_jobs.run if use_qwen else run,
-        args=(records, media, clear_repository, jobs, record, upload, resolved, models.record_usage) if use_qwen else
-             (records, media, clear_repository, jobs, record, upload, getenv), daemon=True).start()
+    selected = qwen_evidence_jobs.run if use_qwen else run
+    args = (records, media, clear_repository, jobs, record, upload, resolved, models.record_usage) if use_qwen else \
+           (records, media, clear_repository, jobs, record, upload, getenv)
+    if execution is None:
+        threading.Thread(target=selected, args=args, daemon=True).start()
+    else:
+        slot = ComparisonSlot(execution.qwen_slots if use_qwen else execution.local_slots)
+        selected = partial(selected, slots=slot, timers=execution.deadlines) if use_qwen else \
+                   partial(selected, slots=slot)
+        launch(lambda wrap: threading.Thread(target=slot.wrap(wrap(selected)), args=args, daemon=True), lambda thread: None)
     return records.public(record)
 
 
 def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Callable[[], None],
-        jobs, record, upload, getenv: EnvironmentReader):
+        jobs, record, upload, getenv: EnvironmentReader, *, slots=None):
+    slots = _slots if slots is None else slots
     start = time.monotonic()
     acquired = False
     try:
@@ -85,7 +105,7 @@ def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Ca
                           message="纯图形或空模板不支持文字对比；未执行识别，不能判定通过。")
             record["diagnostics"]["phase"] = "unsupported_template"
             return
-        acquired = _slots.acquire(timeout=120)
+        acquired = slots.acquire(timeout=120)
         if not acquired or time.monotonic()-start >= 120:
             raise TimeoutError("queue_timeout")
         record["diagnostics"]["phase"] = "recognizing"
@@ -114,11 +134,15 @@ def run(records: ComparisonRecords, media: ComparisonMedia, clear_repository: Ca
         record.update(status="review_required", decision="REVIEW_REQUIRED", message="识别未完成，请人工复核；不会转用付费模型。")
         record["diagnostics"].update(phase="failed", error_type=type(exc).__name__)
     finally:
-        if time.monotonic()-start >= 120:
-            record.update(status="review_required", decision="REVIEW_REQUIRED", auto_decision="REVIEW_REQUIRED", message="识别超时，请人工复核。")
-        record["diagnostics"]["elapsed_ms"] = round((time.monotonic()-start)*1000)
-        record["updated_at"] = int(time.time())
-        records.save("records", record)
-        clear_repository()
-        if acquired:
-            _slots.release()
+        try:
+            if time.monotonic()-start >= 120:
+                record.update(status="review_required", decision="REVIEW_REQUIRED", auto_decision="REVIEW_REQUIRED", message="识别超时，请人工复核。")
+            record["diagnostics"]["elapsed_ms"] = round((time.monotonic()-start)*1000)
+            record["updated_at"] = int(time.time())
+            records.save("records", record)
+        finally:
+            try:
+                clear_repository()
+            finally:
+                if acquired:
+                    slots.release()

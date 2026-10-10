@@ -9,6 +9,9 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch
 
 sys.path.insert(0,str(Path.cwd()))
+from scripts.agent_pose_test_ports import pose_capability_target
+from scripts.agent_pose_assets_application_test_ports import bind_pose_assets, assert_default_pose_assets
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseAssetsContracts(unittest.TestCase):
 
@@ -25,6 +28,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
         from local_inspection_service import server
 
         cls.api=server
+        assert_default_pose_assets(server)
 
     @classmethod
 
@@ -33,12 +37,16 @@ class AgentPoseAssetsContracts(unittest.TestCase):
     def setUp(self):
 
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_pose_assets(self.api,self.stack)
 
         for n in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
 
             self.stack.enter_context(patch(n,side_effect=AssertionError('external operation forbidden')))
 
-    def patch(self,name,**kw):return self.stack.enter_context(patch.object(self.api,name,**kw))
+    def patch(self,name,**kw):
+        # Only template methods have moved; asset-service callbacks still use the entry seam.
+        target = pose_capability_target(self.api,name) if name in {'agent_mcp_pose_request','agent_mcp_pose_templates','agent_mcp_object_kind'} else (self.api,name)
+        return self.stack.enter_context(patch.object(*target,**kw))
 
     def path(self,name,exists=True):
 
@@ -138,7 +146,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
         class BaseId:
 
-            def __format__(self,spec):api.agent_mcp_pose_request=later;return 'part'
+            def __format__(self,spec):setattr(*pose_capability_target(api,"agent_mcp_pose_request"),later);return 'part'
 
         result=self.api.agent_mcp_pose_templates(BaseId(),'bottle');self.assertEqual([x['request'] for x in result],[{'later':True},{'later':True}]);old.assert_not_called();self.assertEqual(later.call_count,2)
 
@@ -174,7 +182,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
             values={f.name:Mock(return_value=None) for f in fields(kind)};getters.extend(values.values());return kind(**values)
 
-        AgentPoseAssets(group(p.PoseAssetPaths),group(p.PoseAssetMaterial),group(p.PoseAssetSprites),group(p.PoseAssetCalls),group(p.PoseAssetCatalog));AgentPoseTemplates(group(p.PoseTemplateIdentity),group(p.PoseTemplateCalls))
+        AgentPoseAssets(group(p.PoseAssetPaths),group(p.PoseAssetMaterial),group(p.PoseAssetSprites),group(p.PoseAssetCalls),group(p.PoseAssetCatalog), files=BusinessFiles());AgentPoseTemplates(group(p.PoseTemplateIdentity),group(p.PoseTemplateCalls))
 
         for getter in getters:getter.assert_not_called()
 
@@ -194,7 +202,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
 
         def make(name):
 
-            assets=AgentPoseAssets(group(p.PoseAssetPaths,resolve=lambda:lambda raw:self.path('/synthetic/'+name+'.png'),suffixes=lambda:{'.png'}),group(p.PoseAssetMaterial,kind=lambda:lambda item:'object'),group(p.PoseAssetSprites,source_paths=lambda:lambda item:[],highlight_ready=lambda:lambda item,paths:True),group(p.PoseAssetCalls),group(p.PoseAssetCatalog))
+            assets=AgentPoseAssets(group(p.PoseAssetPaths,resolve=lambda:lambda raw:self.path('/synthetic/'+name+'.png'),suffixes=lambda:{'.png'}),group(p.PoseAssetMaterial,kind=lambda:lambda item:'object'),group(p.PoseAssetSprites,source_paths=lambda:lambda item:[],highlight_ready=lambda:lambda item,paths:True),group(p.PoseAssetCalls),group(p.PoseAssetCatalog), files=BusinessFiles())
 
             templates=AgentPoseTemplates(group(p.PoseTemplateIdentity,uid=lambda:lambda item:name,kind=lambda:lambda item:'object',search=lambda:re.search),group(p.PoseTemplateCalls,request=lambda:lambda:{'owner':name}))
 

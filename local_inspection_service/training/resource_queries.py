@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from .dataset_catalog import DatasetItem
-from ..storage.artifacts.files import BusinessFiles
+from .file_ports import TrainingResourceFiles
 
 Record = dict[str, Any]
 
@@ -50,10 +50,12 @@ class ResourceAccess:
 class TrainingResources:
     def __init__(self, datasets: ResourceDatasets, records: ResourceRecords,
                  config: ResourceConfiguration, access: ResourceAccess,
-                 resolve: Callable[[], Callable[[Any], Path]], output: Callable[[], Path], *, files=None):
+                 resolve: Callable[[], Callable[[Any], Path]], output: Callable[[], Path], *, files: TrainingResourceFiles):
         self.datasets, self.records, self.config = datasets, records, config
         self.access, self.resolve, self.output = access, resolve, output
-        self.files = files if files is not None else BusinessFiles()
+        if files is None:
+            raise TypeError('files is required')
+        self.files = files
 
     def training_resources_payload(self, *, include_samples=False, user=None, target_user_id=None):
         if self.files.runtime_provider() is None:

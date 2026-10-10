@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "original_parent": "5b619471e5fb7d4d7f6859966ed55ad1912c4222",
+  "source": "Frozen original constructor external expressions; only new port constructor names and internal-edge exclusion change",
+  "aliases": {
+    "_image_worker_runtime": "_image_jobs.worker",
+    "_candidate_store_lock": "_image_jobs.lock",
+    "_image_job_metadata": "_image_jobs.metadata",
+    "_candidate_repository": "_image_jobs.candidates",
+    "_image_job_queue": "_image_jobs.queue",
+    "_image_worker_diagnostics": "_image_jobs.diagnostics",
+    "_image_job_execution": "_image_jobs.execution",
+    "_image_worker_processes": "_image_worker_runtime.processes"
+  },
+  "original_parent_server_sha256": "2fb6a7d629186446f80c6e818e449573dbe078e3d447468a13b59cfe545cd5d1",
+  "root_argument_expressions": {
+    "provenance": "_ImageProvenanceDependencies(hash_file=lambda path: file_sha256(path), policy_version=lambda: ANCHOR_POLICY_VERSION, guide_images=lambda: POSE_TARGET_GUIDE_IMAGES, max_inputs=lambda: MAX_IMAGE_WORKER_INPUTS)",
+    "resolver": "lambda: resolve_model_profiles()",
+    "files": "_business_files",
+    "threads": "lambda: threading.Thread",
+    "scope": "_runtime_repositories.thread_scope",
+    "candidates": "_ImageCandidateFiles(runtime_repository=lambda: runtime_postgres_repository_or_none(), directory=lambda: ACCESSORY_CANDIDATES_DIR, safe_id=lambda value: safe_record_id(value), created_at=lambda record, path: record_created_at(record, path), updated_at=lambda record, path: record_updated_at(record, path))",
+    "storage": "_ImageQueueStorage(CONFIG_PATH=lambda: CONFIG_PATH, load_config=lambda: load_config, save_config=lambda: save_config, runtime_postgres_repository_or_none=lambda: runtime_postgres_repository_or_none, _business_files=lambda: _business_files, HTTPException=lambda: HTTPException)",
+    "metadata": "_ImageQueueMetadata(accessory_uid=lambda: accessory_uid, file_stem_identifier=lambda: file_stem_identifier, accessory_material_type=lambda: accessory_material_type, ensure_pose_collection_image_jobs=lambda: ensure_pose_collection_image_jobs, public_output_url=lambda: public_output_url, resolve_service_path=lambda: resolve_service_path, preprocess_object_clean_sprites=lambda: preprocess_object_clean_sprites)",
+    "limits": "_ImageQueueLimits(IMAGE_JOB_QUEUED_STATUSES=lambda: IMAGE_JOB_QUEUED_STATUSES, MAX_PARALLEL_IMAGE_WORKERS=lambda: MAX_PARALLEL_IMAGE_WORKERS)",
+    "diagnostic_media": "_ImageDiagnosticMedia(_business_files=lambda: _business_files, resolve_service_path=lambda: resolve_service_path, safe_name=lambda: safe_name, IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR)",
+    "execution_files": "_ImageExecutionFiles(_business_files=lambda: _business_files, _image_files=lambda: _image_files, IMAGE_WORKER_LOG_DIR=lambda: IMAGE_WORKER_LOG_DIR, ROOT=lambda: ROOT, safe_name=lambda: safe_name, resolve_service_path=lambda: resolve_service_path, public_output_url=lambda: public_output_url)",
+    "evidence": "_ImageExecutionEvidence(image_job_prompt=lambda: image_job_prompt, bounded_text=lambda: bounded_text)",
+    "providers": "_ImageExecutionProviders(LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER, CURSOR_IMAGE2_PROVIDER=lambda: CURSOR_IMAGE2_PROVIDER, CURSOR_IMAGE2_QUEUE_STATUS=lambda: CURSOR_IMAGE2_QUEUE_STATUS, CODEX_IMAGE_WORKER_QUEUE_STATUS=lambda: CODEX_IMAGE_WORKER_QUEUE_STATUS, MAX_IMAGE_WORKER_INPUTS=lambda: MAX_IMAGE_WORKER_INPUTS, cursor_image2_settings=lambda: cursor_image2_settings, cursor_image2_payload=lambda: cursor_image2_payload, cursor_auth_headers=lambda: cursor_auth_headers, extract_cursor_image2_bytes=lambda: extract_cursor_image2_bytes, windows_worker_base_url=lambda: windows_worker_base_url, windows_worker_headers=lambda: windows_worker_headers, windows_worker_image_timeout_seconds=lambda: windows_worker_image_timeout_seconds, windows_worker_image_response_bytes=lambda: windows_worker_image_response_bytes, masked_url_for_status=lambda: _provider_configuration.masked_url_for_status)",
+    "diagnostic_policy": "_ImageDiagnosticPolicy(IMAGE_JOB_ACTIVE_STATUSES=lambda: IMAGE_JOB_ACTIVE_STATUSES, IMAGE_WORKER_LOG_TAIL_BYTES=lambda: IMAGE_WORKER_LOG_TAIL_BYTES, IMAGE_WORKER_STALE_SECONDS=lambda: IMAGE_WORKER_STALE_SECONDS, LOCAL_CODEX_IMAGE_PROVIDER=lambda: LOCAL_CODEX_IMAGE_PROVIDER)"
+  },
+  "comparison": "Parse both expressions in the current interpreter; compare AST structure, never source text or a frozen interpreter-specific dump"
+}

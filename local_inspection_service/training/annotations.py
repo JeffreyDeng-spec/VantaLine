@@ -5,8 +5,7 @@ from pathlib import Path
 import re
 from typing import Any
 import cv2
-from ..storage.artifacts.images import ImageFiles
-_image_files = ImageFiles(lambda: cv2)
+from .file_ports import TrainingImageIO, TrainingTextWriter
 
 
 def yolo_label_line(class_index: int, polygon: list[list[int]], width: int = 1280, height: int = 900) -> str | None:
@@ -45,7 +44,9 @@ def yolo_detection_label_line(
     return f"{class_index} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}"
 
 
-def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
+def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str], *, files: TrainingTextWriter) -> None:
+    if files is None:
+        raise TypeError('files is required')
     safe_names = [
         re.sub(r"[^a-zA-Z0-9_]+", "_", str(name or f"class_{idx}")).strip("_") or f"class_{idx}"
         for idx, name in enumerate(names)
@@ -58,7 +59,7 @@ def write_dataset_yaml(path: Path, dataset_dir: Path, names: list[str]) -> None:
         "names:",
     ]
     body.extend([f"  {idx}: {name}" for idx, name in enumerate(safe_names)])
-    _image_files.files.write_text(path, "\n".join(body) + "\n", encoding="utf-8")
+    files.write_text(path, "\n".join(body) + "\n", encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -77,11 +78,14 @@ class TrainingOutputLinks:
         return ""
 
 class AnnotationPreview:
-    def __init__(self, public_url: Callable[[Path], str]):
+    def __init__(self, public_url: Callable[[Path], str], *, images: TrainingImageIO):
+        if images is None:
+            raise TypeError('images is required')
+        self.images = images
         self.public_url = public_url
 
     def write_training_annotation_preview(self, image_path: Path, labels: list[dict[str, Any]], out_path: Path) -> str:
-        image = _image_files.imread(str(image_path), cv2.IMREAD_COLOR)
+        image = self.images.imread(str(image_path), cv2.IMREAD_COLOR)
         if image is None:
             return ""
         palette = [(0, 210, 60), (45, 125, 255), (250, 170, 35), (210, 65, 210), (60, 220, 220)]
@@ -98,5 +102,5 @@ class AnnotationPreview:
             y = max(24, y1 - 8)
             cv2.putText(image, str(label.get("name") or label.get("id") or "part"), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        _image_files.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+        self.images.imwrite(str(out_path), image, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         return self.public_url(out_path)

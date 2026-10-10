@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import uuid
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.runtime import get_runtime
 import psycopg
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -65,9 +66,9 @@ class Fixture:
                 if self.owner=='anonymous':raise HTTPException(401,'请登录')
                 if self.owner=='denied':raise HTTPException(403,'没有权限')
             access=SimpleNamespace(require_permission=permission,owner=lambda:(self.owner,'test'))
-            with patch.object(api.pdf_import,'register',lambda *_:None):
+            with patch.object(api.pdf_import,'register',lambda *_, runtime_provider:None):
                 api.register(app,access,SimpleNamespace(repository=lambda:self.reader),
-                    SimpleNamespace(data_directory=lambda:Path(self.directory.name)),lambda:None,lambda:{'enabled':True})
+                    SimpleNamespace(data_directory=lambda:Path(self.directory.name)),lambda:None,lambda:{'enabled':True}, runtime_provider=get_runtime)
             self.endpoint=next(r.endpoint for r in app.routes if getattr(r,'path',None)==api.PREFIX+'/tasks' and 'GET' in r.methods)
             self.client=TestClient(app,raise_server_exceptions=False)
             return self

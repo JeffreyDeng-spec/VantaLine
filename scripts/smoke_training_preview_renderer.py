@@ -12,6 +12,10 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_renderer_application_test_ports import bind_training_renderer, assert_default_training_renderer
+from training_layout_application_test_ports import bind_training_layout
+from local_inspection_service.storage.artifacts.images import ImageFiles
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 def digest(value):
@@ -176,12 +180,15 @@ class PreviewRendererContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_renderer(server)
 
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_layout(self.api,self.stack)
+        bind_training_renderer(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='preview-renderer-')))
         for target in ['requests.request', 'subprocess.Popen', 'os.kill']:
             self.stack.enter_context(patch(target, side_effect=AssertionError('unexpected external operation')))
@@ -607,7 +614,7 @@ class PreviewRendererContracts(unittest.TestCase):
                              (lambda fn=b['pose_family_is_top_view']: fn), b['grid_position_for_center'], b['source_position_for_render_policy'], b['pose_selection_reason']),
                 PreviewLayout(b['random_center_inside_background'], b['choose_object_center_inside_background'], lambda: masks.mask_from_polygon,
                               placement.placement_box_points, geometry.rotated_rect_tuple, visible.visible_polygon_from_mask, geometry.polygon_max_pair_distance_px),
-                PreviewThresholds(minimum, maximum)))
+                PreviewThresholds(minimum, maximum), images=ImageFiles(lambda: cv2, files=BusinessFiles())))
         for fixture in fixtures: self.assertEqual(fixture.events, []); self.assertIsNone(fixture.rng)
         for callback in minima + maxima: callback.assert_not_called()
         for name in fixtures[0].bindings: self.stack.enter_context(patch.object(self.api, name, side_effect=AssertionError('root callback reached')))

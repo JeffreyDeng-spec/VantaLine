@@ -7,6 +7,7 @@ import base64,hashlib,json,os,sys,tempfile,threading,unittest
 import cv2
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
 from contextlib import ExitStack
@@ -211,7 +212,8 @@ class MediaContracts(unittest.TestCase):
         cls.env=patch.dict(os.environ);cls.env.start();cls.tmp=tempfile.TemporaryDirectory(prefix='media-baseline-');root=Path(cls.tmp.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from scripts.detection_media_test_fixture import detection_media_fixture
+        cls.api=detection_media_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
     def setUp(self):
@@ -334,11 +336,11 @@ class MediaContracts(unittest.TestCase):
         from local_inspection_service.detection.reference_sheet import ReferenceSheet
         error_type=self.api.AiProviderError
         def build(f):
-            encoding=ImageEncoding(lambda:f.cv,error_type,lambda image,**kwargs:encoding.image_bgr_data_url(image,**kwargs))
-            storage=InspectionImageStore(lambda:f.cv,InspectionImagePolicy(lambda:f.root/'mcp',lambda:8,lambda:79),f.clock,f.safe)
+            encoding=ImageEncoding(lambda:f.cv,error_type,lambda image,**kwargs:encoding.image_bgr_data_url(image,**kwargs), runtime_provider=lambda: None)
+            storage=InspectionImageStore(lambda:f.cv,InspectionImagePolicy(lambda:f.root/'mcp',lambda:8,lambda:79),f.clock,f.safe, runtime_provider=lambda: None)
             collection=ReferenceCollection(lambda:f.text,f.uid,f.paths,encoding.image_path_data_url,f.mime,ReferenceCollectionPolicy(lambda:2,lambda:640,lambda:72))
             tiles=ReferenceTileRenderer(lambda:f.cv,lambda:np)
-            sheet=ReferenceSheet(lambda:f.text,f.output,ReferenceSheetPolicy(lambda:{'.png','.jpg'},lambda:'sheet',lambda:83,lambda:1400),ReferenceSheetCache(lambda:f.lock,lambda:f.cache),ReferenceSheetImages(lambda:f.cv,lambda:np,tiles.fit_image_into_cell,lambda:encoding.image_path_data_url))
+            sheet=ReferenceSheet(lambda:f.text,f.output,ReferenceSheetPolicy(lambda:{'.png','.jpg'},lambda:'sheet',lambda:83,lambda:1400),ReferenceSheetCache(lambda:f.lock,lambda:f.cache),ReferenceSheetImages(lambda:f.cv,lambda:np,tiles.fit_image_into_cell,lambda:encoding.image_path_data_url), files=lambda: BusinessFiles(runtime_provider=lambda: None))
             return encoding,storage,collection,tiles,sheet
         services=[]
         for owner in ('alice','bob'):

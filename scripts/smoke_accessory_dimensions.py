@@ -46,7 +46,8 @@ class AccessoryDimensionsContracts(unittest.TestCase):
 
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
 
-        cls.api=server
+        from scripts.accessory_projection_test_fixtures import dimensions_fixture
+        cls.api=dimensions_fixture(server)
 
     @classmethod
 

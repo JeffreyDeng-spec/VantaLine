@@ -13,6 +13,8 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
 import cv2
 import httpx
 import numpy as np
@@ -97,14 +99,16 @@ class Fixture:
         self.paths = IncomingPaths(lambda: self.root/'references.json', lambda: self.root/'inspections.json', lambda: self.root/'audit.json')
         self.json = IncomingJSON(self.paths, lambda path: copy.deepcopy(self.state[path.stem]), self.write)
         public = lambda record: incoming_access.public_record(record, lambda value: value)
-        self.catalog = IncomingCatalog(self.access, self.references, self.tasks, self.media, self.writes, self.json, public, lambda: False)
+        self.files = BusinessFiles(runtime_provider=lambda: None)
+        self.images = ImageFiles(lambda: cv2, files=self.files)
+        self.catalog = IncomingCatalog(self.access, self.references, self.tasks, self.media, self.writes, self.json, public, lambda: False, files=self.files, images=self.images)
         self.reviews = IncomingReviews(self.access, self.inspections, self.tasks, self.media, self.writes, self.json,
-            lambda:lambda rows: [row['raw_json'] for row in rows], public)
+            lambda:lambda rows: [row['raw_json'] for row in rows], public, files=self.files)
         self.execution = IncomingExecution(self.access, self.references, self.inspections, self.media,
             IncomingOCR(lambda image: self.observe(image), lambda *a: self.corroborate(*a), lambda:self.field),
             IncomingImaging(lambda image: self.quality(image), lambda:self.rectify, lambda:self.similarity, lambda:self.annotate),
-            lambda:self.capacity, lambda: False, public)
-        self.retention = IncomingRetention(self.inspections, self.media, self.writes, self.json, lambda:self.audit, lambda: 'system')
+            lambda:self.capacity, lambda: False, public, files=self.files, images=self.images)
+        self.retention = IncomingRetention(self.inspections, self.media, self.writes, self.json, lambda:self.audit, lambda: 'system', files=self.files)
     def user(self):
         return {'id': self.context.get()}
     def allowed(self, task, user):
@@ -610,7 +614,7 @@ class Workflows(unittest.TestCase):
         for fixture, owner in zip(fixtures, ('alice', 'bob')):
             fixture.task_records[0]['owner_user_id'] = owner
             app = FastAPI()
-            register_catalog(app, fixture.catalog); register_inspections(app, fixture.execution, fixture.reviews)
+            register_catalog(app, fixture.catalog, files=lambda: BusinessFiles(runtime_provider=lambda: None)); register_inspections(app, fixture.execution, fixture.reviews, files=lambda: BusinessFiles(runtime_provider=lambda: None))
             self.assertEqual(len([r for r in app.routes if r.path.startswith('/api/incoming-text')]), 9)
             applications.append(app)
         # Both compositions exist before either application's first request.

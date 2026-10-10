@@ -14,6 +14,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from auto_application_test_methods import auto_method
+from auto_optimization_test_ports import assert_capability_owner
 from local_inspection_service.model_providers.errors import AiProviderError
 
 BASELINE = os.environ.get("VANTALINE_AUTO_MASK_VERIFICATION_BASELINE_SOURCE")
@@ -187,9 +189,9 @@ class MaskVerificationContract(unittest.TestCase):
         capture()
         from local_inspection_service import server
         service = server._auto_optimization_mask_verification
-        for field in fields(service.ports): self.assertIs(getattr(service.ports, field.name)(), getattr(server, field.name))
+        for field in fields(service.ports): assert_capability_owner(self, service.ports, field.name, server)
         marker = object(); method = Mock(return_value=marker); args = ({}, object(), [])
-        with patch.object(server, "_auto_optimization_mask_verification", SimpleNamespace(verify_auto_optimize_mask_sample=method)):
+        with auto_method(self,server._auto_optimization_mask_verification,"verify_auto_optimize_mask_sample",method):
             self.assertIs(server.verify_auto_optimize_mask_sample(*args), marker)
             method.assert_called_once_with(*args)
 

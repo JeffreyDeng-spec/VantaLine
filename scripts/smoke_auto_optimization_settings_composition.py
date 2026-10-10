@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from auto_optimization_test_ports import SETTINGS_CAPABILITIES
 
 
@@ -26,6 +27,9 @@ class CompositionContract(unittest.TestCase):
                 port = getattr(value, field.name)
                 if isinstance(port, type) or not is_dataclass(port):
                     continue
+                # A complete application's assembly export is not a business port.
+                if type(port).__module__.startswith('local_inspection_service.runtime.wiring.'):
+                    continue
                 for capability in fields(port):
                     if capability.name in SETTINGS_CAPABILITIES:
                         cls.ports.append((port, capability.name))
@@ -42,7 +46,7 @@ class CompositionContract(unittest.TestCase):
             self.assertIs(alias.__self__, self.server._auto_optimization_settings)
 
     def test_no_settings_root_lookup_or_function_forwarder(self):
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         self.assertFalse(any(isinstance(n, ast.FunctionDef) and n.name in SETTINGS_CAPABILITIES for n in tree.body))
         references = [n for n in ast.walk(tree) if isinstance(n, ast.Name)
                       and isinstance(n.ctx, ast.Load) and n.id in SETTINGS_CAPABILITIES]

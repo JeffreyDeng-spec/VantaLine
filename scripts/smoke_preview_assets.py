@@ -7,6 +7,9 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock,patch,call
 sys.path.insert(0,str(Path.cwd()))
+from local_inspection_service.storage.artifacts.files import BusinessFiles
+from local_inspection_service.storage.artifacts.images import ImageFiles
+import cv2
 class PreviewAssetsContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -22,7 +25,8 @@ class PreviewAssetsContracts(unittest.TestCase):
         cls.lifetime.enter_context(patch.dict(sys.modules,{'rembg':SimpleNamespace(new_session=cls.import_factory,remove=cls.import_remove)}))
         from local_inspection_service import server
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
-        cls.api=server
+        from scripts.preview_media_test_fixtures import preview_assets_fixture
+        cls.api=preview_assets_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):
@@ -245,7 +249,7 @@ class PreviewAssetsContracts(unittest.TestCase):
             loaded = (image, {'tag': tag})
             ops = {'resolve': Mock(return_value=path), 'default': Mock(return_value=path), 'candidate': Mock(return_value=loaded), 'select': Mock(side_effect=lambda values, rng, **kwargs: values[0] if values else None), 'preview': Mock(return_value=loaded)}
             getters = {name: Mock(return_value=value) for name, value in {'root': root, 'suffixes': {'.png'}, **ops}.items()}
-            service = PreviewAssetLoader(PreviewAssetPolicy(getters['root'], getters['suffixes']), PreviewAssetPaths(getters['resolve']), PreviewAssetOperations(getters['default'], getters['candidate'], getters['select'], getters['preview']))
+            service = PreviewAssetLoader(PreviewAssetPolicy(getters['root'], getters['suffixes']), PreviewAssetPaths(getters['resolve']), PreviewAssetOperations(getters['default'], getters['candidate'], getters['select'], getters['preview']), files=BusinessFiles(), images=ImageFiles(lambda: cv2, files=BusinessFiles()))
             for getter in getters.values(): getter.assert_not_called()
             return service, ops, path, image, loaded
         a = build('asset-a', 30); b = build('asset-b', 70)
