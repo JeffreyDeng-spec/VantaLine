@@ -165,6 +165,7 @@ def restore_pose_domain_root(source):
 
 
 MAIN284_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main284_real_photo_integration_delta.json").read_text())
+MAIN288_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main288_real_photo_integration_delta.json").read_text())
 
 
 def verify_main284_real_photo_sources():
@@ -180,18 +181,36 @@ def verify_main284_real_photo_sources():
     }, "Unreviewed real-photo integration source"
 
 
+def verify_main288_real_photo_sources():
+    assert MAIN288_REAL_PHOTO["schema"] == 1, "Unknown paused-source integration schema"
+    assert MAIN288_REAL_PHOTO["upstream_sha"] == "cd57cc7c38d10c37ddf8710bca45303c9ebe22f6", "Unreviewed paused-source upstream"
+    assert MAIN288_REAL_PHOTO["previous_candidate"] == "7ddc2c13a6fa02ac62e85efb9be5465ac462841c", "Unreviewed paused-source parent"
+    assert MAIN288_REAL_PHOTO["business_sources"] == {
+        "local_inspection_service/training/real_photo_api.py": {
+            "previous_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496",
+            "main_sha256": "f2807775c14ade2bfa29ed3fbd3e12ed51fd4246bb3069bf7bedbe87da408790",
+            "actual_sha256": "f2807775c14ade2bfa29ed3fbd3e12ed51fd4246bb3069bf7bedbe87da408790",
+        }
+    }, "Unreviewed paused-source integration source"
+
+
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
     from canonical_application_source_contract import restore_canonical_root
     source = restore_canonical_root(source)
     fixture = REAL_PHOTO_WORKFLOWS
     verify_main284_real_photo_sources()
+    verify_main288_real_photo_sources()
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
         if path in MAIN284_REAL_PHOTO["business_sources"]:
             accepted = MAIN284_REAL_PHOTO["business_sources"][path]
             assert expected == accepted["previous_sha256"], "Historical real-photo baseline changed: " + path
+            expected = accepted["actual_sha256"]
+        if path in MAIN288_REAL_PHOTO["business_sources"]:
+            accepted = MAIN288_REAL_PHOTO["business_sources"][path]
+            assert expected == accepted["previous_sha256"], "Historical main284 source changed: " + path
             expected = accepted["actual_sha256"]
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
     if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:

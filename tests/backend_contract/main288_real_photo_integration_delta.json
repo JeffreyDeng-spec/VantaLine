@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "upstream_sha": "cd57cc7c38d10c37ddf8710bca45303c9ebe22f6",
+  "previous_candidate": "7ddc2c13a6fa02ac62e85efb9be5465ac462841c",
+  "business_sources": {
+    "local_inspection_service/training/real_photo_api.py": {
+      "previous_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496",
+      "main_sha256": "f2807775c14ade2bfa29ed3fbd3e12ed51fd4246bb3069bf7bedbe87da408790",
+      "actual_sha256": "f2807775c14ade2bfa29ed3fbd3e12ed51fd4246bb3069bf7bedbe87da408790"
+    }
+  },
+  "scope": "Exact main288 paused-source-group API retained; both historical source oracles remain unchanged"
+}

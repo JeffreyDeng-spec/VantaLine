@@ -89,6 +89,34 @@ class IntegrationContracts(unittest.TestCase):
         with patch.object(Path,'read_bytes',read),patch.object(contract,'MAIN284_REAL_PHOTO',altered),self.assertRaisesRegex(AssertionError,'Unreviewed real-photo integration source'):
             contract.restore_real_photo_workflows_root(self.source)
 
+    def test_main288_delta_is_limited_to_the_reviewed_source(self):
+        relative='local_inspection_service/training/real_photo_api.py'
+        contract.verify_main288_real_photo_sources()
+        for mode in ('extra','missing','schema','upstream','parent','previous','main','actual'):
+            altered=copy.deepcopy(contract.MAIN288_REAL_PHOTO)
+            if mode=='extra': altered['business_sources']['local_inspection_service/pipeline/task_metadata.py']=copy.deepcopy(altered['business_sources'][relative])
+            elif mode=='missing': altered['business_sources'].pop(relative)
+            elif mode=='schema': altered['schema']=2
+            elif mode=='upstream': altered['upstream_sha']='0'*40
+            elif mode=='parent': altered['previous_candidate']='0'*40
+            else: altered['business_sources'][relative][mode+'_sha256']='0'*64
+            with self.subTest(mode=mode),patch.object(contract,'MAIN288_REAL_PHOTO',altered),self.assertRaises(AssertionError):
+                contract.verify_main288_real_photo_sources()
+
+    def test_coordinated_main288_source_and_hash_mutation_is_rejected(self):
+        relative='local_inspection_service/training/real_photo_api.py'
+        target=(contract.ROOT/relative).resolve()
+        original_read=Path.read_bytes
+        original=original_read(target).replace(b'\r\n',b'\n')
+        needle=b"if k not in {'response_id','references'}"
+        self.assertEqual(original.count(needle),1)
+        changed=original.replace(needle,b'if True',1)
+        altered=copy.deepcopy(contract.MAIN288_REAL_PHOTO)
+        altered['business_sources'][relative]['actual_sha256']=hashlib.sha256(changed).hexdigest()
+        def read(path):return changed if path.resolve()==target else original_read(path)
+        with patch.object(Path,'read_bytes',read),patch.object(contract,'MAIN288_REAL_PHOTO',altered),self.assertRaisesRegex(AssertionError,'Unreviewed paused-source integration source'):
+            contract.restore_real_photo_workflows_root(self.source)
+
     def test_pose_actual_owners_and_outer_fixture_mutations_fail(self):
         original_read = Path.read_text
         for relative in ("agent/state_composition.py", "agent/planning_composition.py", "agent/pose_execution_composition.py"):
