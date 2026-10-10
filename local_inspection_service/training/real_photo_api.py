@@ -158,6 +158,8 @@ class FeedbackService:
         public_jobs = [{k:j.get(k) for k in ('id','kind','status','created_at','elapsed_seconds','model','runner_version','usage','result')}
                        for j in jobs]
         for j in public_jobs:
+            if j['kind']=='reference_cache' and isinstance(j.get('result'),dict):
+                j['result']={k:v for k,v in j['result'].items() if k not in {'response_id','references'}}
             if j['kind']=='mask' and isinstance(j.get('result'),dict):
                 j['result']={k:v for k,v in j['result'].items() if k!='path'}
             if (j.get('result') or {}).get('receipt'):
@@ -174,6 +176,7 @@ class FeedbackService:
                 **{k:state.get(k) for k in ('initialization','review_trigger','approved_real_target','assessment','pause_reason','candidate_models')},
                 'review_running':bool(state.get('round')),
                 'call_statistics':stats,
+                'reference_cache':{k:v for k,v in (state.get('reference_cache') or {}).items() if k in {'status','expires_at','generation'}},
                 'datasets':[{k:d.get(k) for k in ('id','created_at','sample_count','real_source_count','unsupported_by_real_data','snapshot_fingerprint')} for d in state['datasets']]}
 
     def relabel(self, identifier, sample_id):
@@ -203,6 +206,9 @@ class FeedbackService:
             for job in repo.rows(c):
                 job['status']='cancelled';repo.save_job(c,job)
             state.pop('round',None);state.pop('pause_reason',None)
+            # A new paid cache attempt requires this explicit user action.
+            if (state.get('reference_cache') or {}).get('status') in {'failed','interrupted'}:
+                state['reference_cache']['status']='retry_authorized'
             if not state.get('initialization'):
                 repo.enqueue(c,state,'initialize','initialize:'+state['epoch']+':explicit:'+uuid.uuid4().hex,
                              {'classes':state['classes'],'history_count':len(state['samples']),'business_context':state.get('business_context',{})})

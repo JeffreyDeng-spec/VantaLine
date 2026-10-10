@@ -6,6 +6,8 @@ from PIL import Image
 from .real_photo_contracts import MODEL, VERSION, digest, objects
 from ..model_profiles.transport import invoke
 
+INPUT_POLICY = 'bounded-first-frame-jpeg90-444-v3'
+
 PROMPT = '''你是工业配件定位标注员。前面的图片是类别参考，只标注最后一张实拍原图。
 标注所有任务类别的所有可见实例，不根据预期数量补框。
 框为可见区域的紧致外接框，不推测遮挡部分；排除透明包装膜。
@@ -41,16 +43,22 @@ def canonical(data, *, max_edge=None):
 
 def image_content(data, *, max_edge):
     clean, meta = canonical(data, max_edge=max_edge)
-    # Provider-only copy: use the same JPEG90 transport as label comparison.
+    # Provider-only copy: retain JPEG90 and color detail for small printed parts.
     # canonical() remains lossless for review and dataset export.
     output = io.BytesIO()
     with Image.open(io.BytesIO(clean)) as pixels:
-        pixels.save(output, 'JPEG', quality=90)
+        # Huffman optimization can exhaust Pillow's internal buffer for noisy 4:4:4
+        # images. Fixed encoding avoids process-global MAXBLOCK changes/fallbacks.
+        pixels.save(output, 'JPEG', quality=90, subsampling=0)
     encoded = output.getvalue()
+    if len(encoded) > (2 if max_edge <= 1024 else 6)*1024*1024:
+        raise ValueError('compressed model image exceeds byte bound')
     with Image.open(io.BytesIO(encoded)) as decoded:
         meta.update(canonical_pixel_sha256=meta['pixel_sha256'],
                     pixel_sha256=digest(decoded.convert('RGB').tobytes()),
-                    input_sha256=digest(encoded), encoding='jpeg', jpeg_quality=90)
+                    input_sha256=digest(encoded), encoding='jpeg', jpeg_quality=90,
+                    jpeg_subsampling='4:4:4', encoded_bytes=len(encoded), source_bytes=len(data),
+                    input_policy_version=INPUT_POLICY)
     return {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(encoded).decode(), 'detail': 'high'}}, meta
 
 
@@ -74,7 +82,7 @@ def annotate(image, classes, settings, read_reference, transport=invoke):
         raise ValueError('model input exceeds aggregate byte bound')
     receipt = {'model': MODEL, 'prompt_version': VERSION, 'prompt_sha256': digest(PROMPT),
                'input': meta, 'references': references, 'usage': {},
-               'input_policy_version': 'bounded-first-frame-jpeg-v2'}
+               'input_policy_version': INPUT_POLICY}
     stage = 'transport'
     try:
         status, raw = transport(payload, settings)

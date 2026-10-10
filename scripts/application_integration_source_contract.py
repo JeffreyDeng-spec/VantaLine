@@ -164,14 +164,35 @@ def restore_pose_domain_root(source):
     return source
 
 
+MAIN284_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main284_real_photo_integration_delta.json").read_text())
+
+
+def verify_main284_real_photo_sources():
+    assert MAIN284_REAL_PHOTO["schema"] == 1, "Unknown real-photo integration schema"
+    assert MAIN284_REAL_PHOTO["upstream_sha"] == "e1c7be97b04c0f172a82baad495ecbda88a6481f", "Unreviewed real-photo upstream"
+    assert MAIN284_REAL_PHOTO["previous_candidate"] == "9d174642c90aed1b681148a460b1137061b9c7d1", "Unreviewed real-photo parent"
+    assert MAIN284_REAL_PHOTO["business_sources"] == {
+        "local_inspection_service/training/real_photo_api.py": {
+            "previous_sha256": "c8833921d53186366de59fa97e635f5d741a1636c42edc29b4498e3ed26ce6ab",
+            "main_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496",
+            "actual_sha256": "6afcb92bca9e67606f48c1d30b63c61cd4a3510a5b9bf951d4aaffe14b6a8496",
+        }
+    }, "Unreviewed real-photo integration source"
+
+
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
     from canonical_application_source_contract import restore_canonical_root
     source = restore_canonical_root(source)
     fixture = REAL_PHOTO_WORKFLOWS
+    verify_main284_real_photo_sources()
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
+        if path in MAIN284_REAL_PHOTO["business_sources"]:
+            accepted = MAIN284_REAL_PHOTO["business_sources"][path]
+            assert expected == accepted["previous_sha256"], "Historical real-photo baseline changed: " + path
+            expected = accepted["actual_sha256"]
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
     if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
