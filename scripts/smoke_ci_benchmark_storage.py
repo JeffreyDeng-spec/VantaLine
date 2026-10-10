@@ -84,18 +84,25 @@ class StorageContracts(unittest.TestCase):
     def test_only_four_real_pg_benchmarks_route_to_second_database(self):
         root=Path(__file__).resolve().parents[1]
         workflow=yaml.safe_load((root/'.github/workflows/ci.yml').read_text())
-        backend=workflow['jobs']['backend-plc']
+        backend=workflow['jobs']['backend-shards']
         self.assertEqual(backend['env']['VANTALINE_POSTGRES_DSN'],storage.NORMAL_DSN)
         self.assertEqual(backend['env']['VANTALINE_BENCHMARK_POSTGRES_DSN'],storage.BENCHMARK_DSN)
         ordinary=backend['services']['postgres'];self.assertEqual(ordinary['ports'],['5432:5432'])
         self.assertNotIn('--tmpfs',ordinary['options'])
         selected=[]
         prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
-        for step in backend['steps']:
-            self.assertNotIn('VANTALINE_POSTGRES_DSN',step.get('env',{}))
-            for line in step.get('run','').splitlines():
-                if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
-                    self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
+        import json
+        manifest=json.loads((root/'scripts/backend_ci_manifest.json').read_text())
+        for item in manifest['checks']:
+            self.assertNotIn('$VANTALINE_BENCHMARK_POSTGRES_DSN',item['run'])
+            self.assertNotIn('VANTALINE_POSTGRES_DSN',item['env'])
+        for item in manifest['performance']:
+            line=item['run']
+            if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
+                self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
+        performance=yaml.safe_load((root/'.github/workflows/backend-performance.yml').read_text())['jobs']['performance']
+        self.assertEqual(performance['services'],backend['services'])
+        self.assertEqual(performance['env'],backend['env'])
         self.assertEqual(selected,['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','summary_reads','projection','run_batch']])
 
 

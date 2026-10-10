@@ -1,0 +1,3186 @@
+{
+  "schema": 1,
+  "shard_count": 12,
+  "baseline_commit": "7bb2475e4d4443320fd5f99aad1521622d2f62a1",
+  "checks": [
+    {
+      "id": "check-000",
+      "run": "python scripts/verify_production_dependencies.py requirements-production.lock",
+      "env": {},
+      "cwd": ".",
+      "group": "check-000",
+      "step": "python scripts/verify_production_dependencies.py requirements-production.lock",
+      "shard": 8
+    },
+    {
+      "id": "check-001",
+      "run": "python scripts/smoke_ci_benchmark_storage.py",
+      "env": {},
+      "cwd": ".",
+      "group": "storage-isolation",
+      "step": "Verify ordinary disk and bounded benchmark database isolation",
+      "shard": 7
+    },
+    {
+      "id": "check-002",
+      "run": "python scripts/verify_ci_benchmark_storage.py",
+      "env": {},
+      "cwd": ".",
+      "group": "storage-isolation",
+      "step": "Verify ordinary disk and bounded benchmark database isolation",
+      "shard": 7
+    },
+    {
+      "id": "check-003",
+      "run": "python scripts/verify_migration_safety.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-003",
+      "step": "Verify additive-only migrations",
+      "shard": 9
+    },
+    {
+      "id": "check-004",
+      "run": "python scripts/smoke_migration_safety.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-004",
+      "step": "python scripts/smoke_migration_safety.py",
+      "shard": 10
+    },
+    {
+      "id": "check-005",
+      "run": "python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-005",
+      "step": "python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py",
+      "shard": 11
+    },
+    {
+      "id": "check-006",
+      "run": "python scripts/smoke_plc_self_service.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-006",
+      "step": "python scripts/smoke_plc_self_service.py",
+      "shard": 8
+    },
+    {
+      "id": "check-007",
+      "run": "python scripts/smoke_plc_request_models.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-007",
+      "step": "python scripts/smoke_plc_request_models.py",
+      "shard": 9
+    },
+    {
+      "id": "check-008",
+      "run": "python local_inspection_service/scripts/smoke_plc_web_serial_v3.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-008",
+      "step": "python local_inspection_service/scripts/smoke_plc_web_serial_v3.py",
+      "shard": 10
+    },
+    {
+      "id": "check-009",
+      "run": "python local_inspection_service/scripts/smoke_plc_frontend_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-009",
+      "step": "python local_inspection_service/scripts/smoke_plc_frontend_contract.py",
+      "shard": 11
+    },
+    {
+      "id": "check-010",
+      "run": "python scripts/smoke_plc_workstation_management.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-010",
+      "step": "python scripts/smoke_plc_workstation_management.py",
+      "shard": 8
+    },
+    {
+      "id": "check-011",
+      "run": "python scripts/smoke_plc_connection_lease_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-011",
+      "step": "python scripts/smoke_plc_connection_lease_api.py",
+      "shard": 9
+    },
+    {
+      "id": "check-012",
+      "run": "python scripts/smoke_plc_lease_maintenance.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-012",
+      "step": "python scripts/smoke_plc_lease_maintenance.py --postgres",
+      "shard": 10
+    },
+    {
+      "id": "check-013",
+      "run": "python scripts/smoke_plc_lease_acquisition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-013",
+      "step": "python scripts/smoke_plc_lease_acquisition.py --postgres",
+      "shard": 11
+    },
+    {
+      "id": "check-014",
+      "run": "python scripts/smoke_plc_lease_rebind.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-014",
+      "step": "python scripts/smoke_plc_lease_rebind.py --postgres",
+      "shard": 7
+    },
+    {
+      "id": "check-015",
+      "run": "python scripts/smoke_plc_diagnostic_state.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-015",
+      "step": "python scripts/smoke_plc_diagnostic_state.py --postgres",
+      "shard": 8
+    },
+    {
+      "id": "check-016",
+      "run": "python scripts/smoke_plc_diagnostic_confirm.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-016",
+      "step": "python scripts/smoke_plc_diagnostic_confirm.py --postgres",
+      "shard": 9
+    },
+    {
+      "id": "check-017",
+      "run": "python scripts/smoke_plc_diagnostic_finish.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-017",
+      "step": "python scripts/smoke_plc_diagnostic_finish.py --postgres",
+      "shard": 10
+    },
+    {
+      "id": "check-018",
+      "run": "python scripts/smoke_plc_dispatch_diagnostic_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-018",
+      "step": "python scripts/smoke_plc_dispatch_diagnostic_api.py",
+      "shard": 11
+    },
+    {
+      "id": "check-019",
+      "run": "python scripts/smoke_plc_config_diagnostics.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-019",
+      "step": "python scripts/smoke_plc_config_diagnostics.py",
+      "shard": 7
+    },
+    {
+      "id": "check-020",
+      "run": "python local_inspection_service/scripts/smoke_release_version.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-020",
+      "step": "python local_inspection_service/scripts/smoke_release_version.py",
+      "shard": 8
+    },
+    {
+      "id": "check-021",
+      "run": "python local_inspection_service/scripts/smoke_navigation_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-021",
+      "step": "python local_inspection_service/scripts/smoke_navigation_endpoints.py",
+      "shard": 9
+    },
+    {
+      "id": "check-022",
+      "run": "python local_inspection_service/scripts/smoke_postgres_runtime_repository.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-022",
+      "step": "python local_inspection_service/scripts/smoke_postgres_runtime_repository.py",
+      "shard": 10
+    },
+    {
+      "id": "check-023",
+      "run": "python scripts/verify_backend_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-023",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-024",
+      "run": "python scripts/smoke_model_dependency_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-024",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-025",
+      "run": "python scripts/verify_backend_boundaries.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-025",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-026",
+      "run": "python scripts/smoke_foundation_policies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-026",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-027",
+      "run": "python scripts/smoke_artifact_file_policies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-027",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-028",
+      "run": "python scripts/smoke_runtime_repository_access.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-028",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-029",
+      "run": "python scripts/smoke_service_paths.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-029",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-030",
+      "run": "python scripts/smoke_read_cache_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-030",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-031",
+      "run": "python scripts/smoke_directory_lifecycle.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-031",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-032",
+      "run": "python scripts/smoke_label_history_benchmark.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-032",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-033",
+      "run": "python scripts/smoke_label_history_statistics.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-033",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-035",
+      "run": "python scripts/smoke_account_projections.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-035",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-036",
+      "run": "python scripts/smoke_public_network_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-036",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-037",
+      "run": "python scripts/smoke_admin_documentation_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-037",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-038",
+      "run": "python scripts/smoke_authentication_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-038",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-039",
+      "run": "python scripts/smoke_provider_proxy_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-039",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-040",
+      "run": "python scripts/smoke_mcp_client_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-040",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-041",
+      "run": "python scripts/smoke_mcp_runtime_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-041",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-042",
+      "run": "python scripts/smoke_image_payload_codec.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-042",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-043",
+      "run": "python scripts/smoke_detection_rule_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-043",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-044",
+      "run": "python scripts/smoke_analysis_composition.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-044",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-045",
+      "run": "python scripts/smoke_accessory_selection_dimensions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-045",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-046",
+      "run": "python scripts/smoke_accessory_workflow_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-046",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-047",
+      "run": "python scripts/smoke_image_worker_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-047",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-048",
+      "run": "python scripts/smoke_pipeline_runtime_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-048",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-049",
+      "run": "python scripts/smoke_auto_optimization_runtime_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-049",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-050",
+      "run": "python scripts/smoke_auto_optimization_settings_composition.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-050",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-051",
+      "run": "python scripts/smoke_resource_names.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-051",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-052",
+      "run": "python scripts/smoke_label_summary_reads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-052",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-053",
+      "run": "python scripts/smoke_label_reader_readiness.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-053",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-054",
+      "run": "python scripts/smoke_label_benchmark_evidence.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-054",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-056",
+      "run": "python scripts/smoke_label_run_summary.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-056",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-057",
+      "run": "python scripts/smoke_label_summary_worker.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-057",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-058",
+      "run": "python scripts/smoke_label_run_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-058",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-060",
+      "run": "python scripts/smoke_label_public_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-060",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-061",
+      "run": "python scripts/smoke_label_summary_migration.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-061",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-062",
+      "run": "python scripts/smoke_service_status_requests.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-062",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-063",
+      "run": "python scripts/smoke_app_config_store.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-063",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-064",
+      "run": "python scripts/smoke_protected_config_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-064",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-065",
+      "run": "python scripts/smoke_local_model_config.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-065",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-066",
+      "run": "python scripts/smoke_model_tool_dispatch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-066",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-067",
+      "run": "python scripts/smoke_accessory_text_preparation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-067",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-068",
+      "run": "python scripts/smoke_pose_collection_prompts.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-068",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-069",
+      "run": "python scripts/smoke_image_worker_diagnostics.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-069",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-070",
+      "run": "python scripts/smoke_pose_collection_jobs.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-070",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-071",
+      "run": "python scripts/smoke_accessory_reference_media.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-071",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-072",
+      "run": "python scripts/smoke_image_job_queue.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-072",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-073",
+      "run": "python scripts/smoke_training_asset_preparation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-073",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-074",
+      "run": "python scripts/smoke_image_provider_configuration.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-074",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-075",
+      "run": "python scripts/smoke_image_job_execution.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-075",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-076",
+      "run": "python scripts/smoke_image_job_management.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-076",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-077",
+      "run": "python scripts/smoke_candidate_artifacts.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-077",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-078",
+      "run": "python scripts/smoke_pipeline_auto_optimization_links.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-078",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-079",
+      "run": "python scripts/smoke_pipeline_task_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-079",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-080",
+      "run": "python scripts/smoke_pipeline_candidate_flow.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-080",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-081",
+      "run": "python scripts/smoke_pipeline_task_metadata.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-081",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-082",
+      "run": "python scripts/smoke_pipeline_task_mutations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-082",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-083",
+      "run": "python scripts/smoke_pipeline_ai_activation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-083",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-084",
+      "run": "python scripts/smoke_auto_optimization_settings.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-084",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-085",
+      "run": "python scripts/smoke_auto_optimization_recommendations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-085",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-086",
+      "run": "python scripts/smoke_auto_optimization_initialization.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-086",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-087",
+      "run": "python scripts/smoke_auto_optimization_state_store.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-087",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-088",
+      "run": "python scripts/smoke_auto_optimization_readiness.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-088",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-089",
+      "run": "python scripts/smoke_auto_optimization_capture.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-089",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-090",
+      "run": "python scripts/smoke_auto_optimization_status.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-090",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-091",
+      "run": "python scripts/smoke_auto_optimization_mask_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-091",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-092",
+      "run": "python scripts/smoke_auto_optimization_mask_verification.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-092",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-093",
+      "run": "python scripts/smoke_auto_optimization_label_generation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-093",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-094",
+      "run": "python scripts/smoke_auto_optimization_sprites.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-094",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-095",
+      "run": "python scripts/smoke_auto_optimization_rendering.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-095",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-096",
+      "run": "python scripts/smoke_auto_optimization_synthetic_batch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-096",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-097",
+      "run": "python scripts/smoke_auto_optimization_dataset.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-097",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-098",
+      "run": "python scripts/smoke_auto_optimization_training_scheduling.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-098",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-099",
+      "run": "python scripts/smoke_auto_optimization_label_processing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-099",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-100",
+      "run": "python scripts/smoke_auto_optimization_shadow_evaluation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-100",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-101",
+      "run": "python scripts/smoke_auto_optimization_requests.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-101",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-102",
+      "run": "python scripts/smoke_auto_optimization_sprite_publication.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-102",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-103",
+      "run": "python scripts/smoke_plc_event_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-103",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-104",
+      "run": "python scripts/smoke_plc_transition_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-104",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-105",
+      "run": "python scripts/smoke_plc_persisted_validation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-105",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-106",
+      "run": "python scripts/smoke_plc_event_commands.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-106",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-107",
+      "run": "python scripts/smoke_plc_dispatch_mutations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-107",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-108",
+      "run": "python scripts/smoke_plc_station_service.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-108",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-109",
+      "run": "python scripts/smoke_plc_browser_dispatch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-109",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-110",
+      "run": "python scripts/smoke_plc_workstation_repository.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-110",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-111",
+      "run": "python scripts/smoke_plc_legacy_dispatch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-111",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-112",
+      "run": "python scripts/smoke_plc_dispatch_runtime_state.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-112",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-113",
+      "run": "python scripts/smoke_plc_capture_state.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-113",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-114",
+      "run": "python scripts/smoke_runtime_lifecycle.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-114",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-115",
+      "run": "python scripts/smoke_cost_ledger.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-115",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-116",
+      "run": "python scripts/smoke_analysis_records.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-116",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-117",
+      "run": "python scripts/smoke_analysis_projections.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-117",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-118",
+      "run": "python scripts/smoke_auth_foundation.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-118",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-119",
+      "run": "python scripts/smoke_auth_access.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-119",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-120",
+      "run": "python scripts/smoke_auth_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-120",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-121",
+      "run": "python scripts/smoke_record_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-121",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-122",
+      "run": "python scripts/smoke_record_audit.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-122",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-123",
+      "run": "python scripts/smoke_record_access.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-123",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-124",
+      "run": "python scripts/smoke_accessory_catalog.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-124",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-125",
+      "run": "python scripts/smoke_accessory_candidates.py --postgres --root",
+      "env": {},
+      "cwd": ".",
+      "group": "check-125",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-126",
+      "run": "python scripts/smoke_accessory_files.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-126",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-127",
+      "run": "python scripts/smoke_accessory_management.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-127",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-128",
+      "run": "python scripts/smoke_accessory_gallery.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-128",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-129",
+      "run": "python scripts/smoke_image_job_metadata.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-129",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-130",
+      "run": "python scripts/smoke_accessory_preparation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-130",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-131",
+      "run": "python scripts/smoke_accessory_routing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-131",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-132",
+      "run": "python scripts/smoke_label_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-132",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-133",
+      "run": "python scripts/smoke_label_worker_lifecycle.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-133",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-134",
+      "run": "python scripts/smoke_label_runtime_identity.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-134",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-135",
+      "run": "python scripts/smoke_label_runtime_bootstrap.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-135",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-136",
+      "run": "python scripts/smoke_label_runtime_signals.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-136",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-137",
+      "run": "python scripts/smoke_label_control_connections.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-137",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-138",
+      "run": "python scripts/smoke_runtime_configuration_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-138",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-139",
+      "run": "python scripts/smoke_runtime_configuration_io.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-139",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-140",
+      "run": "python scripts/smoke_release_runtime_configuration.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-140",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-141",
+      "run": "python scripts/smoke_label_runtime_pause.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-141",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-142",
+      "run": "python scripts/smoke_codex_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-142",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-143",
+      "run": "python scripts/smoke_history_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-143",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-144",
+      "run": "python scripts/smoke_document_job_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-144",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-145",
+      "run": "python scripts/smoke_agent_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-145",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-146",
+      "run": "AGENT_TEST_DATABASE_URL=\"$VANTALINE_POSTGRES_DSN\" python local_inspection_service/scripts/smoke_agent_operations_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-146",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-147",
+      "run": "AGENT_TEST_DATABASE_URL=\"$VANTALINE_POSTGRES_DSN\" python scripts/smoke_agent_policy_read_transactions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-147",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-148",
+      "run": "python scripts/smoke_extraction_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-148",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-149",
+      "run": "python scripts/smoke_preparation_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-149",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-150",
+      "run": "python scripts/smoke_comparison_dependencies.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-150",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-151",
+      "run": "python scripts/smoke_text_record_store.py --root --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-151",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-152",
+      "run": "python scripts/smoke_text_media.py --root",
+      "env": {},
+      "cwd": ".",
+      "group": "check-152",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-153",
+      "run": "python scripts/smoke_text_revisions.py --root",
+      "env": {},
+      "cwd": ".",
+      "group": "check-153",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-154",
+      "run": "python scripts/smoke_text_standards.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-154",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-155",
+      "run": "python scripts/smoke_text_comparison_api.py --root",
+      "env": {},
+      "cwd": ".",
+      "group": "check-155",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-156",
+      "run": "python scripts/smoke_incoming_text_store.py --root --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-156",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-157",
+      "run": "python scripts/smoke_incoming_text_analysis.py --root",
+      "env": {},
+      "cwd": ".",
+      "group": "check-157",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-158",
+      "run": "python scripts/smoke_incoming_text_workflows.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-158",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-159",
+      "run": "python scripts/smoke_accessory_requirements.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-159",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-160",
+      "run": "python scripts/smoke_presence_contracts.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-160",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-161",
+      "run": "python scripts/smoke_profile_cache.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-161",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-162",
+      "run": "python scripts/smoke_detection_upload.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-162",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-163",
+      "run": "python scripts/smoke_camera_detection_request.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-163",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-164",
+      "run": "python scripts/smoke_detection_media.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-164",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-165",
+      "run": "python scripts/smoke_provider_foundations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-165",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-166",
+      "run": "python scripts/smoke_openai_transport.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-166",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-167",
+      "run": "python scripts/smoke_provider_metering.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-167",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-168",
+      "run": "python scripts/smoke_gemini_transport.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-168",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-169",
+      "run": "python scripts/smoke_image_provider_transports.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-169",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-170",
+      "run": "python scripts/smoke_provider_orchestration.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-170",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-171",
+      "run": "python scripts/smoke_public_status.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-171",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-172",
+      "run": "python scripts/smoke_legacy_provider_settings.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-172",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-173",
+      "run": "python scripts/smoke_provider_configuration_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-173",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-174",
+      "run": "python scripts/smoke_provider_key_registry.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-174",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-175",
+      "run": "python scripts/smoke_key_material.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-175",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-176",
+      "run": "python scripts/smoke_agent_settings.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-176",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-177",
+      "run": "python scripts/smoke_agent_invocation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-177",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-178",
+      "run": "python scripts/smoke_agent_settings_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-178",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-179",
+      "run": "python scripts/smoke_agent_pipeline_decisions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-179",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-180",
+      "run": "python scripts/smoke_agent_pipeline_actions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-180",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-181",
+      "run": "python scripts/smoke_agent_state.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-181",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-182",
+      "run": "python scripts/smoke_agent_pose_assets.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-182",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-183",
+      "run": "python scripts/smoke_agent_pose_planning.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-183",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-184",
+      "run": "python scripts/smoke_agent_pose_render.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-184",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-185",
+      "run": "python scripts/smoke_agent_pose_execution.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-185",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-186",
+      "run": "python scripts/smoke_agent_pose_materialization.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-186",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-187",
+      "run": "python scripts/smoke_photo_highlight_workflow.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-187",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-188",
+      "run": "python scripts/smoke_photo_highlight_image.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-188",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-189",
+      "run": "python scripts/smoke_photo_highlight_builder.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-189",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-190",
+      "run": "python scripts/smoke_crop_components.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-190",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-191",
+      "run": "python scripts/smoke_object_preprocessing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-191",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-192",
+      "run": "python scripts/smoke_sprite_geometry.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-192",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-193",
+      "run": "python scripts/smoke_sprite_metadata.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-193",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-194",
+      "run": "python scripts/smoke_sprite_publication.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-194",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-195",
+      "run": "python scripts/smoke_material_alpha.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-195",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-196",
+      "run": "python scripts/smoke_cutout_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-196",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-197",
+      "run": "python scripts/smoke_cutout_geometry.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-197",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-198",
+      "run": "python scripts/smoke_pose_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-198",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-199",
+      "run": "python scripts/smoke_preview_pose_policy.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-199",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-200",
+      "run": "python scripts/smoke_materialized_assets.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-200",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-201",
+      "run": "python scripts/smoke_preview_sprites.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-201",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-202",
+      "run": "python scripts/smoke_compositing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-202",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-203",
+      "run": "python scripts/smoke_preview_assets.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-203",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-204",
+      "run": "python scripts/smoke_reference_evidence.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-204",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-205",
+      "run": "python scripts/smoke_accessory_labels.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-205",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-206",
+      "run": "python scripts/smoke_accessory_profile.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-206",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-207",
+      "run": "python scripts/smoke_accessory_dimensions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-207",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-208",
+      "run": "python scripts/smoke_accessory_profile_payloads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-208",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-209",
+      "run": "python scripts/smoke_accessory_profile_generation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-209",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-210",
+      "run": "python scripts/smoke_background_evidence.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-210",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-211",
+      "run": "python scripts/smoke_background_library_selection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-211",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-212",
+      "run": "python scripts/smoke_pipeline_background_publication.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-212",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-213",
+      "run": "python scripts/smoke_pipeline_ai_task_sync.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-213",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-214",
+      "run": "python scripts/smoke_pipeline_recommendations.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-214",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-215",
+      "run": "python scripts/smoke_pipeline_task_snapshots.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-215",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-216",
+      "run": "python scripts/smoke_pipeline_resource_status.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-216",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-217",
+      "run": "python scripts/smoke_pipeline_task_update.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-217",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-218",
+      "run": "python scripts/smoke_pipeline_task_create.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-218",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-219",
+      "run": "python scripts/smoke_pipeline_task_delete.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-219",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-220",
+      "run": "python scripts/smoke_pipeline_advance_control.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-220",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-221",
+      "run": "python scripts/smoke_pipeline_agent_chat.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-221",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-222",
+      "run": "python scripts/smoke_pipeline_task_list.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-222",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-223",
+      "run": "python scripts/smoke_pipeline_agent_feedback.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-223",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-224",
+      "run": "python scripts/smoke_pipeline_accessory_routes.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-224",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-225",
+      "run": "python scripts/smoke_pipeline_reconciliation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-225",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-226",
+      "run": "python scripts/smoke_pipeline_training_status.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-226",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-227",
+      "run": "python scripts/smoke_pipeline_trained_model_link.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-227",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-228",
+      "run": "python scripts/smoke_pipeline_recommendation_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-228",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-229",
+      "run": "python scripts/smoke_pipeline_auto_agent_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-229",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-230",
+      "run": "python scripts/smoke_pipeline_advance_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-230",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-231",
+      "run": "python scripts/smoke_pipeline_stage_advance.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-231",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-232",
+      "run": "python scripts/smoke_pipeline_decision_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-232",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-233",
+      "run": "python -c \"from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()\"",
+      "env": {},
+      "cwd": ".",
+      "group": "check-233",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-234",
+      "run": "python scripts/smoke_presence_inspection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-234",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-235",
+      "run": "python scripts/smoke_detection_analysis.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-235",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-236",
+      "run": "python scripts/smoke_ai_detection_analysis.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-236",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-237",
+      "run": "python scripts/smoke_detection_annotation.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-237",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-238",
+      "run": "python scripts/smoke_presence_results.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-238",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-239",
+      "run": "python scripts/smoke_detection_failures.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-239",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-240",
+      "run": "python scripts/smoke_detection_results.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-240",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-241",
+      "run": "python scripts/smoke_detection_ocr.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-241",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-242",
+      "run": "python scripts/smoke_detection_task_store.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-242",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-243",
+      "run": "python scripts/smoke_detection_task_catalog.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-243",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-244",
+      "run": "python scripts/smoke_detection_task_requests.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-244",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-245",
+      "run": "python scripts/smoke_dashboard_task_ownership.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-245",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-246",
+      "run": "python scripts/smoke_detection_rules.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-246",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-247",
+      "run": "python scripts/smoke_local_model_runtime.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-247",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-248",
+      "run": "python scripts/smoke_local_model_selection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-248",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-249",
+      "run": "python scripts/smoke_yolo_warmup.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-249",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-250",
+      "run": "python scripts/smoke_model_warmup_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-250",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-251",
+      "run": "python scripts/smoke_trained_model_catalog.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-251",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-252",
+      "run": "python scripts/smoke_training_record_store.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-252",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-253",
+      "run": "python scripts/smoke_training_task_lifecycle.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-253",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-254",
+      "run": "python scripts/smoke_training_executor_client.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-254",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-255",
+      "run": "python scripts/smoke_training_state_services.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-255",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-256",
+      "run": "python scripts/smoke_training_runner.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-256",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-257",
+      "run": "python scripts/smoke_training_dataset.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-257",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-258",
+      "run": "python scripts/smoke_training_runpod_flow.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-258",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-259",
+      "run": "python scripts/smoke_training_artifacts.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-259",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-260",
+      "run": "python scripts/smoke_training_resource_catalog.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-260",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-261",
+      "run": "python scripts/smoke_training_resource_mutations.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-261",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-262",
+      "run": "python scripts/smoke_training_backgrounds.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-262",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-263",
+      "run": "python scripts/smoke_training_preview_layout.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-263",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-264",
+      "run": "python scripts/smoke_training_preview_renderer.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-264",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-265",
+      "run": "python scripts/smoke_training_preview_workflows.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-265",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-266",
+      "run": "python scripts/smoke_training_input_state.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-266",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-267",
+      "run": "python scripts/smoke_training_launch_workflows.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-267",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-268",
+      "run": "python scripts/smoke_training_runpod_transfer.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-268",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-269",
+      "run": "python scripts/smoke_training_jobs_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-269",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-270",
+      "run": "python scripts/smoke_training_background_catalog.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-270",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-271",
+      "run": "python scripts/smoke_training_background_writes.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-271",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-272",
+      "run": "python scripts/smoke_training_background_tasks.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-272",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-273",
+      "run": "python scripts/smoke_training_background_api.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-273",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-274",
+      "run": "python scripts/smoke_training_remote_compatibility.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-274",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-275",
+      "run": "python scripts/smoke_training_worker_transfers.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-275",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-276",
+      "run": "python scripts/smoke_training_worker_bundle.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-276",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-277",
+      "run": "python scripts/smoke_training_worker_artifacts.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-277",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-278",
+      "run": "python scripts/smoke_training_worker_watcher.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-278",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-279",
+      "run": "python scripts/smoke_training_worker_retired_requests.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-279",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-280",
+      "run": "python scripts/smoke_training_worker_retired_flows.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-280",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-281",
+      "run": "python local_inspection_service/scripts/smoke_unique_resource_names.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-281",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-282",
+      "run": "python scripts/smoke_pipeline_stores.py --postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-282",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-283",
+      "run": "python local_inspection_service/scripts/smoke_training_dataset_delete_missing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-283",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-284",
+      "run": "python local_inspection_service/scripts/smoke_phase3a_resources.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-284",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-285",
+      "run": "python local_inspection_service/scripts/smoke_phase3b_detection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-285",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-286",
+      "run": "python local_inspection_service/scripts/smoke_auth_rbac.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-286",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-287",
+      "run": "python local_inspection_service/scripts/smoke_data_analysis.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-287",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-288",
+      "run": "python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-288",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-289",
+      "run": "python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-289",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-290",
+      "run": "git fetch --no-tags --depth=1 origin d16b33c28c7f78acc74e9c569ee4bc7076efed07",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-291",
+      "run": "test \"$(git rev-parse 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py')\" = '1f89c00266ca4e2978e1fb66af3d5b2db9fa97a9'",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-292",
+      "run": "git show 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py' > \"$RUNNER_TEMP/label_v564_api.py\"",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-293",
+      "run": "VANTALINE_LABEL_LIST_BASELINE_SOURCE=\"$RUNNER_TEMP/label_v564_api.py\" python scripts/smoke_label_run_batch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-294",
+      "run": "python scripts/smoke_label_list_payloads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-295",
+      "run": "git show 'HEAD^:local_inspection_service/label_inspection/api.py' > \"$RUNNER_TEMP/label_legacy_parent_api.py\"",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-296",
+      "run": "VANTALINE_LABEL_LIST_BASELINE_SOURCE=\"$RUNNER_TEMP/label_legacy_parent_api.py\" python scripts/smoke_label_legacy_index.py",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-297",
+      "run": "git fetch --no-tags --depth=1 origin cf9c61577c0ccb1f32404e88b46ec07cb9e482e5",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-298",
+      "run": "test \"$(git rev-parse 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py')\" = '36e55d6a78ff5e0b146e856a89c1f2a50ff301a4'",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-299",
+      "run": "git show 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py' > \"$RUNNER_TEMP/label_legacy_v550_api.py\"",
+      "env": {},
+      "cwd": ".",
+      "group": "label-baselines",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-301",
+      "run": "python scripts/smoke_label_read_transactions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-301",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-302",
+      "run": "python scripts/smoke_label_runtime_migration.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-302",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-303",
+      "run": "python scripts/smoke_label_runtime_state.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-303",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-304",
+      "run": "python scripts/smoke_label_runtime_control.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-304",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-305",
+      "run": "python scripts/smoke_label_runtime_monitor.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-305",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-306",
+      "run": "python scripts/smoke_label_runtime_http.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-306",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-307",
+      "run": "python scripts/smoke_label_runtime_deployment.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-307",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-308",
+      "run": "python scripts/smoke_label_process.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-308",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-309",
+      "run": "python scripts/smoke_label_external_deployment.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-309",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-311",
+      "run": "python local_inspection_service/scripts/smoke_label_inspection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-311",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-312",
+      "run": "python local_inspection_service/scripts/smoke_model_profiles.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-312",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-313",
+      "run": "python scripts/smoke_model_profile_read_transactions.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-313",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-314",
+      "run": "python scripts/smoke_model_profile_initialize_fast_path.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-314",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-315",
+      "run": "python scripts/smoke_model_profile_snapshot_reads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-315",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-316",
+      "run": "python scripts/smoke_model_profile_public_read.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-316",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-317",
+      "run": "python local_inspection_service/scripts/smoke_model_profile_routing.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-317",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-318",
+      "run": "python local_inspection_service/scripts/smoke_doc_images.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-318",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-319",
+      "run": "python local_inspection_service/scripts/smoke_document_label_classifier.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-319",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-320",
+      "run": "python local_inspection_service/scripts/smoke_document_jobs_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-320",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-321",
+      "run": "python -m local_inspection_service.scripts.smoke_standard_preparation",
+      "env": {},
+      "cwd": ".",
+      "group": "check-321",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-322",
+      "run": "python -m local_inspection_service.scripts.smoke_standard_preparation_recovery",
+      "env": {},
+      "cwd": ".",
+      "group": "check-322",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-323",
+      "run": "python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-323",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-324",
+      "run": "python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence",
+      "env": {},
+      "cwd": ".",
+      "group": "check-324",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-325",
+      "run": "python -m local_inspection_service.scripts.smoke_local_evidence_search",
+      "env": {},
+      "cwd": ".",
+      "group": "check-325",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-326",
+      "run": "python -m local_inspection_service.scripts.smoke_local_ocr_reread",
+      "env": {},
+      "cwd": ".",
+      "group": "check-326",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-327",
+      "run": "python -m local_inspection_service.scripts.smoke_model_audit_preview",
+      "env": {},
+      "cwd": ".",
+      "group": "check-327",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-328",
+      "run": "PREPARATION_TEST_QWEN=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-328",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-329",
+      "run": "PREPARATION_TEST_INCOMPLETE=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-329",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-330",
+      "run": "PREPARATION_TEST_RECOVERY=\"success\" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-330",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-331",
+      "run": "PREPARATION_TEST_RECOVERY=\"timeout\" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-331",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-332",
+      "run": "PREPARATION_TEST_RECOVERY=\"interrupted\" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints",
+      "env": {},
+      "cwd": ".",
+      "group": "check-332",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 10
+    },
+    {
+      "id": "check-333",
+      "run": "PREPARATION_TEST_DATABASE_URL=\"$VANTALINE_POSTGRES_DSN\" python -m local_inspection_service.scripts.smoke_standard_preparation_postgres",
+      "env": {},
+      "cwd": ".",
+      "group": "check-333",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 11
+    },
+    {
+      "id": "check-334",
+      "run": "python local_inspection_service/scripts/smoke_document_review.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-334",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 0
+    },
+    {
+      "id": "check-335",
+      "run": "python local_inspection_service/scripts/smoke_document_review_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-335",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 1
+    },
+    {
+      "id": "check-336",
+      "run": "python local_inspection_service/scripts/smoke_text_compare_beta.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-336",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 5
+    },
+    {
+      "id": "check-337",
+      "run": "python -m local_inspection_service.scripts.smoke_comparison_history",
+      "env": {},
+      "cwd": ".",
+      "group": "check-337",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 2
+    },
+    {
+      "id": "check-338",
+      "run": "python scripts/smoke_text_inspection_v2.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-338",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 3
+    },
+    {
+      "id": "check-339",
+      "run": "python local_inspection_service/scripts/smoke_label_extraction.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-339",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 4
+    },
+    {
+      "id": "check-340",
+      "run": "python local_inspection_service/scripts/smoke_label_extraction_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-340",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 6
+    },
+    {
+      "id": "check-341",
+      "run": "python local_inspection_service/scripts/smoke_label_bbox.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-341",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 7
+    },
+    {
+      "id": "check-342",
+      "run": "python local_inspection_service/scripts/smoke_label_bbox_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-342",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 8
+    },
+    {
+      "id": "check-343",
+      "run": "python local_inspection_service/scripts/smoke_label_extraction_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-343",
+      "step": "Verify text inspection comparison and document contracts",
+      "shard": 9
+    },
+    {
+      "id": "check-344",
+      "run": "python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-344",
+      "step": "Verify text inspection API fail-closed mode",
+      "shard": 10
+    },
+    {
+      "id": "check-345",
+      "run": "python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py",
+      "env": {
+        "VANTALINE_TEXT_V2_SMOKE_MODE": "external_only"
+      },
+      "cwd": ".",
+      "group": "check-345",
+      "step": "Verify text inspection API external-only mode",
+      "shard": 11
+    },
+    {
+      "id": "check-346",
+      "run": "python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py",
+      "env": {
+        "VANTALINE_TEXT_V2_SMOKE_MODE": "enabled"
+      },
+      "cwd": ".",
+      "group": "check-346",
+      "step": "Verify text inspection API enabled mode",
+      "shard": 0
+    },
+    {
+      "id": "check-347",
+      "run": "python local_inspection_service/scripts/smoke_text_inspection_v2_postgres_contract.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-347",
+      "step": "Verify text inspection PostgreSQL contract",
+      "shard": 1
+    },
+    {
+      "id": "check-348",
+      "run": "python local_inspection_service/scripts/smoke_incoming_text_inspection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-348",
+      "step": "Keep legacy incoming-text rollback path readable",
+      "shard": 5
+    },
+    {
+      "id": "check-349",
+      "run": "python local_inspection_service/scripts/smoke_incoming_text_endpoints.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-349",
+      "step": "Keep legacy incoming-text rollback path readable",
+      "shard": 2
+    },
+    {
+      "id": "check-350",
+      "run": "python local_inspection_service/scripts/smoke_incoming_text_postgres.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-350",
+      "step": "Keep legacy incoming-text rollback path readable",
+      "shard": 3
+    },
+    {
+      "id": "check-351",
+      "run": "python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin",
+      "env": {},
+      "cwd": ".",
+      "group": "check-351",
+      "step": "Validate generated schema with PostgreSQL 16",
+      "shard": 4
+    },
+    {
+      "id": "check-352",
+      "run": "python scripts/verify_ci_benchmark_storage.py",
+      "env": {},
+      "cwd": ".",
+      "group": "storage-isolation",
+      "step": "Retain final benchmark capacity and isolation evidence",
+      "always": true,
+      "shard": 7
+    }
+  ],
+  "performance": [
+    {
+      "id": "check-034",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_history_statistics.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-034",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-055",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_summary_reads.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-055",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-059",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_projection.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-059",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-300",
+      "run": "VANTALINE_LABEL_LIST_BASELINE_SOURCE=\"$RUNNER_TEMP/label_legacy_v550_api.py\" python scripts/benchmark_label_legacy_index.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-300",
+      "step": "Verify text inspection comparison and document contracts"
+    },
+    {
+      "id": "check-310",
+      "run": "VANTALINE_POSTGRES_DSN=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" AGENT_TEST_DATABASE_URL=\"$VANTALINE_BENCHMARK_POSTGRES_DSN\" python scripts/benchmark_label_run_batch.py",
+      "env": {},
+      "cwd": ".",
+      "group": "check-310",
+      "step": "Verify text inspection comparison and document contracts"
+    }
+  ]
+}

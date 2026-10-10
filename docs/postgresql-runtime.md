@@ -601,3 +601,19 @@ Reference prefixes add a reference_cache job kind and versioned state pointer in
 Transport budget and pool-retirement evidence use additive fields in existing attempt/receipt JSON (connect_upload_timeout_seconds, read_timeout_seconds, pool_idle_reset, pool_failure_reset). No DDL, old-row rewrite, task-version reset or claim/publication fencing change. Failed paid outcomes remain terminal until an explicit frontend action creates a new attempt.
 
 Real-photo pause archives the active round with cancelled status/time in the existing state JSON and clears the active pointer inside the same fenced transaction that revokes queued/running jobs. Repeated pause does not duplicate history. No schema migration, historical annotation rewrite or automatic paid replay is introduced.
+
+## Parallel backend CI storage
+
+Backend correctness contracts run on 12 separate runners, each with an independent
+ordinary disk-backed PostgreSQL 16 instance. Existing schemas, concurrency and
+durability assertions are unchanged; tests within one shard remain serial. The
+storage-isolation dependency group also inspects the separate bounded synthetic
+benchmark instance and retains final capacity evidence after assertion failure.
+
+The five complete performance matrices execute in `Backend performance`, rather
+than the required backend gate. The four SQL benchmarks still override only their
+individual command DSNs to the bounded second instance; the fake legacy benchmark
+keeps its prior environment. Both workflows enforce fsync, synchronous_commit
+and full_page_writes, distinct instance identities and original capacity limits.
+No database contents are cached or shared between runners; production storage,
+migrations and rollback remain unchanged.

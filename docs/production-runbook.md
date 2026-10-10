@@ -1084,7 +1084,7 @@ A connection-cleanup exception marks that consumer generation failed even after 
 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
 
-If the label batch or payload benchmark blocks main CI, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Automatic release stays blocked until the normal CI gate succeeds; production remains on the last accepted complete release.
+If the independent Backend performance workflow fails, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Full performance matrices are review evidence; automatic release still requires the ordinary CI correctness/safety gate to succeed.
 
 Source-inaccessible acceptance must include application startup with existing image-job records: guide/provenance hashes use the same COS file adapter as business media. Verify production dependencies and SDK imports as both actual service accounts before installation; a root-only successful import does not establish readable package metadata for systemd services.
 
@@ -1306,7 +1306,7 @@ The list cache reader must follow the accepted empty-table/invalidation and publ
 
 The reader prerequisite is enforced during candidate Web startup, after the normal package switch but before background callbacks, control readiness or HTTP serving. Missing source/projection SELECT/schema or a timed-out SQL check rejects readiness with a fixed safe error; the installed controller cannot start the candidate worker or accept/open admission and performs its existing complete-release rollback. This can extend the ordinary restart interruption on failure; it is not a pre-switch or zero-downtime check. The query uses the actual business connection and only required columns with LIMIT 0, accepting column-level grants. It uses a read-only transaction, 1 s lock and 1.5 s statement limits, followed by rollback and connection release. These SQL limits are not an end-to-end network/connect deadline. Do not grant permissions automatically or change DSNs to pass the check.
 
-Reader benchmark diagnostics run only on isolated synthetic PostgreSQL. They do not query production, change runtime topology, retry model calls or relax deployment gates. A failed benchmark leaves release unaccepted; continue using the last accepted complete package until the new commit passes the normal CI and release verification.
+Reader benchmark diagnostics run only on isolated synthetic PostgreSQL. They do not query production, change runtime topology, retry model calls or relax deployment gates. A failed benchmark is retained as independent performance review evidence. Release acceptance still requires ordinary CI correctness/safety and complete-release verification.
 
 Service-path relocation preserves existing file migration and output placement semantics and changes no production data automatically. File writes retain the original error and partial-effect behavior. Request identity is resolved for each placement call. Rollback restores the previous complete Web/worker package.
 
@@ -1435,3 +1435,20 @@ Before admitting the reference-cache release, settle existing paid calls, reload
 After the connection/upload-budget release, settle active paid tasks before reviewer reload and verify that the independent worker uses the deployed immutable version. A prior failed prefix remains paused; explicitly restart it only from the frontend after inspecting evidence. Check upload/read timeout and pool-reset receipt fields, one POST per attempt, and live prefix/suffix results. Roll back the entire release with admission closed, retaining uncertain receipts and no automatic replay.
 
 To correct unfrozen real-photo source groups, pause from the frontend and wait for active attempts to settle; pause archives the active cohort and revokes its jobs. Verify each group save persists. Re-enable does not replay cancelled labels or uncertain cache requests: explicitly relabel missing images and explicitly restart failed cache creation after inspecting receipts.
+
+## Backend CI latency diagnosis
+
+`backend-plc` is a fail-closed aggregate of 12 runner/database-isolated shards.
+Consult its setup-inclusive timing summary and 30-day command artifacts. A failed
+setup, assertion, cancellation or missing report prevents automatic promotion;
+do not replace it with a successful performance run or manually deploy a bundle.
+The five complete performance matrices live in `Backend performance`, with the
+same bounded synthetic database and frozen baselines, and do not trigger release.
+
+The target is ≤5 minutes from first backend shard start through aggregate
+validation. Record initial queue delay separately and include later shard queueing
+in wall time. Preserve final-commit evidence from three consecutive runs and one
+cold-cache run before claiming the target achieved. PR supersession cancellation
+is scoped to that PR; main runs and production deployments retain their existing
+completion behavior. Revert CI changes through a reviewed PR; runtime rollback
+continues to restore the whole previous immutable release without altering data.

@@ -2316,10 +2316,48 @@ Real-photo JPEG transport regression verifies high-entropy references encode as 
 
 Run `python scripts/smoke_plc_self_service.py` and `npm --prefix local_inspection_service/frontend run test:plc-connection` in addition to the existing PLC, auth, release and frontend checks. The browser test uses the real controls/controller with synthetic API and serial streams; `PLC_TEST_BROWSER=chrome` selects an installed desktop Chrome locally. CI uses its pinned Playwright Chromium. Coverage includes first-use confirmation, saved setup, chooser before network writes, cancellation/no device, occupied port, timeout, short/malformed/checksum/extra/residual responses, unplug, local-only permissions, account logout persistence, two-workstation isolation, stale/absent verification and configuration fencing. Automated checks perform no physical PLC I/O. Real commissioning additionally requires two line computers, real read frames, production ACKs and removal recovery; do not describe synthetic evidence as completed hardware acceptance.
 
-The PLC request-model smoke includes self-pair fields and bounded connection evidence. CI runs it alongside self-service checks before the long text/history benchmarks so malformed public PLC schemas fail early; no existing verification is omitted.
+The PLC request-model smoke includes self-pair fields and bounded connection evidence. CI runs it alongside self-service checks before the long text/history benchmarks as ordinary correctness commands in isolated shards; no existing verification is omitted.
 
 Reference-cache regression: include tests/test_real_photo_cache.py in the disposable PostgreSQL real-photo suite and required artifact-storage CI. Cover one prefix across two single-image suffixes, immutable-prefix isolation, real cached-token accounting, class/profile/owner/task key changes, changed-reference rejection, known expiry, no idle renewal, multi-worker creation/claim, cancelled admission, interrupted/failed no-replay and revoked late publication. Strict Responses validation covers truncated/refused/wrong-model/unknown-class/malformed outputs; transport fixtures verify pooled zero-retry POST, explicit proxy and safe nested timeout evidence. High-entropy JPEG tests exercise actual encoded bytes and original-space geometry with JPEG90 4:4:4. Run frontend typecheck/build, pretraining/label regression, migration/boundary/docs contracts and diff checks. These fixtures do not replace two released frontend business calls with screenshots, actual usage and visual quality checks.
 
 Real-photo transport regression exercises the installed urllib3 socket-write timeout semantics, recent-pool reuse versus pre-POST idle retirement, and failed-pool cleanup without a second POST. Run the disposable PostgreSQL real-photo suite and model dependency/boundary/docs checks. A released frontend prefix request and subsequent cached annotation remain necessary to verify production behavior; fixtures or an increased timeout do not prove reliability.
 
 Disposable PostgreSQL regression verifies pause archives frozen round membership, releases the active round, retains originals and initialization, cancels queued review work, rejects the running review token and does not duplicate history on repeated pause. Verify source-group persistence through the released frontend after pause; changing an input alone is not evidence of a successful save.
+
+## Backend CI parallel execution and performance evidence
+
+Required `CI` executes all backend correctness, safety, migration and compatibility
+checks in 12 isolated `backend-shard-*` jobs. `scripts/backend_ci_manifest.json`
+preserves the 348 ordinary commands and their shell/env variants from commit
+`7bb2475`; dependency groups stay on one shard and execute in original order.
+The coverage fingerprint records the initial migration: intentional future command
+changes must update the inventory and fingerprint together after reviewing coverage.
+The executor records command identity, exit status and elapsed time; failure stops
+ordinary commands in that shard but still attempts final storage evidence.
+
+The required `backend-plc` aggregate succeeds only when every shard, report and
+expected command succeeds for the same commit, workflow run and attempt. Missing,
+failed, cancelled, skipped, stale or malformed evidence blocks the gate. Artifacts
+retain command logs/timings for 30 days; the summary reports setup-inclusive job
+time and the slowest 20 commands. The ≤300-second target measures from the first
+backend shard start through gate validation, excluding only the initial GitHub
+queue. Later shard queueing counts; a timeout is not a substitute for measured speed.
+
+`Backend performance` owns the five full history/cache/projection/legacy-index/batch
+benchmarks, preserving fixed baselines, populations, repeats, samples and assertions.
+Relevant backend/script/test/dependency/workflow PRs trigger it, as do daily main
+runs at 03:00 Asia/Shanghai and manual dispatch. Performance failures remain visible
+and require review, but do not block the ordinary CI gate or trigger production
+deployment. Benchmark protocol and result-equivalence smoke checks remain required
+in ordinary CI. The four real-PostgreSQL benchmarks still route only to the bounded
+second database; storage guards and their fault tests remain in both workflows.
+
+Validate changes with `python scripts/backend_ci.py verify`,
+`python scripts/smoke_backend_ci.py`, `python scripts/smoke_ci_benchmark_storage.py`,
+the documentation contract, release contract, release shell syntax and diff checks.
+After an initial green GitHub run, download shard artifacts and execute
+`python scripts/backend_ci.py rebalance --results <artifact-directory>` to commit
+the deterministic longest-group-first assignment. Verify the final commit with
+three consecutive ≤300-second runs and separately record a cold-cache run using manual `CI` dispatch with `cold-cache=true`. Rerun the
+whole CI workflow for this gate; reports from earlier attempts are deliberately
+rejected, including partial reruns that reuse previously successful shard reports.
