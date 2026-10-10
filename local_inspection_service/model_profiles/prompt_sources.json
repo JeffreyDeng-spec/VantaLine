@@ -1,5 +1,5 @@
 {
-  "version": 179,
+  "version": 180,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -509,6 +509,8 @@
     "pipeline/runtime_state.py",
     "training/auto_optimization_runtime_state.py",
     "training/real_photo_annotation.py",
+    "training/real_photo_cache.py",
+    "training/real_photo_transport.py",
     "training/real_photo_contracts.py",
     "training/real_photo_api.py",
     "training/real_photo_provenance.py",

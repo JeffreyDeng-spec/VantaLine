@@ -162,6 +162,8 @@ def test_api_owner_isolation_failed_multi_capture_and_private_original(database,
     assert sample.status_code==200 and sample.headers['cache-control']=='private, no-store'
     repo=database();init,token=repo.claim({'a'},{'initialize'},'model','cli')
     repo.finish(init['id'],token,{},lambda s,j,c:s.update(initialization={'fixture':True}))
+    from local_inspection_service.training.real_photo_cache import cache_key
+    repo.mutate('a','task',lambda state,c:state.update(reference_cache={'key':cache_key(state),'status':'ready','expires_at':time.time()+3600,'response_id':'resp_fixture','references':[]}))
     failed,token=repo.claim({'a'},{'annotate'},'model','cli')
     repo.finish(failed['id'],token,{'error_type':'precall_failure'},lambda *a:None,success=False)
     assert client.post(f'/api/ai/tasks/task/real-photo/samples/{identifier}/relabel').status_code==200
@@ -220,7 +222,7 @@ def test_large_reference_inputs_bounded_and_boxes_remain_in_original_coordinates
     assert meta['source_sha256'] == digest(raw)
     assert meta['coordinate_transform'] == [2048 / 3000, 0, 0, 0, 1502 / 2200, 0]
     assert meta['encoding'] == 'jpeg' and meta['jpeg_quality'] == 90
-    assert result['receipt']['input_policy_version'] == 'bounded-first-frame-jpeg-v2'
+    assert result['receipt']['input_policy_version'] == 'bounded-first-frame-jpeg90-444-v3'
     encoded = base64.b64decode(calls[0]['messages'][0]['content'][-1]['image_url']['url'].split(',', 1)[1])
     assert meta['input_sha256'] == digest(encoded)
     with Image.open(io.BytesIO(encoded)) as im:

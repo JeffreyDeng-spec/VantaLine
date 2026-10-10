@@ -3,6 +3,7 @@ import copy
 import time
 import uuid
 from .real_photo_contracts import approved, dataset_gate, digest, review_key, review_report
+from .real_photo_cache import schedule_cache, cache_key
 
 
 def summary(state):
@@ -20,6 +21,7 @@ def summary(state):
 
 def schedule(repo, owner, task):
     def update(state, c):
+        schedule_cache(repo,state,c)
         if not state['enabled'] or not state.get('initialization') or state.get('pause_reason'):
             return
         current = state.get('round')
@@ -81,6 +83,17 @@ def schedule(repo, owner, task):
 
 def apply_result(repo, state, job, c):
     result=job['result']
+    if job['kind']=='reference_cache':
+        pointer=state.get('reference_cache') or {}
+        if pointer.get('job_id')!=job['id'] or job['inputs']['cache_key']!=cache_key(state):
+            raise ValueError('reference cache version changed')
+        if result.get('status')=='completed':
+            pointer.update(status='ready',response_id=result['response_id'],expires_at=result['expires_at'],
+                           references=result['references'])
+        else:
+            pointer['status']='failed'
+            state['pause_reason']='豆包参考图缓存未成功；请核查调用证据后明确重新启动，不自动重放'
+        return
     if job['kind']=='annotate':
         snapshot=job['inputs']['sample']
         sample=next(s for s in state['samples'] if s['sample_id']==snapshot['sample_id'])
@@ -90,6 +103,9 @@ def apply_result(repo, state, job, c):
         if sample.get('annotation'):sample['annotation_history'].append(sample['annotation'])
         sample['annotation']={**result,'receipt':{k:v for k,v in result.get('receipt',{}).items() if k!='response'},
                               'version':job['inputs']['version'],'job_id':job['id']}
+        if result.get('status')=='failed' and (result.get('receipt',{}).get('failure_stage')=='transport'
+                                             or result.get('receipt',{}).get('http_status',200)!=200):
+            state['pause_reason']='豆包连接或服务请求失败；已暂停后续调用，请处理后明确恢复并主动重标失败图片'
         if job['inputs'].get('explicit') and sample.get('review'):
             rechecks=state.setdefault('recheck_sample_ids',[])
             if sample['sample_id'] not in rechecks:rechecks.append(sample['sample_id'])

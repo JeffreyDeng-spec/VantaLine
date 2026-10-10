@@ -1,5 +1,7 @@
 """Review orchestration tests with deterministic reports, not visual accuracy claims."""
 import copy
+import time
+from local_inspection_service.training.real_photo_cache import cache_key
 import pytest
 from test_real_photo_feedback import database,classes,state_fixture
 from local_inspection_service.training.real_photo_workflow import schedule,apply_result
@@ -7,6 +9,8 @@ from local_inspection_service.training.real_photo_contracts import review_key
 
 
 def finish(repo,kind,result):
+    if kind=='annotate':
+        repo.mutate('a','task',lambda state,c:state.update(reference_cache={'key':cache_key(state),'status':'ready','expires_at':time.time()+3600,'response_id':'resp_fixture','references':[]}))
     job,token=repo.claim({'a'},{kind},'gpt-6-astra','fixture')
     return repo.finish(job['id'],token,result(job),lambda s,j,c:apply_result(repo,s,j,c))
 
@@ -77,6 +81,7 @@ def test_pending_cohort_freezes_before_late_unannotated_or_failed_arrival(databa
     extra.pop('review');extra.pop('annotation');repo.capture('a','task',extra)
     finish(repo,'annotate',lambda j:{'status':'completed','objects':template[19]['annotation']['objects'],'receipt':{}})
     if future_failed:
+        repo.mutate('a','task',lambda state,c:state.update(reference_cache={'key':cache_key(state),'status':'ready','expires_at':time.time()+3600,'response_id':'resp_fixture','references':[]}))
         job,token=repo.claim({'a'},{'annotate'},'model','fixture')
         repo.finish(job['id'],token,{'error_type':'future fixture'},lambda *a:None,success=False)
     schedule(repo,'a','task')
@@ -97,6 +102,7 @@ def test_failed_cohort_annotation_archives_scope_and_allows_explicit_recovery(da
         if i==19:sample.pop('annotation')
         repo.capture('a','task',sample)
     schedule(repo,'a','task')
+    repo.mutate('a','task',lambda state,c:state.update(reference_cache={'key':cache_key(state),'status':'ready','expires_at':time.time()+3600,'response_id':'resp_fixture','references':[]}))
     job,token=repo.claim({'a'},{'annotate'},'model','fixture')
     repo.finish(job['id'],token,{'error_type':'uncertain fixture'},lambda *a:None,success=False)
     schedule(repo,'a','task');state=repo.get('a','task')
