@@ -24,7 +24,7 @@ from ..model_profiles.service import validate_binding
 from ..training.real_photo_api import accounts
 from ..training.real_photo_annotation import canonical
 from ..training.real_photo_cache import annotate_cached, create_prefix
-from ..training.real_photo_contracts import MODEL, VERSION, digest, encode, review_report
+from ..training.real_photo_contracts import MODEL, VERSION, digest, encode, review_report, source_confirmed
 from ..training.real_photo_workflow import apply_result, schedule
 
 MODULE=Path(__file__).parent
@@ -126,7 +126,7 @@ def prepare(job, directory, files):
         if meta['source_sha256']!=s['image_sha256']:raise ValueError('original version changed')
         filename=f'actual-{index}.png';(directory/filename).write_bytes(clean)
         public['samples'].append({k:s.get(k) for k in ('sample_id','image_sha256','source_group','review_key','review','geometry')}
-                                 |{'image':'/input/'+filename,'annotation':{'objects':s['annotation']['objects'],'version':s['annotation']['version'],'status':s['annotation']['status']}})
+                                 |{'source_group_confirmed':source_confirmed(s),'image':'/input/'+filename,'annotation':{'objects':s['annotation']['objects'],'version':s['annotation']['version'],'status':s['annotation']['status']}})
     schemas={
         'initialize':{'review_trigger':20,'approved_real_target':20,'reason':'concrete reason'},
         'review':{'decisions':[{'sample_id':'exact sample_id','review_key':'exact review_key','decision':'accept_positive|accept_negative|exclude|uncertain','reason':'concrete reason'}]},
