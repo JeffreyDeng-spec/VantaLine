@@ -1941,3 +1941,10 @@ After this release, reload the detection page and verify a task with no saved en
 When explicitly relabeling a failed or cancelled real original, verify the new version progresses to review without an old-version incomplete-cohort pause. Preserve previous receipts; the new version is one separately authorized call. Do not clear old jobs or retry their uncertain attempts to resolve the status.
 
 For a task already paused by an older release, edit its unfrozen source group directly after the compatibility release. The save archives the revoked round without temporarily enabling admission. Verify persisted groups and unchanged queued/running jobs before explicitly resuming labels.
+
+
+## Real-photo source confirmation
+
+After the source-confirmation release, reload both frontend and the idle independent reviewer from the immutable deployed version. Trace actual capture provenance before checking “拍摄来源已核实”; keep undated/untraceable photos pending even if visually useful. Verify persisted group/flag/version/history, pending counts and unchanged paid jobs while paused. Such photos may be annotated, but do not count toward training or independent splits. Do not manufacture source groups to reach the minimum. Whole-release rollback retains additive JSON history and evidence; close new admission and reconcile current attempts first.
+
+Rollback to a release predating source confirmation preserves readable additive JSON but does not preserve the new admission policy: its review key ignores source versions and its approved-sample filter ignores the confirmation flag. Keep real-photo training admission disabled in that older release, retain existing attempts and evidence, and review affected source edits before reopening. Label-worker admission restoration alone does not enforce this separate real-photo boundary. Prefer the actual preceding complete release that already includes source confirmation when that release has passed deployment acceptance.

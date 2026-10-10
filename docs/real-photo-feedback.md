@@ -108,3 +108,10 @@ Explicit pause archives the active review round as cancelled, retaining frozen m
 Incomplete-cohort checks match terminal annotation jobs by original sample ID and annotation version. A failed, interrupted, stale or cancelled older version remains auditable but cannot pause an explicitly requested newer queued version. A terminal current version still blocks admission; no old attempt is retried.
 
 An explicit source-group edit on a disabled task also archives any revoked round left by older pause implementations. It neither enables admission nor queues work. Enabled active rounds and frozen dataset groups still reject edits; repeated edits do not duplicate archived history.
+
+
+## Real-photo source confirmation
+
+Unconfirmed capture sources remain candidates, but cannot be accepted for training or counted as approved photos/independent split groups. Status exposes `source_group_confirmed` and `unconfirmed_source_count`; the frontend source editor has an explicit confirmation checkbox. Empty groups, `unconfirmed`, and names ending in `-unconfirmed` are pending regardless of an explicit true flag. Existing non-placeholder groups without the new field retain their legacy meaning; no historical JSON is rewritten. Do not assign a known batch to an undated photo merely because its background looks similar.
+
+Explicit source edits retain the prior group/confirmation/version and actor/time in history, increment the source version, and invalidate the prior review key once. An identical save is idempotent and queues no paid work. Changed reviewed samples enter the existing explicit recheck list. Frozen splits and enabled active cohorts still reject edits. The dedicated Agent receives the confirmation status and must exclude or mark pending sources uncertain; server report validation, approved counts, and dataset export enforce the same condition independently.

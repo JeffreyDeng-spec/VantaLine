@@ -73,6 +73,32 @@ def test_group_split_and_missing_class_does_not_block():
     with pytest.raises(ValueError):dataset_gate(state,20)
 
 
+@pytest.mark.parametrize('group,flag',[('historical-task-unconfirmed',None),('known-batch',False),('',None)])
+def test_unconfirmed_sources_never_count_even_with_old_accepted_review(group,flag):
+    from local_inspection_service.training.real_photo_contracts import approved
+    from local_inspection_service.training.real_photo_workflow import summary
+    state=state_fixture();sample=state['samples'][0];sample['source_group']=group
+    if flag is not None:sample['source_group_confirmed']=flag
+    assert len(approved(state))==19
+    assert summary(state)['unconfirmed_source_count']==1
+    assert group not in summary(state)['source_groups']
+    with pytest.raises(ValueError):dataset_gate(state,20)
+    sample['review_key']=sample['review']['key']
+    job={'kind':'review','inputs':{'samples':[sample],'classes':state['classes']}}
+    decision={'sample_id':sample['sample_id'],'review_key':sample['review_key'],'decision':'accept_positive','reason':'looks correct'}
+    with pytest.raises(ValueError,match='unconfirmed source'):review_report(job,{'decisions':[decision]})
+    decision['decision']='uncertain'
+    assert review_report(job,{'decisions':[decision]})
+
+
+def test_source_version_changes_review_identity_without_rewriting_legacy_keys():
+    sample=state_fixture()['samples'][0];cs=classes();key=review_key(sample,cs)
+    sample['source_group_confirmed']=True
+    assert review_key(sample,cs)==key
+    sample['source_group_version']=1
+    assert review_key(sample,cs)!=key
+
+
 def test_duplicate_source_cannot_cross_groups_and_no_source_group():
     state=state_fixture();state['samples'][0]['source_group']=''
     with pytest.raises(ValueError):dataset_gate(state,20)

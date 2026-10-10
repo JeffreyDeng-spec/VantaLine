@@ -166,6 +166,7 @@ def restore_pose_domain_root(source):
 
 MAIN284_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main284_real_photo_integration_delta.json").read_text())
 MAIN288_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main288_real_photo_integration_delta.json").read_text())
+MAIN289_REAL_PHOTO = json.loads((ROOT / "tests/backend_contract/main289_real_photo_integration_delta.json").read_text())
 
 
 def verify_main284_real_photo_sources():
@@ -194,6 +195,30 @@ def verify_main288_real_photo_sources():
     }, "Unreviewed paused-source integration source"
 
 
+def verify_main289_real_photo_sources():
+    assert MAIN289_REAL_PHOTO["schema"] == 1, "Unknown confirmed-source integration schema"
+    assert MAIN289_REAL_PHOTO["upstream_sha"] == "e31a3bf44791441f87625ae6ac7ff7075e9d08ad", "Unreviewed confirmed-source upstream"
+    assert MAIN289_REAL_PHOTO["previous_candidate"] == "8083e14f967c5881a9b39db7dfa597378fad5e6d", "Unreviewed confirmed-source parent"
+    assert MAIN289_REAL_PHOTO["business_sources"] == {'local_inspection_service/training/real_photo_api.py': {'previous_sha256': 'f2807775c14ade2bfa29ed3fbd3e12ed51fd4246bb3069bf7bedbe87da408790',
+                                                         'main_sha256': '6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494',
+                                                         'actual_sha256': '6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494'},
+ 'local_inspection_service/training/real_photo_contracts.py': {'previous_sha256': '2b018cc46becd19b23b937a694ee587aa8d1827aea774342b15d084b1f086f99',
+                                                               'main_sha256': '16d76477d5697beb8cbef4fb976da5d05b3caf0749a8c4802c25be85eec709b2',
+                                                               'actual_sha256': '16d76477d5697beb8cbef4fb976da5d05b3caf0749a8c4802c25be85eec709b2'},
+ 'local_inspection_service/training/real_photo_dataset.py': {'previous_sha256': '1d65d6356dfbbfd79e00a8118a74c1ce012343ec20b6d8c429bae90b783a8927',
+                                                             'main_sha256': 'bb6acf51e3e47506d072bbcbb710f33d92222d776b3b31f455ae0108efd5605a',
+                                                             'actual_sha256': 'bb6acf51e3e47506d072bbcbb710f33d92222d776b3b31f455ae0108efd5605a'},
+ 'local_inspection_service/training/real_photo_workflow.py': {'previous_sha256': '3012d7bca4ac0d9e5c8b082d9a0c431a7886cd64d05250ecfa9b4852efbefbbe',
+                                                              'main_sha256': '5eae20a2f849744c68228c04989c95e5042edce519343d78bea16ee7e11976b1',
+                                                              'actual_sha256': '5eae20a2f849744c68228c04989c95e5042edce519343d78bea16ee7e11976b1'},
+ 'local_inspection_service/training_review/worker.py': {'previous_sha256': '05a5828a7392b3b4237986d57905657ecec87719c3537aaa5906d66337ead930',
+                                                        'main_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86',
+                                                        'actual_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86'}}, "Unreviewed confirmed-source integration source"
+    for path, accepted in MAIN289_REAL_PHOTO["business_sources"].items():
+        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        assert hashlib.sha256(actual).hexdigest() == accepted["actual_sha256"], "Confirmed-source business changed: " + path
+
+
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
     from canonical_application_source_contract import restore_canonical_root
@@ -201,6 +226,7 @@ def restore_real_photo_workflows_root(source):
     fixture = REAL_PHOTO_WORKFLOWS
     verify_main284_real_photo_sources()
     verify_main288_real_photo_sources()
+    verify_main289_real_photo_sources()
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
@@ -211,6 +237,10 @@ def restore_real_photo_workflows_root(source):
         if path in MAIN288_REAL_PHOTO["business_sources"]:
             accepted = MAIN288_REAL_PHOTO["business_sources"][path]
             assert expected == accepted["previous_sha256"], "Historical main284 source changed: " + path
+            expected = accepted["actual_sha256"]
+        if path in MAIN289_REAL_PHOTO["business_sources"]:
+            accepted = MAIN289_REAL_PHOTO["business_sources"][path]
+            assert expected == accepted["previous_sha256"], "Historical main288 source changed: " + path
             expected = accepted["actual_sha256"]
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
     if digest(ast.parse(source)) == fixture["integrated_ast_sha256"]:

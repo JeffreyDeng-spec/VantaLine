@@ -4,14 +4,22 @@ import { apiClient, withAuthScope } from "../../api/client";
 import { useAuth } from "../auth/auth-context";
 
 type Box = { class_id: string; bbox: number[] };
-type Sample = { sample_id: string; source_group?: string; geometry: { width: number; height: number }; annotation?: {status: string; version: number; objects: Box[]; error_code?: string; error_type?: string}; review?: {decision: string; reason: string} };
+type Sample = { sample_id: string; source_group?: string; source_group_confirmed?: boolean; geometry: { width: number; height: number }; annotation?: {status: string; version: number; objects: Box[]; error_code?: string; error_type?: string}; review?: {decision: string; reason: string} };
 type CallStats = {attempts: number; failures: number; elapsed_seconds: number; usage: Record<string, number>; unknown_usage_count: number; unknown_elapsed_count: number; estimated_cost: number | null};
-export type RealPhotoStatus = {available: boolean; selected?: boolean; enabled: boolean; candidate_count: number; approved_count: number; positive_count: number; negative_count: number; pending_annotation_count: number; pending_review_count: number; excluded_count: number; failed_annotation_count: number; review_trigger?: number; approved_real_target?: number; pause_reason?: string; initialization?: {reason: string}; assessment?: {action: string; reason: string; next_increment: number; gaps: string[]}; samples: Sample[]; jobs: {id: string; kind: string; status: string; model?: string; result?: {error_code?: string; error_type?: string}}[]; candidate_models?: {model_id: string; status: string; unsupported_by_real_data: string[]; real_source_count:number; positive_image_count:number; negative_image_count:number; split_image_counts:Record<string,number>; metrics?: Record<string,{status:string; reason?:string; metrics?:Record<string,number>}>}[]; reference_cache?: {status?: string; expires_at?: number; generation?: number}; call_statistics?: Record<string, CallStats>};
+export type RealPhotoStatus = {available: boolean; selected?: boolean; enabled: boolean; candidate_count: number; approved_count: number; unconfirmed_source_count?: number; positive_count: number; negative_count: number; pending_annotation_count: number; pending_review_count: number; excluded_count: number; failed_annotation_count: number; review_trigger?: number; approved_real_target?: number; pause_reason?: string; initialization?: {reason: string}; assessment?: {action: string; reason: string; next_increment: number; gaps: string[]}; samples: Sample[]; jobs: {id: string; kind: string; status: string; model?: string; result?: {error_code?: string; error_type?: string}}[]; candidate_models?: {model_id: string; status: string; unsupported_by_real_data: string[]; real_source_count:number; positive_image_count:number; negative_image_count:number; split_image_counts:Record<string,number>; metrics?: Record<string,{status:string; reason?:string; metrics?:Record<string,number>}>}[]; reference_cache?: {status?: string; expires_at?: number; generation?: number}; call_statistics?: Record<string, CallStats>};
 
-function SourceGroup({sample, save}: {sample: Sample; save: (value: string) => void}) {
+function SourceGroup({sample, save}: {sample: Sample; save: (value: string, confirmed: boolean) => void}) {
+  const group = (sample.source_group || "").trim().toLowerCase();
+  const savedConfirmed = sample.source_group_confirmed ?? Boolean(group && group !== "unconfirmed" && !group.endsWith("-unconfirmed"));
   const [value, setValue] = useState(sample.source_group || "");
-  useEffect(() => setValue(sample.source_group || ""), [sample.source_group]);
-  return <label>拍摄分组 <input aria-label="拍摄分组" value={value} onChange={e => setValue(e.target.value)} maxLength={200}/><button type="button" disabled={!value.trim() || value === sample.source_group} onClick={() => save(value)}>保存分组</button></label>;
+  const [confirmed, setConfirmed] = useState(savedConfirmed);
+  useEffect(() => { setValue(sample.source_group || ""); setConfirmed(savedConfirmed); }, [sample.source_group, savedConfirmed]);
+  return <div>
+    <label>拍摄分组 <input aria-label="拍摄分组" value={value} onChange={e => setValue(e.target.value)} maxLength={200}/></label>
+    <label><input type="checkbox" aria-label="拍摄来源已核实" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>拍摄来源已核实</label>
+    {!savedConfirmed && <p>来源待核实，不计入合格实拍；请按真实拍摄批次核对。</p>}
+    <button type="button" disabled={!value.trim() || (value === sample.source_group && confirmed === savedConfirmed)} onClick={() => save(value, confirmed)}>保存分组</button>
+  </div>;
 }
 
 export function RealPhotoFeedback({taskId, onSelection}: {taskId: string; onSelection: (selected: boolean) => void}) {
@@ -21,7 +29,7 @@ export function RealPhotoFeedback({taskId, onSelection}: {taskId: string; onSele
   const key = ["real-photo", auth.user.id, auth.dataUserId, taskId];
   const query = useQuery({queryKey: key, queryFn: () => apiClient.get<RealPhotoStatus>(scoped(path)), enabled: Boolean(taskId), refetchInterval: 5000});
   const mutation = useMutation({mutationFn: ({url, body, post}: {url: string; body?: unknown; post?: boolean}) => post ? apiClient.post<RealPhotoStatus>(scoped(url), body) : apiClient.patch<RealPhotoStatus>(scoped(url), body), onSuccess: value => {setError("");client.setQueryData(key, value);void client.invalidateQueries({queryKey:[...key,"versions"]});}, onError: e => setError(String(e))});
-  const versions = useQuery({queryKey:[...key,"versions",historyId],queryFn:() => apiClient.get<{annotations:unknown[]; reviews:unknown[]; masks:{job_id:string;mapping_status:string}[]}>(scoped(path+`/samples/${historyId}/versions`)),enabled:Boolean(historyId)});
+  const versions = useQuery({queryKey:[...key,"versions",historyId],queryFn:() => apiClient.get<{annotations:unknown[]; reviews:unknown[]; source_groups?:unknown[]; masks:{job_id:string;mapping_status:string}[]}>(scoped(path+`/samples/${historyId}/versions`)),enabled:Boolean(historyId)});
   const state = query.data;
   useEffect(() => onSelection(Boolean(state?.selected)), [state?.selected, onSelection]);
   if (!state?.available) return null;
@@ -31,6 +39,7 @@ export function RealPhotoFeedback({taskId, onSelection}: {taskId: string; onSele
     <button disabled={mutation.isPending} onClick={() => mutation.mutate({url:path, body:{enabled:!state.enabled}})}>{state.enabled ? "暂停实拍回流" : "启用实拍 VLM 回流"}</button>
     {state.selected && <>
       <p>去重候选 {state.candidate_count} · 待标注 {state.pending_annotation_count} · 标注失败 {state.failed_annotation_count} · 待审核 {state.pending_review_count} · 合格正样本 {state.positive_count} / 负样本 {state.negative_count} · 排除或不确定 {state.excluded_count}</p>
+      <p>来源待核实 {state.unconfirmed_source_count ?? 0} 张，不计入训练数量或独立来源组。</p>
       <p>审核触发点 {state.review_trigger ?? "等待 Agent 初始化"} · 合格实拍目标 {state.approved_real_target ?? "待确定"}（至少 20 张，且训练集有正样本、至少 3 个来源组）</p>
       <p>{state.assessment?.reason || state.initialization?.reason}</p>
       {state.assessment?.gaps?.length ? <p>需补充：{state.assessment.gaps.join("；")} · 下一轮新增 {state.assessment.next_increment} 张</p> : null}
@@ -45,11 +54,11 @@ export function RealPhotoFeedback({taskId, onSelection}: {taskId: string; onSele
           {(s.annotation?.objects || []).map((o,i) => <g key={i}><rect x={o.bbox[0]} y={o.bbox[1]} width={o.bbox[2]-o.bbox[0]} height={o.bbox[3]-o.bbox[1]} fill="none" stroke="#ffbf00" strokeWidth={Math.max(s.geometry.width/400,1)}/><text x={o.bbox[0]} y={Math.max(o.bbox[1],16)} fill="#ffbf00" fontSize={Math.max(s.geometry.width/45,12)}>{o.class_id}</text></g>)}
         </svg>
         <p>{s.annotation?.status || "待标注"} · v{s.annotation?.version ?? "-"} · {s.review?.decision || "待审核"}</p><p>{s.review?.reason}</p>{s.annotation?.error_code && <p role="status">标注失败阶段：{s.annotation.error_code}（未通过标注的图片不进入训练；请处理后主动重标）</p>}
-        <SourceGroup sample={s} save={value => mutation.mutate({url:path+`/samples/${s.sample_id}/group`,body:{source_group:value}})}/>
+        <SourceGroup sample={s} save={(value, confirmed) => mutation.mutate({url:path+`/samples/${s.sample_id}/group`,body:{source_group:value,source_group_confirmed:confirmed}})}/>
         <button disabled={mutation.isPending} onClick={() => mutation.mutate({url:path+`/samples/${s.sample_id}/relabel`,post:true})}>重新出框（新版本）</button>
         <button disabled={mutation.isPending} onClick={() => mutation.mutate({url:path+`/samples/${s.sample_id}/mask`,post:true})}>按需生成 mask 附件</button>
         <button onClick={() => setHistoryId(historyId===s.sample_id ? null : s.sample_id)}>查看历史标注与审核</button>
-        {historyId===s.sample_id && versions.data && <details open><summary>标注与审核版本</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({annotations:versions.data.annotations,reviews:versions.data.reviews},null,2)}</pre>{versions.data.masks.map(m=><figure key={m.job_id}><img alt="附加 mask，不能改变训练准入" style={{maxWidth:"100%"}} src={scoped(path+`/samples/${s.sample_id}/masks/${m.job_id}/image`)}/><figcaption>{m.mapping_status} · 不改变框和训练准入</figcaption></figure>)}</details>}
+        {historyId===s.sample_id && versions.data && <details open><summary>标注与审核版本</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({annotations:versions.data.annotations,reviews:versions.data.reviews,source_groups:versions.data.source_groups},null,2)}</pre>{versions.data.masks.map(m=><figure key={m.job_id}><img alt="附加 mask，不能改变训练准入" style={{maxWidth:"100%"}} src={scoped(path+`/samples/${s.sample_id}/masks/${m.job_id}/image`)}/><figcaption>{m.mapping_status} · 不改变框和训练准入</figcaption></figure>)}</details>}
       </article>)}</div>
     </>}
     {error && <p role="alert">{error}</p>}

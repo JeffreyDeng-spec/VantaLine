@@ -1905,7 +1905,7 @@ Real-photo provider encoding is fixed JPEG quality 90, matching the label-compar
 
 Real-photo bbox transport resolves the immutable bbox_annotation profile proxy_ref through the dedicated private secret file and disables ambient HTTP proxy settings. Its Ark v3 endpoint is used as /responses with fixed model doubao-seed-2-1-pro-260915; no fallback. Explicit provider cache inference permission is required. One-hour prefixes are keyed by owner/task/classes/reference hashes/profile/prompt/compression policy; a 180-second expiry margin gates annotation. There are no new environment toggles. Prefix and suffix requests use store=true with the same absolute expiry, so storage/input costs must be measured rather than assumed free. Shared label/pretraining settings remain unchanged. See real-photo-feedback.md.
 
-The upstream reference-prefix release uses prompt source manifest v180 and includes training/real_photo_cache.py and training/real_photo_transport.py. This combined application batch retains all previously selected modules and those two actual upstream sources as manifest v281/616. Stored historical model-profile/task fingerprints remain immutable.
+The upstream reference-prefix release uses prompt source manifest v180 and includes training/real_photo_cache.py and training/real_photo_transport.py. This combined application batch retains all previously selected modules and those two actual upstream sources as manifest v282/616. Stored historical model-profile/task fingerprints remain immutable.
 
 Real-photo connection/upload timeout is min(profile timeout, 30 seconds), response reads remain capped at 120 seconds. This is fixed transport policy, with no new setting or model fallback. Upstream source manifest v181 records the change; the combined application manifest is v281/616; stored profiles and historical snapshots are not rewritten.
 
@@ -1921,4 +1921,10 @@ The real-photo annotation-version recovery guard has no new setting, model bindi
 
 The v182 recovery change also permits source-group edits on legacy disabled states with revoked rounds, without enabling optimization or changing any model setting.
 
-Upstream recovery manifest v182 is included in the combined application manifest v281/616. Existing task and profile snapshots retain their recorded source provenance.
+Upstream recovery manifest v182 is included in the combined application manifest v282/616. Existing task and profile snapshots retain their recorded source provenance.
+
+## Real-photo source confirmation
+
+Real-photo source confirmation is per-sample metadata, not a deployment flag or a reduced training threshold. `source_group_confirmed=false` and pending placeholder group names exclude the sample from approved counts and independent dataset groups. The frontend group request accepts an optional strict boolean; omitted legacy requests derive confirmation from a non-placeholder group. Source version/history are additive JSON fields. Existing 20-photo, positive-sample and three-source-group gates remain unchanged.
+
+The exact main289 source-confirmation behavior and optional strict-boolean HTTP contract are retained. The fixed current source delta follows the original, main284 and main288 API hash chain; prior source oracles remain immutable. New task provenance uses combined manifest v282/616, including upstream v183, without rewriting historical task snapshots.

@@ -6,9 +6,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable, Any
 from fastapi import HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictBool
 from .real_photo_annotation import canonical
-from .real_photo_contracts import MODEL, STRATEGY, digest, approved, review_key, objects
+from .real_photo_contracts import MODEL, STRATEGY, digest, approved, review_key, objects, source_confirmed
 from .real_photo_provenance import source_group, original_sha, pixel_sha
 from ..storage.real_photo_feedback import RealPhotoRepository
 
@@ -39,6 +39,7 @@ class EnableRequest(BaseModel):
 
 class GroupRequest(BaseModel):
     source_group: str
+    source_group_confirmed: StrictBool | None = None
 
 
 class HistoryImportRequest(BaseModel):
@@ -154,7 +155,7 @@ class FeedbackService:
             annotation=s.get('annotation')
             if annotation:
                 annotation={**annotation,'receipt':{k:v for k,v in annotation.get('receipt',{}).items() if k!='response'}}
-            samples.append({k:s.get(k) for k in ('sample_id','image_sha256','source_group','source_kind','review','created_at','geometry')}|{'annotation':annotation})
+            samples.append({k:s.get(k) for k in ('sample_id','image_sha256','source_group','source_group_version','source_kind','review','created_at','geometry')}|{'annotation':annotation,'source_group_confirmed':source_confirmed(s)})
         public_jobs = [{k:j.get(k) for k in ('id','kind','status','created_at','elapsed_seconds','model','runner_version','usage','result')}
                        for j in jobs]
         for j in public_jobs:
@@ -166,6 +167,7 @@ class FeedbackService:
                 j['result']={k:v for k,v in j['result'].items() if k!='receipt'}
         accepted=approved(state)
         counts={'approved_count':len(accepted),'positive_count':sum(bool(s['annotation']['objects']) for s in accepted),
+                'unconfirmed_source_count':sum(not source_confirmed(s) for s in state['samples']),
                 'negative_count':sum(not s['annotation']['objects'] for s in accepted),
                 'pending_annotation_count':sum(not s.get('annotation') for s in state['samples']),
                 'excluded_count':sum(s.get('review',{}).get('decision') in {'exclude','uncertain'} for s in state['samples']),
@@ -306,6 +308,10 @@ class FeedbackService:
         user, _ = self.task(identifier, True)
         if not request.source_group.strip() or len(request.source_group)>200:
             raise HTTPException(422, '需要有效拍摄分组')
+        group = request.source_group.strip()
+        confirmed = source_confirmed({'source_group':group}) if request.source_group_confirmed is None else request.source_group_confirmed
+        if confirmed and not source_confirmed({'source_group':group}):
+            raise HTTPException(422,'请核实实际拍摄分组，不能确认待核实的占位分组')
         def update(state, c):
             sample = next((s for s in state['samples'] if s['sample_id']==sample_id), None)
             if sample is None: raise HTTPException(404,'样本不存在')
@@ -317,7 +323,18 @@ class FeedbackService:
                 # Older releases left a revoked round behind when pausing.
                 # Explicit source editing can archive it without enabling paid work.
                 repo.cancel_round(state)
-            sample['source_group']=request.source_group.strip()
+            if sample.get('source_group') == group and source_confirmed(sample) == confirmed:
+                return
+            sample.setdefault('source_group_history',[]).append({
+                'source_group':sample.get('source_group'), 'confirmed':source_confirmed(sample),
+                'version':sample.get('source_group_version',0),
+                'modified_by':sample.get('source_group_modified_by'),'modified_at':sample.get('source_group_modified_at')})
+            sample.update(source_group=group, source_group_confirmed=confirmed,
+                          source_group_version=sample.get('source_group_version',0)+1,
+                          source_group_modified_by=user['id'], source_group_modified_at=time.time())
+            if sample.get('review'):
+                rechecks=state.setdefault('recheck_sample_ids',[])
+                if sample_id not in rechecks:rechecks.append(sample_id)
         with self.repo() as repo:repo.mutate(user['id'],identifier,update)
         return self.status(identifier)
 
@@ -371,6 +388,9 @@ class FeedbackService:
         if sample is None:raise HTTPException(404,'样本不存在')
         return {'annotations':sample.get('annotation_history',[])+([sample['annotation']] if sample.get('annotation') else []),
                 'reviews':sample.get('review_history',[])+([sample['review']] if sample.get('review') else []),
+                'source_groups':sample.get('source_group_history',[])+[{'source_group':sample.get('source_group'),
+                    'confirmed':source_confirmed(sample),'version':sample.get('source_group_version',0),
+                    'modified_by':sample.get('source_group_modified_by'),'modified_at':sample.get('source_group_modified_at')}],
                 'masks':[{k:m.get(k) for k in ('job_id','model_profile','annotation_version','geometry','mapping_status','mask_sha256')} for m in sample.get('masks',[])]}
 
     def mask_image(self,identifier,sample_id,mask_id):

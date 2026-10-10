@@ -40,6 +40,94 @@ class Connection:
 
 
 class ApplicationContracts(unittest.TestCase):
+    def test_real_photo_source_confirmation_real_http_owner_and_strict_boolean(self):
+        import copy
+        from contextlib import contextmanager
+        from dataclasses import replace
+        from fastapi.testclient import TestClient
+
+        class Repository:
+            def __init__(self):
+                self.state = {'enabled': False, 'classes': [], 'profiles': {}, 'datasets': [],
+                              'samples': [{'sample_id': 'sample', 'source_group': 'original-batch',
+                                           'image_sha256': 'synthetic', 'geometry': {'width': 80, 'height': 60}}]}
+                self.mutations = 0
+            def get(self, owner, identifier):
+                return copy.deepcopy(self.state)
+            def jobs(self, owner, identifier):
+                return []
+            def statistics(self, owner, identifier):
+                return {}
+            def mutate(self, owner, identifier, operation):
+                candidate = copy.deepcopy(self.state)
+                operation(candidate, None)
+                self.state = candidate
+                self.mutations += 1
+
+        with tempfile.TemporaryDirectory(prefix='application-source-confirmation-') as temporary:
+            owned = create_application(environment(Path(temporary)))
+            self.addCleanup(lambda: self.assertTrue(owned.lifetime.close(10)))
+            client = TestClient(owned.app, base_url='https://testserver')
+            anonymous = TestClient(owned.app, base_url='https://testserver')
+            self.addCleanup(client.close)
+            self.addCleanup(anonymous.close)
+            password = 'synthetic-source-confirmation-password'
+            response = client.post('/api/auth/bootstrap', json={'username': 'source-owner', 'password': password})
+            self.assertEqual(response.status_code, 200, response.text)
+            response = client.get('/api/auth/status')
+            self.assertEqual(response.status_code, 200, response.text)
+            owner = response.json()['user']['id']
+            response = client.post('/api/auth/users', json={'username': 'source-neighbor', 'password': password, 'role': 'admin'})
+            self.assertEqual(response.status_code, 200, response.text)
+            neighbor = TestClient(owned.app, base_url='https://testserver')
+            self.addCleanup(neighbor.close)
+            response = neighbor.post('/api/auth/login', json={'username': 'source-neighbor', 'password': password})
+            self.assertEqual(response.status_code, 200, response.text)
+            service = owned.training_pipeline._real_photo_workflows.feedback
+            task = {'id': 'task', 'owner_user_id': owner}
+            service.ports = replace(service.ports, tasks=lambda: [task])
+            repository = Repository()
+            @contextmanager
+            def scope():
+                yield repository
+            path = '/api/ai/tasks/task/real-photo/samples/sample/group'
+            with patch.object(service, 'repo', scope), patch.dict(os.environ, {'VANTALINE_REAL_PHOTO_ACCOUNTS': owner}):
+                self.assertEqual(anonymous.patch(path, json={'source_group': 'known-batch'}).status_code, 401)
+                self.assertEqual(neighbor.patch(path, json={'source_group': 'known-batch'}).status_code, 403)
+                self.assertEqual(repository.mutations, 0)
+                version = 0
+                for body, expected in [({'source_group': 'legacy-batch'}, True),
+                                       ({'source_group': 'null-batch', 'source_group_confirmed': None}, True),
+                                       ({'source_group': 'pending-batch', 'source_group_confirmed': False}, False),
+                                       ({'source_group': 'verified-batch', 'source_group_confirmed': True}, True)]:
+                    response = client.patch(path, json=body)
+                    self.assertEqual(response.status_code, 200, response.text)
+                    version += 1
+                    sample = response.json()['samples'][0]
+                    self.assertIs(sample['source_group_confirmed'], expected)
+                    self.assertEqual(sample['source_group_version'], version)
+                    self.assertEqual(response.json()['unconfirmed_source_count'], int(not expected))
+                    self.assertEqual(response.json()['jobs'], [])
+                unchanged = copy.deepcopy(repository.state)
+                before = repository.mutations
+                for invalid in (0, 1, 'true', 'false', {}, []):
+                    response = client.patch(path, json={'source_group': 'known-batch', 'source_group_confirmed': invalid})
+                    self.assertEqual(response.status_code, 422, response.text)
+                    self.assertEqual(repository.state, unchanged)
+                    self.assertEqual(repository.mutations, before)
+                response = client.patch(path, json={'source_group': 'historical-unconfirmed', 'source_group_confirmed': True})
+                self.assertEqual(response.status_code, 422, response.text)
+                self.assertEqual(repository.state, unchanged)
+                response = client.get('/api/ai/tasks/task/real-photo/samples/sample/versions')
+                self.assertEqual(response.status_code, 200, response.text)
+                groups = response.json()['source_groups']
+                self.assertEqual(len(groups), 5)
+                self.assertEqual([item['version'] for item in groups], [0, 1, 2, 3, 4])
+                self.assertEqual(groups[-1]['modified_by'], owner)
+                self.assertEqual(groups[-1]['source_group'], 'verified-batch')
+                self.assertIs(groups[-1]['confirmed'], True)
+            self.assertIsNone(owned.infrastructure._request_user.get())
+
     def test_parent_bindings_and_registered_tuple_exports_are_preserved(self):
         from canonical_application_source_contract import FIXTURE
 

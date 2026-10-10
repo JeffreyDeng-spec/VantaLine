@@ -856,3 +856,8 @@ Real-photo pause archives the active round with cancelled status/time in the exi
 Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.
 
 Explicit source edits on disabled legacy states reuse the same round-archive helper as pause, within the existing mutate transaction. They do not enable state, create jobs or rewrite old job evidence; active-round rejection rolls back the group edit.
+
+
+## Real-photo source confirmation
+
+Real-photo source confirmation uses additive fields in the existing fenced state JSON: group confirmation, source version, actor/time and prior group history. No DDL or historical-state rewrite is required. Group edits run under the existing owner/task mutation fence, preserve active/frozen guards, and return without version/history/recheck changes for an identical save. A changed reviewed source schedules at most one explicit recheck ID; it does not insert a paid job. Approved queries and frozen dataset validation independently exclude pending sources, including historical accepted records.

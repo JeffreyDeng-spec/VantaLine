@@ -52,8 +52,20 @@ def annotation_key(sample, classes):
     return digest({'image': sample['image_sha256'], 'classes': classes, 'model': MODEL, 'version': VERSION})
 
 
+def source_confirmed(sample):
+    group = (sample.get('source_group') or '').strip()
+    pending = group.casefold() == 'unconfirmed' or group.casefold().endswith('-unconfirmed')
+    return bool(group) and not pending and sample.get('source_group_confirmed', True) is True
+
+
 def review_key(sample, classes):
-    return digest({'image': sample['image_sha256'], 'annotation': sample.get('annotation'), 'classes': classes})
+    value = {'image': sample['image_sha256'], 'annotation': sample.get('annotation'), 'classes': classes}
+    # Preserve existing review keys until an explicit provenance edit. A changed
+    # source version needs one new review, not repeated paid wakeups on polling.
+    if sample.get('source_group_version'):
+        value['source'] = {'group': sample['source_group'], 'confirmed': source_confirmed(sample),
+                           'version': sample['source_group_version']}
+    return digest(value)
 
 
 def review_report(job, result):
@@ -80,6 +92,8 @@ def review_report(job, result):
                 raise ValueError('unknown review decision')
             if decision['decision'].startswith('accept_') and s['annotation'].get('status')!='completed':
                 raise ValueError('failed localization may not become a training label')
+            if decision['decision'].startswith('accept_') and not source_confirmed(s):
+                raise ValueError('unconfirmed source may not become a training sample')
             if decision['decision'] == 'accept_positive' and not s['annotation']['objects']:
                 raise ValueError('positive review requires existing boxes')
             if decision['decision'] == 'accept_positive':
@@ -116,7 +130,7 @@ def reason(value):
 
 def approved(state):
     classes = state['classes']
-    return [s for s in state['samples'] if s.get('annotation', {}).get('status') == 'completed'
+    return [s for s in state['samples'] if source_confirmed(s) and s.get('annotation', {}).get('status') == 'completed'
             and s.get('review', {}).get('key') == review_key(s, classes)
             and s['review'].get('decision') in {'accept_positive', 'accept_negative'}]
 

@@ -2,7 +2,7 @@
 import copy
 import time
 import uuid
-from .real_photo_contracts import approved, dataset_gate, digest, review_key, review_report
+from .real_photo_contracts import approved, dataset_gate, digest, review_key, review_report, source_confirmed
 from .real_photo_cache import schedule_cache, cache_key
 
 
@@ -13,6 +13,7 @@ def summary(state):
         for o in s['annotation']['objects']:
             counts[o['class_id']] += 1
     return {'candidate_count':len(state['samples']), 'approved_count':len(selected),
+            'unconfirmed_source_count':sum(not source_confirmed(s) for s in state['samples']),
             'positive_images':sum(bool(s['annotation']['objects']) for s in selected),
             'negative_images':sum(not s['annotation']['objects'] for s in selected),
             'class_instance_counts':counts, 'source_groups':sorted({s['source_group'] for s in selected if s.get('source_group')}),
