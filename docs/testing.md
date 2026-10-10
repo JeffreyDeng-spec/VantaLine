@@ -2326,6 +2326,13 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 
 ## Full CI, trusted environments and exact-tree evidence
 
+Backend runners first restore, checksum and version-check the main-built environment,
+then install/verify the entire lock and initialize fonts in the same process. Only a
+miss, corruption or cached-preparation exception restores the existing pip download
+cache and performs a complete installation. The recovery condition checks both
+actual step outcome and its ready output; cached preparation cannot mask a failure.
+PRs never save an installed environment, and no validation/assertion is removed.
+
 Automatic promotion also requires the successful main CI commit to equal the
 workflow-run event's current default-branch commit before a deployment job starts.
 A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
@@ -2458,6 +2465,14 @@ Only protected main builds
 and saves the installed-environment cache, with its own capacity and integrity checks.
 
 ### Final fixed-configuration acceptance
+
+First cached full PR run [38080683294](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38080683294)
+succeeded in **210 seconds**, above the 170-second budget. Environment restore took
+11–19 s and the full lock/integrity/font preparation 6–9 s. Shard test times ranged
+60–118 s; one later runner start was 35 s behind the first ordinary job. This led
+to cache-first preparation (pip restoration only on fallback) and another fixed
+longest-group-first balance estimated at 82.6–82.7 test seconds per shard.
+These are optimizations awaiting a fresh final-configuration measurement.
 
 Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
 and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded

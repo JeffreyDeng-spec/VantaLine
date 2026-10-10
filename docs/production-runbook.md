@@ -1438,6 +1438,13 @@ To correct unfrozen real-photo source groups, pause from the frontend and wait f
 
 ## Full CI latency and evidence diagnosis
 
+Backend runners first restore, checksum and version-check the main-built environment,
+then install/verify the entire lock and initialize fonts in the same process. Only a
+miss, corruption or cached-preparation exception restores the existing pip download
+cache and performs a complete installation. The recovery condition checks both
+actual step outcome and its ready output; cached preparation cannot mask a failure.
+PRs never save an installed environment, and no validation/assertion is removed.
+
 Automatic promotion also requires the successful main CI commit to equal the
 workflow-run event's current default-branch commit before a deployment job starts.
 A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
