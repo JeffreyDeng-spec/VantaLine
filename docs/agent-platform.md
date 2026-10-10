@@ -370,3 +370,5 @@ Photo highlight and background-plate image reads/writes have an opt-in storage a
 In COS mode, photo-highlight ROI and mask persistence failures propagate before successful artifact publication. Optional local image-processing fallback must not hide a failed durable write.
 
 Accessory readiness, image-worker status, ID matching and first-source convenience workflows are now owned by existing accessory services. Agent capabilities continue calling those services through the current explicit interfaces; provider/tool authorization and execution topology do not change.
+
+Operator PLC self-pair and self-config are explicit controller exceptions in the generated API manifest. The shared local PLC controls own human confirmation, browser identity and connection release; these operations are not exposed as Agent actions.
