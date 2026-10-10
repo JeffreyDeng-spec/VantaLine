@@ -236,7 +236,7 @@ def performance(manifest, output):
 
 
 def rebalance(manifest, directory):
-    reports = [json.loads(p.read_text()) for p in directory.glob('shard-*.json')]
+    reports = [json.loads(p.read_text()) for p in directory.rglob('shard-*.json')]
     validate_reports(manifest, reports, 'success')
     times = {c['id']:c['seconds'] for r in reports for c in r['commands']}
     groups = defaultdict(list)

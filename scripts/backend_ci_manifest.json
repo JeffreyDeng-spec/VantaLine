@@ -10,7 +10,7 @@
       "cwd": ".",
       "group": "check-000",
       "step": "python scripts/verify_production_dependencies.py requirements-production.lock",
-      "shard": 8
+      "shard": 5
     },
     {
       "id": "check-001",
@@ -19,7 +19,7 @@
       "cwd": ".",
       "group": "storage-isolation",
       "step": "Verify ordinary disk and bounded benchmark database isolation",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-002",
@@ -28,7 +28,7 @@
       "cwd": ".",
       "group": "storage-isolation",
       "step": "Verify ordinary disk and bounded benchmark database isolation",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-003",
@@ -37,7 +37,7 @@
       "cwd": ".",
       "group": "check-003",
       "step": "Verify additive-only migrations",
-      "shard": 9
+      "shard": 0
     },
     {
       "id": "check-004",
@@ -46,7 +46,7 @@
       "cwd": ".",
       "group": "check-004",
       "step": "python scripts/smoke_migration_safety.py",
-      "shard": 10
+      "shard": 2
     },
     {
       "id": "check-005",
@@ -55,7 +55,7 @@
       "cwd": ".",
       "group": "check-005",
       "step": "python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py",
-      "shard": 11
+      "shard": 1
     },
     {
       "id": "check-006",
@@ -64,7 +64,7 @@
       "cwd": ".",
       "group": "check-006",
       "step": "python scripts/smoke_plc_self_service.py",
-      "shard": 8
+      "shard": 11
     },
     {
       "id": "check-007",
@@ -73,7 +73,7 @@
       "cwd": ".",
       "group": "check-007",
       "step": "python scripts/smoke_plc_request_models.py",
-      "shard": 9
+      "shard": 11
     },
     {
       "id": "check-008",
@@ -82,7 +82,7 @@
       "cwd": ".",
       "group": "check-008",
       "step": "python local_inspection_service/scripts/smoke_plc_web_serial_v3.py",
-      "shard": 10
+      "shard": 8
     },
     {
       "id": "check-009",
@@ -91,7 +91,7 @@
       "cwd": ".",
       "group": "check-009",
       "step": "python local_inspection_service/scripts/smoke_plc_frontend_contract.py",
-      "shard": 11
+      "shard": 4
     },
     {
       "id": "check-010",
@@ -100,7 +100,7 @@
       "cwd": ".",
       "group": "check-010",
       "step": "python scripts/smoke_plc_workstation_management.py",
-      "shard": 8
+      "shard": 1
     },
     {
       "id": "check-011",
@@ -109,7 +109,7 @@
       "cwd": ".",
       "group": "check-011",
       "step": "python scripts/smoke_plc_connection_lease_api.py",
-      "shard": 9
+      "shard": 8
     },
     {
       "id": "check-012",
@@ -118,7 +118,7 @@
       "cwd": ".",
       "group": "check-012",
       "step": "python scripts/smoke_plc_lease_maintenance.py --postgres",
-      "shard": 10
+      "shard": 7
     },
     {
       "id": "check-013",
@@ -127,7 +127,7 @@
       "cwd": ".",
       "group": "check-013",
       "step": "python scripts/smoke_plc_lease_acquisition.py --postgres",
-      "shard": 11
+      "shard": 8
     },
     {
       "id": "check-014",
@@ -136,7 +136,7 @@
       "cwd": ".",
       "group": "check-014",
       "step": "python scripts/smoke_plc_lease_rebind.py --postgres",
-      "shard": 7
+      "shard": 6
     },
     {
       "id": "check-015",
@@ -145,7 +145,7 @@
       "cwd": ".",
       "group": "check-015",
       "step": "python scripts/smoke_plc_diagnostic_state.py --postgres",
-      "shard": 8
+      "shard": 0
     },
     {
       "id": "check-016",
@@ -154,7 +154,7 @@
       "cwd": ".",
       "group": "check-016",
       "step": "python scripts/smoke_plc_diagnostic_confirm.py --postgres",
-      "shard": 9
+      "shard": 1
     },
     {
       "id": "check-017",
@@ -163,7 +163,7 @@
       "cwd": ".",
       "group": "check-017",
       "step": "python scripts/smoke_plc_diagnostic_finish.py --postgres",
-      "shard": 10
+      "shard": 1
     },
     {
       "id": "check-018",
@@ -172,7 +172,7 @@
       "cwd": ".",
       "group": "check-018",
       "step": "python scripts/smoke_plc_dispatch_diagnostic_api.py",
-      "shard": 11
+      "shard": 5
     },
     {
       "id": "check-019",
@@ -190,7 +190,7 @@
       "cwd": ".",
       "group": "check-020",
       "step": "python local_inspection_service/scripts/smoke_release_version.py",
-      "shard": 8
+      "shard": 11
     },
     {
       "id": "check-021",
@@ -199,7 +199,7 @@
       "cwd": ".",
       "group": "check-021",
       "step": "python local_inspection_service/scripts/smoke_navigation_endpoints.py",
-      "shard": 9
+      "shard": 3
     },
     {
       "id": "check-022",
@@ -208,7 +208,7 @@
       "cwd": ".",
       "group": "check-022",
       "step": "python local_inspection_service/scripts/smoke_postgres_runtime_repository.py",
-      "shard": 10
+      "shard": 6
     },
     {
       "id": "check-023",
@@ -217,7 +217,7 @@
       "cwd": ".",
       "group": "check-023",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 10
     },
     {
       "id": "check-024",
@@ -226,7 +226,7 @@
       "cwd": ".",
       "group": "check-024",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 10
     },
     {
       "id": "check-025",
@@ -235,7 +235,7 @@
       "cwd": ".",
       "group": "check-025",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 6
     },
     {
       "id": "check-026",
@@ -244,7 +244,7 @@
       "cwd": ".",
       "group": "check-026",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 1
     },
     {
       "id": "check-027",
@@ -253,7 +253,7 @@
       "cwd": ".",
       "group": "check-027",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 6
     },
     {
       "id": "check-028",
@@ -262,7 +262,7 @@
       "cwd": ".",
       "group": "check-028",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 5
     },
     {
       "id": "check-029",
@@ -271,7 +271,7 @@
       "cwd": ".",
       "group": "check-029",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 9
     },
     {
       "id": "check-030",
@@ -280,7 +280,7 @@
       "cwd": ".",
       "group": "check-030",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 10
     },
     {
       "id": "check-031",
@@ -289,7 +289,7 @@
       "cwd": ".",
       "group": "check-031",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-032",
@@ -298,7 +298,7 @@
       "cwd": ".",
       "group": "check-032",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 1
     },
     {
       "id": "check-033",
@@ -307,7 +307,7 @@
       "cwd": ".",
       "group": "check-033",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 8
     },
     {
       "id": "check-035",
@@ -316,7 +316,7 @@
       "cwd": ".",
       "group": "check-035",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 1
     },
     {
       "id": "check-036",
@@ -325,7 +325,7 @@
       "cwd": ".",
       "group": "check-036",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 9
     },
     {
       "id": "check-037",
@@ -334,7 +334,7 @@
       "cwd": ".",
       "group": "check-037",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 10
     },
     {
       "id": "check-038",
@@ -343,7 +343,7 @@
       "cwd": ".",
       "group": "check-038",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-039",
@@ -352,7 +352,7 @@
       "cwd": ".",
       "group": "check-039",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 4
     },
     {
       "id": "check-040",
@@ -361,7 +361,7 @@
       "cwd": ".",
       "group": "check-040",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-041",
@@ -370,7 +370,7 @@
       "cwd": ".",
       "group": "check-041",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 11
     },
     {
       "id": "check-042",
@@ -379,7 +379,7 @@
       "cwd": ".",
       "group": "check-042",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 7
     },
     {
       "id": "check-043",
@@ -388,7 +388,7 @@
       "cwd": ".",
       "group": "check-043",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 1
     },
     {
       "id": "check-044",
@@ -397,7 +397,7 @@
       "cwd": ".",
       "group": "check-044",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 1
     },
     {
       "id": "check-045",
@@ -406,7 +406,7 @@
       "cwd": ".",
       "group": "check-045",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 11
     },
     {
       "id": "check-046",
@@ -415,7 +415,7 @@
       "cwd": ".",
       "group": "check-046",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-047",
@@ -424,7 +424,7 @@
       "cwd": ".",
       "group": "check-047",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 0
     },
     {
       "id": "check-048",
@@ -433,7 +433,7 @@
       "cwd": ".",
       "group": "check-048",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 8
     },
     {
       "id": "check-049",
@@ -442,7 +442,7 @@
       "cwd": ".",
       "group": "check-049",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 10
     },
     {
       "id": "check-050",
@@ -451,7 +451,7 @@
       "cwd": ".",
       "group": "check-050",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 4
     },
     {
       "id": "check-051",
@@ -460,7 +460,7 @@
       "cwd": ".",
       "group": "check-051",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 2
     },
     {
       "id": "check-052",
@@ -478,7 +478,7 @@
       "cwd": ".",
       "group": "check-053",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 5
     },
     {
       "id": "check-054",
@@ -487,7 +487,7 @@
       "cwd": ".",
       "group": "check-054",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 7
     },
     {
       "id": "check-056",
@@ -496,7 +496,7 @@
       "cwd": ".",
       "group": "check-056",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 10
     },
     {
       "id": "check-057",
@@ -505,7 +505,7 @@
       "cwd": ".",
       "group": "check-057",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 0
     },
     {
       "id": "check-058",
@@ -514,7 +514,7 @@
       "cwd": ".",
       "group": "check-058",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-060",
@@ -523,7 +523,7 @@
       "cwd": ".",
       "group": "check-060",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-061",
@@ -532,7 +532,7 @@
       "cwd": ".",
       "group": "check-061",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 1
     },
     {
       "id": "check-062",
@@ -541,7 +541,7 @@
       "cwd": ".",
       "group": "check-062",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 2
     },
     {
       "id": "check-063",
@@ -550,7 +550,7 @@
       "cwd": ".",
       "group": "check-063",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 0
     },
     {
       "id": "check-064",
@@ -559,7 +559,7 @@
       "cwd": ".",
       "group": "check-064",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 2
     },
     {
       "id": "check-065",
@@ -568,7 +568,7 @@
       "cwd": ".",
       "group": "check-065",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-066",
@@ -586,7 +586,7 @@
       "cwd": ".",
       "group": "check-067",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 0
     },
     {
       "id": "check-068",
@@ -595,7 +595,7 @@
       "cwd": ".",
       "group": "check-068",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 9
     },
     {
       "id": "check-069",
@@ -604,7 +604,7 @@
       "cwd": ".",
       "group": "check-069",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 7
     },
     {
       "id": "check-070",
@@ -613,7 +613,7 @@
       "cwd": ".",
       "group": "check-070",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 8
     },
     {
       "id": "check-071",
@@ -622,7 +622,7 @@
       "cwd": ".",
       "group": "check-071",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-072",
@@ -631,7 +631,7 @@
       "cwd": ".",
       "group": "check-072",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 6
     },
     {
       "id": "check-073",
@@ -649,7 +649,7 @@
       "cwd": ".",
       "group": "check-074",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-075",
@@ -658,7 +658,7 @@
       "cwd": ".",
       "group": "check-075",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 9
     },
     {
       "id": "check-076",
@@ -676,7 +676,7 @@
       "cwd": ".",
       "group": "check-077",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 7
     },
     {
       "id": "check-078",
@@ -685,7 +685,7 @@
       "cwd": ".",
       "group": "check-078",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 6
     },
     {
       "id": "check-079",
@@ -694,7 +694,7 @@
       "cwd": ".",
       "group": "check-079",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 0
     },
     {
       "id": "check-080",
@@ -703,7 +703,7 @@
       "cwd": ".",
       "group": "check-080",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 10
     },
     {
       "id": "check-081",
@@ -712,7 +712,7 @@
       "cwd": ".",
       "group": "check-081",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 5
     },
     {
       "id": "check-082",
@@ -721,7 +721,7 @@
       "cwd": ".",
       "group": "check-082",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 4
     },
     {
       "id": "check-083",
@@ -730,7 +730,7 @@
       "cwd": ".",
       "group": "check-083",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-084",
@@ -739,7 +739,7 @@
       "cwd": ".",
       "group": "check-084",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 4
     },
     {
       "id": "check-085",
@@ -748,7 +748,7 @@
       "cwd": ".",
       "group": "check-085",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 3
     },
     {
       "id": "check-086",
@@ -757,7 +757,7 @@
       "cwd": ".",
       "group": "check-086",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-087",
@@ -766,7 +766,7 @@
       "cwd": ".",
       "group": "check-087",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 10
     },
     {
       "id": "check-088",
@@ -775,7 +775,7 @@
       "cwd": ".",
       "group": "check-088",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 10
     },
     {
       "id": "check-089",
@@ -784,7 +784,7 @@
       "cwd": ".",
       "group": "check-089",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-090",
@@ -793,7 +793,7 @@
       "cwd": ".",
       "group": "check-090",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 2
     },
     {
       "id": "check-091",
@@ -802,7 +802,7 @@
       "cwd": ".",
       "group": "check-091",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 5
     },
     {
       "id": "check-092",
@@ -811,7 +811,7 @@
       "cwd": ".",
       "group": "check-092",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 5
     },
     {
       "id": "check-093",
@@ -820,7 +820,7 @@
       "cwd": ".",
       "group": "check-093",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 2
     },
     {
       "id": "check-094",
@@ -829,7 +829,7 @@
       "cwd": ".",
       "group": "check-094",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 4
     },
     {
       "id": "check-095",
@@ -838,7 +838,7 @@
       "cwd": ".",
       "group": "check-095",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 1
     },
     {
       "id": "check-096",
@@ -847,7 +847,7 @@
       "cwd": ".",
       "group": "check-096",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 11
     },
     {
       "id": "check-097",
@@ -865,7 +865,7 @@
       "cwd": ".",
       "group": "check-098",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 8
     },
     {
       "id": "check-099",
@@ -874,7 +874,7 @@
       "cwd": ".",
       "group": "check-099",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 3
     },
     {
       "id": "check-100",
@@ -883,7 +883,7 @@
       "cwd": ".",
       "group": "check-100",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-101",
@@ -892,7 +892,7 @@
       "cwd": ".",
       "group": "check-101",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 7
     },
     {
       "id": "check-102",
@@ -901,7 +901,7 @@
       "cwd": ".",
       "group": "check-102",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 6
     },
     {
       "id": "check-103",
@@ -910,7 +910,7 @@
       "cwd": ".",
       "group": "check-103",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 8
     },
     {
       "id": "check-104",
@@ -919,7 +919,7 @@
       "cwd": ".",
       "group": "check-104",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-105",
@@ -928,7 +928,7 @@
       "cwd": ".",
       "group": "check-105",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 2
     },
     {
       "id": "check-106",
@@ -937,7 +937,7 @@
       "cwd": ".",
       "group": "check-106",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 3
     },
     {
       "id": "check-107",
@@ -946,7 +946,7 @@
       "cwd": ".",
       "group": "check-107",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 8
     },
     {
       "id": "check-108",
@@ -955,7 +955,7 @@
       "cwd": ".",
       "group": "check-108",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 1
     },
     {
       "id": "check-109",
@@ -964,7 +964,7 @@
       "cwd": ".",
       "group": "check-109",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 11
     },
     {
       "id": "check-110",
@@ -973,7 +973,7 @@
       "cwd": ".",
       "group": "check-110",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 9
     },
     {
       "id": "check-111",
@@ -982,7 +982,7 @@
       "cwd": ".",
       "group": "check-111",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 0
     },
     {
       "id": "check-112",
@@ -991,7 +991,7 @@
       "cwd": ".",
       "group": "check-112",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 10
     },
     {
       "id": "check-113",
@@ -1000,7 +1000,7 @@
       "cwd": ".",
       "group": "check-113",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 6
     },
     {
       "id": "check-114",
@@ -1009,7 +1009,7 @@
       "cwd": ".",
       "group": "check-114",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 1
     },
     {
       "id": "check-115",
@@ -1018,7 +1018,7 @@
       "cwd": ".",
       "group": "check-115",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 2
     },
     {
       "id": "check-116",
@@ -1027,7 +1027,7 @@
       "cwd": ".",
       "group": "check-116",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-117",
@@ -1036,7 +1036,7 @@
       "cwd": ".",
       "group": "check-117",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 3
     },
     {
       "id": "check-118",
@@ -1045,7 +1045,7 @@
       "cwd": ".",
       "group": "check-118",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 5
     },
     {
       "id": "check-119",
@@ -1054,7 +1054,7 @@
       "cwd": ".",
       "group": "check-119",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 8
     },
     {
       "id": "check-120",
@@ -1063,7 +1063,7 @@
       "cwd": ".",
       "group": "check-120",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 4
     },
     {
       "id": "check-121",
@@ -1072,7 +1072,7 @@
       "cwd": ".",
       "group": "check-121",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 9
     },
     {
       "id": "check-122",
@@ -1081,7 +1081,7 @@
       "cwd": ".",
       "group": "check-122",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 7
     },
     {
       "id": "check-123",
@@ -1090,7 +1090,7 @@
       "cwd": ".",
       "group": "check-123",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 10
     },
     {
       "id": "check-124",
@@ -1099,7 +1099,7 @@
       "cwd": ".",
       "group": "check-124",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 8
     },
     {
       "id": "check-125",
@@ -1108,7 +1108,7 @@
       "cwd": ".",
       "group": "check-125",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-126",
@@ -1117,7 +1117,7 @@
       "cwd": ".",
       "group": "check-126",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 6
     },
     {
       "id": "check-127",
@@ -1126,7 +1126,7 @@
       "cwd": ".",
       "group": "check-127",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 1
     },
     {
       "id": "check-128",
@@ -1135,7 +1135,7 @@
       "cwd": ".",
       "group": "check-128",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-129",
@@ -1144,7 +1144,7 @@
       "cwd": ".",
       "group": "check-129",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 3
     },
     {
       "id": "check-130",
@@ -1153,7 +1153,7 @@
       "cwd": ".",
       "group": "check-130",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 4
     },
     {
       "id": "check-131",
@@ -1162,7 +1162,7 @@
       "cwd": ".",
       "group": "check-131",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-132",
@@ -1189,7 +1189,7 @@
       "cwd": ".",
       "group": "check-134",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 8
     },
     {
       "id": "check-135",
@@ -1198,7 +1198,7 @@
       "cwd": ".",
       "group": "check-135",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 11
     },
     {
       "id": "check-136",
@@ -1207,7 +1207,7 @@
       "cwd": ".",
       "group": "check-136",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 10
     },
     {
       "id": "check-137",
@@ -1216,7 +1216,7 @@
       "cwd": ".",
       "group": "check-137",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 4
     },
     {
       "id": "check-138",
@@ -1234,7 +1234,7 @@
       "cwd": ".",
       "group": "check-139",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 0
     },
     {
       "id": "check-140",
@@ -1243,7 +1243,7 @@
       "cwd": ".",
       "group": "check-140",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 1
     },
     {
       "id": "check-141",
@@ -1252,7 +1252,7 @@
       "cwd": ".",
       "group": "check-141",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 11
     },
     {
       "id": "check-142",
@@ -1261,7 +1261,7 @@
       "cwd": ".",
       "group": "check-142",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 5
     },
     {
       "id": "check-143",
@@ -1270,7 +1270,7 @@
       "cwd": ".",
       "group": "check-143",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-144",
@@ -1279,7 +1279,7 @@
       "cwd": ".",
       "group": "check-144",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 0
     },
     {
       "id": "check-145",
@@ -1288,7 +1288,7 @@
       "cwd": ".",
       "group": "check-145",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 3
     },
     {
       "id": "check-146",
@@ -1297,7 +1297,7 @@
       "cwd": ".",
       "group": "check-146",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 7
     },
     {
       "id": "check-147",
@@ -1306,7 +1306,7 @@
       "cwd": ".",
       "group": "check-147",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 9
     },
     {
       "id": "check-148",
@@ -1315,7 +1315,7 @@
       "cwd": ".",
       "group": "check-148",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 11
     },
     {
       "id": "check-149",
@@ -1324,7 +1324,7 @@
       "cwd": ".",
       "group": "check-149",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 7
     },
     {
       "id": "check-150",
@@ -1333,7 +1333,7 @@
       "cwd": ".",
       "group": "check-150",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 6
     },
     {
       "id": "check-151",
@@ -1342,7 +1342,7 @@
       "cwd": ".",
       "group": "check-151",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-152",
@@ -1360,7 +1360,7 @@
       "cwd": ".",
       "group": "check-153",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 0
     },
     {
       "id": "check-154",
@@ -1369,7 +1369,7 @@
       "cwd": ".",
       "group": "check-154",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 10
     },
     {
       "id": "check-155",
@@ -1387,7 +1387,7 @@
       "cwd": ".",
       "group": "check-156",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 11
     },
     {
       "id": "check-157",
@@ -1396,7 +1396,7 @@
       "cwd": ".",
       "group": "check-157",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 3
     },
     {
       "id": "check-158",
@@ -1405,7 +1405,7 @@
       "cwd": ".",
       "group": "check-158",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 9
     },
     {
       "id": "check-159",
@@ -1414,7 +1414,7 @@
       "cwd": ".",
       "group": "check-159",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 3
     },
     {
       "id": "check-160",
@@ -1423,7 +1423,7 @@
       "cwd": ".",
       "group": "check-160",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 1
     },
     {
       "id": "check-161",
@@ -1432,7 +1432,7 @@
       "cwd": ".",
       "group": "check-161",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 6
     },
     {
       "id": "check-162",
@@ -1441,7 +1441,7 @@
       "cwd": ".",
       "group": "check-162",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 2
     },
     {
       "id": "check-163",
@@ -1450,7 +1450,7 @@
       "cwd": ".",
       "group": "check-163",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 5
     },
     {
       "id": "check-164",
@@ -1459,7 +1459,7 @@
       "cwd": ".",
       "group": "check-164",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 4
     },
     {
       "id": "check-165",
@@ -1468,7 +1468,7 @@
       "cwd": ".",
       "group": "check-165",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-166",
@@ -1477,7 +1477,7 @@
       "cwd": ".",
       "group": "check-166",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 2
     },
     {
       "id": "check-167",
@@ -1486,7 +1486,7 @@
       "cwd": ".",
       "group": "check-167",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 2
     },
     {
       "id": "check-168",
@@ -1495,7 +1495,7 @@
       "cwd": ".",
       "group": "check-168",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 3
     },
     {
       "id": "check-169",
@@ -1504,7 +1504,7 @@
       "cwd": ".",
       "group": "check-169",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 5
     },
     {
       "id": "check-170",
@@ -1513,7 +1513,7 @@
       "cwd": ".",
       "group": "check-170",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 7
     },
     {
       "id": "check-171",
@@ -1522,7 +1522,7 @@
       "cwd": ".",
       "group": "check-171",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 11
     },
     {
       "id": "check-172",
@@ -1540,7 +1540,7 @@
       "cwd": ".",
       "group": "check-173",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 10
     },
     {
       "id": "check-174",
@@ -1549,7 +1549,7 @@
       "cwd": ".",
       "group": "check-174",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 9
     },
     {
       "id": "check-175",
@@ -1558,7 +1558,7 @@
       "cwd": ".",
       "group": "check-175",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 2
     },
     {
       "id": "check-176",
@@ -1567,7 +1567,7 @@
       "cwd": ".",
       "group": "check-176",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-177",
@@ -1576,7 +1576,7 @@
       "cwd": ".",
       "group": "check-177",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 0
     },
     {
       "id": "check-178",
@@ -1585,7 +1585,7 @@
       "cwd": ".",
       "group": "check-178",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 7
     },
     {
       "id": "check-179",
@@ -1594,7 +1594,7 @@
       "cwd": ".",
       "group": "check-179",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 3
     },
     {
       "id": "check-180",
@@ -1603,7 +1603,7 @@
       "cwd": ".",
       "group": "check-180",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 0
     },
     {
       "id": "check-181",
@@ -1612,7 +1612,7 @@
       "cwd": ".",
       "group": "check-181",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 7
     },
     {
       "id": "check-182",
@@ -1621,7 +1621,7 @@
       "cwd": ".",
       "group": "check-182",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 3
     },
     {
       "id": "check-183",
@@ -1630,7 +1630,7 @@
       "cwd": ".",
       "group": "check-183",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 1
     },
     {
       "id": "check-184",
@@ -1639,7 +1639,7 @@
       "cwd": ".",
       "group": "check-184",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 0
     },
     {
       "id": "check-185",
@@ -1648,7 +1648,7 @@
       "cwd": ".",
       "group": "check-185",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 0
     },
     {
       "id": "check-186",
@@ -1657,7 +1657,7 @@
       "cwd": ".",
       "group": "check-186",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 9
     },
     {
       "id": "check-187",
@@ -1666,7 +1666,7 @@
       "cwd": ".",
       "group": "check-187",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 1
     },
     {
       "id": "check-188",
@@ -1675,7 +1675,7 @@
       "cwd": ".",
       "group": "check-188",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 2
     },
     {
       "id": "check-189",
@@ -1684,7 +1684,7 @@
       "cwd": ".",
       "group": "check-189",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 2
     },
     {
       "id": "check-190",
@@ -1693,7 +1693,7 @@
       "cwd": ".",
       "group": "check-190",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 11
     },
     {
       "id": "check-191",
@@ -1702,7 +1702,7 @@
       "cwd": ".",
       "group": "check-191",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 8
     },
     {
       "id": "check-192",
@@ -1711,7 +1711,7 @@
       "cwd": ".",
       "group": "check-192",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 10
     },
     {
       "id": "check-193",
@@ -1720,7 +1720,7 @@
       "cwd": ".",
       "group": "check-193",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 4
     },
     {
       "id": "check-194",
@@ -1729,7 +1729,7 @@
       "cwd": ".",
       "group": "check-194",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 4
     },
     {
       "id": "check-195",
@@ -1747,7 +1747,7 @@
       "cwd": ".",
       "group": "check-196",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 0
     },
     {
       "id": "check-197",
@@ -1756,7 +1756,7 @@
       "cwd": ".",
       "group": "check-197",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 9
     },
     {
       "id": "check-198",
@@ -1765,7 +1765,7 @@
       "cwd": ".",
       "group": "check-198",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 10
     },
     {
       "id": "check-199",
@@ -1774,7 +1774,7 @@
       "cwd": ".",
       "group": "check-199",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 6
     },
     {
       "id": "check-200",
@@ -1783,7 +1783,7 @@
       "cwd": ".",
       "group": "check-200",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 9
     },
     {
       "id": "check-201",
@@ -1792,7 +1792,7 @@
       "cwd": ".",
       "group": "check-201",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 3
     },
     {
       "id": "check-202",
@@ -1801,7 +1801,7 @@
       "cwd": ".",
       "group": "check-202",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 10
     },
     {
       "id": "check-203",
@@ -1810,7 +1810,7 @@
       "cwd": ".",
       "group": "check-203",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 6
     },
     {
       "id": "check-204",
@@ -1819,7 +1819,7 @@
       "cwd": ".",
       "group": "check-204",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 1
     },
     {
       "id": "check-205",
@@ -1828,7 +1828,7 @@
       "cwd": ".",
       "group": "check-205",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 8
     },
     {
       "id": "check-206",
@@ -1837,7 +1837,7 @@
       "cwd": ".",
       "group": "check-206",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 5
     },
     {
       "id": "check-207",
@@ -1846,7 +1846,7 @@
       "cwd": ".",
       "group": "check-207",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 8
     },
     {
       "id": "check-208",
@@ -1855,7 +1855,7 @@
       "cwd": ".",
       "group": "check-208",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 7
     },
     {
       "id": "check-209",
@@ -1873,7 +1873,7 @@
       "cwd": ".",
       "group": "check-210",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 9
     },
     {
       "id": "check-211",
@@ -1882,7 +1882,7 @@
       "cwd": ".",
       "group": "check-211",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 3
     },
     {
       "id": "check-212",
@@ -1900,7 +1900,7 @@
       "cwd": ".",
       "group": "check-213",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 10
     },
     {
       "id": "check-214",
@@ -1909,7 +1909,7 @@
       "cwd": ".",
       "group": "check-214",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 10
     },
     {
       "id": "check-215",
@@ -1918,7 +1918,7 @@
       "cwd": ".",
       "group": "check-215",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 2
     },
     {
       "id": "check-216",
@@ -1927,7 +1927,7 @@
       "cwd": ".",
       "group": "check-216",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 9
     },
     {
       "id": "check-217",
@@ -1936,7 +1936,7 @@
       "cwd": ".",
       "group": "check-217",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 6
     },
     {
       "id": "check-218",
@@ -1945,7 +1945,7 @@
       "cwd": ".",
       "group": "check-218",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 11
     },
     {
       "id": "check-219",
@@ -1954,7 +1954,7 @@
       "cwd": ".",
       "group": "check-219",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 5
     },
     {
       "id": "check-220",
@@ -1963,7 +1963,7 @@
       "cwd": ".",
       "group": "check-220",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 8
     },
     {
       "id": "check-221",
@@ -1972,7 +1972,7 @@
       "cwd": ".",
       "group": "check-221",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 11
     },
     {
       "id": "check-222",
@@ -1981,7 +1981,7 @@
       "cwd": ".",
       "group": "check-222",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 6
     },
     {
       "id": "check-223",
@@ -1990,7 +1990,7 @@
       "cwd": ".",
       "group": "check-223",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 8
     },
     {
       "id": "check-224",
@@ -1999,7 +1999,7 @@
       "cwd": ".",
       "group": "check-224",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 0
     },
     {
       "id": "check-225",
@@ -2008,7 +2008,7 @@
       "cwd": ".",
       "group": "check-225",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-226",
@@ -2017,7 +2017,7 @@
       "cwd": ".",
       "group": "check-226",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 9
     },
     {
       "id": "check-227",
@@ -2026,7 +2026,7 @@
       "cwd": ".",
       "group": "check-227",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 3
     },
     {
       "id": "check-228",
@@ -2035,7 +2035,7 @@
       "cwd": ".",
       "group": "check-228",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 4
     },
     {
       "id": "check-229",
@@ -2044,7 +2044,7 @@
       "cwd": ".",
       "group": "check-229",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 6
     },
     {
       "id": "check-230",
@@ -2053,7 +2053,7 @@
       "cwd": ".",
       "group": "check-230",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 4
     },
     {
       "id": "check-231",
@@ -2062,7 +2062,7 @@
       "cwd": ".",
       "group": "check-231",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 1
     },
     {
       "id": "check-232",
@@ -2071,7 +2071,7 @@
       "cwd": ".",
       "group": "check-232",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 6
     },
     {
       "id": "check-233",
@@ -2080,7 +2080,7 @@
       "cwd": ".",
       "group": "check-233",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 0
     },
     {
       "id": "check-234",
@@ -2089,7 +2089,7 @@
       "cwd": ".",
       "group": "check-234",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 0
     },
     {
       "id": "check-235",
@@ -2098,7 +2098,7 @@
       "cwd": ".",
       "group": "check-235",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 3
     },
     {
       "id": "check-236",
@@ -2107,7 +2107,7 @@
       "cwd": ".",
       "group": "check-236",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-237",
@@ -2116,7 +2116,7 @@
       "cwd": ".",
       "group": "check-237",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-238",
@@ -2125,7 +2125,7 @@
       "cwd": ".",
       "group": "check-238",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 11
     },
     {
       "id": "check-239",
@@ -2134,7 +2134,7 @@
       "cwd": ".",
       "group": "check-239",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 4
     },
     {
       "id": "check-240",
@@ -2143,7 +2143,7 @@
       "cwd": ".",
       "group": "check-240",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 7
     },
     {
       "id": "check-241",
@@ -2152,7 +2152,7 @@
       "cwd": ".",
       "group": "check-241",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-242",
@@ -2161,7 +2161,7 @@
       "cwd": ".",
       "group": "check-242",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 6
     },
     {
       "id": "check-243",
@@ -2170,7 +2170,7 @@
       "cwd": ".",
       "group": "check-243",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 10
     },
     {
       "id": "check-244",
@@ -2179,7 +2179,7 @@
       "cwd": ".",
       "group": "check-244",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 4
     },
     {
       "id": "check-245",
@@ -2188,7 +2188,7 @@
       "cwd": ".",
       "group": "check-245",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 7
     },
     {
       "id": "check-246",
@@ -2197,7 +2197,7 @@
       "cwd": ".",
       "group": "check-246",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 8
     },
     {
       "id": "check-247",
@@ -2206,7 +2206,7 @@
       "cwd": ".",
       "group": "check-247",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 9
     },
     {
       "id": "check-248",
@@ -2215,7 +2215,7 @@
       "cwd": ".",
       "group": "check-248",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 11
     },
     {
       "id": "check-249",
@@ -2224,7 +2224,7 @@
       "cwd": ".",
       "group": "check-249",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 6
     },
     {
       "id": "check-250",
@@ -2233,7 +2233,7 @@
       "cwd": ".",
       "group": "check-250",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 11
     },
     {
       "id": "check-251",
@@ -2242,7 +2242,7 @@
       "cwd": ".",
       "group": "check-251",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-252",
@@ -2251,7 +2251,7 @@
       "cwd": ".",
       "group": "check-252",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 4
     },
     {
       "id": "check-253",
@@ -2260,7 +2260,7 @@
       "cwd": ".",
       "group": "check-253",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-254",
@@ -2269,7 +2269,7 @@
       "cwd": ".",
       "group": "check-254",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 11
     },
     {
       "id": "check-255",
@@ -2278,7 +2278,7 @@
       "cwd": ".",
       "group": "check-255",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 4
     },
     {
       "id": "check-256",
@@ -2287,7 +2287,7 @@
       "cwd": ".",
       "group": "check-256",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 5
     },
     {
       "id": "check-257",
@@ -2296,7 +2296,7 @@
       "cwd": ".",
       "group": "check-257",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 4
     },
     {
       "id": "check-258",
@@ -2305,7 +2305,7 @@
       "cwd": ".",
       "group": "check-258",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 10
     },
     {
       "id": "check-259",
@@ -2314,7 +2314,7 @@
       "cwd": ".",
       "group": "check-259",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 7
     },
     {
       "id": "check-260",
@@ -2323,7 +2323,7 @@
       "cwd": ".",
       "group": "check-260",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 5
     },
     {
       "id": "check-261",
@@ -2332,7 +2332,7 @@
       "cwd": ".",
       "group": "check-261",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 9
     },
     {
       "id": "check-262",
@@ -2341,7 +2341,7 @@
       "cwd": ".",
       "group": "check-262",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 9
     },
     {
       "id": "check-263",
@@ -2350,7 +2350,7 @@
       "cwd": ".",
       "group": "check-263",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 8
     },
     {
       "id": "check-264",
@@ -2359,7 +2359,7 @@
       "cwd": ".",
       "group": "check-264",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 7
     },
     {
       "id": "check-265",
@@ -2368,7 +2368,7 @@
       "cwd": ".",
       "group": "check-265",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 3
     },
     {
       "id": "check-266",
@@ -2377,7 +2377,7 @@
       "cwd": ".",
       "group": "check-266",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 4
     },
     {
       "id": "check-267",
@@ -2386,7 +2386,7 @@
       "cwd": ".",
       "group": "check-267",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 8
     },
     {
       "id": "check-268",
@@ -2395,7 +2395,7 @@
       "cwd": ".",
       "group": "check-268",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 3
     },
     {
       "id": "check-269",
@@ -2404,7 +2404,7 @@
       "cwd": ".",
       "group": "check-269",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 5
     },
     {
       "id": "check-270",
@@ -2413,7 +2413,7 @@
       "cwd": ".",
       "group": "check-270",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 10
     },
     {
       "id": "check-271",
@@ -2422,7 +2422,7 @@
       "cwd": ".",
       "group": "check-271",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 8
     },
     {
       "id": "check-272",
@@ -2431,7 +2431,7 @@
       "cwd": ".",
       "group": "check-272",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 1
     },
     {
       "id": "check-273",
@@ -2440,7 +2440,7 @@
       "cwd": ".",
       "group": "check-273",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 1
     },
     {
       "id": "check-274",
@@ -2449,7 +2449,7 @@
       "cwd": ".",
       "group": "check-274",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 0
     },
     {
       "id": "check-275",
@@ -2458,7 +2458,7 @@
       "cwd": ".",
       "group": "check-275",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 0
     },
     {
       "id": "check-276",
@@ -2467,7 +2467,7 @@
       "cwd": ".",
       "group": "check-276",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 2
     },
     {
       "id": "check-277",
@@ -2485,7 +2485,7 @@
       "cwd": ".",
       "group": "check-278",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 2
     },
     {
       "id": "check-279",
@@ -2494,7 +2494,7 @@
       "cwd": ".",
       "group": "check-279",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 1
     },
     {
       "id": "check-280",
@@ -2503,7 +2503,7 @@
       "cwd": ".",
       "group": "check-280",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 5
     },
     {
       "id": "check-281",
@@ -2512,7 +2512,7 @@
       "cwd": ".",
       "group": "check-281",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 10
     },
     {
       "id": "check-282",
@@ -2521,7 +2521,7 @@
       "cwd": ".",
       "group": "check-282",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 0
     },
     {
       "id": "check-283",
@@ -2530,7 +2530,7 @@
       "cwd": ".",
       "group": "check-283",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 4
     },
     {
       "id": "check-284",
@@ -2539,7 +2539,7 @@
       "cwd": ".",
       "group": "check-284",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 11
     },
     {
       "id": "check-285",
@@ -2548,7 +2548,7 @@
       "cwd": ".",
       "group": "check-285",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 5
     },
     {
       "id": "check-286",
@@ -2557,7 +2557,7 @@
       "cwd": ".",
       "group": "check-286",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 9
     },
     {
       "id": "check-287",
@@ -2566,7 +2566,7 @@
       "cwd": ".",
       "group": "check-287",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 4
     },
     {
       "id": "check-288",
@@ -2575,7 +2575,7 @@
       "cwd": ".",
       "group": "check-288",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 10
     },
     {
       "id": "check-289",
@@ -2584,7 +2584,7 @@
       "cwd": ".",
       "group": "check-289",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 8
     },
     {
       "id": "check-290",
@@ -2593,7 +2593,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-291",
@@ -2602,7 +2602,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-292",
@@ -2611,7 +2611,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-293",
@@ -2620,7 +2620,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-294",
@@ -2629,7 +2629,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-295",
@@ -2638,7 +2638,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-296",
@@ -2647,7 +2647,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-297",
@@ -2656,7 +2656,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-298",
@@ -2665,7 +2665,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-299",
@@ -2674,7 +2674,7 @@
       "cwd": ".",
       "group": "label-baselines",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 5
     },
     {
       "id": "check-301",
@@ -2683,7 +2683,7 @@
       "cwd": ".",
       "group": "check-301",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 10
     },
     {
       "id": "check-302",
@@ -2701,7 +2701,7 @@
       "cwd": ".",
       "group": "check-303",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 6
     },
     {
       "id": "check-304",
@@ -2710,7 +2710,7 @@
       "cwd": ".",
       "group": "check-304",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 5
     },
     {
       "id": "check-305",
@@ -2719,7 +2719,7 @@
       "cwd": ".",
       "group": "check-305",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 7
     },
     {
       "id": "check-306",
@@ -2728,7 +2728,7 @@
       "cwd": ".",
       "group": "check-306",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 3
     },
     {
       "id": "check-307",
@@ -2737,7 +2737,7 @@
       "cwd": ".",
       "group": "check-307",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 7
     },
     {
       "id": "check-308",
@@ -2746,7 +2746,7 @@
       "cwd": ".",
       "group": "check-308",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 7
     },
     {
       "id": "check-309",
@@ -2755,7 +2755,7 @@
       "cwd": ".",
       "group": "check-309",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 8
     },
     {
       "id": "check-311",
@@ -2764,7 +2764,7 @@
       "cwd": ".",
       "group": "check-311",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 4
     },
     {
       "id": "check-312",
@@ -2773,7 +2773,7 @@
       "cwd": ".",
       "group": "check-312",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 6
     },
     {
       "id": "check-313",
@@ -2791,7 +2791,7 @@
       "cwd": ".",
       "group": "check-314",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 2
     },
     {
       "id": "check-315",
@@ -2800,7 +2800,7 @@
       "cwd": ".",
       "group": "check-315",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 8
     },
     {
       "id": "check-316",
@@ -2809,7 +2809,7 @@
       "cwd": ".",
       "group": "check-316",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 4
     },
     {
       "id": "check-317",
@@ -2818,7 +2818,7 @@
       "cwd": ".",
       "group": "check-317",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 10
     },
     {
       "id": "check-318",
@@ -2827,7 +2827,7 @@
       "cwd": ".",
       "group": "check-318",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 5
     },
     {
       "id": "check-319",
@@ -2836,7 +2836,7 @@
       "cwd": ".",
       "group": "check-319",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 6
     },
     {
       "id": "check-320",
@@ -2845,7 +2845,7 @@
       "cwd": ".",
       "group": "check-320",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 2
     },
     {
       "id": "check-321",
@@ -2854,7 +2854,7 @@
       "cwd": ".",
       "group": "check-321",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 8
     },
     {
       "id": "check-322",
@@ -2863,7 +2863,7 @@
       "cwd": ".",
       "group": "check-322",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 4
     },
     {
       "id": "check-323",
@@ -2881,7 +2881,7 @@
       "cwd": ".",
       "group": "check-324",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 1
     },
     {
       "id": "check-325",
@@ -2890,7 +2890,7 @@
       "cwd": ".",
       "group": "check-325",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 8
     },
     {
       "id": "check-326",
@@ -2899,7 +2899,7 @@
       "cwd": ".",
       "group": "check-326",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 0
     },
     {
       "id": "check-327",
@@ -2908,7 +2908,7 @@
       "cwd": ".",
       "group": "check-327",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 0
     },
     {
       "id": "check-328",
@@ -2917,7 +2917,7 @@
       "cwd": ".",
       "group": "check-328",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 2
     },
     {
       "id": "check-329",
@@ -2935,7 +2935,7 @@
       "cwd": ".",
       "group": "check-330",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 2
     },
     {
       "id": "check-331",
@@ -2944,7 +2944,7 @@
       "cwd": ".",
       "group": "check-331",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 1
     },
     {
       "id": "check-332",
@@ -2953,7 +2953,7 @@
       "cwd": ".",
       "group": "check-332",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 10
+      "shard": 5
     },
     {
       "id": "check-333",
@@ -2962,7 +2962,7 @@
       "cwd": ".",
       "group": "check-333",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 11
+      "shard": 10
     },
     {
       "id": "check-334",
@@ -2971,7 +2971,7 @@
       "cwd": ".",
       "group": "check-334",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 0
+      "shard": 6
     },
     {
       "id": "check-335",
@@ -2980,7 +2980,7 @@
       "cwd": ".",
       "group": "check-335",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 1
+      "shard": 9
     },
     {
       "id": "check-336",
@@ -2989,7 +2989,7 @@
       "cwd": ".",
       "group": "check-336",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 5
+      "shard": 10
     },
     {
       "id": "check-337",
@@ -2998,7 +2998,7 @@
       "cwd": ".",
       "group": "check-337",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 2
+      "shard": 11
     },
     {
       "id": "check-338",
@@ -3007,7 +3007,7 @@
       "cwd": ".",
       "group": "check-338",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 3
+      "shard": 4
     },
     {
       "id": "check-339",
@@ -3016,7 +3016,7 @@
       "cwd": ".",
       "group": "check-339",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 4
+      "shard": 3
     },
     {
       "id": "check-340",
@@ -3025,7 +3025,7 @@
       "cwd": ".",
       "group": "check-340",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 6
+      "shard": 9
     },
     {
       "id": "check-341",
@@ -3034,7 +3034,7 @@
       "cwd": ".",
       "group": "check-341",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 7
+      "shard": 11
     },
     {
       "id": "check-342",
@@ -3043,7 +3043,7 @@
       "cwd": ".",
       "group": "check-342",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 8
+      "shard": 1
     },
     {
       "id": "check-343",
@@ -3052,7 +3052,7 @@
       "cwd": ".",
       "group": "check-343",
       "step": "Verify text inspection comparison and document contracts",
-      "shard": 9
+      "shard": 6
     },
     {
       "id": "check-344",
@@ -3061,7 +3061,7 @@
       "cwd": ".",
       "group": "check-344",
       "step": "Verify text inspection API fail-closed mode",
-      "shard": 10
+      "shard": 8
     },
     {
       "id": "check-345",
@@ -3072,7 +3072,7 @@
       "cwd": ".",
       "group": "check-345",
       "step": "Verify text inspection API external-only mode",
-      "shard": 11
+      "shard": 3
     },
     {
       "id": "check-346",
@@ -3083,7 +3083,7 @@
       "cwd": ".",
       "group": "check-346",
       "step": "Verify text inspection API enabled mode",
-      "shard": 0
+      "shard": 4
     },
     {
       "id": "check-347",
@@ -3092,7 +3092,7 @@
       "cwd": ".",
       "group": "check-347",
       "step": "Verify text inspection PostgreSQL contract",
-      "shard": 1
+      "shard": 6
     },
     {
       "id": "check-348",
@@ -3101,7 +3101,7 @@
       "cwd": ".",
       "group": "check-348",
       "step": "Keep legacy incoming-text rollback path readable",
-      "shard": 5
+      "shard": 3
     },
     {
       "id": "check-349",
@@ -3110,7 +3110,7 @@
       "cwd": ".",
       "group": "check-349",
       "step": "Keep legacy incoming-text rollback path readable",
-      "shard": 2
+      "shard": 7
     },
     {
       "id": "check-350",
@@ -3119,7 +3119,7 @@
       "cwd": ".",
       "group": "check-350",
       "step": "Keep legacy incoming-text rollback path readable",
-      "shard": 3
+      "shard": 1
     },
     {
       "id": "check-351",
@@ -3128,7 +3128,7 @@
       "cwd": ".",
       "group": "check-351",
       "step": "Validate generated schema with PostgreSQL 16",
-      "shard": 4
+      "shard": 3
     },
     {
       "id": "check-352",
@@ -3138,7 +3138,7 @@
       "group": "storage-isolation",
       "step": "Retain final benchmark capacity and isolation evidence",
       "always": true,
-      "shard": 7
+      "shard": 11
     }
   ],
   "performance": [

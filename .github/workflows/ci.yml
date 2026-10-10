@@ -305,7 +305,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-shard-${{ matrix.shard }}
+          name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/backend-results/
           if-no-files-found: error
           retention-days: 30
@@ -325,7 +325,7 @@ jobs:
           python-version: '3.10'
       - uses: actions/download-artifact@v4
         with:
-          pattern: backend-shard-*
+          pattern: backend-shard-${{ github.run_attempt }}-*
           path: backend-results
           merge-multiple: true
       - name: Fail closed and summarize backend latency
