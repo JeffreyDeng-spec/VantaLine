@@ -14,6 +14,7 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_write_application_test_ports import bind_training_background_write, assert_default_training_background_write
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
 
@@ -37,10 +38,12 @@ class TrainingBackgroundWriteContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_background_write(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_write(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-writes-'))).resolve()
         self.sets = self.root / 'sets'; self.source = self.root / 'source.gif'; self.source.write_bytes(b'raw source bytes')
         self.manifest = {'sets': {}}; self.saved = []; self.events = []

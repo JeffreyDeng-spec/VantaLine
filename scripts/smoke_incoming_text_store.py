@@ -15,6 +15,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.runtime import json_records
 from local_inspection_service.text_inspection.incoming_store import IncomingTextStore, IncomingPaths, IncomingRows
 from local_inspection_service.storage.runtime_records import incoming_text_reference_row, incoming_text_inspection_row, audit_event_row, row_raw_json_list
+from scripts.text_application_test_ports import text_value, text_repository
+from local_inspection_service.runtime.wiring import text as text_wiring
 ROOT_CHECK='--root' in sys.argv;PG_CHECK='--postgres' in sys.argv
 for flag in ['--root','--postgres']:
     if flag in sys.argv:sys.argv.remove(flag)
@@ -329,11 +331,11 @@ class IncomingStoreContracts(unittest.TestCase):
             self.assertIs(server._text_records.dependencies.guard(),server._text_storage.lock)
             self.assertIsNot(server._incoming_text_store.guard(),server._incoming_text_store_lock)
         target=Path(self.temp.name)/'late.json'
-        with patch.object(server,'INCOMING_TEXT_REFERENCES_PATH',target),patch.object(server,'incoming_text_reference_row',return_value=None) as serializer,patch.object(server,'runtime_postgres_repository_or_none') as factory:
+        with text_value(server._default_application.values,'INCOMING_TEXT_REFERENCES_PATH',target),patch.object(text_wiring,'incoming_text_reference_row',return_value=None) as serializer,text_repository(self,server) as factory:
             self.assertEqual(server._incoming_text_store.paths.references(),target)
             with self.assertRaisesRegex(RuntimeError,'invalid incoming text'):server.save_incoming_text_reference(reference())
             serializer.assert_called_once();factory.assert_not_called()
-        with patch.object(server,'runtime_postgres_repository_or_none',side_effect=RuntimeError('late')):
+        with text_repository(self,server,side_effect=RuntimeError('late')):
             with self.assertRaisesRegex(RuntimeError,'late'):server.load_incoming_text_inspection('inspection')
     @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
     def test_root_single_lookup_uses_its_store_list_loader(self):
@@ -343,7 +345,7 @@ class IncomingStoreContracts(unittest.TestCase):
         original=server.row_raw_json_list
         self.assertIs(server._incoming_text_store.rows.decode(),original)
         replacement=Mock()
-        with patch.object(server,'row_raw_json_list',replacement):self.assertIs(server._incoming_text_store.rows.decode(),replacement)
+        with patch.object(text_wiring,'row_raw_json_list',replacement):self.assertIs(server._incoming_text_store.rows.decode(),replacement)
         self.assertIs(server._incoming_text_store.rows.decode(),original)
         for kind in ('references','inspections'):
             for missing in (False,True):
@@ -351,7 +353,7 @@ class IncomingStoreContracts(unittest.TestCase):
                     name='load_incoming_text_'+kind;initial=Mock(return_value=[])
                     replacement=None if missing else Mock(return_value=[{'id':'wanted'}])
                     def repository():setattr(server._incoming_text_store,name,replacement);return None
-                    with patch.object(server._incoming_text_store,name,initial),patch.object(server,'runtime_postgres_repository_or_none',side_effect=repository) as factory:
+                    with patch.object(server._incoming_text_store,name,initial),text_repository(self,server,side_effect=repository) as factory:
                         fn=getattr(server,'load_incoming_text_'+kind[:-1])
                         if missing:
                             with self.assertRaises(TypeError):fn('wanted')

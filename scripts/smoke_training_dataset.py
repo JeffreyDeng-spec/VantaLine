@@ -17,6 +17,7 @@ from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.storage.artifacts.images import ImageFiles
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.training_dataset_application_test_ports import bind_training_dataset, assert_default_training_dataset
 
 
 class DatasetFixture:
@@ -95,6 +96,7 @@ class TrainingDatasetContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_dataset(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -104,6 +106,7 @@ class TrainingDatasetContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        bind_training_dataset(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-dataset-')))
         self.stack.enter_context(patch('requests.request', side_effect=AssertionError('unexpected network')))
         self.stack.enter_context(patch('subprocess.Popen', side_effect=AssertionError('unexpected process')))

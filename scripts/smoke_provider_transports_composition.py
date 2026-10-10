@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.model_providers.transport_composition import ProviderTransports, TransportInputs
 from local_inspection_service.model_providers.openai_ports import OpenAITransportIO, OpenAITransportErrors
 from local_inspection_service.model_providers.gemini_ports import GeminiTransportIO, GeminiTransportErrors
@@ -147,7 +148,7 @@ class Contracts(unittest.TestCase):
 
     def test_default_classes_and_unchanged_entry_functions(self):
         import application_integration_source_contract as contract
-        source=(contract.ROOT/'local_inspection_service/server.py').read_text()
+        source=read_checked_application_source(contract.ROOT / 'local_inspection_service/server.py')
         actual=ast.parse(contract.restore_real_photo_workflows_root(source))
         self.assertEqual(contract.digest(actual),contract.PROVIDER_TRANSPORTS['integrated_ast_sha256'])
         parent=ast.parse(contract.restore_provider_transports_root(source))

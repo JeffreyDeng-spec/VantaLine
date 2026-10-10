@@ -2,6 +2,7 @@
 import ast,os,sys,threading,unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_AUTO_OPT_OWNER_BASELINE_SOURCE')
 NAMES={'_auto_optimize_lock':'lock','_auto_optimize_label_threads':'label_threads','_auto_optimize_shadow_threads':'shadow_threads'}
 def create():
@@ -32,7 +33,7 @@ class Contracts(unittest.TestCase):
   a['label_threads']['one']=object();a['shadow_threads']['two']=object();self.assertEqual(b['label_threads'],{});self.assertEqual(b['shadow_threads'],{})
  @unittest.skipIf(bool(BASELINE),'candidate owner composition')
  def test_actual_aliases_have_one_owner(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text())
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
   for name,field in NAMES.items():
    node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id==name for t in n.targets));self.assertEqual(ast.unparse(node.value),'_auto_optimization_runtime.'+field)
 if __name__=='__main__':unittest.main()

@@ -12,6 +12,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_MODEL_TOOL_DISPATCH_BASELINE_SOURCE')
 NAMES=('provider_generate_json_error_payload','tool_provider_gemini_generate_json','call_ai_mcp_tool')
 class ProviderError(Exception):pass
@@ -98,7 +99,7 @@ class ToolContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE),'new assembly only')
     def test_root_composition_and_all_getters_independent(self):
         s,a,ea=self.fixture();t,b,eb=self.fixture()
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         assignments={x.targets[0].id:x.value for x in tree.body if isinstance(x,ast.Assign) and len(x.targets)==1 and isinstance(x.targets[0],ast.Name)}
         for name,expression in {'_model_tool_dispatch':'_model_tools.dispatch','_presence_inspection':'_model_tools.presence','_ai_mcp_client':'_model_tools.client','AI_MCP_TOOL_HANDLERS':'_model_tools.handlers'}.items():
             self.assertEqual(ast.dump(assignments[name]),ast.dump(ast.parse(expression,mode='eval').body))

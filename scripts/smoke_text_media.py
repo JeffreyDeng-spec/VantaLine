@@ -207,6 +207,9 @@ class MediaContracts(unittest.TestCase):
             root=Path(folder);(root/'local_inspection_service/static').mkdir(parents=True)
             os.environ.update(LOCAL_INSPECTION_ROOT=folder,VANTALINE_DATA_STORE='json',VANTALINE_LABEL_INSPECTION_ENABLED='false',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
             from local_inspection_service import server
+            from local_inspection_service.runtime.wiring import text as text_wiring
+            from text_application_test_ports import text_value, text_repository
+            values=server._default_application.values
             self.assertIs(server._text_v2_prepare_image,images.prepare_image);self.assertIs(server._text_v2_annotate,images.annotate)
             self.assertIs(server._text_v2_data_url,images.data_url);self.assertIs(server._text_v2_similarity,images.similarity)
             self.assertEqual(server._text_media.directory(),server.TEXT_INSPECTION_MEDIA_DIR)
@@ -234,14 +237,14 @@ class MediaContracts(unittest.TestCase):
             real_open=Image.open;real_transpose=ImageOps.exif_transpose
             for mode in ('open-max','transpose-max','transpose-quality'):
                 def opened(*a,**k):
-                    if mode=='open-max':server.TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE=400
+                    if mode=='open-max':object.__setattr__(values,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',400)
                     return real_open(*a,**k)
                 def transpose(*a,**k):
-                    if mode=='transpose-max':server.TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE=100
-                    if mode=='transpose-quality':server.TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY=11
+                    if mode=='transpose-max':object.__setattr__(values,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',100)
+                    if mode=='transpose-quality':object.__setattr__(values,'TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY',11)
                     return real_transpose(*a,**k)
-                with patch.object(server,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',200),patch.object(server,'TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY',95),patch.object(Image,'open',side_effect=opened),patch.object(ImageOps,'exif_transpose',side_effect=transpose):
-                    actual=server._text_v2_prepare_provider_image(blob,'image/png')
+                with text_value(values,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',200),text_value(values,'TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY',95),patch.object(Image,'open',side_effect=opened),patch.object(ImageOps,'exif_transpose',side_effect=transpose):
+                    actual=server._text_comparisons.images.provider_copy(blob,'image/png')
                 if mode=='open-max':self.assertEqual(actual,(blob,'image/png','PNG'))
                 else:
                     expected=real_transpose(real_open(io.BytesIO(blob)))
@@ -250,10 +253,10 @@ class MediaContracts(unittest.TestCase):
                     target=io.BytesIO();expected.save(target,format='JPEG',quality=11 if mode=='transpose-quality' else 95,optimize=True)
                     self.assertEqual(actual,(target.getvalue(),'image/jpeg','JPEG'),mode)
             blob=picture()
-            with patch.object(server,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',200):
-                self.assertEqual(server._text_v2_prepare_provider_image(blob,'image/png')[0],blob)
-            with patch.object(server,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',100), patch.object(server,'TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY',35):
-                resized=server._text_v2_prepare_provider_image(blob,'image/png')[0]
+            with text_value(values,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',200):
+                self.assertEqual(server._text_comparisons.images.provider_copy(blob,'image/png')[0],blob)
+            with text_value(values,'TEXT_INSPECTION_PROVIDER_IMAGE_MAX_SIDE',100), text_value(values,'TEXT_INSPECTION_PROVIDER_IMAGE_JPEG_QUALITY',35):
+                resized=server._text_comparisons.images.provider_copy(blob,'image/png')[0]
                 self.assertEqual(Image.open(io.BytesIO(resized)).size,(100,50))
                 self.assertEqual(resized,images.prepare_provider_image(blob,'image/png',max_side=lambda:100,jpeg_quality=lambda:35)[0])
             with patch.object(server._text_standards,'owned',return_value=None) as owned:

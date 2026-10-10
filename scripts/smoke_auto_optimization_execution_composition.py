@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.training import execution_composition as composition
 from local_inspection_service.runtime.training_tasks import TrainingThreadLifecycle, TrainingRuntimeClosed
 from local_inspection_service.model_profiles.snapshots import pinned
@@ -196,7 +197,7 @@ def native_owner(test, owner):
 
 class Contracts(unittest.TestCase):
     def test_exact_parent_ports_aliases_and_mutants(self):
-        source = (ROOT / 'local_inspection_service/server.py').read_text()
+        source = read_checked_application_source(ROOT / 'local_inspection_service/server.py')
         verify_source(source)
         execution_source = Path(composition.__file__).read_text()
         verify_execution_source(execution_source)
@@ -309,7 +310,7 @@ class Contracts(unittest.TestCase):
 
     def test_actual_public_worker_decorators_pin_once(self):
         fixture, owner = native_owner(self, 'A')
-        source = ast.parse((ROOT / 'local_inspection_service/server.py').read_text())
+        source = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         for name, alias, method, args in [('auto_optimize_label_worker', '_auto_optimization_label_processing', 'auto_optimize_label_worker', ('same',)), ('auto_optimize_training_check_worker', '_auto_optimization_training_scheduling', 'auto_optimize_training_check_worker', ('same', 0.0))]:
             node = next(n for n in source.body if isinstance(n, ast.FunctionDef) and n.name == name)
             seen = []

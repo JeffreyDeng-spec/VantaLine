@@ -107,7 +107,8 @@ class StreamConfigTests(unittest.TestCase):
             with patch.dict(os.environ,{'LOCAL_INSPECTION_ROOT':temporary,'VANTALINE_DATA_STORE':'json','VANTALINE_LABEL_INSPECTION_ENABLED':'false','LOCAL_INSPECTION_AUTO_RESUME_WORKER':'0','VANTALINE_BOOTSTRAP_ADMIN_USERNAME':'','VANTALINE_BOOTSTRAP_ADMIN_PASSWORD':'','INSPECTION_CORS_ORIGINS':''}):
                 from local_inspection_service import server
                 from fastapi.testclient import TestClient
-                with patch.object(server,'load_config',return_value={}) as load, patch.object(server,'save_config') as save:
+                owner = server._stream_configuration
+                with patch.object(owner,'load',return_value={}) as load, patch.object(owner,'save') as save:
                     result=server.update_stream(StreamConfig(url='first'))
                     load.assert_called_once_with();save.assert_called_once();self.assertEqual(result['stream']['url'],'first')
                 admin=TestClient(server.app,base_url='https://testserver')
@@ -115,15 +116,15 @@ class StreamConfigTests(unittest.TestCase):
                 try:
                     response=admin.post('/api/auth/bootstrap',json={'username':'stream-admin','password':'synthetic-contract-password'})
                     self.assertEqual(response.status_code,200,response.text)
-                    with patch.object(server,'_stream_configuration') as service:
-                        service.update.return_value={'status':'saved','stream':{}}
+                    with patch.object(type(owner),'update',autospec=True) as update:
+                        update.return_value={'status':'saved','stream':{}}
                         response=anonymous.post('/api/stream/config',json={})
-                        self.assertEqual(response.status_code,401);service.update.assert_not_called()
+                        self.assertEqual(response.status_code,401);update.assert_not_called()
                         response=admin.post('/api/stream/config',json={'enabled':[]})
-                        self.assertEqual(response.status_code,422);service.update.assert_not_called()
+                        self.assertEqual(response.status_code,422);update.assert_not_called()
                         response=admin.post('/api/stream/config',json={})
-                        self.assertEqual(response.status_code,200,response.text);service.update.assert_called_once()
-                        self.assertEqual(service.update.call_args.args[0],StreamConfig())
+                        self.assertEqual(response.status_code,200,response.text);update.assert_called_once_with(owner,StreamConfig())
+                        self.assertIs(update.call_args.args[0],owner)
                 finally:admin.close();anonymous.close()
 
 if __name__=='__main__':unittest.main()

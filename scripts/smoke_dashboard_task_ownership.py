@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get("VANTALINE_DASHBOARD_TASK_BASELINE_SOURCE")
 NAME = "upsert_dashboard_ai_task"
 
@@ -137,7 +138,7 @@ class DashboardTaskContract(unittest.TestCase):
 
     @unittest.skipIf(BASELINE, "candidate root owner binding")
     def test_actual_root_binding_and_independent_capabilities(self):
-        tree = ast.parse((ROOT / "local_inspection_service/server.py").read_text())
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         alias = next(n for n in tree.body if isinstance(n, ast.Assign)
                      and any(isinstance(t, ast.Name) and t.id == NAME for t in n.targets))
         self.assertEqual(ast.unparse(alias.value), "_detection_task_requests.upsert_dashboard_ai_task")

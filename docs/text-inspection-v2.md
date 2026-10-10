@@ -980,3 +980,5 @@ workflow owner and verify the exact runtime provider supplied through
 StandardMediaStorage. Root _text_media remains a forwarding alias. Required
 provider and media authorization, remote integrity, hybrid fallback and failure
 ordering cases remain; the composition refactor changes no media API behavior.
+
+Text/Codex/label owners now assemble in `runtime/wiring/text.py` and register through the original ordered HTTP schedule. Existing standard/extraction/inspection interleaving, request permissions, native lifetimes and thread repository scopes remain. The standalone label worker still uses its lightweight bootstrap and existing external topology; it never imports the Web factory or historical compatibility exports. No manual-history cursor, 15-minute snapshot, model binding, paid-call, queue-concurrency or pagination behavior changes in this structural batch.

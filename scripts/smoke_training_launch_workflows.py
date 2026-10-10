@@ -11,6 +11,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from training_state_test_ports import patch_training_port, get_training_port, set_training_port
+from training_launch_application_test_ports import bind_training_launch, assert_default_training_launch
 
 
 class LaunchFixture:
@@ -45,6 +46,7 @@ class LaunchFixture:
     def state(self, full, user, state): self.event('state'); self.states.append(state); full['training'] = state
     def persist(self, full): self.event('save'); self.saved.append(copy.deepcopy(full)); return False
     def bind(self, api, stack):
+        bind_training_launch(api,stack)
         values = {'current_auth_user': self.current, 'load_config': self.load, 'scope_config_for_user': self.scope,
                   'selected_accessories': self.select, 'dataset_for_training': self.find_dataset,
                   'validate_approved_preview': self.approve, 'ensure_training_assets_for_request': self.ensure,
@@ -66,6 +68,7 @@ class TrainingLaunchContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        assert_default_training_launch(server)
         cls.api = server; cls.original_enqueue = staticmethod(server._training_execution.enqueue_training_task)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()

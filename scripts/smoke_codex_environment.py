@@ -6,6 +6,7 @@ import sys
 from unittest.mock import Mock,patch
 import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from fastapi import FastAPI,HTTPException
 from fastapi.testclient import TestClient
 from local_inspection_service.codex_compare import api
@@ -64,7 +65,7 @@ class EnvironmentContracts(unittest.TestCase):
             keywords=[node.value for node in calls[0].keywords if node.arg=='environment']
             self.assertEqual(len(keywords),1)
             self.assertEqual(ast.dump(keywords[0]),ast.dump(ast.parse('os.environ',mode='eval').body))
-        source=(Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8')
+        source=read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8')
         check(source)
         for replacement in ('',', environment={}',', environment=dict(os.environ)'):
             mutant=source.replace(', environment=os.environ\n)',replacement+'\n)')

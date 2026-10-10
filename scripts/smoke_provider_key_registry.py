@@ -72,7 +72,7 @@ class ProviderKeyRegistryContracts(unittest.TestCase):
 
     def test_json_skips_explicit_unknown_but_uses_fallback_for_absent_provider(self):
         config = {"provider": "unknown", "api_keys": [None, {"key": "synthetic-a", "provider": "unknown"}, {"key": "synthetic-b", "id": "b"}, {"env": "PENDING_KEY", "id": "pending"}]}
-        with patch.object(self.api, "AI_DEFAULT_PROVIDER", "qwen"):
+        with patch_provider_capability(self.api, "AI_DEFAULT_PROVIDER", "qwen"):
             result = self.api.normalize_ai_key_items(config)
         self.assertEqual([item["id"] for item in result], ["b", "pending"])
         self.assertEqual([item["provider"] for item in result], ["qwen", "qwen"])
@@ -181,9 +181,9 @@ class ProviderKeyRegistryContracts(unittest.TestCase):
             class Item(dict):
                 def get(inner, name, default=None):
                     if name == "label":
-                        api.bounded_text = late
+                        set_provider_capability(api, 'bounded_text', late)
                     return super().get(name, default)
-            with patch.object(api, "bounded_text", selected):
+            with patch_provider_capability(api, "bounded_text", selected):
                 result = method({"provider": "qwen", key: [Item(id="one", key="synthetic", label="given")]}, *args)
             self.assertEqual(result[0]["label"], "selected-label")
             selected.assert_called_once_with("given", 80)
@@ -206,10 +206,10 @@ class ProviderKeyRegistryContracts(unittest.TestCase):
 
     def test_supported_providers_refresh_after_environment_resolution(self):
         def resolve(name):
-            self.api.AI_SUPPORTED_PROVIDERS = {"qwen", "synthetic-provider"}
+            set_provider_capability(self.api, 'AI_SUPPORTED_PROVIDERS', {"qwen", "synthetic-provider"})
             return "synthetic-value"
         self.lookup.side_effect = resolve
-        with patch.object(self.api, "AI_SUPPORTED_PROVIDERS", {"qwen"}):
+        with patch_provider_capability(self.api, "AI_SUPPORTED_PROVIDERS", {"qwen"}):
             result = self.api.normalize_ai_key_items({"api_keys": [{"id": "one", "env": "SYNTHETIC_KEY", "provider": "synthetic-provider"}]}, "qwen")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["provider"], "synthetic-provider")

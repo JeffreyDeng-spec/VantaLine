@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import urlsplit
 from unittest.mock import Mock
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PUBLIC_NETWORK_BASELINE_SOURCE')
 NAMES=('normalize_origin','same_origin','cors_origin_allowed','is_private_or_local_host','sanitize_url_for_public_user','sanitize_path_for_public_user','include_internal_runtime_details')
 def create(b):
@@ -57,7 +58,7 @@ class Contracts(unittest.TestCase):
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
   from application_integration_source_contract import restore_account_visibility_root
-  tree=ast.parse(restore_account_visibility_root((ROOT/'local_inspection_service/server.py').read_text()));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
+  tree=ast.parse(restore_account_visibility_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_public_network_policy' for t in n.targets));count=0
   from application_integration_source_contract import verify_actual_compositions
   verify_actual_compositions()
   self.assertEqual(len(binding.keywords),3)

@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path.cwd()))
 from scripts.agent_pose_test_ports import patch_pose_capability
+from scripts.agent_pose_planning_application_test_ports import bind_pose_planning, assert_default_pose_planning
 class AgentPosePlanningContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -12,10 +13,12 @@ class AgentPosePlanningContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.tmp.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_pose_planning(server)
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_pose_planning(self.api,self.stack)
         for n in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(n,side_effect=AssertionError('external operation forbidden')))
     def patch(self,name,**kw):return self.stack.enter_context(patch_pose_capability(self.api,name,**kw))

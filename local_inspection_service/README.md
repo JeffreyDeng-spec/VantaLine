@@ -22,3 +22,5 @@ npm --prefix local_inspection_service/frontend run typecheck
 ```
 
 Use the authoritative [test matrix](../docs/testing.md), [architecture](../docs/architecture.md), [configuration reference](../docs/configuration-reference.md), and [PLC Web Serial v4 specification](../docs/plc-web-serial-v4.md). Do not use phase or migration evidence as current design documentation.
+
+Web application assembly is `runtime/application.py:create_application`; `server:app` exposes its process-default instance. Six static wiring groups assemble existing domain owners before ordered HTTP/lifecycle registration. Historical helper calls live in `compatibility/`; business never imports that default-call API. Independent apps have fresh defaults, identity, repository factories and native lifetimes. Operator settings, standalone label topology, HTTP contracts, model snapshots and PLC behavior remain compatible. New task provenance uses manifest v277/612.

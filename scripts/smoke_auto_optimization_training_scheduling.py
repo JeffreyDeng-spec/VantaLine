@@ -13,6 +13,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock, patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_TRAINING_SCHEDULING_BASELINE_SOURCE')
 NAMES=('maybe_start_auto_optimize_training_locked','auto_optimize_training_check_worker','start_auto_optimize_training_check_worker')
@@ -134,10 +135,12 @@ class SchedulingContract(unittest.TestCase):
         for name,args in zip(NAMES,(({},),('t',2.0),('t',3.0))):
             mock=Mock(return_value=object());fn=getattr(server,name)
             if hasattr(fn,'__wrapped__'):fn=fn.__wrapped__
-            with patch.object(server,'_auto_optimization_training_scheduling',SimpleNamespace(**{name:mock})):self.assertIs(fn(*args),mock.return_value)
-            mock.assert_called_once_with(*args)
+            with patch.object(type(service), name, autospec=True, return_value=mock.return_value) as receiver:
+                self.assertIs(fn(*args),mock.return_value)
+                receiver.assert_called_once_with(service, *args)
+                self.assertIs(receiver.call_args.args[0], service)
         self.assertTrue(hasattr(server.auto_optimize_training_check_worker,'__wrapped__'))
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[1])
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==NAMES[1])
         self.assertEqual(ast.unparse(node.decorator_list[0]),'pinned_model_profiles(resolve_model_profiles, lambda identity: load_auto_optimize_state(identity))')
         subprocess.run([sys.executable,'-c',"import sys; import local_inspection_service.training.auto_optimization_training_scheduling; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)
 

@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from smoke_pipeline_stores import Fixture, available
 from local_inspection_service.training.persistence_graph import (
     TrainingPersistenceGraph, TrainingAccountInputs, PipelinePersistenceInputs,
@@ -97,7 +98,7 @@ class TrainingPersistenceContracts(unittest.TestCase):
     def test_actual_default_graph_and_fixed_parent_inverse(self):
         import ast
         import application_integration_source_contract as contract
-        source=(contract.ROOT/'local_inspection_service/server.py').read_text()
+        source=read_checked_application_source(contract.ROOT / 'local_inspection_service/server.py')
         self.assertEqual(contract.digest(ast.parse(contract.restore_account_visibility_root(source))),
             contract.TRAINING_PERSISTENCE_GRAPH['integrated_ast_sha256'])
         inverse=contract.restore_training_persistence_graph_root(source)

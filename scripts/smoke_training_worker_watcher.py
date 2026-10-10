@@ -9,6 +9,8 @@ import types
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_worker_watcher
 
 
 class StopLoop(BaseException):pass
@@ -57,18 +59,18 @@ class TrainingWorkerWatcherContracts(unittest.TestCase):
         root=Path(cls.runtime.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server;cls.interval_fn=staticmethod(server.worker_training_watcher_interval_seconds);cls.once_fn=staticmethod(server._worker_training_watch_once)
+        cls.api=server;assert_default_legacy_worker(cls.api);cls.interval_fn=staticmethod(server.worker_training_watcher_interval_seconds);cls.once_fn=staticmethod(server._worker_training_watch_once)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.f=WatcherFixture();self.f.bind(self.api,self.stack)
+        self.stack=ExitStack();self.addCleanup(self.stack.close);bind_worker_watcher(self.api,self.stack);self.f=WatcherFixture();self.f.bind(self.api,self.stack)
         for target in ['requests.request','requests.get','requests.post','subprocess.Popen','os.kill','threading.Thread','threading.Event']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected operation')))
     def loop(self):return self.api._worker_training_watcher_loop()
     def test_retired_entry_points_and_registered_startup_remain_noops(self):
         from fastapi import FastAPI
         f=self.f;handler=self.api.start_worker_training_watcher
-        handlers=[fn for fn in self.api.app.router.on_startup if fn.__name__=='start_worker_training_watcher'];self.assertEqual(handlers,[handler])
+        handlers=[fn.__wrapped__ for fn in self.api.app.router.on_startup if fn.__name__=='start_worker_training_watcher'];self.assertEqual(handlers,[handler])
         self.assertIs(self.api.worker_training_watcher_enabled(),False);self.assertEqual(self.once_fn(),0)
         with patch.object(self.api,'worker_training_watcher_enabled',return_value=True) as enabled,patch.object(self.api,'_worker_training_watcher_loop',side_effect=AssertionError('must stay disabled')) as loop:
             for unused in range(2):
@@ -77,7 +79,7 @@ class TrainingWorkerWatcherContracts(unittest.TestCase):
                 with self.assertRaises(StopIteration):lifecycle.__aexit__(None,None,None).send(None)
                 self.assertEqual(app.router.on_startup,[handler])
             enabled.assert_not_called();loop.assert_not_called()
-        self.assertEqual([fn for fn in self.api.app.router.on_startup if fn.__name__=='start_worker_training_watcher'],handlers)
+        self.assertEqual([fn.__wrapped__ for fn in self.api.app.router.on_startup if fn.__name__=='start_worker_training_watcher'],handlers)
         for callback in [f.interval,f.watch,f.sleep,f.report]:callback.assert_not_called()
     def test_interval_default_clamp_and_nonfinite_values(self):
         key='INSPECTION_WORKER_WATCHER_INTERVAL_SECONDS'

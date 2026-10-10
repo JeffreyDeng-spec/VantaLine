@@ -14,6 +14,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service import plc_fx_ascii as fx
 from local_inspection_service.plc.errors import PlcDispatchStateConflict
 from local_inspection_service.plc.transition_policy import PlcDispatchTransitionKind as Kind
@@ -125,15 +126,23 @@ class DispatchMutationContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE), 'candidate actual-root compatibility')
     def test_actual_root_existing_typed_storage_contracts(self):
         code = """from pathlib import Path
-import os, shutil, tempfile
+import os, shutil, tempfile, sys
 os.environ['VANTALINE_DATA_STORE'] = 'json'
 from local_inspection_service.scripts import smoke_plc_phase1_hardening as existing
+sys.path.insert(0, str(Path('scripts').resolve()))
+from canonical_application_source_contract import verify_actual_sources
+from plc_legacy_test_composition import build
+verify_actual_sources()
+default = existing.server
+existing.server = build(default)
 try:
     existing.server.plc_pg_coordination_available = lambda: True
     existing.test_strict_create_boundary_json()
     existing.test_actual_typed_handler_boundary_json_and_pg()
-    print('PASS actual root strict-create and typed JSON/PG-substitute contracts')
+    print('PASS current native strict-create and typed JSON/PG-substitute contracts')
 finally:
+    existing.server._plc_io_executor.shutdown(wait=True)
+    existing.server = default
     owned = existing.ROOT.resolve()
     assert owned.parent == Path(tempfile.gettempdir()).resolve()
     assert owned.name.startswith('vantaline_plc_hardening_')
@@ -143,7 +152,7 @@ finally:
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_docs_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_plc_dispatch_mutations' for t in n.targets));count=0
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_plc_dispatch_mutations' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,31)

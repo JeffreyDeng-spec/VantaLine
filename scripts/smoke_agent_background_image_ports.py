@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
@@ -98,7 +99,7 @@ class BackgroundImagePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): PipelineBackgroundPublication(**args, **ports)
         files, images = Falsey(), Falsey(); service = PipelineBackgroundPublication(**args, files=files, images=images)
         self.assertIs(service.files, files); self.assertIs(service.images, images)
-        tree = ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))
         calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == '_PipelineBackgroundPublication']
         self.assertEqual(len(calls), 1); bindings = {kw.arg: ast.dump(kw.value) for kw in calls[0].keywords}
         for key, value in [('files', '_business_files'), ('images', '_agent_pil_images')]: self.assertEqual(bindings[key], ast.dump(ast.parse(value, mode='eval').body))

@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
 from local_inspection_service.runtime.identity import RequestIdentity
@@ -116,7 +117,7 @@ class HttpArtifactPortsTests(unittest.TestCase):
 
     def test_actual_entry_media_storage_keywords(self):
         root = Path(__file__).resolve().parents[1]
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         selected = {'create_http_application': ('upload_runtime_provider', 'lambda: _business_files.runtime_provider()'),
             'ArtifactStaticFiles': ('runtime_provider', 'lambda: _business_files.runtime_provider()'),
             'BackgroundQuery': ('files', 'lambda: _business_files')}

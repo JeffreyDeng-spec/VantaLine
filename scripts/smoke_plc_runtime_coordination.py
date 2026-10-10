@@ -14,6 +14,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_PLC_COORDINATION_BASELINE_SOURCE')
 NAMES = {'mutate_plc_runtime_coordination', 'plc_completed_capture_receipt',
          '_mutate_plc_runtime_rows', 'plc_claim_or_renew_io_owner', 'plc_current_process_owns_io'}
@@ -22,7 +23,7 @@ NAMES = {'mutate_plc_runtime_coordination', 'plc_completed_capture_receipt',
 def build():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
-    text = source.read_text(encoding='utf-8-sig')
+    text = read_checked_application_source(source, encoding='utf-8-sig')
     if not BASELINE:
         from application_integration_source_contract import restore_plc_domain_root
         text = restore_plc_domain_root(text)
@@ -240,7 +241,7 @@ class CoordinationContract(unittest.TestCase):
         for name in NAMES:
             self.assertIs(getattr(self.api, name).__self__, self.api._legacy_plc_coordination)
         self.assertIsNot(build()._legacy_plc_coordination, self.api._legacy_plc_coordination)
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text())
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         startup = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'start_plc_runtime_workers')
         self.assertEqual(ast.dump(startup.body[0]), ast.dump(ast.Return(value=ast.Constant(value=None))))
         self.assertEqual(len(startup.body), 1)

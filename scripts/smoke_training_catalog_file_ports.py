@@ -7,6 +7,7 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
@@ -69,7 +70,7 @@ class TrainingCatalogFilePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): cls(**args)
             with self.assertRaises(TypeError): cls(**args, **{key:None})
             owner = Falsey(); self.assertIs(getattr(cls(**args, **{key:owner}),key),owner)
-        tree = ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))
         calls = [n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ('DatasetCatalog','TrainingResources','TrainedModelCatalog')]
         # ModelCatalog now owns the actual TrainedModelCatalog constructor.
         domain=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/training/catalog_composition.py').read_text(encoding='utf-8'))

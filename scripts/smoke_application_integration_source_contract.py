@@ -10,7 +10,8 @@ import application_integration_source_contract as contract
 
 class IntegrationContracts(unittest.TestCase):
     def setUp(self):
-        self.source = (contract.ROOT / "local_inspection_service/server.py").read_text()
+        from canonical_application_source_contract import restore_canonical_root
+        self.source = restore_canonical_root((contract.ROOT / "local_inspection_service/server.py").read_text())
 
     def test_current_root_and_actual_owner_bindings_pass_before_replay(self):
         contract.verify_actual_compositions()

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 POSTGRES = '--postgres' in sys.argv
 if POSTGRES: sys.argv.remove('--postgres')
 from smoke_pipeline_stores import Fixture, available
@@ -117,7 +118,7 @@ class PipelineCompositionContracts(unittest.TestCase):
 
     def test_root_inverse_and_actual_owner_reject_wrong_bindings(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,PIPELINE_QUERIES,PIPELINE_EXECUTION,PIPELINE_PERSISTENCE,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py');source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE),PIPELINE_QUERIES),PIPELINE_EXECUTION),PIPELINE_PERSISTENCE))),PIPELINE_PERSISTENCE['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in [('_pipeline_runtime = _pipeline_persistence.runtime','_pipeline_runtime = None'),

@@ -57,10 +57,15 @@ class TrainingStateContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        from scripts.training_account_application_test_ports import assert_default_training_account
+        assert_default_training_account(cls.api)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.f=Fixture();self.f.bind(self.api,self.stack)
+        self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.training_account_application_test_ports import bind_training_account
+        bind_training_account(self.api,self.stack)
+        self.f=Fixture();self.f.bind(self.api,self.stack)
         token=self.api._request_user.set(None);self.addCleanup(self.api._request_user.reset,token)
         self.alice={'id':'alice','username':'Alice','role':'user'};self.admin={'id':'admin','role':'admin'}
         self.stack.enter_context(patch('requests.request',side_effect=AssertionError('unexpected network')))

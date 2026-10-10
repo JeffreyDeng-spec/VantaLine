@@ -11,6 +11,7 @@ import unittest
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 POSTGRES = '--postgres' in sys.argv
 if POSTGRES:
     sys.argv.remove('--postgres')
@@ -22,7 +23,7 @@ class ConfigError(Exception):
 
 def baseline_function():
     path = Path(os.environ["VANTALINE_PLC_FINISH_BASELINE_SOURCE"])
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    tree = ast.parse(read_checked_application_source(path, encoding='utf-8-sig'))
     node = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                 and node.name == "plc_web_serial_finish_diagnostic")
     namespace = {"Any": object, "PlcWebSerialDiagnosticReceiptRequest": object,
@@ -370,7 +371,7 @@ class CandidateFinish(FinishContract, unittest.TestCase):
         from local_inspection_service.plc.diagnostic_state_ports import DiagnosticStatePorts
         path = Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
         from application_integration_source_contract import restore_plc_domain_root
-        tree = ast.parse(restore_plc_domain_root(path.read_text(encoding="utf-8-sig")))
+        tree = ast.parse(restore_plc_domain_root(read_checked_application_source(path, encoding='utf-8-sig')))
         nodes = [node for node in tree.body if (
             isinstance(node, ast.Assign) and any(
                 isinstance(item, ast.Name) and item.id == "_plc_diagnostic_state"

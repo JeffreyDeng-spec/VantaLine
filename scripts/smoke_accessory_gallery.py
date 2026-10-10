@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from accessory_application_test_ports import accessory_callback
 import cv2
 import numpy as np
 from fastapi.testclient import TestClient
@@ -24,6 +25,8 @@ class GalleryContracts(unittest.TestCase):
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
         cls.server = server
+        from scripts.accessory_default_dependency_contract import assert_default_accessory_dependencies
+        assert_default_accessory_dependencies(server)
         cls.admin = TestClient(server.app, base_url='https://testserver')
         assert cls.admin.post('/api/auth/bootstrap', json={'username':'fixture-admin','password':'fixture-password-only'}).status_code == 200
         cls.clients, cls.users = {}, {}
@@ -45,7 +48,7 @@ class GalleryContracts(unittest.TestCase):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.state = {'accessories':[]}
-        self.stack.enter_context(patch.object(self.server,'load_config',side_effect=lambda:copy.deepcopy(self.state)))
+        self.stack.enter_context(accessory_callback(self.server,'load_config',side_effect=lambda:copy.deepcopy(self.state)))
 
     def image(self, name, pixels=None):
         path = self.server.OUTPUT_DIR/'gallery-fixtures'/(name+'.png')
@@ -102,8 +105,8 @@ class GalleryContracts(unittest.TestCase):
         asset = {'path':str(sprite),'pose_family':'upright','pose_position':'top','source_long_side_px':99,
                  'source_long_short_ratio':2.5,'task_id':'fixture-task','render_footprint_mm':[10,20],
                  'normalized_bbox_xyxy':[1,2,3,4],'edge_alpha_pass':True}
-        with patch.object(self.server,'clean_sprite_assets',return_value=[{'path':str(source)},asset]), \
-             patch.object(self.server,'accessory_image_paths',return_value=[source,pose,sprite,derived]):
+        with accessory_callback(self.server,'clean_sprite_assets',return_value=[{'path':str(source)},asset]), \
+             accessory_callback(self.server,'accessory_image_paths',return_value=[source,pose,sprite,derived]):
             response = self.detail('gallery-order')
         self.assertEqual(response.status_code,200,response.text)
         result = response.json()
@@ -149,8 +152,8 @@ class GalleryContracts(unittest.TestCase):
         pose = self.image('text-pose')
         item['ai_profile_reference_files'] = [str(pose)]
         item['codex_image_jobs'] = [{'output_path':str(pose)}]
-        with patch.object(self.server,'clean_sprite_assets',return_value=[]), \
-             patch.object(self.server,'accessory_image_paths',return_value=[source,pose]):
+        with accessory_callback(self.server,'clean_sprite_assets',return_value=[]), \
+             accessory_callback(self.server,'accessory_image_paths',return_value=[source,pose]):
             response = self.detail('gallery-text')
         gallery = response.json()['gallery']
         self.assertEqual([entry['kind'] for entry in gallery],['source','normalized'])
@@ -158,16 +161,16 @@ class GalleryContracts(unittest.TestCase):
         self.assertEqual(gallery[0]['label'],'文档照片')
         cap_source, cap_item = self.seed('gallery-cap')
         assets = [{'path':str(self.image('cap-'+str(index)))} for index in range(21)]
-        with patch.object(self.server,'clean_sprite_assets',return_value=assets), \
-             patch.object(self.server,'accessory_image_paths',return_value=[]):
+        with accessory_callback(self.server,'clean_sprite_assets',return_value=assets), \
+             accessory_callback(self.server,'accessory_image_paths',return_value=[]):
             response = self.detail('gallery-cap')
         self.assertEqual(response.status_code,200,response.text)
         clean = [entry for entry in response.json()['gallery'] if entry['kind']=='clean_object_sprite']
         self.assertEqual(len(clean),18)
         self.assertEqual(clean[-1]['source_path'],assets[17]['path'])
         assets[0] = {'path':str(cap_source)}
-        with patch.object(self.server,'clean_sprite_assets',return_value=assets), \
-             patch.object(self.server,'accessory_image_paths',return_value=[]):
+        with accessory_callback(self.server,'clean_sprite_assets',return_value=assets), \
+             accessory_callback(self.server,'accessory_image_paths',return_value=[]):
             response = self.detail('gallery-cap')
         clean = [entry for entry in response.json()['gallery'] if entry['kind']=='clean_object_sprite']
         self.assertEqual(len(clean),17)

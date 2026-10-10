@@ -16,6 +16,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import assert_capability_owner
 BASELINE = os.environ.get('VANTALINE_AUTO_SPRITES_BASELINE_SOURCE')
 NAMES = ('auto_optimize_load_sprite', 'auto_optimize_sprite_records_for_sample',
@@ -160,7 +161,7 @@ class SpriteContract(unittest.TestCase):
         for name in NAMES:
             signature=inspect.signature(getattr(server,name));args=[object() for p in signature.parameters.values() if p.default is inspect.Parameter.empty]
             mock=Mock(return_value=object())
-            with patch.object(server,'_auto_optimization_sprites',SimpleNamespace(**{name:mock})):
+            with auto_method(self,server._auto_optimization_sprites,name,mock):
                 self.assertIs(getattr(server,name)(*args),mock.return_value)
             expected=list(args)+[p.default for p in signature.parameters.values() if p.default is not inspect.Parameter.empty]
             mock.assert_called_once_with(*expected)

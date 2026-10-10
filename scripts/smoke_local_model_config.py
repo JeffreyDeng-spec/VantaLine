@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock,patch
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_LOCAL_MODEL_CONFIG_BASELINE_SOURCE')
 NAMES=('load_ai_local_config','ai_local_config_temp_path','save_ai_local_config')
 
@@ -103,7 +104,7 @@ class ConfigurationContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE),'new assembly only')
     def test_root_composition_all_getters_and_instances_are_independent(self):
         from application_integration_source_contract import restore_infrastructure_root
-        s,a,ea=self.fixture();t,b,eb=self.fixture();tree=ast.parse(restore_infrastructure_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')))
+        s,a,ea=self.fixture();t,b,eb=self.fixture();tree=ast.parse(restore_infrastructure_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')))
         nodes=[n for n in tree.body if (isinstance(n,ast.ImportFrom) and n.module in ('model_providers.local_model_config','model_providers.local_model_config_ports')) or (isinstance(n,ast.Assign) and any(isinstance(x,ast.Name) and x.id=='_local_model_config' for x in n.targets)) or (isinstance(n,ast.FunctionDef) and n.name in NAMES)]
         self.assertEqual(len(nodes),6)
         from dataclasses import replace

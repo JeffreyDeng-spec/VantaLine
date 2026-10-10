@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from smoke_trained_model_catalog import Fixture
 from local_inspection_service.training.catalog_composition import (
     ModelCatalog, ModelRunFiles, ModelPipeline, ModelRegistry,
@@ -156,7 +157,7 @@ class CatalogCompositionContracts(unittest.TestCase):
 
     def test_actual_entry_constructs_one_graph_and_exports_only_owned_compatibility_aliases(self):
         root=Path(__file__).resolve().parents[1]
-        tree=ast.parse((root/'local_inspection_service/server.py').read_text(encoding='utf8'))
+        tree=ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf8'))
         assignments={node.targets[0].id:node.value for node in tree.body if isinstance(node,ast.Assign)
             and len(node.targets)==1 and isinstance(node.targets[0],ast.Name)}
         assembly=assignments['_model_catalog']

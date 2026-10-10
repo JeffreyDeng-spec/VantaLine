@@ -23,6 +23,8 @@ EXECUTION_METHODS = frozenset({'run_training_task', 'enqueue_training_task'})
 
 
 def training_port_target(api, name):
+    if hasattr(api, '_training_preview_cache') and name in {'accessory_sprite_version','preview_cache_key','training_preview_metadata_missing'}:
+        return api._training_preview_cache, name
     if hasattr(api, '_training_persistence_graph'):
         graph = api._training_persistence_graph
         if name == 'sync_pipeline_training_state_from_task':

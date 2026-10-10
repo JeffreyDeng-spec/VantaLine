@@ -17,6 +17,7 @@ from unittest.mock import Mock, patch
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_APP_CONFIG_STORE_BASELINE_SOURCE')
 NAMES=('_read_config_file','load_config','save_config')
 
@@ -177,7 +178,7 @@ class StoreContract(unittest.TestCase):
         from local_inspection_service.config.application_composition import ApplicationConfiguration,ConfigurationFiles,ConfigurationPolicy
         from local_inspection_service.config.app_store_ports import AppConfigRows
         from application_integration_source_contract import restore_path_configuration_root
-        tree=ast.parse(restore_path_configuration_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')))
+        tree=ast.parse(restore_path_configuration_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')))
         node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_app_configuration' for t in n.targets))
         symbols=dict(ApplicationConfiguration=ApplicationConfiguration,ConfigurationFiles=ConfigurationFiles,AppConfigRows=AppConfigRows,ConfigurationPolicy=ConfigurationPolicy)
         exec(compile(ast.Module(body=[node],type_ignores=[]),'<assembly>','exec'),symbols)

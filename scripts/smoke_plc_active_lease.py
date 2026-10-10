@@ -8,6 +8,7 @@ import types
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get("VANTALINE_PLC_ACTIVE_LEASE_BASELINE_SOURCE")
 NAME = "_plc_web_serial_require_active_lease"
 
@@ -19,7 +20,7 @@ class ConfigError(Exception):
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    raw = source.read_text(encoding="utf-8-sig")
+    raw = read_checked_application_source(source, encoding='utf-8-sig')
     if not BASELINE:
         from application_integration_source_contract import restore_plc_domain_root
         raw = restore_plc_domain_root(raw)

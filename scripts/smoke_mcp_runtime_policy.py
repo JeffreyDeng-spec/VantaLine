@@ -115,7 +115,13 @@ class Contracts(unittest.TestCase):
         self.assertIs(server.warm_ai_mcp_client.__self__,server._mcp_warmup)
         self.assertIs(server._mcp_warmup.client(),server._ai_mcp_client)
         self.assertIs(server._mcp_warmup.enabled,runtime.external_ai_mcp_enabled)
-        self.assertEqual(server.app.router.on_startup.count(server.start_ai_mcp_warmup),1)
+        from inspect import unwrap
+        hooks = [hook for hook in server.app.router.on_startup
+                 if hook.__name__ == 'start_ai_mcp_warmup']
+        self.assertEqual(len(hooks), 1)
+        self.assertIsNot(hooks[0], server.start_ai_mcp_warmup)
+        self.assertIs(unwrap(hooks[0]), server.start_ai_mcp_warmup)
+        self.assertIs(server.start_ai_mcp_warmup, server._default_application.http.start_ai_mcp_warmup)
         with patch.dict(os.environ,{'INSPECTION_AI_MCP_RUNTIME':'','INSPECTION_AI_MCP_SERVER_MODE':''},clear=True),patch.object(server.threading,'Thread',side_effect=AssertionError('thread')):
             server.start_ai_mcp_warmup()
         with patch.dict(os.environ,{'INSPECTION_AI_MCP_RUNTIME':'stdio','INSPECTION_AI_MCP_SERVER_MODE':''},clear=True),patch.object(server._ai_mcp_client,'start_warmup') as start:

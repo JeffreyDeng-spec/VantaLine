@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = 'local_inspection_service'
-PACKAGES = ('model_providers', 'model_profiles', 'runtime', 'config', 'schemas', 'analytics', 'auth', 'records', 'accessories', 'label_inspection', 'codex_compare', 'training_review', 'text_inspection', 'agent', 'detection', 'training', 'pipeline', 'plc', 'storage/artifacts')
+PACKAGES = ('model_providers', 'model_profiles', 'runtime', 'config', 'schemas', 'analytics', 'auth', 'records', 'accessories', 'label_inspection', 'codex_compare', 'training_review', 'text_inspection', 'agent', 'detection', 'training', 'pipeline', 'plc', 'storage/artifacts', 'compatibility')
 
 MODULES = ('qwen_evidence_jobs', 'evidence_preview', 'model_call_audit', 'plc_fx_ascii', 'plc_web_serial', 'storage/label_run_projection')
 
@@ -42,6 +42,11 @@ def inspect_module(source, module, is_package=False):
             errors.append('module namespace lookup')
     if any(name == PACKAGE + '.server' or name.startswith(PACKAGE + '.server.') for name in imports):
         errors.append('business module imports application entry point')
+    if not module.startswith(PACKAGE + '.compatibility.'):
+        if any(name == PACKAGE + '.compatibility' or name.startswith(PACKAGE + '.compatibility.') for name in imports):
+            errors.append('business module imports historical default compatibility')
+        if any(name == PACKAGE + '.runtime.default_application' or name.startswith(PACKAGE + '.runtime.default_application.') for name in imports):
+            errors.append('business module imports process-default application')
     return imports, errors
 
 
@@ -81,6 +86,7 @@ def main():
     child, _ = inspect_module('from . import shared', fixture_package + '.child')
     assert cycle_errors({fixture_package: parent, fixture_package + '.child': child})
     for source in ('from .. import server', 'from ..server import app', 'from .service import *',
+                   'from ..compatibility import inspection', 'from ..runtime.default_application import default_application',
                    'register(globals())', 'register(locals())', "locals()['callback']", 'vars(sys.modules[fn.__module__])',
                    'key in locals()', "'chunks' in locals() == True", "'chunks' in globals()"):
         assert inspect_module(source, PACKAGE + '.model_profiles.example')[1], source

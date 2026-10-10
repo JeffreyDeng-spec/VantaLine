@@ -183,7 +183,8 @@ class PresenceInspectionContracts(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from scripts.presence_inspection_test_fixture import presence_inspection_fixture
+        cls.api=presence_inspection_fixture(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):

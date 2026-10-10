@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from fastapi import HTTPException
 from local_inspection_service.pipeline import stage_composition as module
 from smoke_pipeline_query_composition import build as query_graph
@@ -155,7 +156,7 @@ class StageCompositionContracts(unittest.TestCase):
         self.assertEqual(f.owner.pipeline_recommendation_signature({},'samples'),'late')
     def test_source_inverse_preserves_all_business_and_root_functions(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py');source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         restored=restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES)
         self.assertNotIn('_pipeline_stages = PipelineStages',restored)
         restore_plc_domain_root(source)

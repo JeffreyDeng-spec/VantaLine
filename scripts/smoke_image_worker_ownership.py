@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_IMAGE_WORKER_OWNER_BASELINE_SOURCE')
 def create(target, factory):
  if BASELINE:
@@ -45,5 +46,5 @@ class Contracts(unittest.TestCase):
  @unittest.skipIf(bool(BASELINE),'candidate owns process registry')
  def test_registry_isolation_and_entry_state_removed(self):
   other,_=create(Mock(),Mock());self.s.owner.processes['test']=object();self.assertEqual(other.owner.processes,{})
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());assigned={t.id for n in tree.body if isinstance(n,ast.Assign) for t in n.targets if isinstance(t,ast.Name)}|{n.target.id for n in tree.body if isinstance(n,ast.AnnAssign) and isinstance(n.target,ast.Name)};self.assertNotIn('_image_worker_thread',assigned);self.assertNotIn('_image_worker_lock',assigned);self.assertIn('_image_worker_runtime',assigned)
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'));assigned={t.id for n in tree.body if isinstance(n,ast.Assign) for t in n.targets if isinstance(t,ast.Name)}|{n.target.id for n in tree.body if isinstance(n,ast.AnnAssign) and isinstance(n.target,ast.Name)};self.assertNotIn('_image_worker_thread',assigned);self.assertNotIn('_image_worker_lock',assigned);self.assertIn('_image_worker_runtime',assigned)
 if __name__=='__main__':unittest.main()

@@ -21,6 +21,8 @@ from local_inspection_service.text_inspection import beta_comparison as beta
 from local_inspection_service.text_inspection.beta_api import BetaAccess, register
 from local_inspection_service.incoming_text_inspection import TextObservation
 from local_inspection_service import text_compare_beta as comparison_engine
+from local_inspection_service.runtime.wiring import text as text_wiring
+from scripts.incoming_analysis_application_test_ports import assert_default_incoming_analysis,incoming_observer_fixture,read_cell
 ROOT_CHECK='--root' in sys.argv
 if ROOT_CHECK:sys.argv.remove('--root')
 try:import fitz
@@ -274,6 +276,8 @@ class AnalysisContracts(unittest.TestCase):
             self.addCleanup(__import__('shutil').rmtree,directory)
             os.environ.update(LOCAL_INSPECTION_ROOT=directory,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        assert_default_incoming_analysis(self,server)
+        native_observe=server._default_application.text._beta_comparison.observer()
         image=np.zeros((2,2,3),np.uint8)
         for mode in ['plain','switch','missing']:
             with self.subTest(mode=mode):
@@ -283,17 +287,17 @@ class AnalysisContracts(unittest.TestCase):
                     return run
                 a,b,c=callback('A'),callback('B'),callback('C')
                 class Items:
-                    def __bool__(self):events.append('bool');server._ocr_result_mapping=c;return True
+                    def __bool__(self):events.append('bool');text_wiring._ocr_result_mapping=c;return True
                     def __getitem__(self,key):events.append(('item',key));return {}
                 def predict(value):
                     events.append('predict')
-                    if mode!='plain':server._ocr_result_mapping=b if mode=='switch' else None
+                    if mode!='plain':text_wiring._ocr_result_mapping=b if mode=='switch' else None
                     return Items()
                 model=Mock(predict=Mock(side_effect=predict))
-                with patch.object(server,'incoming_text_ocr_engine',return_value=model),patch.object(server,'_ocr_result_mapping',a):
+                with patch.object(server._incoming_ocr_engine,'get',return_value=model),patch.object(text_wiring,'_ocr_result_mapping',a):
                     if mode=='missing':
-                        with self.assertRaises(TypeError):server.incoming_text_ocr_observations(image)
-                    else:self.assertEqual([item.text for item in server.incoming_text_ocr_observations(image)],['A' if mode=='plain' else 'B'])
+                        with self.assertRaises(TypeError):native_observe(image)
+                    else:self.assertEqual([item.text for item in native_observe(image)],['A' if mode=='plain' else 'B'])
                 self.assertEqual(events,['predict','bool',('item',0)]+([] if mode=='missing' else ['A' if mode=='plain' else 'B']))
 
     @unittest.skipUnless(ROOT_CHECK,'use --root for application composition')
@@ -302,13 +306,15 @@ class AnalysisContracts(unittest.TestCase):
             (Path(directory)/'local_inspection_service/static').mkdir(parents=True)
             os.environ.update(LOCAL_INSPECTION_ROOT=directory,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
             from local_inspection_service import server
+            assert_default_incoming_analysis(self,server)
             self.assertIs(server.decode_incoming_reference,analysis.decode_reference);self.assertIs(server._field_observation,analysis.field_observation)
             self.assertIs(server._incoming_text_ocr_lock,server._incoming_ocr_engine.lock)
             self.assertIs(server._text_compare_beta_cache,server._beta_comparison.cache);self.assertIs(server._text_compare_beta_cache_lock,server._beta_comparison.lock)
+            native_corroborate=read_cell(server._default_application.text._incoming_execution.ocr.corroborate,'incoming_text_corroboration_observations').cell_contents
             callback=Mock(return_value=[])
-            with patch.object(server,'incoming_text_ocr_observations',callback):
+            with patch.object(server,'incoming_text_ocr_observations',callback),incoming_observer_fixture(server):
                 self.assertIs(server._beta_comparison.observer(),callback)
-                server.incoming_text_corroboration_observations(np.zeros((20,20,3),np.uint8),[{'field_id':'x','importance':'critical','region_normalized':{'x':0,'y':0,'width':1,'height':1}}])
+                native_corroborate(np.zeros((20,20,3),np.uint8),[{'field_id':'x','importance':'critical','region_normalized':{'x':0,'y':0,'width':1,'height':1}}])
                 callback.assert_called_once()
 
 

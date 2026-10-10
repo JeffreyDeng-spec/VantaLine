@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.accessories import image_composition as composition
 from local_inspection_service.accessories.image_job_metadata import ProvenanceDependencies
 from local_inspection_service.accessories.image_worker_diagnostic_ports import ImageDiagnosticPolicy
@@ -108,7 +109,7 @@ class ImageComposition(unittest.TestCase):
 
     def test_actual_root_contract_rejects_external_and_ownership_alias_mutants(self):
         from accessory_image_test_ports import root_errors
-        original=ast.parse((ROOT/'local_inspection_service/server.py').read_text())
+        original=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         for name,replacement in [('_candidate_store_lock','_image_jobs.worker.lock'),
                                  ('_image_worker_processes','_image_jobs.metadata.processes')]:
             with self.subTest(alias=name):

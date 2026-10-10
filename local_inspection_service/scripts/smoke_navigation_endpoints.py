@@ -2,16 +2,22 @@
 import sys
 import tempfile
 from pathlib import Path
+from contextlib import ExitStack
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server, TestClient, PASSWORD
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="vantaline_navigation_dist_") as directory:
+    with tempfile.TemporaryDirectory(prefix="vantaline_navigation_dist_") as directory, ExitStack() as lifetime:
         dist = Path(directory)
         (dist / "index.html").write_text("<!doctype html><title>navigation fixture</title>", encoding="utf-8")
-        server.REACT_PRODUCTION_DIST_DIR = dist
+        # Patch the actual shell's narrow path supplier; frozen application
+        # settings and compatibility aliases do not own mutable test paths.
+        shell = server._default_application.infrastructure._web_shell
+        original = shell.production_dist
+        lifetime.callback(object.__setattr__, shell, "production_dist", original)
+        object.__setattr__(shell, "production_dist", lambda: dist)
         client = TestClient(server.app, base_url="https://testserver")
         pages = ["/", "/docs", "/workspace", "/workspace/about", "/workspace/text-compare-beta", "/workspace/tasks/pipeline:fixture/inspect", "/login", "/text-compare-beta", "/tasks/pipeline:fixture/inspect"]
         for page in pages:

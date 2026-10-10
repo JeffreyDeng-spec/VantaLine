@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import zipfile
+from unittest.mock import patch
 from pathlib import Path
 
 import cv2
@@ -77,7 +78,8 @@ def login(client: TestClient, username: str) -> None:
     assert_status(response, 200, f"login {username}")
 
 
-def main() -> None:
+def run() -> None:
+    global model_call
     # The browser may label a file image/jpeg purely because its name ends in
     # .jpg. Backend acceptance follows decoded bytes and normalizes readable
     # formats instead of rejecting that mismatch.
@@ -236,10 +238,10 @@ def main() -> None:
     assert_status(same_source_new_business, 200, "same source different business key")
     assert same_source_new_business.json()["id"] != standard["id"]
 
-    original_call = server.call_ai_mcp_tool
+    original_call = model_call
     calls = []
     provider_payload = {"decision": "MATCH", "message": "same", "differences": []} if SMOKE_MODE == "external_only" else {"decision": "DIFFERENCES", "message": "case", "differences": [{"type": "case", "reference_text": "O", "actual_text": "o", "confidence": 0.99, "box": [0.1, 0.2, 0.3, 0.4]}]}
-    server.call_ai_mcp_tool = lambda _tool, call_payload: calls.append(call_payload) or {"ok": True, "parsed": provider_payload, "latency_ms": 5, "provider": "qwen", "model": "qwen-test"}
+    model_call = lambda _tool, call_payload: calls.append(call_payload) or {"ok": True, "parsed": provider_payload, "latency_ms": 5, "provider": "qwen", "model": "qwen-test"}
     try:
         payload = {"standard_asset_id": asset["id"], "comparison_id": "cmp_endpoint_0001"}
         files = {"captured_file": ("capture.jpg", large_picture("MoDEL: PPLBP-2020"), "image/jpeg")}
@@ -283,7 +285,7 @@ def main() -> None:
         assert compatibility.json()["source_upload_sha256"] != compatibility.json()["source_sha256"]
         assert len(calls) == (0 if SMOKE_MODE == "fail_closed" else 2)
     finally:
-        server.call_ai_mcp_tool = original_call
+        model_call = original_call
 
     assert server._text_v2_diagnostic_value(
         {"Authorization": "Bearer secret", "image_url": "data:image/png;base64,AAAA"}
@@ -294,9 +296,10 @@ def main() -> None:
         def info(self, _pattern: str, payload: str) -> None:
             logged.append(payload)
 
-    original_logger = server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER
+    values = server._default_application.values
+    original_logger = values.TEXT_INSPECTION_DIAGNOSTIC_LOGGER
     try:
-        server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER = CaptureLogger()
+        object.__setattr__(values, "TEXT_INSPECTION_DIAGNOSTIC_LOGGER", CaptureLogger())
         server._text_v2_write_server_diagnostic(
             {
                 "id": "ins_log_redaction",
@@ -309,13 +312,13 @@ def main() -> None:
             }
         )
     finally:
-        server.TEXT_INSPECTION_DIAGNOSTIC_LOGGER = original_logger
+        object.__setattr__(values, "TEXT_INSPECTION_DIAGNOSTIC_LOGGER", original_logger)
     assert logged and "Bearer secret" not in logged[0] and "error_message_sha256" in logged[0]
 
     if SMOKE_MODE in {"external_only", "enabled"}:
-        original_call = server.call_ai_mcp_tool
+        original_call = model_call
         try:
-            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+            model_call = lambda *_args, **_kwargs: {
                 "ok": False,
                 "parsed": {},
                 "latency_ms": 10_000,
@@ -356,7 +359,7 @@ def main() -> None:
                     },
                 ],
             }
-            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+            model_call = lambda *_args, **_kwargs: {
                 "ok": True,
                 "parsed": qwen_payload,
                 "latency_ms": 8,
@@ -381,7 +384,7 @@ def main() -> None:
             }]
 
             invalid_payload = {"decision": "MATCH", "differences": [], "message": "same", "unexpected": True}
-            server.call_ai_mcp_tool = lambda *_args, **_kwargs: {
+            model_call = lambda *_args, **_kwargs: {
                 "ok": True,
                 "parsed": invalid_payload,
                 "latency_ms": 7,
@@ -400,7 +403,7 @@ def main() -> None:
             assert "结构不符合约定" in validation_failure_json["diagnostics"]["failure"]["message"]
             assert validation_failure_json["diagnostics"]["provider_result"]["parsed_response"] == invalid_payload
         finally:
-            server.call_ai_mcp_tool = original_call
+            model_call = original_call
 
     if SMOKE_MODE == "fail_closed":
         now = 1_800_000_000
@@ -414,6 +417,17 @@ def main() -> None:
         assert_status(completed, 410, "legacy manual is read-only")
 
     print(f"text inspection v2 endpoint smoke passed: {SMOKE_MODE}")
+
+
+def main() -> None:
+    global model_call
+    dispatch = server._model_tool_dispatch
+    model_call = dispatch.call_ai_mcp_tool
+    def call(receiver, *args, **kwargs):
+        assert receiver is dispatch
+        return model_call(*args, **kwargs)
+    with patch.object(type(dispatch), "call_ai_mcp_tool", autospec=True, side_effect=call):
+        run()
 
 
 if __name__ == "__main__":

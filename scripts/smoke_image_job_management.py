@@ -19,6 +19,7 @@ from fastapi import HTTPException
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_IMAGE_JOB_MANAGEMENT_BASELINE_SOURCE')
 NAMES = ('refresh_codex_image_job', 'public_image_job', 'refreshed_public_codex_jobs_for_record',
          'list_codex_image_jobs', 'apply_codex_image_job_action', 'update_codex_image_job',
@@ -228,7 +229,7 @@ class ManagementContract(unittest.TestCase):
 
     @unittest.skipIf(BASELINE,'Original entry has no extracted assembly')
     def test_root_forwarding_and_all_late_getters(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         assembly=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_image_job_management' for t in n.targets))
         for group in assembly.value.keywords:
             for field in group.value.keywords:

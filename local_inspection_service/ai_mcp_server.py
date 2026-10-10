@@ -7,11 +7,14 @@ from typing import Any
 
 os.environ["INSPECTION_AI_MCP_SERVER_MODE"] = "1"
 
-from local_inspection_service import server as inspection_server  # noqa: E402
+from local_inspection_service.runtime.default_application import default_application  # noqa: E402
+
+tool_definitions = default_application.values.AI_MCP_TOOL_DEFINITIONS
+tool_handlers = default_application.inspection.AI_MCP_TOOL_HANDLERS
 
 
 def json_schema_for_tool(tool_name: str) -> dict[str, Any]:
-    definition = inspection_server.AI_MCP_TOOL_DEFINITIONS.get(tool_name, {})
+    definition = tool_definitions.get(tool_name, {})
     return {
         "type": "object",
         "description": definition.get("description", tool_name),
@@ -21,7 +24,7 @@ def json_schema_for_tool(tool_name: str) -> dict[str, Any]:
 
 def tool_list() -> list[dict[str, Any]]:
     tools = []
-    for tool_name, definition in inspection_server.AI_MCP_TOOL_DEFINITIONS.items():
+    for tool_name, definition in tool_definitions.items():
         tools.append(
             {
                 "name": tool_name,
@@ -85,7 +88,7 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
         if method == "tools/call":
             tool_name = str(params.get("name") or "")
             arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-            handler = inspection_server.AI_MCP_TOOL_HANDLERS.get(tool_name)
+            handler = tool_handlers.get(tool_name)
             if handler is None:
                 return error_response(message_id, -32602, f"Unknown tool: {tool_name}")
             result = handler(arguments)

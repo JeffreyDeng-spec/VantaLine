@@ -159,7 +159,12 @@ class Composition(unittest.TestCase):
         selected = [r for r in server.app.routes if getattr(r,'path',None) in RULE_PATHS and 'POST' in getattr(r,'methods',())]
         self.assertEqual(len(selected), 2)
         self.assertTrue(all(r.endpoint.__self__ is service for r in selected))
-        self.assertIs(service.store.list_trained_model_specs, server.list_trained_model_specs)
+        catalog=server._trained_model_catalog
+        with patch.object(type(catalog),'list_trained_model_specs',autospec=True) as selected_specs:
+            selected_specs.return_value=object()
+            self.assertIs(service.store.list_trained_model_specs(),selected_specs.return_value)
+            selected_specs.assert_called_once_with(catalog,None)
+            self.assertIs(selected_specs.call_args.args[0],catalog)
         self.assertIs(service.access.current_auth_user, server.current_auth_user)
         self.assertIs(server.update_rules.__self__, service)
         self.assertIs(server.update_task_rules.__self__, service)

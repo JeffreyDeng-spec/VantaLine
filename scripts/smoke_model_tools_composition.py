@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.model_providers.tool_composition import (
     ModelTools, JsonProviderCalls, McpRuntimeSelection, AccessoryTools, PresencePreparation,
 )
@@ -49,7 +50,7 @@ def verify_internal_edges(tree):
 class Contracts(unittest.TestCase):
     def test_exact_internal_edges_and_mutation_rejection(self):
         p=Path(__file__).resolve().parents[1]/'local_inspection_service/model_providers/tool_composition.py'
-        source=p.read_text();verify_internal_edges(ast.parse(source))
+        source=read_checked_application_source(p);verify_internal_edges(ast.parse(source))
         mutants=[('lambda: self.client.admission','lambda: self.dispatch.call_ai_mcp_tool'),('lambda: self.handlers','lambda: accessories.handlers'),('lambda: self.dispatch.provider_generate_json_error_payload','lambda: self.dispatch.tool_provider_gemini_generate_json'),('self.presence.tool_vision_inspect_presence','accessories.tool_vision_inspect_presence'),('"provider.gemini.generate_json": self._generate_json','"provider.gemini.generate_json": accessories.profile')]
         for old,new in mutants:
             self.assertEqual(source.count(old),1)
@@ -57,7 +58,7 @@ class Contracts(unittest.TestCase):
 
     def test_parent_root_contract_rejects_wrong_owner_and_supplier(self):
         from smoke_model_tool_dispatch import ToolContract
-        p=Path(__file__).resolve().parents[1]/'local_inspection_service/server.py';source=p.read_text();original=Path.read_text
+        p=Path(__file__).resolve().parents[1]/'local_inspection_service/server.py';source=read_checked_application_source(p);original=Path.read_text
         for old,new in [('_model_tool_dispatch = _model_tools.dispatch','_model_tool_dispatch = _model_tools.presence'),('stdio=lambda: AI_MCP_RUNTIME_STDIO','stdio=lambda: AI_MCP_RUNTIME_IN_PROCESS'),('profile=tool_accessory_profile_generate','profile=tool_accessory_reference_collect')]:
             self.assertEqual(source.count(old),1);mutant=source.replace(old,new)
             def read(path,*a,**k):return mutant if path==p else original(path,*a,**k)

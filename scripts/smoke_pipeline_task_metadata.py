@@ -12,6 +12,7 @@ from typing import Any
 import unittest
 from unittest.mock import Mock,patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PIPELINE_TASK_METADATA_BASELINE_SOURCE')
 NAMES=('pipeline_task_model_id','normalize_pipeline_detection_method','pipeline_method_uses_training','ensure_pipeline_task_accessory_objects','normalize_pipeline_accessory_counts','normalize_pipeline_task_auto_advance_defaults')
 
@@ -83,7 +84,7 @@ class MetadataContract(unittest.TestCase):
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_import(self):
         from application_integration_source_contract import restore_plc_domain_root
-        tree=ast.parse(restore_plc_domain_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_task_metadata' for t in n.targets));count=0
+        tree=ast.parse(restore_plc_domain_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pipeline_task_metadata' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,8)

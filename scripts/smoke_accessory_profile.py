@@ -46,7 +46,8 @@ class AccessoryProfileContracts(unittest.TestCase):
 
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
 
-        cls.api=server
+        from scripts.accessory_projection_test_fixtures import profile_fixture
+        cls.api=profile_fixture(server)
 
     @classmethod
 

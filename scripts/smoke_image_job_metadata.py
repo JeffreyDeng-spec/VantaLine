@@ -21,7 +21,8 @@ class MetadataContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(cls.root), VANTALINE_DATA_STORE='json',
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
-        cls.server = server
+        from scripts.image_job_metadata_test_fixture import image_job_metadata_fixture
+        cls.server = image_job_metadata_fixture(server)
 
     @classmethod
     def tearDownClass(cls):

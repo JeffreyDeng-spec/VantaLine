@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from local_inspection_service.model_profiles.snapshots import freeze_record
+from auto_application_test_methods import auto_method,auto_port
 from auto_optimization_test_ports import test_capability, assert_capability_owner
 BASELINE=os.environ.get('VANTALINE_AUTO_STATE_BASELINE_SOURCE')
 PG_CHECK='--postgres' in sys.argv
@@ -191,8 +192,12 @@ class StateStoreContract(unittest.TestCase):
             for field in fields(port):assert_capability_owner(self, port, field.name, server)
         f=self.fixture(postgres=False)
         with ExitStack() as stack:
-            for name,value in f.bindings.items():
-                if name not in {'auto_optimize_task_path','_read_path_cache'}:stack.enter_context(patch.object(server,name,value))
+            from dataclasses import replace
+            stack.enter_context(auto_port(service,'storage',replace(f.service.storage,
+                auto_optimize_task_path=lambda:service.auto_optimize_task_path)))
+            stack.enter_context(auto_port(service,'policy',f.service.policy))
+            stack.enter_context(auto_port(service,'cache',replace(f.service.cache,
+                _read_path_cache=lambda:server._read_path_cache)))
             state={'task_id':'a','value':1};self.assertIs(server.save_auto_optimize_state(state),state)
             with server.read_path_cache_scope():
                 first=server.load_auto_optimize_state('a')
@@ -204,7 +209,7 @@ class StateStoreContract(unittest.TestCase):
         self.assertIsNone(server._read_path_cache.get())
         for name,args in [('auto_optimize_task_path',('a',)),('load_auto_optimize_state',('a',)),('save_auto_optimize_state',({},)),('list_auto_optimize_states',())]:
             result=object();operation=Mock(return_value=result)
-            with patch.object(server,'_auto_optimization_state_store',SimpleNamespace(**{name:operation})):
+            with auto_method(self,server._auto_optimization_state_store,name,operation):
                 self.assertIs(getattr(server,name)(*args),result);operation.assert_called_once_with(*args)
 
     @unittest.skipUnless(PG_CHECK,'use --postgres with isolated test DSN')

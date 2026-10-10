@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from smoke_application_foundation import inputs as foundation_inputs
 from smoke_repository_composition import Connection
 from smoke_model_configuration_composition import provider_inputs
@@ -197,7 +198,7 @@ class InfrastructureContracts(unittest.TestCase):
     def test_actual_default_source_is_current_and_all_callable_nodes_are_preserved(self):
         import ast
         import application_integration_source_contract as contract
-        source=(contract.ROOT/'local_inspection_service/server.py').read_text()
+        source=read_checked_application_source(contract.ROOT / 'local_inspection_service/server.py')
         current=ast.parse(contract.restore_training_persistence_graph_root(source))
         self.assertEqual(contract.digest(current),contract.INFRASTRUCTURE['integrated_ast_sha256'])
         parent=ast.parse(contract.restore_infrastructure_root(source))

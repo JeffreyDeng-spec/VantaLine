@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from smoke_training_record_store import Fixture, task
 from local_inspection_service.runtime.training_tasks import TrainingTaskRuntime, TrainingRuntimeClosed
 from local_inspection_service.training.record_store import TrainingRows
@@ -79,7 +80,7 @@ def verify_root(source):
 
 class TrainingStateCompositionContracts(unittest.TestCase):
     def test_parent_assembly_and_business_sources(self):
-        verify_root((ROOT/'local_inspection_service/server.py').read_text())
+        verify_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         source=(ROOT/'local_inspection_service/training/state_composition.py').read_text()
         verify_composition(source)
         for name,digest in FIXTURE['business_sha256'].items():
@@ -97,7 +98,7 @@ class TrainingStateCompositionContracts(unittest.TestCase):
             self.assertIn(before,source)
             with self.assertRaises(AssertionError):verify_composition(source.replace(before,after,1))
         with self.assertRaises(AssertionError):verify_composition(source+'\nclass TrainingStateWorkflows: pass\n')
-        root_source=(ROOT/'local_inspection_service/server.py').read_text()
+        root_source=read_checked_application_source(ROOT / 'local_inspection_service/server.py')
         for name in ('TrainingStateWorkflows','_training_state_workflows','_training_records','_training_task_runtime','TrainingRows'):
             with self.subTest(import_shadow=name),self.assertRaises(AssertionError):
                 verify_root(root_source+'\nimport os as '+name+'\n')

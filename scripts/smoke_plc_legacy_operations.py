@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.plc.errors import PlcDispatchStateConflict
 from local_inspection_service.plc_fx_ascii import PlcConfigError
 BASELINE = os.environ.get('VANTALINE_PLC_LEGACY_OPERATIONS_BASELINE_SOURCE')
@@ -19,7 +20,7 @@ NAMES = {'plc_reconcile_pending_dispatches_once', 'plc_capture_poll_once'}
 def build():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
-    for node in ast.parse(source.read_text(encoding='utf-8-sig')).body:
+    for node in ast.parse(read_checked_application_source(source, encoding='utf-8-sig')).body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
             nodes.append(node)
         elif not BASELINE and isinstance(node, ast.ImportFrom) and node.module == 'plc.legacy_operations':
@@ -221,7 +222,7 @@ class LegacyOperationsContract(unittest.TestCase):
             self.assertIs(getattr(self.api, name).__self__, self.api._legacy_plc_operations)
         self.api.load_config.assert_not_called()
         self.assertIsNot(build()._legacy_plc_operations, self.api._legacy_plc_operations)
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text())
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         startup = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'start_plc_runtime_workers')
         self.assertEqual(len(startup.body), 1)
         self.assertEqual(ast.dump(startup.body[0]), ast.dump(ast.Return(value=ast.Constant(value=None))))

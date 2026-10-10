@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_IMAGE_WORKER_DIAGNOSTICS_BASELINE_SOURCE')
 NAMES = ('image_job_is_active', 'codex_log_has_generated_image', 'image_job_output_path', 'image_job_log_path',
          'read_image_worker_log_tail', 'classify_image_worker_failure', 'image_worker_process_alive',
@@ -122,7 +123,7 @@ class ImageDiagnosticsContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE), 'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree = ast.parse((ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
         from accessory_image_test_ports import binding as owner_binding
         binding = owner_binding(ROOT,'diagnostics')
         count = 0

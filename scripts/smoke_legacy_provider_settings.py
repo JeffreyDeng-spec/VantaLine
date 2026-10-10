@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import ExitStack
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path.cwd()))
-from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability, get_provider_capability, provider_capability_target
+from scripts.provider_configuration_test_ports import patch_provider_capability, set_provider_capability, set_provider_capability, get_provider_capability, provider_capability_target
 class LegacyProviderSettingsContracts(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
@@ -103,9 +103,9 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
   class ReplacementError(Exception):pass
   for method,target,default in [(self.api._legacy_ai_detection_settings,self.timeout,self.api.AI_DEFAULT_TIMEOUT_SECONDS),(self.api._legacy_image_generation_settings,self.image_timeout,max(10.0,min(300.0,float(self.api.IMAGE_GENERATION_DEFAULT_TIMEOUT_SECONDS))))]:
    with self.subTest(method=method.__name__):
-    def invalid(value):self.api.HTTPException=ReplacementError;raise ReplacementError('synthetic')
+    def invalid(value):set_provider_capability(self.api, 'HTTPException', ReplacementError);raise ReplacementError('synthetic')
     original=target.side_effect
-    with patch.object(self.api,'HTTPException',self.api.HTTPException):
+    with patch_provider_capability(self.api,'HTTPException',self.api.HTTPException):
      target.side_effect=invalid;result=error=None
      try:result=method()
      except BaseException as caught:error=caught
@@ -124,8 +124,8 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
   class ReplacementError(Exception):pass
   for method in (self.api._legacy_ai_detection_settings,self.api._legacy_image_generation_settings):
    with self.subTest(method=method.__name__):
-    def invalid(value):self.api.HTTPException=ReplacementError;raise ReplacementError('synthetic-base')
-    with patch.object(self.api,'HTTPException',self.api.HTTPException):
+    def invalid(value):set_provider_capability(self.api, 'HTTPException', ReplacementError);raise ReplacementError('synthetic-base')
+    with patch_provider_capability(self.api,'HTTPException',self.api.HTTPException):
      self.base.side_effect=invalid;result=error=None
      try:result=method()
      except BaseException as caught:error=caught
@@ -138,7 +138,9 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
     def load():events.append('load');os.environ={model_env:'after-load'};return self.local
     def proxy(local,provider):events.append('proxy');os.environ={key_env:'after-proxy'};return ('synthetic-proxy','synthetic-source',False)
     self.image_keys=[]
-    with patch.object(os,'environ',{model_env:'before-load'}):
+    from scripts.provider_configuration_test_ports import provider_environment_input
+    domain = 'legacy_json' if method.__name__ == '_legacy_ai_detection_settings' else 'legacy_image'
+    with provider_environment_input(self.api, domain, lambda: os.environ), patch.object(os,'environ',{model_env:'before-load'}):
      self.load.side_effect=load;self.proxy.side_effect=proxy;r=method()
     self.assertEqual(r['model'],'after-load');self.assertEqual(r['api_key'],'after-proxy');self.assertEqual(events,['load','proxy'])
     self.load.side_effect=None;self.proxy.side_effect=None
@@ -212,8 +214,8 @@ class LegacyProviderSettingsContracts(unittest.TestCase):
   def second_id(env,key):events.append(('id2',env));return 'second-id'
   def first_id(env,key):events.append(('id1',env));set_provider_capability(self.api, 'secret_key_item_id', second_id);return 'first-id'
   def second_text(value,limit):events.append(('text2',value));return 'second-text'
-  def first_text(value,limit):events.append(('text1',value));self.api.bounded_text=second_text;return 'first-text'
-  with patch_provider_capability(self.api, 'secret_key_item_id', first_id),patch.object(self.api,'bounded_text',first_text):r=self.api._legacy_ai_detection_settings()
+  def first_text(value,limit):events.append(('text1',value));set_provider_capability(self.api, 'bounded_text', second_text);return 'first-text'
+  with patch_provider_capability(self.api, 'secret_key_item_id', first_id),patch_provider_capability(self.api,'bounded_text',first_text):r=self.api._legacy_ai_detection_settings()
   self.assertEqual([(x['id'],x['label']) for x in r['api_key_candidates']],[('first-id','first-text'),('second-id','second-text')])
   self.assertEqual(events,[('id1','A'),('text1','first'),('id2','B'),('text2','second')])
 

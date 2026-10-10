@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_catalog_application_test_ports import bind_training_background_catalog, assert_default_training_background_catalog
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
@@ -23,10 +24,12 @@ class TrainingBackgroundCatalogContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_background_catalog(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_catalog(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-catalog-')))
         self.directory = self.root / 'backgrounds'; self.sets = self.directory / 'sets'
         self.manifest = self.directory / 'background_sets.json'; self.default = self.directory / 'default.png'

@@ -172,7 +172,8 @@ class OpenAITransportContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root), VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.provider_transport_test_fixture import transport_fixture
+        cls.api = transport_fixture(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -199,6 +200,10 @@ class OpenAITransportContracts(unittest.TestCase):
     def provider(self, bound=False):
         if bound:self.settings['profile_id']='synthetic-profile'
         return self.api.OpenAICompatibleAiProvider(self.settings)
+
+    def test_actual_default_application_transport(self):
+        from scripts.provider_default_transport_contract import assert_default_transport
+        assert_default_transport(self, 'openai')
 
     def test_constructor_retains_settings_and_does_no_io(self):
         p=self.provider(True)

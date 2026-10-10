@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -104,7 +105,7 @@ class LabelMediaRuntimeTests(unittest.TestCase):
             def __call__(self):return None
         provider=Falsey();controller=worker.LabelWorker(Mock(),Mock(),Mock(),runtime_provider=provider)
         self.assertIs(controller.runtime_provider,provider)
-        root=Path(__file__).resolve().parents[1];tree=ast.parse((root/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        root=Path(__file__).resolve().parents[1];tree=ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         call=next(n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='register_label_inspection')
         self.assertEqual(ast.unparse(next(k.value for k in call.keywords if k.arg=='runtime_provider')),'_business_files.runtime_provider')
 

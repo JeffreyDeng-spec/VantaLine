@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException, UploadFile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
@@ -118,7 +119,7 @@ class AccessoryFilePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): cls(**args)
             with self.assertRaises(TypeError): cls(**args, files=None)
             port = Falsey(); self.assertIs(cls(**args, files=port).files, port)
-        root = Path(__file__).resolve().parents[1]; tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8')); found = []
+        root = Path(__file__).resolve().parents[1]; tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8')); found = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {'AccessoryCreation', 'ImageJobMetadata', '_SpriteRenderMetadata'}:
                 if node.func.id == 'ImageJobMetadata' and not node.args:

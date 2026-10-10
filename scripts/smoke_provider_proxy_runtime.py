@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_PROVIDER_PROXY_BASELINE_SOURCE')
 NAMES=('ai_proxy_url_from_environment','local_proxy_available','env_flag_enabled','ai_proxy_url_from_config','ai_urlopen')
 def create(b):
@@ -61,7 +62,7 @@ class Contracts(unittest.TestCase):
   self.b['urllib'].request.ProxyHandler=handler;self.assertEqual(self.s.ai_urlopen(object(),{'proxy_url':'proxy'},timeout=1),'proxied');original.assert_called_once_with('handler')
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
-  tree=ast.parse(restore_infrastructure_root((ROOT/'local_inspection_service/server.py').read_text()));alias=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets))
+  tree=ast.parse(restore_infrastructure_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py')));alias=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_proxy_runtime' for t in n.targets))
   self.assertEqual(ast.unparse(alias),'_provider_configuration.proxy')
   binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_provider_configuration' for t in n.targets));count=0
   for group in [k for k in binding.keywords if k.arg in ('proxy_settings','proxy_calls','proxy_transports')]:

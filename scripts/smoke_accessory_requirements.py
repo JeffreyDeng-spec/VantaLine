@@ -71,7 +71,23 @@ class AccessoryRequirementContracts(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from types import SimpleNamespace
+        from local_inspection_service.accessories.lookup import AccessoryLookup
+        from local_inspection_service.detection.requirements import RequiredAccessories
+        from local_inspection_service.accessories.catalog import AccessorySelection,AccessorySelectionDependencies
+        assert type(server._accessory_lookup) is AccessoryLookup
+        assert type(server._required_accessories) is RequiredAccessories
+        cls.api=SimpleNamespace(accessory_uid=server.accessory_uid,
+            accessory_legacy_uid=server.accessory_legacy_uid,CLASS_LABELS=server.CLASS_LABELS)
+        lookup=AccessoryLookup(lambda item:cls.api.accessory_uid(item),lambda item:cls.api.accessory_legacy_uid(item))
+        required=RequiredAccessories(lambda item:cls.api.accessory_uid(item),lambda:cls.api.CLASS_LABELS)
+        def unused(*args,**kwargs):raise AssertionError('unexpected serialization')
+        selection=AccessorySelection(AccessorySelectionDependencies(
+            lambda:cls.api.accessory_uid,lambda:unused,lambda:cls.api.accessory_lookup_by_id))
+        cls.api.accessory_id_aliases=lookup.accessory_id_aliases
+        cls.api.accessory_lookup_by_id=lookup.accessory_lookup_by_id
+        cls.api.ai_required_accessories=required.ai_required_accessories
+        cls.api.resolve_accessory_id=selection.resolve_accessory_id
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):

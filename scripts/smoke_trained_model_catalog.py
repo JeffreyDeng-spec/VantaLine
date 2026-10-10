@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from model_catalog_test_ports import patch_model, get_model_callback, set_model_callback
+from trained_catalog_application_test_ports import bind_trained_catalog, assert_default_trained_catalog
 
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 PG_CHECK = '--postgres' in sys.argv
@@ -73,12 +74,14 @@ class TrainedCatalogContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_trained_catalog(server)
     @classmethod
     def tearDownClass(cls):
         cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
         directory = self.stack.enter_context(tempfile.TemporaryDirectory(prefix='trained-case-'))
+        bind_trained_catalog(self.api,self.stack)
         self.f = Fixture(Path(directory)); self.f.bind(self.api, self.stack)
         token = self.api._request_user.set(None); self.addCleanup(self.api._request_user.reset, token)
 

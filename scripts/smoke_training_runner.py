@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from training_state_test_ports import patch_training_port, get_training_port, set_training_port
 from local_inspection_service.model_profiles.snapshots import freeze_record
+from scripts.training_runner_application_test_ports import bind_training_runner, assert_default_training_runner
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
@@ -62,6 +63,7 @@ class Fixture:
     def updated(self,job,**values):self.event('update',job,values);self.updates.append(values);return {'job_id':job,**values}
     def save_record(self,task):self.event('save',task);freeze_record(lambda:self.resolver,task);self.saved.append(task)
     def bind(self,api,stack):
+        bind_training_runner(api,stack)
         values={'model_profile_service':self.resolver,'find_training_task':self.find,'training_task_path':self.path,'load_training_task':self.load,
             'update_training_task':self.update,'sync_training_state_from_task':self.sync,'training_executor_mode':self.mode,'resolve_service_path':self.resolve,
             'generate_training_dataset':self.generate,'run_runpod_training_task':self.runpod,'run_remote_training_task':self.remote,
@@ -81,7 +83,8 @@ class TrainingRunnerContracts(unittest.TestCase):
         (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server;cls.original_progress=staticmethod(server.parse_yolo_epoch_progress);cls.original_cli=staticmethod(server.yolo_cli_command)
+        cls.api=server
+        assert_default_training_runner(server);cls.original_progress=staticmethod(server.parse_yolo_epoch_progress);cls.original_cli=staticmethod(server.yolo_cli_command)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):

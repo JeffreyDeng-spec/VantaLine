@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from fastapi import HTTPException
 from local_inspection_service.storage.artifacts.files import BusinessFiles
@@ -73,7 +74,7 @@ class RunPodTransportRuntimeTests(unittest.TestCase):
             with self.assertRaises(TypeError):cls(**kwargs)
             with self.assertRaises(TypeError):cls(**kwargs,runtime_provider=None)
             self.assertIs(cls(**kwargs,runtime_provider=provider).runtime_provider,provider)
-        tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))
         from application_integration_source_contract import verify_actual_compositions
         verify_actual_compositions()
         calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='RunPodFlow']

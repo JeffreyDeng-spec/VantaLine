@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_RESOURCE_NAMES_BASELINE_SOURCE')
 NAMES=('resource_name_key','resource_owner_id_for_new_record','duplicate_name_error','assert_unique_accessory_name','task_record_name','task_matches_excluded_identity','assert_unique_task_name','assert_unique_dataset_name','assert_unique_model_name')
 def create(b):
@@ -61,7 +62,7 @@ class Contracts(unittest.TestCase):
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_wiring_and_import(self):
   import subprocess
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_resource_names' for t in n.targets));count=0
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_resource_names' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,11)

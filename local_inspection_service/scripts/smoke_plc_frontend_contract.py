@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "local_inspection_service" / "frontend" / "src"
+sys.path.insert(0, str(ROOT / "scripts"))
+from canonical_application_source_contract import read_checked_application_source
 
 
 def require(text: str, snippets: dict[str, str]) -> None:
@@ -153,7 +156,7 @@ def main() -> None:
     queries = (FRONTEND / "api" / "queries.ts").read_text(encoding="utf-8")
     types = (FRONTEND / "api" / "types.ts").read_text(encoding="utf-8")
     web_serial = (FRONTEND / "features" / "plc" / "webSerialClient.ts").read_text(encoding="utf-8")
-    server = (ROOT / "local_inspection_service" / "server.py").read_text(encoding="utf-8")
+    server = read_checked_application_source(ROOT / "local_inspection_service" / "server.py", encoding="utf-8")
 
     require(
         rules,

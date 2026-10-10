@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.types import ArtifactConflict, ArtifactUnavailable
@@ -110,7 +111,7 @@ class BackgroundFilePortsTests(unittest.TestCase):
     def test_missing_none_falsey_ports_and_actual_root_bindings(self):
         f=self.graph(0)
         classes={'BackgroundImageFiles','BackgroundManifest','BackgroundWrites','BackgroundSeeding','TrainingBackgroundLibrary','BackgroundUpload','BackgroundCapture'}
-        root=Path(__file__).resolve().parents[1];tree=ast.parse((root/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        root=Path(__file__).resolve().parents[1];tree=ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         found=[]
         for node in ast.walk(tree):
             if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in classes:

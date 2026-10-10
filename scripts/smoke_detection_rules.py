@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.schemas.detection import RuleConfig,TaskRuleConfig
 BASELINE=os.environ.get('VANTALINE_DETECTION_RULES_BASELINE_SOURCE')
 NAMES=('task_rule_overrides','apply_task_rule_override_to_spec','update_rules','update_task_rules')
@@ -73,7 +74,7 @@ class Contracts(unittest.TestCase):
   self.assertIn('one',self.config['task_rules'])
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_assembly(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_rule_requests' for t in n.targets));count=0
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_detection_rule_requests' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Name);self.assertEqual(kw.arg,kw.value.id);count+=1
   self.assertEqual(count,8)

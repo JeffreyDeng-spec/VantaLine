@@ -13,11 +13,15 @@ class AgentStateContracts(unittest.TestCase):
         (Path(cls.root.name)/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        from scripts.agent_state_test_ports import assert_default_state_identifier
+        assert_default_state_identifier(server)
         cls.api=server
     @classmethod
     def tearDownClass(cls):cls.root.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.agent_state_test_ports import bind_state_identifier
+        bind_state_identifier(self.api,self.stack)
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
     def patch(self,name,**kwargs):return self.stack.enter_context(patch_pose_capability(self.api,name,**kwargs))

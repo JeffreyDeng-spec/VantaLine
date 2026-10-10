@@ -44,6 +44,8 @@ class AutoAgentRuntimeContract(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'auto')
 
     @classmethod
     def tearDownClass(cls):
@@ -52,6 +54,8 @@ class AutoAgentRuntimeContract(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'auto')
         self.events = []
         self.task = {"id": "task", "stage": "training", "status": "completed", "orchestration": {"auto_steps": 1}}
         self.inflight = {"task"}

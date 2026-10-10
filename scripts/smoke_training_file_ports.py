@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from fastapi import HTTPException
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from smoke_training_dataset import DatasetFixture
 from local_inspection_service.storage.artifacts.files import BusinessFiles
@@ -136,7 +137,7 @@ class TrainingFilePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): cls(**args, files=None)
             port = Falsey(); self.assertIs(cls(**args, files=port).files, port)
         root = Path(__file__).resolve().parents[1]
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         names = {cls.__name__ for cls in classes}; found = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in names:

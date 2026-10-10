@@ -14,6 +14,7 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.plc.errors import PlcDispatchStateConflict
 BASELINE = os.environ.get('VANTALINE_PLC_DISPATCH_RECORDS_BASELINE_SOURCE')
 NAMES = {'plc_dispatch_audit_records', 'raw_plc_namespace', 'plc_config_audit_snapshot',
@@ -23,7 +24,7 @@ NAMES = {'plc_dispatch_audit_records', 'raw_plc_namespace', 'plc_config_audit_sn
 def build():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
-    for node in ast.parse(source.read_text(encoding='utf-8-sig')).body:
+    for node in ast.parse(read_checked_application_source(source, encoding='utf-8-sig')).body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
             nodes.append(node)
         elif not BASELINE and isinstance(node, ast.ImportFrom) and node.module == 'plc.legacy_records':

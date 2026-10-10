@@ -11,6 +11,7 @@ import types
 import unittest
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.training.auto_optimization_settings import AutoOptimizationSettings,normalize_expected_production_count
 NAMES={'auto_optimize_complexity_rule_recommendation','clamp_auto_optimize_initialization_recommendation','public_auto_optimize_initialization_payload'}
 BASELINE=os.environ.get('VANTALINE_AUTO_RECOMMENDATION_BASELINE_SOURCE')
@@ -104,7 +105,7 @@ class RecommendationContract(unittest.TestCase):
         # Execute the original definition or the actual composition plus wrapper.
         # A mutable mapping makes Python's callee-before-arguments order observable.
         source=Path(BASELINE) if BASELINE else ROOT/'local_inspection_service/server.py'
-        tree=ast.parse(source.read_text(encoding='utf-8-sig'))
+        tree=ast.parse(read_checked_application_source(source, encoding='utf-8-sig'))
         name='clamp_auto_optimize_initialization_recommendation'
         nodes=[node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name==name]
         namespace=dict(Any=Any,AUTO_OPTIMIZE_NEGATIVES_PER_REAL_IMAGE=3,

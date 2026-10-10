@@ -14,6 +14,7 @@ from PIL import Image
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from smoke_text_standards import Fixture, StandardMedia
 from local_inspection_service.storage.artifacts.files import BusinessFiles
@@ -98,7 +99,7 @@ class TextCleanupFilePortsTests(unittest.TestCase):
             calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id==name]
             self.assertEqual(len(calls),1,name)
             return next(k.value for k in calls[0].keywords if k.arg==field)
-        tree=ast.parse((root/'server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(root / 'server.py', encoding='utf-8'))
         media=keyword(tree,'TextStandardWorkflows','media')
         self.assertEqual(ast.dump(next(k.value for k in media.keywords if k.arg=='files')),ast.dump(ast.parse('_business_files',mode='eval').body))
         self.assertEqual(ast.dump(keyword(tree,'TextComparisonWorkflows','files')),ast.dump(ast.parse('_business_files',mode='eval').body))

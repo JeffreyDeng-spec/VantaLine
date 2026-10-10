@@ -13,6 +13,7 @@ from uuid import uuid4
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.agent import pipeline_composition as module
 from local_inspection_service.model_profiles.dependencies import ProfileDependencies
 from local_inspection_service.model_profiles.service import Service
@@ -109,9 +110,10 @@ class AgentCompositionContracts(unittest.TestCase):
         from scripts.verify_backend_contract import capture
         capture()
         from local_inspection_service import server
+        from local_inspection_service.compatibility import training_pipeline as entry
         f=self.a;task=self.task('a')
         with patch.object(server._model_profile_configuration,'service',f.models), \
-             patch.object(server,'_agent_decision_flow',f.owner.decision):
+             patch.object(entry,'_agent_decision_flow',f.owner.decision):
             result=server.agent_pipeline_decide(task,f.queries.config,user_message='public')
         self.assertEqual(result['message_to_user'],'a')
         self.assertEqual([e[0] for e in f.events],['pin-enter','chat','pin-exit'])
@@ -231,7 +233,7 @@ class AgentCompositionContracts(unittest.TestCase):
 
     def test_strict_source_inverse_rejects_owner_or_provider_mutation(self):
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,PIPELINE_TASKS,PIPELINE_STAGES,AGENT_PIPELINE,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py');source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT);source=restore_delta(source,PIPELINE_RUNTIME)
         self.assertEqual(digest(ast.parse(restore_delta(restore_delta(restore_delta(source,PIPELINE_TASKS),PIPELINE_STAGES),AGENT_PIPELINE))),AGENT_PIPELINE['parent_ast_sha256'])
         restore_plc_domain_root(source)
         for old,new in (('_agent_decision_flow = _agent_pipeline_workflows.decision','_agent_decision_flow = _agent_pipeline_workflows.policy'),

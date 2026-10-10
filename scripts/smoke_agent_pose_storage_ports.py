@@ -10,6 +10,7 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
@@ -78,7 +79,7 @@ class AgentPoseStoragePortsTests(unittest.TestCase):
             with self.assertRaises(TypeError): cls(**args)
             with self.assertRaises(TypeError): cls(**args, files=None)
             files = Falsey(); self.assertIs(cls(**args, files=files).files, files)
-        tree = ast.parse(restore_pose_domain_root((Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py').read_text(encoding='utf-8'))); names = {'_' + cls.__name__ for cls in classes}; found = []
+        tree = ast.parse(restore_pose_domain_root(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))); names = {'_' + cls.__name__ for cls in classes}; found = []
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in names:
                 values = [kw.value for kw in node.keywords if kw.arg == 'files']; self.assertEqual(len(values), 1)

@@ -16,6 +16,32 @@ NAMES = {"get_plc_web_serial_workstation", "list_plc_web_serial_workstations",
          "verify_plc_web_serial_workstation_profile"}
 
 
+def build_management_fixture():
+    from canonical_application_source_contract import verify_actual_sources
+    from local_inspection_service.plc.workstation_management import WorkstationManagement
+    from local_inspection_service.plc.workstation_management_ports import (
+        WorkstationAccess, WorkstationErrors, WorkstationMutation, WorkstationProjection)
+    verify_actual_sources()
+    api = types.SimpleNamespace()
+    service = WorkstationManagement(
+        WorkstationAccess(lambda: api.require_permission,
+                          lambda: api.plc_web_serial_station_from_request,
+                          lambda: api.require_plc_web_serial_station),
+        WorkstationProjection(lambda: api.plc_web_serial_station_payload,
+                              lambda: api.plc_web_serial_unpaired_payload,
+                              lambda: api.plc_web_serial_list_workstations),
+        WorkstationMutation(lambda: api.plc_web_serial_pair,
+                            lambda: api.plc_web_serial_update_config,
+                            lambda: api.plc_web_serial_set_verified),
+        WorkstationErrors(lambda: api.PlcConfigError, lambda: api.HTTPException))
+    api.get_plc_web_serial_workstation = service.get
+    api.list_plc_web_serial_workstations = service.list
+    api.pair_plc_web_serial_workstation = service.pair
+    api.update_plc_web_serial_workstation_config = service.update_config
+    api.verify_plc_web_serial_workstation_profile = service.verify_profile
+    return api
+
+
 class ConfigError(Exception):
     pass
 
@@ -53,8 +79,7 @@ class WorkstationManagementContract(unittest.TestCase):
                                     PlcWorkstationVerifyRequest=object)
             exec(compile(ast.Module(body=functions, type_ignores=[]), baseline, "exec"), cls.api.__dict__)
         else:
-            from local_inspection_service import server
-            cls.api = server
+            cls.api = build_management_fixture()
 
     @classmethod
     def tearDownClass(cls):
@@ -82,6 +107,18 @@ class WorkstationManagementContract(unittest.TestCase):
 
     def replace(self, name, value):
         self.stack.enter_context(patch.object(self.api, name, value, create=True))
+
+    def test_actual_http_receivers(self):
+        if os.environ.get("VANTALINE_PLC_MANAGEMENT_BASELINE_SOURCE"):
+            self.skipTest("candidate composition only")
+        from plc_http_test_contract import assert_http_receivers
+        payload = object()
+        assert_http_receivers(self, '_plc_workstation_management', [
+            ('get_plc_web_serial_workstation', 'get', (self.request,)),
+            ('list_plc_web_serial_workstations', 'list', ()),
+            ('pair_plc_web_serial_workstation', 'pair', (self.request, self.response, payload)),
+            ('update_plc_web_serial_workstation_config', 'update_config', (self.request, payload)),
+            ('verify_plc_web_serial_workstation_profile', 'verify_profile', (self.request, payload))])
 
     def test_get_paired_unpaired_and_falsey_station(self):
         self.assertEqual(self.api.get_plc_web_serial_workstation(self.request), {"paired": True})

@@ -10,6 +10,7 @@ from unittest.mock import Mock,patch
 
 sys.path.insert(0,str(Path.cwd()))
 from scripts.agent_pose_test_ports import pose_capability_target
+from scripts.agent_pose_assets_application_test_ports import bind_pose_assets, assert_default_pose_assets
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 class AgentPoseAssetsContracts(unittest.TestCase):
@@ -27,6 +28,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
         from local_inspection_service import server
 
         cls.api=server
+        assert_default_pose_assets(server)
 
     @classmethod
 
@@ -35,6 +37,7 @@ class AgentPoseAssetsContracts(unittest.TestCase):
     def setUp(self):
 
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_pose_assets(self.api,self.stack)
 
         for n in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
 

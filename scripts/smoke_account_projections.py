@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_ACCOUNT_PROJECTIONS_BASELINE_SOURCE')
 NAMES=('merge_scoped_accessory_updates','scope_config_for_user','require_analyze_model_permission','output_path_visible_to_user','redact_status_payload_for_user','redact_config_summary_for_user','redact_accessory_payload_for_user')
 def create(b):
@@ -84,7 +85,7 @@ class Contracts(unittest.TestCase):
  def test_actual_assembly_and_light_import(self):
   import subprocess
   from application_integration_source_contract import restore_account_visibility_root
-  tree=ast.parse(restore_account_visibility_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_account_projections' for t in n.targets));count=0
+  tree=ast.parse(restore_account_visibility_root(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_account_projections' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,14)

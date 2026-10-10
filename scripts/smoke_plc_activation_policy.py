@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get("VANTALINE_PLC_ACTIVATION_BASELINE_SOURCE")
 NAMES = {"plc_pg_coordination_available", "plc_profile_fingerprint", "plc_device_profile_verified",
          "plc_read_profile_verified", "plc_serial_dependency_available", "plc_activation_errors"}
@@ -23,7 +24,7 @@ NAMES = {"plc_pg_coordination_available", "plc_profile_fingerprint", "plc_device
 def build():
     source = Path(BASELINE) if BASELINE else ROOT / "local_inspection_service/server.py"
     nodes = []
-    for node in ast.parse(source.read_text(encoding="utf-8-sig")).body:
+    for node in ast.parse(read_checked_application_source(source, encoding='utf-8-sig')).body:
         if isinstance(node, ast.FunctionDef) and node.name in NAMES:
             nodes.append(node)
         elif not BASELINE and isinstance(node, ast.ImportFrom) and node.module == "plc.legacy_activation":
@@ -179,7 +180,7 @@ class ActivationContract(unittest.TestCase):
             self.assertIs(getattr(self.api, name).__self__, self.api._legacy_plc_activation)
         other = build()
         self.assertIsNot(other._legacy_plc_activation, self.api._legacy_plc_activation)
-        tree = ast.parse((ROOT / "local_inspection_service/server.py").read_text())
+        tree = ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         startup = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "start_plc_runtime_workers")
         self.assertEqual(len(startup.body), 1)
         self.assertIsInstance(startup.body[0], ast.Return)

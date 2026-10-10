@@ -19,6 +19,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'scripts')]
+from canonical_application_source_contract import read_checked_application_source
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -117,7 +118,7 @@ class Contracts(unittest.TestCase):
         process.start(); self.addCleanup(process.stop)
 
     def test_parent_derived_external_ports_aliases_and_registration_positions(self):
-        source = (ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')
+        source = read_checked_application_source(ROOT/'local_inspection_service/server.py',encoding='utf-8')
         fixture = json.loads((ROOT/'tests/backend_contract/text_standard_workflows_ports.json').read_text())
         aliases = {'_text_media':'media','_text_revisions':'revisions','_standard_access':'access',
             '_standard_records':'standard_records','_standard_media':'standard_media',

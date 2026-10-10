@@ -6,6 +6,7 @@ import sys
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import cv2
 import numpy as np
 from PIL import Image
@@ -61,7 +62,7 @@ class WebArtifactCompositionTests(unittest.TestCase):
     def test_required_suppliers_and_entry_binding(self):
         for args in ((None,Mock(),Mock()),(Mock(),None,Mock()),(Mock(),Mock(),None)):
             with self.assertRaises(TypeError):create_artifact_composition(*args)
-        tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))
         assignments={t.id:n.value for n in tree.body if isinstance(n,ast.Assign) for t in n.targets if isinstance(t,ast.Name)}
         expected = {
             '_artifact_composition': 'create_artifact_composition(lambda: os.environ, lambda: cv2, lambda: Image)',

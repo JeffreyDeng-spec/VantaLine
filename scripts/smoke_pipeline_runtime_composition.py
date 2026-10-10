@@ -13,6 +13,7 @@ from typing import get_type_hints
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 POSTGRES='--postgres' in sys.argv
 if POSTGRES:sys.argv.remove('--postgres')
 from local_inspection_service.pipeline import runtime_composition as module
@@ -227,7 +228,7 @@ class RuntimeCompositionContracts(unittest.TestCase):
     def test_runtime_type_hints_and_strict_original_source_inverse(self):
         get_type_hints(module.PipelineRuntimeWorkflows.advance_pipeline_task)
         from application_integration_source_contract import ROOT,CODEX_ENVIRONMENT,PIPELINE_RUNTIME,digest,restore_delta,restore_plc_domain_root
-        source=(ROOT/'local_inspection_service/server.py').read_text();source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT)
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py');source=restore_pose_domain_root(source);source=restore_delta(source,CODEX_ENVIRONMENT)
         self.assertEqual(digest(ast.parse(restore_delta(source,PIPELINE_RUNTIME))),PIPELINE_RUNTIME['parent_ast_sha256'])
         restore_plc_domain_root(source)
 

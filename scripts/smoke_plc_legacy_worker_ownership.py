@@ -146,7 +146,18 @@ class Contracts(unittest.TestCase):
             self.assertIs(getattr(server,name).__self__,owner)
             self.assertFalse(hasattr(server,'_plc_'+part+'_thread'))
         before=len(self.created);self.assertIsNone(server.start_plc_runtime_workers());self.assertEqual(len(self.created),before)
-        self.assertEqual(server.app.router.on_startup.count(server.start_plc_runtime_workers),1)
+        from canonical_application_source_contract import verify_actual_sources
+        verify_actual_sources()
+        hooks = [hook for hook in server.app.router.on_startup
+                 if hook.__name__ == 'start_plc_runtime_workers']
+        self.assertEqual(len(hooks), 1)
+        from inspect import unwrap
+        native = unwrap(hooks[0])
+        self.assertIsNot(native, hooks[0])
+        self.assertIs(native, server._default_application.http.start_plc_runtime_workers)
+        self.assertIs(server.start_plc_runtime_workers, native)
+        self.assertIsNone(native())
+        self.assertEqual(len(self.created), before)
 
 
 if __name__=='__main__':unittest.main()

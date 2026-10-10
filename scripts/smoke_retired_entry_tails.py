@@ -15,13 +15,14 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from fastapi.testclient import TestClient
+from canonical_application_source_contract import restore_canonical_root
 
 
 def main():
     frozen = (ROOT/'tests/backend_contract/retired_entry_baseline.py').read_bytes().replace(b'\r\n', b'\n')
     assert hashlib.sha256(frozen).hexdigest() == '8060e25e115ec936e9894af8c1e2d48a3694d3dc57704798212e92dd36af7eff'
     old_nodes = {n.name:n for n in ast.parse(frozen).body if isinstance(n,ast.FunctionDef)}
-    source = ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+    source = ast.parse(restore_canonical_root((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')))
     new_nodes = {n.name:n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in old_nodes}
     assert len(old_nodes) == len(new_nodes) == 7
     def compile_nodes(nodes, namespace):
@@ -78,7 +79,12 @@ def main():
             # The only compiler difference is allocating never-read closure cells.
             for code in (left,right):
                 assert not any('DEREF' in i.opname or i.opname in {'LOAD_CLOSURE','MAKE_FUNCTION'} or (i.opname=='LOAD_GLOBAL' and i.argval in {'locals','globals','vars'}) for i in dis.get_instructions(code))
-        assert server.stream_plc_capture_events.__code__.co_flags == (candidate['stream_plc_capture_events'].__code__.co_flags & ~__future__.annotations.compiler_flag)
+        # The route is now nested in its native registration factory and owns
+        # its closure. Preserve executable flags, including async/generator
+        # behavior; only source annotation and lexical ownership flags differ.
+        lexical_flags = (__future__.annotations.compiler_flag | inspect.CO_NESTED |
+                         getattr(inspect, 'CO_NOFREE', 0))
+        assert (server.stream_plc_capture_events.__code__.co_flags & ~lexical_flags) == (candidate['stream_plc_capture_events'].__code__.co_flags & ~lexical_flags)
         clients=[TestClient(server.app,base_url='https://testserver') for _ in range(3)]
         anonymous,admin,member=clients
         try:

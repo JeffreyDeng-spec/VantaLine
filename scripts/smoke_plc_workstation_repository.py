@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 NAMES = {"_plc_web_serial_empty_state", "_plc_web_serial_load_local", "_plc_web_serial_save_local",
          "_plc_web_serial_record", "_plc_workstation_row", "_plc_workstation_lease_row",
          "_plc_web_serial_dispatch_row", "_plc_web_serial_upsert_row", "_plc_web_serial_mutate"}
@@ -27,7 +28,7 @@ class ConfigError(Exception):
 def load_target():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
-    raw = source.read_text(encoding="utf-8-sig")
+    raw = read_checked_application_source(source, encoding='utf-8-sig')
     if not BASELINE:
         from application_integration_source_contract import restore_plc_domain_root
         raw = restore_plc_domain_root(raw)

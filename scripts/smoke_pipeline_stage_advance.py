@@ -49,6 +49,8 @@ class StageAdvanceContract(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'stage')
 
     @classmethod
     def tearDownClass(cls):
@@ -57,6 +59,8 @@ class StageAdvanceContract(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'stage')
         self.events = []
         self.task = {"id": "task", "stage": "draft", "status": "pending", "accessory_ids": ["a"], "params": {}}
         self.cancel = threading.Event()

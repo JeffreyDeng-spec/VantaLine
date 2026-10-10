@@ -13,6 +13,7 @@ from unittest.mock import Mock, call, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_preview_application_test_ports import bind_training_preview, assert_default_training_preview
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
 
@@ -111,12 +112,14 @@ class PreviewWorkflowContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_preview(server)
 
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_preview(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='preview-workflow-')))
         self.f = PreviewWorkflowFixture(self.api, self.root).install(self.stack)
         for target in ['requests.request', 'subprocess.Popen', 'os.kill']:

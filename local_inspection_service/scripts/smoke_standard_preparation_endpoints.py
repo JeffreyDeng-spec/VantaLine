@@ -3,17 +3,21 @@ import copy
 import json
 import os
 import time
+from contextlib import ExitStack
+from unittest.mock import patch
+
+os.environ["VANTALINE_TEXT_INSPECTION_EXTERNAL_VLM_ENABLED"] = "true"
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server, TestClient, PASSWORD, assert_status, docx
 from local_inspection_service.scripts.smoke_standard_preparation import fixture
 from local_inspection_service.standard_preparation import png
 
 
-def main():
+def run():
+    global model_settings, model_call
     admin = TestClient(server.app, base_url="https://testserver")
     owner = admin.post("/api/auth/bootstrap", json=dict(username="admin", password=PASSWORD)).json()["user"]["id"]
     os.environ["VANTALINE_STANDARD_PREPARATION_ACCOUNTS"] = owner
-    server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED = True
-    server.ai_detection_settings = lambda *args: dict(configured=True, provider="qwen", model="fixture", api_key="private-fixture")
+    model_settings = lambda *args: dict(configured=True, provider="qwen", model="fixture", api_key="private-fixture")
     image, elements = fixture()
     calls = []
     recovery_mode = os.environ.get("PREPARATION_TEST_RECOVERY")
@@ -43,7 +47,7 @@ def main():
         assert any(a.get("preparation_attempt", {}).get("state") == "classifying" for a in server._text_v2_load("assets"))
         calls.append(1)
         return dict(ok=True, parsed=dict(kind="label_design", coverage_complete=os.environ.get("PREPARATION_TEST_INCOMPLETE") != "1", missing_regions=[region] if recovery_mode else [], reason="fixture", elements=[{k: e[k] for k in ("id", "state", "reason")} for e in initial]))
-    server.call_ai_mcp_tool = provider
+    model_call = provider
     response = admin.post("/api/text-inspection/standards/import", data=dict(name="fixture", material_code="fixture", version_label="1"), files={"file": ("test.docx", docx())})
     assert_status(response, 200, "import")
     standard = response.json(); identity = standard["id"]; asset = standard["assets"][0]
@@ -120,7 +124,7 @@ def main():
     if qwen_mode:
         from local_inspection_service import qwen_evidence_jobs as qj
         os.environ["VANTALINE_QWEN_OCR_ACCOUNTS"] = owner
-        server.ai_detection_settings = lambda *args: dict(provider="qwen", model="qwen-vl-ocr-2025-11-20" if args and args[0] == "ocr" else "fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
+        model_settings = lambda *args: dict(provider="qwen", model="qwen-vl-ocr-2025-11-20" if args and args[0] == "ocr" else "fixture", api_key="private-fixture", base_url="https://dashscope.aliyuncs.com")
         original_standard = copy.deepcopy(server._text_v2_owned("standards", standard["id"], owner))
         unprepared = copy.deepcopy(original_standard)
         for snapshot in unprepared["confirmed_assets"]:
@@ -281,6 +285,23 @@ def main():
     assert legacy["decision"]=="REVIEW_REQUIRED" and legacy["diagnostics"]["phase"]=="unsupported_template"
     assert len(writes)==1,"legacy empty worker terminates before OCR or slots"
     print("preparation routes/auth/version/dedup/manual/graphics: PASS")
+
+
+def main():
+    configuration = server._model_profile_configuration
+    dispatch = server._model_tool_dispatch
+    original_observe = server.standard_preparation_jobs.observe
+    def settings(receiver, *args, **kwargs):
+        assert receiver is configuration
+        return model_settings(*args, **kwargs)
+    def call(receiver, *args, **kwargs):
+        assert receiver is dispatch
+        return model_call(*args, **kwargs)
+    with ExitStack() as lifetime:
+        lifetime.callback(setattr, server.standard_preparation_jobs, "observe", original_observe)
+        lifetime.enter_context(patch.object(type(configuration), "ai_detection_settings", autospec=True, side_effect=settings))
+        lifetime.enter_context(patch.object(type(dispatch), "call_ai_mcp_tool", autospec=True, side_effect=call))
+        run()
 
 
 if __name__ == "__main__": main()

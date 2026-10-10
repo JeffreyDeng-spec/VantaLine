@@ -279,8 +279,8 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         "diagnostic requires system settings permission",
     )
 
-    original_analyze = server.analyze_bgr
-    server.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {
+    original_analyze = server._detection_analysis.analyze_bgr
+    server._detection_analysis.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {
         "request_id": request_id,
         "passed": True,
         "rule": {"passed": True},
@@ -295,7 +295,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
             files={"file": ("camera.png", TINY_PNG, "image/png")},
         )
     finally:
-        server.analyze_bgr = original_analyze
+        server._detection_analysis.analyze_bgr = original_analyze
     assert_status(ordinary, 200, "ordinary image")
     assert "plc_sync" not in ordinary.json()
     assert_status(camera, 200, "camera image")
@@ -320,8 +320,8 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         409,
         "model rebind rejected while camera dispatch is reserved",
     )
-    original_analyze = server.analyze_bgr
-    server.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {"request_id": request_id, "passed": False, "detections": []}
+    original_analyze = server._detection_analysis.analyze_bgr
+    server._detection_analysis.analyze_bgr = lambda _image, request_id, _model_id=None, **_kwargs: {"request_id": request_id, "passed": False, "detections": []}
     try:
         second_camera = client.post(
             "/api/analyze/camera",
@@ -329,7 +329,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
             files={"file": ("camera-2.png", TINY_PNG, "image/png")},
         )
     finally:
-        server.analyze_bgr = original_analyze
+        server._detection_analysis.analyze_bgr = original_analyze
     assert_status(second_camera, 409, "second camera rejected while station is reserved")
 
     attempt = client.post(

@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 from fastapi import FastAPI, HTTPException
 from local_inspection_service.schemas.training import TrainingStartRequest
 from local_inspection_service.storage.artifacts.files import BusinessFiles
@@ -227,7 +228,8 @@ class Contracts(unittest.TestCase):
 
     def test_default_graph_and_ordered_parent_entry_contract(self):
         import application_integration_source_contract as contract
-        source=(contract.ROOT/'local_inspection_service/server.py').read_text()
+        from canonical_application_source_contract import restore_canonical_root
+        source=restore_canonical_root(read_checked_application_source(contract.ROOT / 'local_inspection_service/server.py'))
         self.assertEqual(contract.digest(ast.parse(source)),contract.REAL_PHOTO_WORKFLOWS['integrated_ast_sha256'])
         parent=ast.parse(contract.restore_real_photo_workflows_root(source))
         self.assertEqual(contract.digest(parent),contract.PROVIDER_TRANSPORTS['integrated_ast_sha256'])

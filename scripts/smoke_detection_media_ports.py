@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 from fastapi import UploadFile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.detection.image_encoding import ImageEncoding
 from local_inspection_service.detection.inspection_image_store import InspectionImageStore
@@ -152,7 +153,7 @@ class DetectionMediaPortsTests(unittest.TestCase):
                 if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name): continue
                 self.assertNotIn(node.func.id, {'BusinessFiles', 'get_runtime'}, str(path))
                 if node.func.id == 'image_backend': self.assertEqual(sum(k.arg == 'runtime_provider' for k in node.keywords), 1, str(path))
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         for name, key, expected in [('_image_encoding', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
             ('_inspection_image_store', 'runtime_provider', 'lambda: _business_files.runtime_provider()'),
             ('_reference_sheet', 'files', 'lambda: _business_files'), ('_model_catalog', 'files', '_business_files'), ('_video_upload', 'files', '_business_files')]:
@@ -180,7 +181,7 @@ class DetectionMediaPortsTests(unittest.TestCase):
 
     def test_actual_root_object_and_supplier_binding_difference(self):
         root = Path(__file__).resolve().parents[1]
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         first, second = BusinessFiles(lambda: self.runtimes[0]), BusinessFiles(lambda: self.runtimes[1])
         for name, key, lazy in [('_model_catalog', 'files', False), ('_video_upload', 'files', False),
                                ('_reference_sheet', 'files', True), ('_image_encoding', 'runtime_provider', True),

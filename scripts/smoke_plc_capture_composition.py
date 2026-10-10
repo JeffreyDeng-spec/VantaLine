@@ -7,6 +7,7 @@ import unittest
 POSTGRES = "--postgres" in sys.argv
 if POSTGRES: sys.argv.remove("--postgres")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_plc_capture_state as baseline
 from local_inspection_service.plc.capture_composition import PlcCaptureWorkflows, CaptureStorage, CapturePolicy
 from local_inspection_service.plc.legacy_coordination import LegacyCoordinationPolicy
@@ -71,7 +72,7 @@ class ActualCaptureContract(baseline.CaptureContract):
 
     def test_strict_root_inverse_and_no_capture_startup_enablement(self):
         root=Path(__file__).resolve().parents[1]
-        source=(root/'local_inspection_service/server.py').read_text(encoding='utf-8-sig')
+        source=read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8-sig')
         restored=restore_plc_domain_root(source)
         self.assertNotEqual(digest(ast.parse(source)), digest(ast.parse(restored)))
         with self.assertRaises(AssertionError):

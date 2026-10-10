@@ -147,6 +147,8 @@ def restore_pose_domain_root(source):
 
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
+    from canonical_application_source_contract import restore_canonical_root
+    source = restore_canonical_root(source)
     fixture = REAL_PHOTO_WORKFLOWS
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert digest(ast.parse((ROOT / path).read_text())) == expected, path

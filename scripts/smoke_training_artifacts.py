@@ -21,6 +21,7 @@ PIL_IMAGE_OPEN = Image.open
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.storage.artifacts.runtime import get_runtime
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.training_artifacts_application_test_ports import bind_training_artifacts, assert_default_training_artifacts
 
 
 class ArtifactContracts(unittest.TestCase):
@@ -35,6 +36,7 @@ class ArtifactContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_artifacts(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -44,6 +46,7 @@ class ArtifactContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        bind_training_artifacts(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-artifacts-'))).resolve()
         self.output_root = self.root / 'outputs'
         self.output_root.mkdir()

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.training import workflow_composition as composition
 from local_inspection_service.training import core_composition, execution_composition
 from local_inspection_service.runtime.training_tasks import TrainingThreadLifecycle, TrainingRuntimeClosed
@@ -178,7 +179,7 @@ def assemble(test, account):
 
 class Contracts(unittest.TestCase):
     def test_parent_root_wiring_and_actual_composition_mutants(self):
-        source = (ROOT / 'local_inspection_service/server.py').read_text()
+        source = read_checked_application_source(ROOT / 'local_inspection_service/server.py')
         verify_source(source)
         for old, new in [('_auto_optimization_workflows.core', '_auto_optimization_workflows.execution'), ('shadow_resolver=resolve_model_profiles,', 'shadow_resolver=lambda: None,'), ('from .training.workflow_composition import', 'from training.workflow_composition import')]:
             self.assertIn(old, source)

@@ -525,6 +525,10 @@ class SubmissionContracts(unittest.TestCase):
         (Path(os.environ['LOCAL_INSPECTION_ROOT'])/'local_inspection_service/static').mkdir(parents=True)
         from local_inspection_service import server
         from local_inspection_service.text_inspection import comparison_composition
+        from local_inspection_service.runtime.wiring import text as text_wiring
+        from local_inspection_service.text_inspection.comparison_ports import ComparisonModels
+        from scripts.text_application_test_ports import text_value, assert_prepared_comparison_defaults
+        assert_prepared_comparison_defaults(self, server)
         captures=[]
         names=['_text_v2_load','_text_v2_save','_text_v2_owned','_text_v2_update_attempt','_text_v2_public','_text_v2_media_path','_text_v2_write','sha256_bytes','ai_detection_settings','record_model_call','clear_thread_runtime_repository_selection']
         first={name:Mock(name='first-'+name) for name in names};second={name:Mock(name='second-'+name) for name in names}
@@ -537,10 +541,12 @@ class SubmissionContracts(unittest.TestCase):
                     ('load','_text_v2_load'),('save','_text_v2_save'),('owned','_text_v2_owned'),
                     ('update_attempt','_text_v2_update_attempt'),('media_path','_text_v2_media_path'),
                     ('write','_text_v2_write')]}
-                external={name:callbacks[name] for name in ['_text_v2_public','sha256_bytes',
-                    'ai_detection_settings','record_model_call','clear_thread_runtime_repository_selection']}
+                external={name:callbacks[name] for name in ['_text_v2_public','sha256_bytes']}
                 with patch.multiple(server._text_standards,**methods,preparation=jobs), \
-                        patch.multiple(server,**external,TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=flag,os=environment):
+                        patch.multiple(text_wiring,**external,os=environment), \
+                        text_value(server._default_application.values,'TEXT_INSPECTION_EXTERNAL_VLM_ENABLED',flag), \
+                        patch.object(server._text_comparisons,'prepared_models',lambda:ComparisonModels(callbacks['ai_detection_settings'],flag,callbacks['record_model_call'])), \
+                        patch.object(server._text_comparisons,'prepared_cleanup',lambda:callbacks['clear_thread_runtime_repository_selection']):
                     server._submit_prepared_text_comparison('owner','name',{}, {}, {},b'upload','request',None)
         a,b=captures;self.assertIs(a[0].load,first['_text_v2_load']);self.assertIs(b[0].load,second['_text_v2_load'])
         for captured,callbacks,jobs,flag in [(a,first,first_jobs,True),(b,second,second_jobs,False)]:

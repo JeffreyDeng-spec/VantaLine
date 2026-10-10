@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 from fastapi import UploadFile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_artifact_storage as storage_fixture
 from smoke_detection_analysis import AnalysisFixture
 from local_inspection_service.detection.image_upload import ImageUpload
@@ -222,7 +223,7 @@ class DetectionArtifactPortsTests(unittest.TestCase):
 
     def test_actual_entry_suppliers_are_explicit_and_late_bound(self):
         root = Path(__file__).resolve().parents[1]
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         from application_integration_source_contract import verify_actual_compositions
         verify_actual_compositions()
         assignments = {target.id:node.value for node in tree.body if isinstance(node,ast.Assign)

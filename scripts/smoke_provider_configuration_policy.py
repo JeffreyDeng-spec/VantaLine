@@ -12,13 +12,18 @@ class ProviderConfigurationPolicyContracts(unittest.TestCase):
   (Path(cls.tmp.name)/'local_inspection_service/static').mkdir(parents=True)
   os.environ.update(LOCAL_INSPECTION_ROOT=cls.tmp.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
   from local_inspection_service import server
-  cls.api=server
+  from scripts.provider_policy_test_fixture import policy_fixture
+  cls.api=policy_fixture(server)
  @classmethod
  def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
  def setUp(self):
   self.stack=ExitStack();self.addCleanup(self.stack.close)
   for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
    self.stack.enter_context(patch(name,side_effect=AssertionError('external operation forbidden')))
+ def test_actual_default_policy_inputs(self):
+  from local_inspection_service import server
+  from scripts.provider_policy_test_fixture import assert_default_policy_inputs
+  assert_default_policy_inputs(self, server)
  def test_json_defaults_known_unknown_and_empty(self):
   with patch.object(self.api,'AI_DEFAULT_MODELS',{'known':'known-model'}),patch.object(self.api,'AI_DEFAULT_MODEL','default-model'),patch.object(self.api,'AI_DEFAULT_PROVIDER','default'),patch.object(self.api,'AI_DEFAULT_BASE_URLS',{'known':'known-base','default':'default-base'}),patch.object(self.api,'AI_PROVIDER_LABELS',{'known':'known-label'}):
    self.assertEqual([self.api.default_ai_model(v) for v in ('known','unknown','')],['known-model','default-model','default-model'])

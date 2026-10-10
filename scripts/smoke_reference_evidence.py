@@ -25,7 +25,8 @@ class ReferenceEvidenceContracts(unittest.TestCase):
         cls.lifetime.enter_context(patch.dict(sys.modules,{'rembg':SimpleNamespace(new_session=cls.import_factory,remove=cls.import_remove)}))
         from local_inspection_service import server
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
-        cls.api=server
+        from scripts.reference_evidence_test_fixture import reference_evidence_fixture
+        cls.api=reference_evidence_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):

@@ -21,7 +21,68 @@ class AgentInvocationContracts(unittest.TestCase):
         (Path(cls.root.name)/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name,VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from types import SimpleNamespace
+        from local_inspection_service.agent import invocation_ports as p
+        from local_inspection_service.agent.protocol_policy import AgentProtocolPolicy
+        from local_inspection_service.agent.chat_transport import AgentChatTransport
+        from local_inspection_service.agent.connection_discovery import AgentConnectionDiscovery
+        from local_inspection_service.agent.recommendation import AgentRecommendation
+        # The fixture substitutes explicit native capabilities, retaining the
+        # real protocol, HTTP, discovery and recommendation implementations.
+        api = SimpleNamespace(urllib=server.urllib, json=server.json, re=server.re,
+            base64=server.base64, HTTPException=server.HTTPException,
+            _request_user=server._request_user,
+            _provider_configuration=server._provider_configuration,
+            _provider_transports=server._provider_transports,
+            _openai_profile_resolver=server._openai_profile_resolver,
+            generate_provider_json_with_fallback=server.generate_provider_json_with_fallback,
+            ai_settings_match_runtime=server.ai_settings_match_runtime,
+            bounded_text=server.bounded_text, load_agent_config=server.load_agent_config,
+            normalize_agent_provider=server.normalize_agent_provider,
+            is_cursor_base_url=server.is_cursor_base_url,
+            agent_required_fields_present=server.agent_required_fields_present,
+            agent_connected=server.agent_connected,
+            agent_recommendation_supported=server.agent_recommendation_supported,
+            agent_model_options_from_items=server.agent_model_options_from_items,
+            load_config=server.load_config, selected_accessories=server.selected_accessories,
+            accessory_material_type=server.accessory_material_type,
+            selected_background_set_id=server.selected_background_set_id)
+        settings = p.AgentInvocationSettings(lambda: api.load_agent_config,
+            lambda: api.normalize_agent_provider, lambda: server.AGENT_PROVIDER_OPENAI_COMPATIBLE,
+            lambda: server.AGENT_PROVIDER_CURSOR, lambda: server.AGENT_CURSOR_RECOMMENDATION_MESSAGE,
+            lambda: api.is_cursor_base_url, lambda: api.agent_required_fields_present,
+            lambda: api.agent_connected, lambda: api.agent_recommendation_supported)
+        codec = p.AgentInvocationCodec(lambda: api.json.loads, lambda: api.json.dumps)
+        http = p.AgentHttpIO(lambda: api.urllib.request.Request, lambda: api.urllib.request.urlopen,
+            lambda: api.urllib.error.HTTPError, lambda: api.urllib.error.URLError,
+            lambda: api.agent_http_error_message, lambda: api.bounded_text)
+        protocol = AgentProtocolPolicy(p.AgentProtocolRuntime(lambda: api.base64.b64encode,
+            lambda: server.AGENT_CURSOR_DEFAULT_BASE_URL))
+        chat = AgentChatTransport(settings, http, codec, p.AgentChatCalls(
+            lambda: api.openai_compatible_chat_url, lambda: api.agent_openai_chat_completion,
+            lambda: api.generate_provider_json_with_fallback))
+        discovery = AgentConnectionDiscovery(settings, http, codec, p.AgentModelCalls(
+            lambda: api.openai_compatible_models_url, lambda: api.cursor_auth_headers,
+            lambda: api.cursor_api_url, lambda: api.agent_model_options_from_items,
+            lambda: api.cursor_model_available, lambda: api.fetch_openai_compatible_model_options,
+            lambda: api.test_cursor_agent_connection, lambda: api.test_openai_agent_connection,
+            lambda: api.agent_openai_chat_completion))
+        recommendation = AgentRecommendation(settings, codec, p.AgentResponseParsing(
+            lambda: api.re.sub, lambda: api.re.search, lambda: api.re.DOTALL),
+            p.AgentRecommendationInputs(lambda: api.load_config, lambda: api.selected_accessories,
+                lambda: api.accessory_material_type, lambda: api.selected_background_set_id,
+                lambda: api._request_user.get, lambda: api.HTTPException),
+            p.AgentRecommendationCalls(lambda: api.rule_recommendation, lambda: api.agent_chat_completion,
+                lambda: api.parse_agent_json, lambda: api.clamp_recommend_params))
+        for owner, names in ((protocol, ('openai_compatible_chat_url', 'openai_compatible_models_url',
+                'cursor_auth_headers', 'cursor_api_url', 'cursor_model_available')),
+            (chat, ('agent_http_error_message', 'agent_openai_chat_completion', 'agent_chat_completion')),
+            (discovery, ('fetch_openai_compatible_model_options', 'test_cursor_agent_connection',
+                'test_openai_agent_connection', 'test_agent_connection')),
+            (recommendation, ('parse_agent_json', 'rule_recommendation', 'clamp_recommend_params', 'agent_recommendation'))):
+            for name in names:
+                setattr(api, name, getattr(owner, name))
+        cls.api=api
     @classmethod
     def tearDownClass(cls):
         cls.root.cleanup();cls.environment.stop()

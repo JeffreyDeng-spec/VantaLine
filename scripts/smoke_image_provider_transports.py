@@ -158,7 +158,33 @@ class ImageProviderContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from dataclasses import replace
+        from local_inspection_service.model_providers.image_ports import ImageTransportIO, ImageTransportErrors
+        from local_inspection_service.model_providers.transport_composition import ProviderTransports
+        # Exercise the native transport composition with explicit, replaceable
+        # capabilities. Reassigning the compatibility entry cannot redirect it.
+        api = SimpleNamespace(requests=server.requests, time=server.time,
+            bounded_text=server.bounded_text, decode_b64_image=server.decode_b64_image,
+            masked_url_for_status=server.masked_url_for_status, ai_urlopen=server.ai_urlopen,
+            AiProviderError=server.AiProviderError, AiProviderAuthError=server.AiProviderAuthError,
+            AiProviderOverloaded=server.AiProviderOverloaded, AiProviderConfigError=server.AiProviderConfigError,
+            AiProviderTimeout=server.AiProviderTimeout, model_profile_service=None)
+        image_io = ImageTransportIO(lambda: api.ai_urlopen, lambda: api.bounded_text,
+            lambda: api.decode_b64_image, lambda: api.masked_url_for_status, lambda: api.requests.get)
+        image_errors = ImageTransportErrors(lambda: api.AiProviderConfigError,
+            lambda: api.AiProviderTimeout, lambda: api.AiProviderError,
+            lambda: api.AiProviderAuthError, lambda: api.AiProviderOverloaded,
+            lambda: api.requests.RequestException)
+        inputs = replace(server._provider_transports.inputs,
+            image_io=lambda: image_io, image_errors=lambda: image_errors,
+            agnes_image_size=lambda: os.environ.get('VANTALINE_AGNES_IMAGE_SIZE', '1024x1024'),
+            qwen_image_size=lambda: os.environ.get('VANTALINE_QWEN_IMAGE_SIZE', '1024*1024'))
+        api.resolve_model_profiles = lambda: api.model_profile_service
+        api._provider_transports = ProviderTransports(inputs,
+            api.resolve_model_profiles, cache_ttl_seconds=server.AI_PROFILE_CACHE_TTL_SECONDS)
+        api.AgnesImageProvider = api._provider_transports.agnes
+        api.QwenImageProvider = api._provider_transports.qwen
+        cls.api=api
 
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()

@@ -8,6 +8,7 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from fastapi import HTTPException
 from local_inspection_service.text_inspection.media import TextMedia, TextMediaRecords
@@ -67,7 +68,7 @@ class TextMediaRuntimeTests(unittest.TestCase):
         with self.assertRaises(TypeError):TextMedia(*args)
         with self.assertRaises(TypeError):TextMedia(*args,runtime_provider=None)
         provider=Falsey();self.assertIs(TextMedia(*args,runtime_provider=provider).runtime_provider,provider)
-        tree=ast.parse((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree=ast.parse(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8'))
         assign=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_text_media' for t in n.targets))
         from application_integration_source_contract import verify_actual_compositions
         verify_actual_compositions()

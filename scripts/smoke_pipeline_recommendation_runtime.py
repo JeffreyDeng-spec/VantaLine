@@ -45,6 +45,8 @@ class RecommendationRuntimeContract(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'recommendation')
 
     @classmethod
     def tearDownClass(cls):
@@ -53,6 +55,8 @@ class RecommendationRuntimeContract(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'recommendation')
         self.events = []
         self.task = {"id": "task", "accessory_ids": [1, "two"], "params": {"sample_count": "4"}}
         self.inflight = {"task|samples"}

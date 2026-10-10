@@ -139,7 +139,8 @@ class Contracts(unittest.TestCase):
             self.assertNotIn('shadow-start', f.events)
 
     def test_parent_derived_wiring_and_wrong_external_port_rejection(self):
-        source = (ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')
+        from canonical_application_source_contract import read_checked_application_source
+        source = read_checked_application_source(ROOT/'local_inspection_service/server.py',encoding='utf-8')
         fixture = json.loads((ROOT/'tests/backend_contract/detection_workflows_ports.json').read_text())
         def check(text):
             tree = ast.parse(text)

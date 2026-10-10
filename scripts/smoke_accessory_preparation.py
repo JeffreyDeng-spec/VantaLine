@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from accessory_application_test_ports import accessory_callback
 import cv2
 import numpy as np
 from fastapi import HTTPException
@@ -24,6 +25,8 @@ class PreparationContracts(unittest.TestCase):
                           VANTALINE_LABEL_INSPECTION_ENABLED='false', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0')
         from local_inspection_service import server
         cls.server = server
+        from scripts.accessory_default_dependency_contract import assert_default_accessory_dependencies
+        assert_default_accessory_dependencies(server)
 
     @classmethod
     def tearDownClass(cls): cls.temporary.cleanup()
@@ -42,11 +45,11 @@ class PreparationContracts(unittest.TestCase):
             return True
         def save(path,item):
             self.events.append(('save',Path(path),copy.deepcopy(item)))
-        self.stack.enter_context(patch.object(self.server,'ensure_accessory_ai_profile',side_effect=profile))
-        self.stack.enter_context(patch.object(self.server,'generate_accessory_ai_profile',side_effect=profile))
-        self.stack.enter_context(patch.object(self.server,'ensure_pose_collection_image_jobs',side_effect=pose))
-        self.stack.enter_context(patch.object(self.server,'save_accessory_candidate',side_effect=save))
-        self.stack.enter_context(patch.object(self.server,'start_image_worker',side_effect=AssertionError('factory must not start worker')))
+        self.stack.enter_context(accessory_callback(self.server,'ensure_accessory_ai_profile',side_effect=profile))
+        self.stack.enter_context(accessory_callback(self.server,'generate_accessory_ai_profile',side_effect=profile))
+        self.stack.enter_context(accessory_callback(self.server,'ensure_pose_collection_image_jobs',side_effect=pose))
+        self.stack.enter_context(accessory_callback(self.server,'save_accessory_candidate',side_effect=save))
+        self.stack.enter_context(accessory_callback(self.server,'start_image_worker',side_effect=AssertionError('factory must not start worker')))
 
     def image(self,name):
         path = self.root/(name+'.png')
@@ -62,7 +65,7 @@ class PreparationContracts(unittest.TestCase):
         def normalize(path,directory,size):
             calls.append((path.name,directory,size))
             return None if path.name.startswith('first_') else {'path':str(path),'kind':'normalized_text'}
-        with patch.object(self.server,'normalize_text_image',side_effect=normalize):
+        with accessory_callback(self.server,'normalize_text_image',side_effect=normalize):
             result = self.server.normalize_accessory_assets(item)
         self.assertEqual([call[0] for call in calls],['first_manual_rectified.png','second_manual_rectified.png'])
         self.assertEqual(calls[0][2],{'width_mm':99})
@@ -72,7 +75,7 @@ class PreparationContracts(unittest.TestCase):
         self.assertEqual(item,before)
         self.assertTrue((self.server.NORMALIZED_DIR/'text-plan').is_dir())
         item['original_source_files'] = ['uncropped.png']
-        with patch.object(self.server,'normalize_text_image',side_effect=normalize):
+        with accessory_callback(self.server,'normalize_text_image',side_effect=normalize):
             result = self.server.normalize_accessory_assets(item)
         self.assertEqual((result['status'],result['manual_crop_required'],result['manual_crop_reason']),('needs_crop',True,'manual_crop_required'))
         empty = self.server.normalize_accessory_assets({'id':'empty-text','material_type':'text','source_files':[]})
@@ -125,7 +128,7 @@ class PreparationContracts(unittest.TestCase):
             frame = directory/(path.stem+'.png')
             frame.write_bytes(b'synthetic video frame')
             return [{'path':str(frame),'source':str(path)}]
-        with patch.object(self.server,'extract_video_reference_frames',side_effect=extract):
+        with accessory_callback(self.server,'extract_video_reference_frames',side_effect=extract):
             expanded, frames = self.server.expand_accessory_reference_sources('candidate',source)
         directory = self.server.UPLOAD_DIR/'accessory_candidates/candidate/video_reference_frames'
         self.assertEqual([path.name for path,_ in calls],['one.MP4','one.MP4','two.mov'])
@@ -136,7 +139,7 @@ class PreparationContracts(unittest.TestCase):
         def fail_second(path,directory):
             if path.name=='two.mov': raise RuntimeError('synthetic video failure')
             return extract(path,directory)
-        with patch.object(self.server,'extract_video_reference_frames',side_effect=fail_second):
+        with accessory_callback(self.server,'extract_video_reference_frames',side_effect=fail_second):
             with self.assertRaises(RuntimeError): self.server.expand_accessory_reference_sources('partial',['one.MP4','two.mov'])
         self.assertTrue((self.server.UPLOAD_DIR/'accessory_candidates/partial/video_reference_frames/one.png').exists())
 
@@ -149,7 +152,7 @@ class PreparationContracts(unittest.TestCase):
         self.assertEqual(item['ai_profile_reference_files'],[str(path)])
         self.assertEqual(self.events,[])
         text = {'id':'refresh-text','material_type':'text','source_files':[]}
-        with patch.object(self.server,'normalize_text_image',side_effect=AssertionError('no images')):
+        with accessory_callback(self.server,'normalize_text_image',side_effect=AssertionError('no images')):
             self.server.refresh_accessory_assets_after_source_change(text,force_profile=False)
         self.assertFalse(text['normalization_deferred'])
         self.assertEqual(text['status'],'needs_crop')
@@ -158,8 +161,8 @@ class PreparationContracts(unittest.TestCase):
             self.assertEqual(item['ai_profile'],{'fallback':True})
             self.assertEqual(item['ai_profile_status'],'ready')
             raise RuntimeError('synthetic provider failure')
-        with patch.object(self.server,'fallback_accessory_ai_profile',return_value={'fallback':True}), \
-             patch.object(self.server,'generate_accessory_ai_profile',side_effect=fail):
+        with accessory_callback(self.server,'fallback_accessory_ai_profile',return_value={'fallback':True}), \
+             accessory_callback(self.server,'generate_accessory_ai_profile',side_effect=fail):
             with self.assertRaises(RuntimeError): self.server.refresh_accessory_assets_after_source_change(item)
         self.assertEqual(item['ai_profile'],{'fallback':True})
         self.assertEqual(item['ai_profile_status'],'ready')
@@ -172,7 +175,7 @@ class PreparationContracts(unittest.TestCase):
         def thumbnail(*args):
             self.events.append(('thumbnail',Path(args[1]).name))
             return original(*args)
-        with patch.object(self.server,'write_thumbnail',side_effect=thumbnail):
+        with accessory_callback(self.server,'write_thumbnail',side_effect=thumbnail):
             item = self.server.create_accessory_candidate('Factory','object','detect_and_classify',paths,size,'opaque','ruler')
         self.assertEqual([event[0] for event in self.events],['profile']+['thumbnail']*8+['pose','save'])
         self.assertEqual(self.events[0],('profile',{'allow_provider':True}))
@@ -190,7 +193,7 @@ class PreparationContracts(unittest.TestCase):
     def test_candidate_thumbnail_limit_and_default_size_call(self):
         paths = [str(self.root/'unreadable-first.png')]+[str(self.image(f'limit-{idx}')) for idx in range(8)]
         size = {'fixture':'default size'}
-        with patch.object(self.server,'physical_size_payload',return_value=size) as defaults:
+        with accessory_callback(self.server,'physical_size_payload',return_value=size) as defaults:
             item = self.server.create_accessory_candidate('Limits','object','detect_and_classify',paths,{},'opaque')
         defaults.assert_called_once_with('object')
         self.assertIs(item['physical_size'],size)
@@ -203,8 +206,8 @@ class PreparationContracts(unittest.TestCase):
             self.assertFalse(path.exists())
             written.append(path)
             return original_thumbnail(image,path,angle)
-        with patch.object(self.server,'save_accessory_candidate',side_effect=RuntimeError('synthetic save failure')), \
-             patch.object(self.server,'write_thumbnail',side_effect=thumbnail):
+        with accessory_callback(self.server,'save_accessory_candidate',side_effect=RuntimeError('synthetic save failure')), \
+             accessory_callback(self.server,'write_thumbnail',side_effect=thumbnail):
             with self.assertRaises(RuntimeError):
                 self.server.create_accessory_candidate('Save failure','object','detect_and_classify',[paths[1]],material_alpha_policy='opaque')
         self.assertEqual(self.events[-1][0],'pose')
@@ -219,15 +222,15 @@ class PreparationContracts(unittest.TestCase):
             frame.write_bytes(b'synthetic frame')
             events.append(frame)
             return [{'path':str(frame)}]
-        with patch.object(self.server,'extract_video_reference_frames',side_effect=extract):
+        with accessory_callback(self.server,'extract_video_reference_frames',side_effect=extract):
             with self.assertRaises(HTTPException) as caught:
                 self.server.create_accessory_candidate('Invalid','object','detect_and_classify',['video.mp4'])
         self.assertEqual(caught.exception.status_code,400)
         self.assertTrue(events[0].exists())
         self.assertEqual(self.events,[])
         path = self.image('factory-failure')
-        with patch.object(self.server,'ensure_accessory_ai_profile',side_effect=RuntimeError('synthetic profile failure')), \
-             patch.object(self.server,'write_thumbnail',side_effect=AssertionError('profile failed before thumbnail')):
+        with accessory_callback(self.server,'ensure_accessory_ai_profile',side_effect=RuntimeError('synthetic profile failure')), \
+             accessory_callback(self.server,'write_thumbnail',side_effect=AssertionError('profile failed before thumbnail')):
             with self.assertRaises(RuntimeError):
                 self.server.create_accessory_candidate('Fail','object','detect_and_classify',[str(path)],material_alpha_policy='opaque')
         self.assertEqual(self.events,[])
@@ -236,8 +239,8 @@ class PreparationContracts(unittest.TestCase):
         def thumbnail(image,path,angle):
             written.append(path)
             return original(image,path,angle)
-        with patch.object(self.server,'write_thumbnail',side_effect=thumbnail), \
-             patch.object(self.server,'ensure_pose_collection_image_jobs',side_effect=RuntimeError('synthetic pose failure')):
+        with accessory_callback(self.server,'write_thumbnail',side_effect=thumbnail), \
+             accessory_callback(self.server,'ensure_pose_collection_image_jobs',side_effect=RuntimeError('synthetic pose failure')):
             with self.assertRaises(RuntimeError):
                 self.server.create_accessory_candidate('Fail pose','object','detect_and_classify',[str(path)],material_alpha_policy='opaque')
         self.assertTrue(written[0].exists())

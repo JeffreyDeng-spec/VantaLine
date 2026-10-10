@@ -6,6 +6,7 @@ from unittest.mock import Mock,AsyncMock,patch,call
 import asyncio,io,os,sys,tempfile,unittest
 import numpy as np
 sys.path.insert(0,str(Path.cwd()))
+from canonical_application_source_contract import read_checked_application_source
 from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from scripts.smoke_ai_detection_analysis import BindingResolver
@@ -166,6 +167,22 @@ class UploadFixture:
         value=self.frames[self.index];self.index+=1;return True,value
     def bind(self,api,stack):
         for name,value in {'ensure_dirs':self.ensure,'require_analyze_model_permission':self.permission,'safe_name':self.safe,'UPLOAD_DIR':self.root,'cv2':self.cv,'analyze_bgr':self.analyze,'load_config':self.load,'model_profile_service':self.resolver}.items():stack.enter_context(patch_fixture_capability(api, name, value))
+        from local_inspection_service.detection.upload_ports import UploadAccess, UploadPaths, VideoResults
+        access = UploadAccess(lambda: api.ensure_dirs(), lambda *a, **k: api.require_analyze_model_permission(*a, **k))
+        paths = UploadPaths(lambda: api.safe_name, lambda: api.UPLOAD_DIR)
+        for owner in (api._image_upload, api._video_upload):
+            for name, value in {'access': access, 'paths': paths,
+                    'analyze': lambda *a, **k: api.analyze_bgr(*a, **k)}.items():
+                stack.enter_context(patch.object(owner, name, value))
+        stack.enter_context(patch.object(api._image_upload, 'arrays', lambda: api.np))
+        stack.enter_context(patch.object(api._image_upload, 'images', lambda: api.cv2))
+        stack.enter_context(patch.object(api._video_upload, 'copies', lambda: api.shutil))
+        stack.enter_context(patch.object(api._video_upload, 'videos', lambda: api.cv2))
+        stack.enter_context(patch.object(api._video_upload, 'config', lambda: api.load_config()))
+        stack.enter_context(patch.object(api._video_upload, 'results', VideoResults(
+            lambda *a, **k: api.video_frame_result_payload(*a, **k),
+            lambda *a, **k: api.video_ai_summary(*a, **k))))
+        stack.enter_context(patch.object(api._video_summary, 'strings', lambda: api.string_list))
 
 class UploadContracts(unittest.TestCase):
     @classmethod
@@ -417,7 +434,7 @@ class UploadContracts(unittest.TestCase):
     def test_actual_upload_routes_and_plc_guard_follow_moved_implementations(self):
         import ast,copy
         from local_inspection_service.scripts.smoke_plc_frontend_contract import require_detection_upload_boundary
-        root=Path(__file__).resolve().parents[1];source=(root/'local_inspection_service/server.py').read_text(encoding='utf-8')
+        root=Path(__file__).resolve().parents[1];source=read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8')
         implementations={name:(root/'local_inspection_service/detection'/name).read_text(encoding='utf-8') for name in ('image_upload.py','video_upload.py','video_results.py','upload_ports.py')}
         require_detection_upload_boundary(source,implementations)
         positions=[]

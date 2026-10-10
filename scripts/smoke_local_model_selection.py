@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch, call
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE = os.environ.get('VANTALINE_LOCAL_SELECTION_BASELINE_SOURCE')
 NAMES = ('yolo_inference_device', 'detect_base_model')
 
@@ -135,7 +136,7 @@ class SelectionContracts(unittest.TestCase):
         first = CheckpointSelection(lambda:'one', fail, fail, fail)
         second = CheckpointSelection(lambda:'two', fail, fail, fail)
         self.assertEqual([first.detect_base_model(), second.detect_base_model(), first.detect_base_model()], ['one','two','one'])
-        require_root_selection_binding((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        require_root_selection_binding(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'))
 
     @unittest.skipIf(bool(BASELINE), 'candidate composition only')
     def test_binding_guard_accepts_formatting_and_rejects_changed_dependencies(self):

@@ -22,7 +22,9 @@ The browser owns camera capture and physical serial I/O. FastAPI authenticates, 
 
 ## Code and ownership map
 
-- `local_inspection_service/server.py`: API composition, authentication/permissions, detection orchestration, PLC station leases/dispatches.
+- `local_inspection_service/server.py`: stable ASGI entry and explicit compatibility exports; no business flows.
+- `local_inspection_service/runtime/application.py` and `runtime/wiring/`: per-application infrastructure, domain, HTTP and lifecycle assembly. Business services receive narrow typed ports, never the whole assembly.
+- `local_inspection_service/compatibility/`: retained default-application call signatures; business modules must not import these adapters.
 - `local_inspection_service/frontend/src/`: React UI; `features/plc/webSerialClient.ts` is the physical Web Serial state machine.
 - `local_inspection_service/model_providers/`: OpenAI-compatible, Gemini, Agnes and Qwen image transports, provider selection/retry orchestration, legacy migration settings, configuration policy, key registry, local secret material, explicit capabilities, shared error types and payload/error parsing without importing the Web application.
 - `local_inspection_service/accessories/`: accessory workflows, crop component analysis/selection, object sprite preprocessing, masked sprite geometry, dimension metadata, artifact publication, material alpha, shared cutout runtime, chroma geometry and pose layout/selection/preview policies, and materialized sprite/text asset inventory, and preview sprite decoding/selection/orientation, and asset canvas composition, and preview/document asset loading, and accessory reference evidence, display labels, profile projection, physical dimensions, profile payloads, profile generation, background evidence, and background-library selection.
@@ -168,3 +170,5 @@ factory assembly. New tasks use manifest v270 with 583 actual source entries;
 historical task snapshots and secret references are unchanged.
 
 Provider constructors now live in `model_providers/transport_composition.py`. Supply narrow transport inputs and the app's resolver callable; do not pass default-entry Provider classes into another application. `training/real_photo_composition.py` owns the original feedback/training bridge and dispatch lifecycle. Its internal callbacks select the owned bridge. These close domain wiring gaps; the complete application factory and final release acceptance still require verification.
+
+The canonical Web entry is `server:app`, assembled by `runtime/application.py` through six explicit `runtime/wiring/` groups and the ordered HTTP registration module. Complete results are assembler/entry-owned. Business uses narrow typed ports and cannot import `server`, `compatibility` or `runtime/default_application`. `ApplicationLifetime` owns once-only startup and ordered bounded drain; build another instance after close. Use real owner/port replacement in tests. These current rules supersede earlier notes that individual domain builders alone did not complete application assembly.

@@ -15,6 +15,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import assert_capability_owner
 from local_inspection_service.model_providers.errors import AiProviderError
 
@@ -200,7 +201,7 @@ class GenerationContract(unittest.TestCase):
         for name in NAMES:
             args = ({}, {}, "model", Path("fixture")) if name.endswith("for_sample") else ({}, {}, {}, "model", Path("fixture"))
             marker = object(); method = Mock(return_value=marker)
-            with patch.object(server, "_auto_optimization_label_generation", SimpleNamespace(**{name: method})):
+            with auto_method(self,server._auto_optimization_label_generation,name,method):
                 self.assertIs(getattr(server, name)(*args), marker); method.assert_called_once_with(*args)
 
     @unittest.skipIf(BASELINE, "candidate-only lightweight import")

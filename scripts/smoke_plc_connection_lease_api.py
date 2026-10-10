@@ -23,6 +23,29 @@ CALLEES = (
 )
 
 
+def build_lease_fixture():
+    from canonical_application_source_contract import verify_actual_sources
+    from local_inspection_service.plc.connection_lease import ConnectionLease
+    from local_inspection_service.plc.connection_lease_ports import LeaseAccess, LeaseErrors, LeaseMutation
+    verify_actual_sources()
+    api = types.SimpleNamespace()
+    service = ConnectionLease(
+        LeaseAccess(lambda: api.require_plc_web_serial_station,
+                    lambda: api.require_analyze_model_permission),
+        LeaseMutation(lambda: api.plc_web_serial_claim_connecting_lease,
+                      lambda: api.plc_web_serial_activate_lease,
+                      lambda: api.plc_web_serial_heartbeat,
+                      lambda: api.plc_web_serial_rebind_model,
+                      lambda: api.plc_web_serial_release_lease),
+        LeaseErrors(lambda: api.PlcConfigError, lambda: api.HTTPException))
+    api.claim_plc_web_serial_connection = service.claim
+    api.activate_plc_web_serial_connection = service.activate
+    api.heartbeat_plc_web_serial_connection = service.heartbeat
+    api.rebind_plc_web_serial_connection_model = service.rebind_model
+    api.disconnect_plc_web_serial_connection = service.disconnect
+    return api
+
+
 class ConfigError(Exception):
     pass
 
@@ -60,8 +83,7 @@ class LeaseApiContract(unittest.TestCase):
                                     PlcWorkstationLeaseRebindRequest=object)
             exec(compile(ast.Module(body=functions, type_ignores=[]), baseline, "exec"), cls.api.__dict__)
         else:
-            from local_inspection_service import server
-            cls.api = server
+            cls.api = build_lease_fixture()
 
     @classmethod
     def tearDownClass(cls):
@@ -84,6 +106,14 @@ class LeaseApiContract(unittest.TestCase):
 
     def replace(self, name, value):
         self.stack.enter_context(patch.object(self.api, name, value, create=True))
+
+    def test_actual_http_receivers(self):
+        if os.environ.get("VANTALINE_PLC_LEASE_API_BASELINE_SOURCE"):
+            self.skipTest("candidate composition only")
+        from plc_http_test_contract import assert_http_receivers
+        assert_http_receivers(self, '_plc_connection_lease', [
+            (name, method, (self.request, self.payload))
+            for name, method in zip(NAMES, ('claim', 'activate', 'heartbeat', 'rebind_model', 'disconnect'))])
 
     def test_success_order_payload_identity_and_rebind_permission(self):
         for name, callee in zip(NAMES, CALLEES):

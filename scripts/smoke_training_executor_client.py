@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scripts.provider_configuration_test_ports import patch_provider_capability
+from scripts.training_executor_application_test_ports import bind_training_executor, assert_default_training_executor
 
 
 class TrainingExecutorContracts(unittest.TestCase):
@@ -23,10 +24,12 @@ class TrainingExecutorContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_training_executor(server)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_training_executor(self.api,self.stack)
         self.stack.enter_context(patch.dict(os.environ,{},clear=True))
         self.request=self.stack.enter_context(patch.object(requests,'request',side_effect=AssertionError('unexpected network request')))
     def response(self,status,body=None,text='',failure=None):

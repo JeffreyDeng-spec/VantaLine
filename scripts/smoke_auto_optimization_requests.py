@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import assert_capability_owner
 from local_inspection_service.schemas.training import AutoOptimizeSettingsRequest,AutoOptimizeSampleApproveRequest
 BASELINE=os.environ.get('VANTALINE_AUTO_REQUESTS_BASELINE_SOURCE')
@@ -134,7 +135,7 @@ class RequestsContract(unittest.TestCase):
             for f in fields(group): assert_capability_owner(self, group, f.name, server)
         for name,args in zip(NAMES,(('t',),('t',object()),('t','s'),('t','s'),('t','s',None))):
             mock=Mock(return_value=object())
-            with patch.object(server,'_auto_optimization_requests',SimpleNamespace(**{name:mock})):self.assertIs(getattr(server,name)(*args),mock.return_value)
+            with auto_method(self,server._auto_optimization_requests,name,mock):self.assertIs(getattr(server,name)(*args),mock.return_value)
             mock.assert_called_once_with(*args)
         routes=[r for r in server.app.routes if '/auto-optimize' in getattr(r,'path','')];self.assertEqual(len(routes),5)
         subprocess.run([sys.executable,'-c',"import sys; import local_inspection_service.training.auto_optimization_requests; assert not any(n in sys.modules for n in ('local_inspection_service.server','fastapi','psycopg'))"],cwd=ROOT,check=True)

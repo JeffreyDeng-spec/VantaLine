@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 from fastapi import HTTPException, UploadFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from training_background_http_application_test_ports import bind_training_background_http, assert_default_training_background_http
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
 
@@ -179,10 +180,11 @@ class TrainingBackgroundApiContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_training_background_http(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack(); self.addCleanup(self.stack.close); self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-api-')))
+        self.stack=ExitStack(); self.addCleanup(self.stack.close); bind_training_background_http(self.api,self.stack); self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-api-')))
         self.f=BackgroundApiFixture(self.root/'base'); self.f.bind(self.api,self.stack)
         for target in ['requests.request','subprocess.Popen','os.kill']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))

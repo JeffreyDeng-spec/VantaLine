@@ -77,10 +77,14 @@ class TrainingStoreContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        from scripts.training_records_application_test_ports import assert_default_training_records
+        assert_default_training_records(cls.api,lifecycle=False)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack(); self.addCleanup(self.stack.close)
+        from scripts.training_records_application_test_ports import bind_training_records
+        bind_training_records(self.api,self.stack,lifecycle=False)
         root=self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-store-'))
         self.f=Fixture(root); self.f.bind(self.api,self.stack)
 

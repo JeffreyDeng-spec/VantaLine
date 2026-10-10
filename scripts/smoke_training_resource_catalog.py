@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from starlette.concurrency import run_in_threadpool
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.training_resource_application_test_ports import bind_training_resources, assert_default_training_resources
 
 
 class ResourceCatalogContracts(unittest.TestCase):
@@ -29,6 +30,7 @@ class ResourceCatalogContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_resources(server)
 
     @classmethod
     def tearDownClass(cls):
@@ -36,6 +38,7 @@ class ResourceCatalogContracts(unittest.TestCase):
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_resources(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-catalog-'))).resolve()
         self.events = []
         self.user = {'id': 'alice'}

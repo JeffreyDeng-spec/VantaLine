@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.plc import workstation_composition as module
 from local_inspection_service import plc_web_serial as protocol
 from local_inspection_service.plc_fx_ascii import PlcConfigError
@@ -198,7 +199,7 @@ class WorkstationCompositionContracts(unittest.TestCase):
     def test_root_inverse_actual_owner_and_business_identity(self):
         from application_integration_source_contract import verify_actual_compositions, restore_plc_domain_root, PLC_WORKSTATION, digest
         verify_actual_compositions()
-        source = (ROOT/'local_inspection_service/server.py').read_text()
+        source = read_checked_application_source(ROOT / 'local_inspection_service/server.py')
         restored = restore_plc_domain_root(source)
         self.assertEqual(digest(ast.parse(restored)), PLC_WORKSTATION['parent_ast_sha256'])
         for old, new in [('_plc_workstation_workflows.repository', '_plc_workstation_workflows.station'),

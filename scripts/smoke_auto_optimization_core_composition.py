@@ -16,6 +16,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.training import core_composition as composition
 from local_inspection_service.training.auto_optimization_runtime_state import AutoOptimizationRuntimeState
 from local_inspection_service.training.auto_optimization_settings import AutoOptimizationSettings
@@ -182,7 +183,7 @@ def seed(fixture, *, active='', owner='A'):
 
 class Contracts(unittest.TestCase):
     def test_parent_ports_aliases_and_shadow_mutants(self):
-        source = (ROOT / 'local_inspection_service/server.py').read_text(encoding='utf-8')
+        source = read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8')
         verify_source(source)
         for old, new in [
             ('detection=lambda: _detection_workflows', 'detection=lambda: _image_generation'),
@@ -351,7 +352,7 @@ class Contracts(unittest.TestCase):
             return {'rule': {'counts': {'part': 1}}}
         f.detection.analyze_bgr = analyze
         source = ROOT / 'local_inspection_service/server.py'
-        tree = ast.parse(source.read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(source, encoding='utf-8'))
         worker = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'auto_optimize_shadow_worker')
         namespace = {
             'pinned_model_profiles': pinned, 'resolve_model_profiles': lambda: f.resolver,

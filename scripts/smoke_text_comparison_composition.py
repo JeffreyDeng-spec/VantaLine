@@ -91,7 +91,8 @@ class Contracts(unittest.TestCase):
         self.assertTrue(f.standard.graph.documents.close(1));self.assertTrue(f.standard.graph.preparation.close(1))
 
     def test_parent_derived_ports_aliases_registrars_and_shadow_rejection(self):
-        source=(ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8')
+        from canonical_application_source_contract import read_checked_application_source
+        source=read_checked_application_source(ROOT/'local_inspection_service/server.py',encoding='utf-8')
         fixture=json.loads((ROOT/'tests/backend_contract/text_comparison_workflows_ports.json').read_text())
         aliases={'_history_records':'history_records','_history_media':'history_media',
             '_extraction_records':'extraction_records','_extraction_media':'extraction_media',

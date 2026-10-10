@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
@@ -92,7 +93,7 @@ class AccessoryCatalogPortsTests(unittest.TestCase):
             self.assertIs(service.files, files); self.assertIs(service.images, images)
         with self.assertRaises(TypeError): preview_sprites.load_clean_sprite(Path('synthetic'))
         with self.assertRaises(TypeError): preview_sprites.load_clean_sprite(Path('synthetic'), images=None)
-        source = Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py'; tree = ast.parse(source.read_text(encoding='utf-8'))
+        source = Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py'; tree = ast.parse(read_checked_application_source(source, encoding='utf-8'))
         expected = {'_SpriteAssetCatalog': {'files': '_business_files', 'images': '_accessory_image_io'}, '_TextAssetCatalog': {'files': '_business_files', 'images': '_accessory_image_io'}, '_load_clean_sprite_impl': {'images': '_accessory_image_io'}}
         found = []
         for node in ast.walk(tree):

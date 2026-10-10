@@ -110,7 +110,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -F 'BACKGROUND_DIR = DATA_DIR / "backgrounds"' local_inspection_service/server.py
+          python scripts/smoke_canonical_application_source_contract.py
+          grep -F "BACKGROUND_DIR = DATA_DIR / 'backgrounds'" local_inspection_service/runtime/application_values.py
+          grep -F 'BACKGROUND_DIR = _default_application.values.BACKGROUND_DIR' local_inspection_service/server.py
           grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
           grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
           grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
@@ -304,6 +306,9 @@ jobs:
       - name: Verify text inspection comparison and document contracts
         run: |
           python scripts/verify_backend_contract.py
+          python scripts/smoke_application_factory.py
+          APPLICATION_FACTORY_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_application_factory_postgres.py
+          python scripts/smoke_canonical_application_source_contract.py
           python scripts/smoke_web_shell_composition.py
           python scripts/smoke_retired_entry_tails.py
           python scripts/smoke_model_dependency_contract.py

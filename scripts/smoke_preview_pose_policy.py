@@ -22,7 +22,8 @@ class PreviewPoseContracts(unittest.TestCase):
         cls.lifetime.enter_context(patch.dict(sys.modules,{'rembg':SimpleNamespace(new_session=cls.import_factory,remove=cls.import_remove)}))
         from local_inspection_service import server
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
-        cls.api=server
+        from scripts.pose_policy_test_fixture import pose_fixture
+        cls.api=pose_fixture(server)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):

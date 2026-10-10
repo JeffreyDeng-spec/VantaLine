@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 from fastapi import File,Form,HTTPException,Request,UploadFile
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from local_inspection_service.plc_fx_ascii import PlcConfigError
 BASELINE=os.environ.get('VANTALINE_CAMERA_DETECTION_BASELINE_SOURCE')
 def create(b):
@@ -84,7 +85,7 @@ class Contracts(unittest.IsolatedAsyncioTestCase):
   self.assertEqual(self.finished,[]);self.assertEqual(self.writes,[])
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  async def test_actual_wiring_and_no_entry_import(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_camera_detection_request' for t in n.targets));count=0
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_camera_detection_request' for t in n.targets));count=0
   for group in binding.keywords:
    for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
   self.assertEqual(count,10)

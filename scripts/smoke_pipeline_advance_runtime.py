@@ -50,12 +50,16 @@ class AdvanceRuntimeContract(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'advance')
 
     @classmethod
     def tearDownClass(cls): cls.lifetime.close()
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'advance')
         self.events = []
         self.task = {"id": "task", "stage": "samples", "status": "running", "auto_advance": True}
         self.inflight = {"task"}

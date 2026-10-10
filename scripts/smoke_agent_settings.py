@@ -23,6 +23,8 @@ class AgentSettingsContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE="json", LOCAL_INSPECTION_AUTO_RESUME_WORKER="0", VANTALINE_LABEL_INSPECTION_ENABLED="false")
         from local_inspection_service import server
         cls.api = server
+        from scripts.agent_settings_application_test_ports import assert_default_agent_settings
+        assert_default_agent_settings(cls.api, http=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -32,6 +34,8 @@ class AgentSettingsContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.agent_settings_application_test_ports import bind_agent_settings
+        bind_agent_settings(self.api,self.stack,http=False)
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="synthetic-agent-settings-")))
         self.path = self.directory / "agent.json"
         self.stack.enter_context(patch.object(self.api, "DATA_DIR", self.directory))

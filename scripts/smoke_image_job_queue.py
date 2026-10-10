@@ -153,19 +153,23 @@ class QueueContract(unittest.TestCase):
             (Path(tmp)/'local_inspection_service/static').mkdir(parents=True)
             with patch.dict(os.environ,{'LOCAL_INSPECTION_ROOT':tmp,'VANTALINE_DATA_STORE':'json','VANTALINE_LABEL_INSPECTION_ENABLED':'false','LOCAL_INSPECTION_AUTO_RESUME_WORKER':'0','INSPECTION_WORKER_WATCHER':'0','VANTALINE_YOLO_PREWARM':'0'}):
                 from local_inspection_service import server
-                from accessory_image_test_ports import queue_target, replace_queue_port
+                from accessory_image_test_ports import queue_target, replace_queue_port, assert_queue_relay
                 service=server._image_job_queue
                 for group in ('storage','metadata','execution'):
                     ports=getattr(service,group)
                     for f in fields(ports):
-                        getter=getattr(ports,f.name);target,attribute=queue_target(server,f.name);original=getattr(target,attribute);self.assertEqual(getter(),original)
+                        getter=getattr(ports,f.name)
+                        if assert_queue_relay(self,server,f.name,getter):continue
+                        target,attribute=queue_target(server,f.name);original=getattr(target,attribute);self.assertEqual(getter(),original)
                         with replace_queue_port(server,f.name,object()) as replacement:self.assertIs(getter(),replacement)
                         self.assertEqual(getter(),original)
                 for name in NAMES:
-                    callback=Mock(return_value=object());args=(Path('/a'),{},{},{}) if name.startswith('mutate') else ()
+                    args=(Path('/a'),{},{},{}) if name.startswith('mutate') else ()
                     kwargs={'preprocess_clean_sprites':True} if args else {}
-                    with patch.object(server,'_image_job_queue',SimpleNamespace(**{name:callback})):
-                        self.assertIs(getattr(server,name)(*args,**kwargs),callback.return_value);callback.assert_called_once_with(*args,**kwargs)
+                    with patch.object(type(service),name,autospec=True) as callback:
+                        callback.return_value=object()
+                        self.assertIs(getattr(server,name)(*args,**kwargs),callback.return_value);callback.assert_called_once_with(service,*args,**kwargs)
+                        self.assertIs(callback.call_args.args[0],service)
 
 
 if __name__=='__main__':unittest.main()

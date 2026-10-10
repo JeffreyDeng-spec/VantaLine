@@ -220,3 +220,5 @@ includes the real infrastructure modules for new tasks only; historical model
 snapshots are not rewritten. This change introduces no physical PLC IO.
 
 Provider/real-photo graph assembly does not change workstation ownership, lease/epoch, ACK or uncertainty policy. The feedback bridge's training submission remains separate from browser PLC dispatch. Its native startup and shutdown perform no server serial I/O. Preserve the complete PLC and HTTP contracts when accepting the consolidated backend composition batch.
+
+Canonical application assembly preserves the actual PLC services, HTTP contracts and browser-only physical I/O rules. Each app receives fresh logical PLC runtime/executor state; closing another app cannot close it. No serial ownership, lease, ACK, uncertain-write retry, protocol or camera provenance behavior changes. Keep the complete PLC/release regression and whole-package rollback gates.

@@ -11,6 +11,8 @@ def target(api, name):
             'list_trained_model_specs': (owner.catalog, 'list_trained_model_specs'),
             'selected_model_spec': (owner.selection, 'selected_model_spec'),
             'legacy_model_specs': (owner, 'legacy_model_specs'),
+            '_models': (owner.local, 'models'),
+            '_model_paths': (owner.local, 'paths'),
         }
         if name in targets: return targets[name]
     return api, name

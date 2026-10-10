@@ -11,6 +11,7 @@ import cv2
 import httpx
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as stores
 from smoke_incoming_text_workflows import Fixture, Upload, RULE
 from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
@@ -128,7 +129,7 @@ class IncomingArtifactPortsTests(unittest.TestCase):
 
     def test_actual_composition_uses_one_matching_files_images_graph(self):
         root = Path(__file__).resolve().parents[1]
-        tree = ast.parse((root / 'local_inspection_service/server.py').read_text(encoding='utf-8'))
+        tree = ast.parse(read_checked_application_source(root / 'local_inspection_service/server.py', encoding='utf-8'))
         assignments = {n.targets[0].id: n.value for n in tree.body
             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name)}
         call = assignments['_incoming_workflows']

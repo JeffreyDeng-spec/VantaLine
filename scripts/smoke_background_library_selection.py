@@ -50,7 +50,9 @@ class BackgroundLibrarySelectionContracts(unittest.TestCase):
 
         cls.import_factory.assert_not_called();cls.import_remove.assert_not_called()
 
-        cls.api=server
+        from scripts.background_library_test_fixture import background_library_fixture
+
+        cls.api=background_library_fixture(server)
 
     @classmethod
 

@@ -24,7 +24,8 @@ class ObjectPreprocessingContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             cls.lifetime.enter_context(patch(name,side_effect=AssertionError('External operation forbidden')))
         from local_inspection_service import server
-        cls.api=server
+        from scripts.object_preprocessing_test_fixture import object_preprocessing_fixture
+        cls.api=object_preprocessing_fixture(server, cls.preprocessing_capability_groups)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):

@@ -5,6 +5,7 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 import smoke_detection_artifact_ports as fixtures
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.types import ArtifactUnavailable
@@ -48,7 +49,7 @@ class PipelineStatusFilePortsTests(unittest.TestCase):
         with self.assertRaises(TypeError): PipelineResourceStatus(Mock())
         with self.assertRaises(TypeError): PipelineResourceStatus(Mock(), files=None)
         files = Falsey(); self.assertIs(PipelineResourceStatus(Mock(), files=files).files, files)
-        tree = ast.parse(restore_plc_domain_root((Path(__file__).resolve().parents[1]/'local_inspection_service/server.py').read_text(encoding='utf-8')))
+        tree = ast.parse(restore_plc_domain_root(read_checked_application_source(Path(__file__).resolve().parents[1] / 'local_inspection_service/server.py', encoding='utf-8')))
         calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_PipelineResourceStatus']
         self.assertEqual(len(calls), 1); self.assertEqual(ast.dump(next(k.value for k in calls[0].keywords if k.arg == 'files')), ast.dump(ast.parse('_business_files', mode='eval').body))
 

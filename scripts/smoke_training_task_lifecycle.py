@@ -68,6 +68,8 @@ class TrainingLifecycleContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        from scripts.training_records_application_test_ports import assert_default_training_records
+        assert_default_training_records(cls.api,lifecycle=True)
         cls.originals={name:getattr(server._training_state_workflows,name) for name in ('training_task_path','load_training_task','save_training_task','find_training_task')}
         cls.runtime_aliases=(server._training_task_lock,server._training_task_threads,server._training_task_delete_tombstones)
         runtime=server._training_task_runtime
@@ -77,6 +79,8 @@ class TrainingLifecycleContracts(unittest.TestCase):
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        from scripts.training_records_application_test_ports import bind_training_records
+        bind_training_records(self.api,self.stack,lifecycle=True)
         self.f=Fixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-lifecycle-')));self.f.bind(self.api,self.stack)
         self.kill=self.stack.enter_context(patch.object(os,'kill',side_effect=AssertionError('unexpected process signal')))
 

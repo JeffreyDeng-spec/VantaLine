@@ -13,6 +13,8 @@ import unittest
 from unittest.mock import MagicMock, Mock, call, patch
 import requests
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_worker_transfers
 
 
 def _capture_worker_transfer_window(ns,site,mode):
@@ -115,11 +117,11 @@ class TrainingWorkerTransferContracts(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        cls.api=server;assert_default_legacy_worker(cls.api)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack(); self.addCleanup(self.stack.close); self.f=TransferFixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-transfer-')))
+        self.stack=ExitStack(); self.addCleanup(self.stack.close); bind_worker_transfers(self.api,self.stack); self.f=TransferFixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-transfer-')))
         self.f.bind(self.api,self.stack)
         for target in ['requests.request','subprocess.Popen','os.kill']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))

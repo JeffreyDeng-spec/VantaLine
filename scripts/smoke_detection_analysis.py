@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from canonical_application_source_contract import read_checked_application_source
 
 
 def capture_ordinary(api, Fixture, root, stage, mode):
@@ -121,6 +122,23 @@ class AnalysisFixture:
             'INSPECTION_PREVIEW_MAX_SIDE':640,'INSPECTION_PREVIEW_JPEG_QUALITY':87}.items():stack.enter_context(patch.object(api,name,value))
         # Replace consumed domain ports; private root aliases no longer own routing.
         graph=api._detection_workflows
+        from local_inspection_service.detection.analysis_ports import AnalysisInput, AnalysisRouting, AnalysisInference, AnalysisOutput
+        service = api._detection_analysis
+        for name, value in {
+            'input': AnalysisInput(lambda: api.load_config(), lambda: api.scope_config_for_user,
+                lambda *a, **k: api.selected_model_spec(*a, **k), lambda: api.sanitize_ai_detection_task_id,
+                lambda *a, **k: api.load_auto_optimize_state(*a, **k)),
+            'routing': AnalysisRouting(lambda *a, **k: graph.analyze_bgr(*a, **k),
+                lambda *a, **k: graph.pinned_ai(*a, **k), lambda *a, **k: api.removed_phase1_feature(*a, **k),
+                lambda: api.bounded_text),
+            'inference': AnalysisInference(lambda: api.model, lambda: api.yolo_inference_device(),
+                lambda *a, **k: api.parse_detections(*a, **k), lambda *a, **k: api.attach_ocr_results(*a, **k),
+                lambda *a, **k: api.apply_rule(*a, **k), lambda *a, **k: api.draw_detections(*a, **k)),
+            'output': AnalysisOutput(lambda *a, **k: api.output_write_dir(*a, **k), lambda: api.resize_bgr_max_side,
+                lambda: api.INSPECTION_PREVIEW_MAX_SIDE, lambda: api.cv2,
+                lambda: api.INSPECTION_PREVIEW_JPEG_QUALITY, lambda *a, **k: api.output_url(*a, **k)),
+        }.items():
+            stack.enter_context(patch.object(service, name, value))
         stack.enter_context(patch.object(graph,'pinned_ai',lambda *a,**k:api.analyze_bgr_ai_detection(*a,**k)))
         stack.enter_context(patch.object(graph,'analyze_bgr',lambda *a,**k:api.analyze_bgr(*a,**k)))
 
@@ -328,7 +346,7 @@ class DetectionAnalysisContracts(unittest.TestCase):
     def test_independent_plc_guard_rejects_business_calls_and_pin_bypass(self):
         import ast
         from local_inspection_service.scripts.smoke_plc_frontend_contract import require_detection_analysis_boundary
-        root=Path(__file__).resolve().parents[1]/'local_inspection_service'; source=(root/'server.py').read_text(encoding='utf-8')
+        root=Path(__file__).resolve().parents[1]/'local_inspection_service'; source=read_checked_application_source(root / 'server.py', encoding='utf-8')
         implementations={name:(root/'detection'/name).read_text(encoding='utf-8') for name in ['analysis.py','ai_analysis.py','workflow_composition.py']}
         require_detection_analysis_boundary(source,implementations)
         for filename,method in [('analysis.py','analyze_bgr'),('ai_analysis.py','analyze_bgr_ai_detection')]:

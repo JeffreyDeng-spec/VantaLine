@@ -129,9 +129,12 @@ class Composition(unittest.TestCase):
             with patch.object(server,name,Mock(side_effect=AssertionError('root rebound'))):
                 self.assertNotEqual(getattr(server,name),actual)
         failure=RuntimeError('live repository factory')
-        with patch.object(server,'runtime_postgres_repository_or_none',Mock(side_effect=failure)):
+        owner=server._runtime_repository_access
+        with patch.object(type(owner),'runtime_postgres_repository_or_none',autospec=True,side_effect=failure) as selected:
             with self.assertRaises(RuntimeError) as caught:
                 graph.repository.dependencies.runtime_repository()
+            selected.assert_called_once_with(owner)
+            self.assertIs(selected.call_args.args[0],owner)
         self.assertIs(caught.exception,failure)
 
 

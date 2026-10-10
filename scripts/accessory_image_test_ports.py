@@ -23,7 +23,49 @@ def queue_target(server,name):
         'update_image_worker_status':(owner.queue,'update_image_worker_status'),
         'run_image_generation_job':(owner,'run_image_generation_job'),
     }
+    if hasattr(server,'_default_application'):
+        from local_inspection_service.runtime.wiring import inspection
+        targets.update({
+            'CONFIG_PATH':(server._default_application.values,'CONFIG_PATH'),
+            'IMAGE_JOB_QUEUED_STATUSES':(server._default_application.values,'IMAGE_JOB_QUEUED_STATUSES'),
+            'MAX_PARALLEL_IMAGE_WORKERS':(server._default_application.values,'MAX_PARALLEL_IMAGE_WORKERS'),
+            '_business_files':(server._default_application.artifacts,'files'),
+            'HTTPException':(inspection,'HTTPException'),
+            'file_stem_identifier':(inspection,'file_stem_identifier'),
+        })
     return targets.get(name,(server,name))
+
+
+def assert_queue_relay(test, server, name, getter):
+    """Witness only the enumerated native external callbacks."""
+    from unittest.mock import patch
+    targets={
+        'load_config':(server._app_configuration,'load_config',(),{}),
+        'save_config':(server._app_configuration,'save_config',({},),{}),
+        'runtime_postgres_repository_or_none':(server._runtime_repository_access,'runtime_postgres_repository_or_none',(),{}),
+        'accessory_uid':(server._accessory_policy,'accessory_uid',({},),{}),
+        'accessory_material_type':(server._accessory_policy,'accessory_material_type',({},),{}),
+        'ensure_pose_collection_image_jobs':(server._pose_collection_jobs,'ensure_pose_collection_image_jobs',({},),{}),
+        'public_output_url':(server._service_paths,'public_output_url',(Path('/fixture'),),{}),
+        'resolve_service_path':(server._service_paths,'resolve_service_path',('fixture',),{'for_write':False}),
+        'preprocess_object_clean_sprites':(server._object_sprite_preprocessor,'preprocess_object_clean_sprites',({},True,False),{}),
+    }
+    if name not in targets:return False
+    from canonical_application_source_contract import verify_actual_sources
+    verify_actual_sources()
+    owner,method,args,kwargs=targets[name]
+    selected=getter()
+    result=object()
+    if name in {'accessory_uid','accessory_material_type'}:
+        with patch.object(owner,method,autospec=True,return_value=result) as receiver:
+            test.assertIs(selected(*args),result)
+            receiver.assert_called_once_with(*args,**kwargs)
+        return True
+    with patch.object(type(owner),method,autospec=True,return_value=result) as receiver:
+        test.assertIs(selected(*args),result)
+        receiver.assert_called_once_with(owner,*args,**kwargs)
+        test.assertIs(receiver.call_args.args[0],owner)
+    return True
 
 
 def binding(root,owner):
@@ -103,7 +145,9 @@ def edge_errors(call,contract):
 def root_errors(root,tree=None):
     import json
     expected=json.loads((Path(root)/'tests/backend_contract/accessory_image_composition_ports.json').read_text())
-    if tree is None:tree=ast.parse((Path(root)/'local_inspection_service/server.py').read_text(encoding='utf-8'))
+    if tree is None:
+        from canonical_application_source_contract import read_checked_application_source
+        tree=ast.parse(read_checked_application_source(Path(root)/'local_inspection_service/server.py', encoding='utf-8'))
     assignments={}
     for node in tree.body:
         if isinstance(node,ast.Assign):

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
-from scripts.provider_configuration_test_ports import patch_provider_capability, get_provider_capability, set_provider_capability
+from scripts.provider_configuration_test_ports import patch_provider_capability, get_provider_capability, set_provider_capability, provider_environment_input
 
 
 class KeyMaterialContracts(unittest.TestCase):
@@ -34,8 +34,8 @@ class KeyMaterialContracts(unittest.TestCase):
         self.addCleanup(self.stack.close)
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="synthetic-secrets-")))
         self.path = self.directory / "data" / "secrets.env"
-        self.stack.enter_context(patch.object(self.api, "DATA_DIR", self.path.parent))
-        self.stack.enter_context(patch.object(self.api, "LOCAL_SECRET_ENV_PATH", self.path))
+        self.stack.enter_context(patch_provider_capability(self.api, "DATA_DIR", self.path.parent))
+        self.stack.enter_context(patch_provider_capability(self.api, "LOCAL_SECRET_ENV_PATH", self.path))
         self.stack.enter_context(patch.dict(os.environ, {}, clear=True))
         for name in ("requests.sessions.Session.request", "urllib.request.urlopen", "subprocess.Popen", "os.kill"):
             self.stack.enter_context(patch(name, side_effect=AssertionError("external operation forbidden")))
@@ -66,13 +66,13 @@ class KeyMaterialContracts(unittest.TestCase):
         fake = Mock()
         fake.exists.return_value = True
         fake.read_text.side_effect = OSError("synthetic read failure")
-        with patch.object(self.api, "LOCAL_SECRET_ENV_PATH", fake):
+        with patch_provider_capability(self.api, "LOCAL_SECRET_ENV_PATH", fake):
             self.assertEqual(self.api.load_local_secret_env(), {})
         fake.read_text.assert_called_once_with(encoding="utf-8")
         fake.read_text.reset_mock()
         error = RuntimeError("synthetic unknown failure")
         fake.read_text.side_effect = error
-        with patch.object(self.api, "LOCAL_SECRET_ENV_PATH", fake), self.assertRaises(RuntimeError) as caught:
+        with patch_provider_capability(self.api, "LOCAL_SECRET_ENV_PATH", fake), self.assertRaises(RuntimeError) as caught:
             self.api.load_local_secret_env()
         self.assertIs(caught.exception, error)
         fake.read_text.assert_called_once_with(encoding="utf-8")
@@ -202,12 +202,12 @@ class KeyMaterialContracts(unittest.TestCase):
             name = "first.env"
             @property
             def with_name(inner):
-                api.LOCAL_SECRET_ENV_PATH = replacement_path
+                set_provider_capability(api, 'LOCAL_SECRET_ENV_PATH', replacement_path)
                 def selected(name):
                     events.append(name)
                     return temporary_path
                 return selected
-        with patch.object(api, "LOCAL_SECRET_ENV_PATH", FirstPath()), patch.object(api.os, "chmod") as chmod, patch.object(api.os, "replace") as replace:
+        with patch_provider_capability(api, "LOCAL_SECRET_ENV_PATH", FirstPath()), patch.object(api.os, "chmod") as chmod, patch.object(api.os, "replace") as replace:
             api.save_local_secret_env({"SYNTHETIC_KEY": "synthetic"})
         self.assertEqual(events, ["second.env.tmp"])
         replace.assert_called_once_with(temporary_path, replacement_path)
@@ -219,7 +219,7 @@ class KeyMaterialContracts(unittest.TestCase):
         def load():
             self.api.os.environ = later
             return {"SYNTHETIC_KEY": " synthetic-value "}
-        with patch.object(self.api.os, "environ", first), patch_provider_capability(self.api, 'load_local_secret_env', load):
+        with provider_environment_input(self.api, 'secrets', lambda: self.api.os.environ), patch.object(self.api.os, "environ", first), patch_provider_capability(self.api, 'load_local_secret_env', load):
             self.assertEqual(self.api.local_secret_env_value("SYNTHETIC_KEY"), "synthetic-value")
         self.assertEqual(first, {})
         self.assertEqual(later, {"SYNTHETIC_KEY": "synthetic-value"})
@@ -229,7 +229,7 @@ class KeyMaterialContracts(unittest.TestCase):
         fake = Mock()
         fake.exists.return_value = True
         fake.read_text.side_effect = chain([OSError("synthetic read failure")], repeat('SYNTHETIC_KEY="synthetic-later"'))
-        with patch.object(self.api, "LOCAL_SECRET_ENV_PATH", fake):
+        with patch_provider_capability(self.api, "LOCAL_SECRET_ENV_PATH", fake):
             self.assertEqual(self.api.load_local_secret_env(), {})
         fake.read_text.assert_called_once_with(encoding="utf-8")
 

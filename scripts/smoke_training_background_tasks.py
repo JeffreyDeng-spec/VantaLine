@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_task_application_test_ports import bind_training_background_tasks, assert_default_training_background_tasks
 from scripts.model_profile_test_ports import patch_profile_service, set_profile_service, patch_fixture_capability
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
@@ -64,10 +65,12 @@ class TrainingBackgroundTaskContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_training_background_tasks(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack=ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_tasks(self.api,self.stack)
         self.f=BackgroundFixture(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='background-task-'))); self.f.bind(self.api,self.stack)
         self.name=self.stack.enter_context(patch.object(self.api,'safe_name',side_effect=lambda value:value.replace(' ','_')))
         self.which=self.stack.enter_context(patch.object(shutil,'which',return_value='fake-codex'))

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_FOUNDATION_POLICIES_BASELINE_SOURCE')
 NAMES={'bounded_text','env_flag','resize_bgr_max_side','bbox_iou_xyxy'}
 def functions():
@@ -53,5 +54,5 @@ class Contracts(unittest.TestCase):
   self.assertIs(caught.exception,error)
  @unittest.skipIf(bool(BASELINE),'candidate direct imports only')
  def test_entry_exports_actual_implementations(self):
-  tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text());imports={a.name for n in tree.body if isinstance(n,ast.ImportFrom) and n.module in {'runtime.text_policy','config.environment','detection.geometry','detection.image_geometry'} for a in n.names};self.assertTrue(NAMES<=imports);self.assertFalse(any(isinstance(n,ast.FunctionDef) and n.name in NAMES for n in tree.body))
+  tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'));imports={a.name for n in tree.body if isinstance(n,ast.ImportFrom) and n.module in {'runtime.text_policy','config.environment','detection.geometry','detection.image_geometry'} for a in n.names};self.assertTrue(NAMES<=imports);self.assertFalse(any(isinstance(n,ast.FunctionDef) and n.name in NAMES for n in tree.body))
 if __name__=='__main__':unittest.main()

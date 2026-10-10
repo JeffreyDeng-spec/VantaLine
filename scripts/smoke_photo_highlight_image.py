@@ -21,7 +21,8 @@ class PhotoHighlightImageContracts(unittest.TestCase):
         (Path(cls.root.name) / 'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api = server
+        from scripts.photo_highlight_image_test_fixture import photo_highlight_image_fixture
+        cls.api = photo_highlight_image_fixture(server)
     @classmethod
     def tearDownClass(cls):
         cls.root.cleanup()

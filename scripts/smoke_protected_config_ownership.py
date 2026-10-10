@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 from scripts import smoke_app_config_store as existing
 BASELINE=os.environ.get('VANTALINE_PROTECTED_CONFIG_BASELINE_SOURCE')
 NAMES=('save_app_config','mutate_app_config_atomically')
@@ -189,7 +190,7 @@ class ProtectedConfigContracts(unittest.TestCase):
 
     @unittest.skipIf(BASELINE,'new direct owner exports')
     def test_root_exports_and_source_contract(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text())
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py'))
         for name in NAMES:
             node=next(n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id==name for t in n.targets))
             self.assertEqual(ast.unparse(node.value),'_app_configuration.'+name)
@@ -199,7 +200,7 @@ class ProtectedConfigContracts(unittest.TestCase):
     @unittest.skipIf(BASELINE,'new direct owner source oracle')
     def test_configuration_replay_rejects_unknown_query_or_lease_owner(self):
         from application_integration_source_contract import restore_business_root
-        source=(ROOT/'local_inspection_service/server.py').read_text()
+        source=read_checked_application_source(ROOT / 'local_inspection_service/server.py')
         restore_business_root(source)
         for old,new in (
             ('_pipeline_candidate_flow = _pipeline_queries.candidates', '_pipeline_candidate_flow = _pipeline_queries.metadata'),

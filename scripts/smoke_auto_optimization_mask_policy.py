@@ -13,6 +13,7 @@ import unittest
 import cv2
 import numpy as np
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from auto_application_test_methods import auto_method
 from auto_optimization_test_ports import assert_capability_owner
 BASELINE=os.environ.get("VANTALINE_AUTO_MASK_POLICY_BASELINE_SOURCE")
 PROMPT_NAMES={"auto_optimize_mask_system_prompt","auto_optimize_mask_owner_user","auto_optimize_accessory_lookup_for_sample","auto_optimize_mask_target_profile","auto_optimize_mask_target_payload","auto_optimize_mask_user_prompt","auto_optimize_multicolor_mask_prompt"}
@@ -120,7 +121,7 @@ class MaskContract(unittest.TestCase):
                     if parameter.kind==inspect.Parameter.KEYWORD_ONLY:kw[parameter.name]=object()
                     else:args.append(object())
                 bound=signature.bind(*args,**kw);bound.apply_defaults();expected=object();method=Mock(return_value=expected)
-                with patch.object(server,"_auto_optimization_mask_"+suffix,SimpleNamespace(**{name:method})):
+                with auto_method(self,service,name,method):
                     self.assertIs(fn(*args,**kw),expected);method.assert_called_once_with(*bound.args,**bound.kwargs)
 
     @unittest.skipIf(BASELINE,"candidate-only import")

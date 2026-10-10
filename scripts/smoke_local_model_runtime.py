@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import Mock, patch, call
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from model_catalog_test_ports import patch_model, get_model_callback, set_model_callback
+from scripts.local_model_application_test_ports import bind_local_model, assert_default_local_model
 
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 
@@ -21,10 +22,12 @@ class LocalModelContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api=server
+        assert_default_local_model(server)
     @classmethod
     def tearDownClass(cls):cls.temp.cleanup()
     def setUp(self):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
+        bind_local_model(self.api,self.stack)
         self.directory=tempfile.TemporaryDirectory(prefix='local-model-files-');self.addCleanup(self.directory.cleanup)
         self.path=Path(self.directory.name)/'fixture.pt';self.path.write_bytes(b'synthetic-not-a-model')
         self.registry={'default':{'id':'default','path':self.path}}

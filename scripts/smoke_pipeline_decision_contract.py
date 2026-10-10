@@ -30,6 +30,10 @@ def main() -> None:
                      "subprocess.Popen", "socket.create_connection", "socket.socket.connect"):
             stack.enter_context(patch(name, side_effect=AssertionError("External operation forbidden in decision contract")))
         from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_agent_pipeline_decision_helpers
+        from local_inspection_service import server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state,bind_external_pipeline_state
+        assert_default_pipeline_state(server,'reconciliation')
+        bind_external_pipeline_state(server,stack,'reconciliation')
         assert_agent_pipeline_decision_helpers()
     print("PASS active pipeline decision contracts (full legacy workflow not run)")
 

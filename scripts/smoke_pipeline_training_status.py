@@ -42,6 +42,8 @@ class PipelineTrainingStatusContracts(unittest.TestCase):
         else:
             from local_inspection_service import server
             cls.api = server
+        from scripts.pipeline_state_application_test_ports import assert_default_pipeline_state
+        assert_default_pipeline_state(cls.api, 'training')
 
     @classmethod
     def tearDownClass(cls):
@@ -50,6 +52,8 @@ class PipelineTrainingStatusContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        from scripts.pipeline_state_application_test_ports import bind_external_pipeline_state
+        bind_external_pipeline_state(self.api, self.stack, 'training')
 
     def replace(self, name, value):
         from pipeline_stage_test_ports import patch_pipeline_stage

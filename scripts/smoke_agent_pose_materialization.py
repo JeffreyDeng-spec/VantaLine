@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path.cwd()))
 from local_inspection_service.storage.artifacts.files import BusinessFiles
+from scripts.agent_pose_materialization_application_test_ports import bind_pose_materialization, assert_default_pose_materialization
 
 class AgentPoseMaterializationContracts(unittest.TestCase):
     @classmethod
@@ -24,6 +25,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
         os.environ.update(LOCAL_INSPECTION_ROOT=cls.root.name, VANTALINE_DATA_STORE='json', LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_pose_materialization(cls.api)
 
     @classmethod
     def tearDownClass(cls):
@@ -33,6 +35,7 @@ class AgentPoseMaterializationContracts(unittest.TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
+        bind_pose_materialization(self.api,self.stack)
         self.directory = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir=self.root.name)))
         for name in ('requests.sessions.Session.request', 'urllib.request.urlopen', 'subprocess.Popen', 'os.kill'):
             self.stack.enter_context(patch(name, side_effect=AssertionError('External operation forbidden')))

@@ -157,7 +157,62 @@ class ProviderOrchestrationContracts(unittest.TestCase):
         root=Path(cls.tmp.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        from local_inspection_service.model_providers.selection import ProviderSelection, ProviderKeySelection
+        from local_inspection_service.model_providers.retry_policy import ProviderRetryPolicy, ProviderFailureEvidence
+        from local_inspection_service.model_providers.retry_flow import JsonRetryFlow, ImageRetryFlow
+        from local_inspection_service.model_providers.orchestration_ports import (
+            ProviderFactories, ProviderKeys, RetryErrors, ImageDelay, FailureEvidence,
+            JsonProviderSelection, JsonRetryEvidence, JsonRetryTiming, ImageRetryCalls, ImageRetryTiming)
+        api = SimpleNamespace(time=server.time, random=server.random,
+            GeminiAiProvider=server.GeminiAiProvider, OpenAICompatibleAiProvider=server.OpenAICompatibleAiProvider,
+            AgnesImageProvider=server.AgnesImageProvider, QwenImageProvider=server.QwenImageProvider,
+            AiProviderConfigError=server.AiProviderConfigError, AiProviderError=server.AiProviderError,
+            AiProviderNonRetryableError=server.AiProviderNonRetryableError,
+            AiProviderOverloaded=server.AiProviderOverloaded, AiProviderTimeout=server.AiProviderTimeout,
+            bounded_text=server.bounded_text, secret_key_item_id=server.secret_key_item_id,
+            ai_detection_settings=server.ai_detection_settings,
+            AI_PROVIDER_MAX_ATTEMPTS=server.AI_PROVIDER_MAX_ATTEMPTS,
+            AI_PROVIDER_RETRY_BACKOFF_SECONDS=server.AI_PROVIDER_RETRY_BACKOFF_SECONDS,
+            AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS=server.AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS,
+            AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS=server.AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS,
+            AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS=server.AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS,
+            _auto_optimize_image_request_semaphore=server._auto_optimize_image_request_semaphore,
+            AI_DETECTION_SYSTEM_PROMPT=server.AI_DETECTION_SYSTEM_PROMPT,
+            generate_ai_detection_json=server.generate_ai_detection_json)
+        selection = ProviderSelection(ProviderFactories(lambda: api.GeminiAiProvider,
+            lambda: api.OpenAICompatibleAiProvider, lambda: api.AgnesImageProvider,
+            lambda: api.QwenImageProvider, lambda: api.AiProviderConfigError,
+            lambda: api.ai_detection_settings, lambda: api.ai_provider_from_settings))
+        keys = ProviderKeySelection(ProviderKeys(lambda: api.secret_key_item_id,
+            lambda: api.bounded_text, lambda: api.ai_provider_key_candidates))
+        errors = RetryErrors(lambda: api.AiProviderError, lambda: api.AiProviderNonRetryableError,
+            lambda: api.AiProviderOverloaded, lambda: api.AiProviderTimeout)
+        policy = ProviderRetryPolicy(errors, ImageDelay(lambda: api.AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS,
+            lambda: api.AUTO_OPTIMIZE_MASK_RETRY_BASE_SECONDS, lambda: api.AUTO_OPTIMIZE_MASK_RETRY_MAX_SECONDS,
+            lambda: api.random.uniform))
+        evidence = ProviderFailureEvidence(FailureEvidence(lambda: api.AiProviderError, lambda: api.GeminiAiProvider))
+        for name in ('ai_provider_from_settings', 'ai_provider', 'image_generation_provider_from_settings', 'ai_settings_match_runtime'):
+            setattr(api, name, getattr(selection, name))
+        for name in ('ai_provider_key_candidates', 'rotate_ai_provider_key'):
+            setattr(api, name, getattr(keys, name))
+        for name in ('provider_error_is_retryable', 'image_provider_error_is_retryable', 'auto_optimize_retry_delay_seconds'):
+            setattr(api, name, getattr(policy, name))
+        for name in ('require_ai_json_object', 'provider_error_needs_repair_prompt', 'provider_failure_usage_metadata', 'annotate_provider_failure'):
+            setattr(api, name, getattr(evidence, name))
+        json_flow = JsonRetryFlow(JsonProviderSelection(lambda: api.ai_settings_match_runtime,
+            lambda: api.ai_provider, lambda: api.ai_provider_from_settings, lambda: api.GeminiAiProvider,
+            lambda: api.rotate_ai_provider_key), JsonRetryEvidence(lambda: api.require_ai_json_object,
+            lambda: api.provider_failure_usage_metadata, lambda: api.provider_error_is_retryable,
+            lambda: api.provider_error_needs_repair_prompt, lambda: api.annotate_provider_failure,
+            lambda: api.bounded_text), errors, JsonRetryTiming(lambda: api.AI_PROVIDER_MAX_ATTEMPTS,
+            lambda: api.AI_PROVIDER_RETRY_BACKOFF_SECONDS, lambda: api.random.uniform, lambda: api.time.sleep))
+        image_flow = ImageRetryFlow(ImageRetryCalls(lambda: api.image_generation_provider_from_settings,
+            lambda: api._auto_optimize_image_request_semaphore, lambda: api.image_provider_error_is_retryable,
+            lambda: api.bounded_text, lambda: api.auto_optimize_retry_delay_seconds), errors,
+            ImageRetryTiming(lambda: api.AUTO_OPTIMIZE_MASK_MAX_ATTEMPTS, lambda: api.time.time, lambda: api.time.sleep))
+        api.generate_provider_json_with_fallback = json_flow.generate_provider_json_with_fallback
+        api.auto_optimize_generate_image_with_retry = image_flow.auto_optimize_generate_image_with_retry
+        cls.api=api
     @classmethod
     def tearDownClass(cls):cls.tmp.cleanup();cls.env.stop()
     def setUp(self):
@@ -292,7 +347,8 @@ class ProviderOrchestrationContracts(unittest.TestCase):
                     except BaseException as exc:caught=exc
                 self.assertIs(caught,error);self.assertEqual(p.generate_image.call_count,count);self.assertEqual((error.attempts,error.retry_count),(count,count-1));self.assertEqual(self.sleep.call_count,count-1)
     def test_detection_adapter_uses_existing_system_prompt(self):
-        with patch.object(self.api,'generate_provider_json_with_fallback',return_value=({'ok':True},1,{})) as flow:
+        from local_inspection_service.compatibility import infrastructure
+        with patch.object(infrastructure,'generate_provider_json_with_fallback',return_value=({'ok':True},1,{})) as flow:
             content=[];self.assertEqual(self.api.generate_ai_detection_json(self.settings,content,max_tokens=9),({'ok':True},1,{}))
         flow.assert_called_once_with(self.settings,self.api.AI_DETECTION_SYSTEM_PROMPT,content,max_tokens=9)
 

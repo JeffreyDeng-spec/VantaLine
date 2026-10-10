@@ -12,6 +12,7 @@ from unittest.mock import Mock, call, patch
 import cv2
 import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from training_background_render_application_test_ports import bind_training_background_render, assert_default_training_background_render
 from local_inspection_service.storage.artifacts.files import BusinessFiles
 from local_inspection_service.storage.artifacts.images import ImageFiles
 
@@ -26,6 +27,7 @@ class BackgroundContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_background_render(server)
         cls.files_helper = staticmethod(server.background_set_image_files)
 
     @classmethod
@@ -33,6 +35,7 @@ class BackgroundContracts(unittest.TestCase):
 
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_background_render(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-background-')))
         self.directory = self.root / 'backgrounds'; self.directory.mkdir()
         self.default = self.root / 'default.png'

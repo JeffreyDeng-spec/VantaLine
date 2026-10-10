@@ -42,6 +42,8 @@ def main():
         (Path(tmp) / "local_inspection_service" / "static").mkdir(parents=True)
         os.environ.pop("VANTALINE_POSTGRES_DSN", None)
         from local_inspection_service import server
+        from scripts.pipeline_task_application_test_ports import assert_default_task_http,bind_external_task_http
+        assert_default_task_http(server)
 
         baseline_source = os.environ.get("VANTALINE_DELETE_BASELINE_SOURCE")
         if baseline_source:
@@ -126,6 +128,7 @@ def main():
                 "HTTPException": HTTPException,
             }
             with ExitStack() as stack:
+                bind_external_task_http(server,stack)
                 for name, value in replacements.items():
                     stack.enter_context(patch_pipeline_task_test_port(server, name, value))
                 try:

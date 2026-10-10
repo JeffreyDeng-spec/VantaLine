@@ -25,7 +25,8 @@ class PhotoHighlightBuilderContracts(unittest.TestCase):
         for name in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             cls.lifetime.enter_context(patch(name,side_effect=AssertionError('External operation forbidden')))
         from local_inspection_service import server
-        cls.api=server
+        from scripts.photo_highlight_builder_test_fixture import photo_highlight_builder_fixture
+        cls.api=photo_highlight_builder_fixture(server,cls.builder_capability_groups)
     @classmethod
     def tearDownClass(cls):cls.lifetime.close()
     def setUp(self):

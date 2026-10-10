@@ -31,7 +31,8 @@ class PipelineBackgroundPublicationContracts(unittest.TestCase):
         from local_inspection_service import server
         cls.import_factory.assert_not_called()
         cls.import_remove.assert_not_called()
-        cls.api = server
+        from scripts.pipeline_background_test_fixture import pipeline_background_fixture
+        cls.api=pipeline_background_fixture(server)
 
     @classmethod
     def tearDownClass(cls):

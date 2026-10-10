@@ -80,6 +80,8 @@ class AiAnalysisFixture:
             'write_ai_original_output':self.original,'ai_model_payload':self.model,'ai_detection_failure_result':self.failure,
             'persist_data_analysis_record_for_ai_detection':self.persist,'AI_REFERENCE_IMAGES_PER_ACCESSORY':2,
             'AI_REFERENCE_IMAGE_MAX_SIDE':512,'AI_REFERENCE_IMAGE_QUALITY':80}.items():stack.enter_context(patch_fixture_capability(api, name, value))
+        from scripts.ai_analysis_test_ports import bind_ai_analysis_ports
+        bind_ai_analysis_ports(api,stack)
         stack.enter_context(patch.object(api._detection_workflows.analysis.publisher,
             'persist_data_analysis_record_for_ai_detection',
             lambda *a,**k:api.persist_data_analysis_record_for_ai_detection(*a,**k)))
@@ -92,6 +94,8 @@ class AiAnalysisContracts(unittest.TestCase):
         root=Path(cls.runtime.name); (root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
+        from scripts.ai_analysis_test_ports import assert_default_ai_analysis
+        assert_default_ai_analysis(server)
         cls.api=server
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()

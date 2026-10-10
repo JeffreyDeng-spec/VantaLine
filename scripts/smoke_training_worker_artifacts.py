@@ -13,6 +13,8 @@ import types
 import unittest
 from unittest.mock import Mock, call, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from scripts.legacy_worker_application_test_ports import assert_default_legacy_worker
+from scripts.legacy_worker_application_test_ports import bind_worker_artifacts
 
 
 def _capture_worker_artifact_window(ns,site,mode,directory=None):
@@ -89,11 +91,11 @@ class TrainingWorkerArtifactContracts(unittest.TestCase):
         root=Path(cls.runtime.name);(root/'local_inspection_service/static').mkdir(parents=True)
         os.environ.update(LOCAL_INSPECTION_ROOT=str(root),VANTALINE_DATA_STORE='json',LOCAL_INSPECTION_AUTO_RESUME_WORKER='0',VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
-        cls.api=server
+        cls.api=server;assert_default_legacy_worker(cls.api)
     @classmethod
     def tearDownClass(cls):cls.runtime.cleanup();cls.environment.stop()
     def setUp(self):
-        self.stack=ExitStack();self.addCleanup(self.stack.close);self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-artifact-')));self.sequence=0;self.f=self.fixture()
+        self.stack=ExitStack();self.addCleanup(self.stack.close);bind_worker_artifacts(self.api,self.stack);self.root=Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='worker-artifact-')));self.sequence=0;self.f=self.fixture()
         for target in ['requests.request','requests.get','requests.post','subprocess.Popen','os.kill']:
             self.stack.enter_context(patch(target,side_effect=AssertionError('unexpected external operation')))
     def fixture(self):

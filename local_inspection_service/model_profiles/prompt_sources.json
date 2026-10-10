@@ -1,5 +1,5 @@
 {
-  "version": 276,
+  "version": 277,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -590,6 +590,28 @@
     "training/persistence_graph.py",
     "auth/visibility_composition.py",
     "model_providers/transport_composition.py",
-    "training/real_photo_composition.py"
+    "training/real_photo_composition.py",
+    "ai_mcp_server.py",
+    "compatibility/__init__.py",
+    "compatibility/analytics.py",
+    "compatibility/infrastructure.py",
+    "compatibility/inspection.py",
+    "compatibility/plc.py",
+    "compatibility/text.py",
+    "compatibility/training_pipeline.py",
+    "config/list_policy.py",
+    "pipeline/errors.py",
+    "runtime/application.py",
+    "runtime/application_lifetime.py",
+    "runtime/application_values.py",
+    "runtime/default_application.py",
+    "runtime/wiring/__init__.py",
+    "runtime/wiring/analytics.py",
+    "runtime/wiring/http_registration.py",
+    "runtime/wiring/infrastructure.py",
+    "runtime/wiring/inspection.py",
+    "runtime/wiring/plc.py",
+    "runtime/wiring/text.py",
+    "runtime/wiring/training_pipeline.py"
   ]
 }

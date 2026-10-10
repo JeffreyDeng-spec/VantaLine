@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from canonical_application_source_contract import read_checked_application_source
 BASELINE=os.environ.get('VANTALINE_POSE_COLLECTION_JOBS_BASELINE_SOURCE')
 NAMES=('safe_record_id','pose_collection_output_dir','pose_collection_output_name','pose_collection_job_id','source_reference_inputs_for_pose_job','make_pose_collection_job','ensure_pose_collection_image_jobs','pending_pose_collection_jobs','pose_collection_pending_detail')
 
@@ -106,7 +107,7 @@ class PoseJobsContract(unittest.TestCase):
 
     @unittest.skipIf(bool(BASELINE),'candidate wiring only')
     def test_wiring_and_light_import(self):
-        tree=ast.parse((ROOT/'local_inspection_service/server.py').read_text(encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pose_collection_jobs' for t in n.targets));count=0
+        tree=ast.parse(read_checked_application_source(ROOT / 'local_inspection_service/server.py', encoding='utf-8'));binding=next(n.value for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_pose_collection_jobs' for t in n.targets));count=0
         for group in binding.keywords:
             for kw in group.value.keywords:self.assertIsInstance(kw.value,ast.Lambda);self.assertEqual(kw.arg,kw.value.body.id);count+=1
         self.assertEqual(count,26)

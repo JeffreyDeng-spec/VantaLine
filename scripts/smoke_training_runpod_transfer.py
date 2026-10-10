@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from training_state_test_ports import patch_training_port, get_training_port, set_training_port
+from training_transfer_application_test_ports import bind_training_transfer, assert_default_training_transfer
 from local_inspection_service.storage.artifacts.runtime import get_runtime
 
 
@@ -35,10 +36,12 @@ class TrainingTransferContracts(unittest.TestCase):
                           LOCAL_INSPECTION_AUTO_RESUME_WORKER='0', VANTALINE_LABEL_INSPECTION_ENABLED='false')
         from local_inspection_service import server
         cls.api = server
+        assert_default_training_transfer(server)
     @classmethod
     def tearDownClass(cls): cls.runtime.cleanup(); cls.environment.stop()
     def setUp(self):
         self.stack = ExitStack(); self.addCleanup(self.stack.close)
+        bind_training_transfer(self.api,self.stack)
         self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix='training-transfer-'))).resolve()
         self.output = self.root / 'output'; self.output.mkdir()
         self.archive = self.output / 'data.zip'; self.archive.write_bytes(b'synthetic-archive')
