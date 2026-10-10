@@ -1438,6 +1438,10 @@ To correct unfrozen real-photo source groups, pause from the frontend and wait f
 
 ## Full CI latency and evidence diagnosis
 
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
 Use required `backend-plc`'s ordinary-job and twelve-shard summaries plus 30-day
 command/receipt artifacts. Full PR CI includes every correctness, safety, migration
 and compatibility check concurrently; only complete performance matrices are

@@ -19,12 +19,12 @@ class EvidenceContract(unittest.TestCase):
     def setUp(self):
         self.now=datetime(2026,10,11,tzinfo=timezone.utc)
         self.manifest=ci.load_manifest()
-        self.context=dict(repository='owner/repo',repository_id=1,main_sha='main',tree='tree',parent='base',policy_hash='policy',workflow_blob='workflow',manifest=self.manifest)
+        self.context=dict(repository='owner/repo',repository_id=1,main_sha='main',tree='tree',parent='base',policy_hash='policy',workflow_blob='workflow',manifest=self.manifest,lock_sha256='lock')
         self.pr=dict(state='closed',merged_at=self.now.isoformat(),merge_commit_sha='main',number=2,base={'ref':'main'},head={'sha':'head','repo':{'id':1}})
         self.run=dict(id=3,event='pull_request',status='completed',conclusion='success',path='.github/workflows/ci.yml',head_repository={'id':1},head_sha='head',run_attempt=1,updated_at=self.now.isoformat())
         self.artifact=dict(name='ci-evidence-1',expired=False,workflow_run={'id':3,'head_sha':'head'})
         self.jobs={'jobs':[dict(name=name,run_attempt=1,status='completed',conclusion='success') for name in ci.FULL_JOBS]}
-        self.reports=[dict(schema=1,manifest_sha256=ci.digest(self.manifest),shard=n,commit='tested',run_id='3',run_attempt='1',completed_at='now',status='success',environment=dict(python='3.10.22',runner_os='Linux',image='image',architecture='X64'),commands=[dict(id=e['id'],status='success',returncode=0,seconds=1) for e in self.manifest['checks'] if e['shard']==n]) for n in range(12)]
+        self.reports=[dict(schema=1,manifest_sha256=ci.digest(self.manifest),shard=n,commit='tested',run_id='3',run_attempt='1',completed_at='now',status='success',environment=dict(python='3.10.22',runner_os='Linux',image='image',architecture='X64',postgresql='postgres (PostgreSQL) 16.10',lock_sha256='lock'),commands=[dict(id=e['id'],status='success',returncode=0,seconds=1) for e in self.manifest['checks'] if e['shard']==n]) for n in range(12)]
         self.receipt=dict(schema=1,event='pull_request',repository='owner/repo',repository_id=1,pr_number=2,head_sha='head',base_sha='base',tested_sha='tested',tree='tree',parent='base',policy_hash='policy',workflow_blob='workflow',manifest_sha256=ci.digest(self.manifest),run_id=3,run_attempt=1,created_at=self.now.isoformat(),jobs=ci.FULL_JOBS,environments=[r['environment'] for r in self.reports])
 
     def check(self):
@@ -53,7 +53,9 @@ class EvidenceContract(unittest.TestCase):
             lambda:self.receipt.update(manifest_sha256='different'),lambda:self.receipt.update(jobs=[]),
             lambda:self.reports[0]['commands'].pop(),lambda:self.reports[0]['commands'][0].update(returncode=7),
             lambda:self.reports[0].update(commit='old'),lambda:self.reports[0].update(run_attempt='0'),
-            lambda:self.receipt['environments'][0].update(python='3.11.0')]
+            lambda:self.receipt['environments'][0].update(python='3.11.0'),
+            lambda:self.receipt['environments'][0].update(postgresql='postgres (PostgreSQL) 17.1'),
+            lambda:self.receipt['environments'][0].update(lock_sha256='wrong')]
         for index,mutate in enumerate(mutations):
             self.setUp();mutate()
             with self.subTest(index=index),self.assertRaises((AssertionError,KeyError)):self.check()
@@ -105,6 +107,15 @@ class EvidenceContract(unittest.TestCase):
             env=dict(GITHUB_EVENT_NAME='push',GITHUB_REF='refs/heads/main',GITHUB_RUN_ATTEMPT='1',GITHUB_OUTPUT=str(output))
             with patch.dict(os.environ,env,clear=True),patch.object(ci.subprocess,'Popen') as spawn:
                 spawn.return_value.communicate.return_value=(b'',b'API failure');spawn.return_value.returncode=1
+                ci.prepare()
+            self.assertIn('mode=full',output.read_text())
+
+    def test_verifier_exception_or_missing_proof_selects_full(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output=Path(temp)/'out'
+            env=dict(GITHUB_EVENT_NAME='push',GITHUB_REF='refs/heads/main',GITHUB_RUN_ATTEMPT='1',GITHUB_OUTPUT=str(output))
+            with patch.dict(os.environ,env,clear=True),patch.object(ci.subprocess,'Popen') as spawn:
+                spawn.return_value.communicate.return_value=(b'',b'');spawn.return_value.returncode=0
                 ci.prepare()
             self.assertIn('mode=full',output.read_text())
 

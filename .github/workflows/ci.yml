@@ -295,16 +295,6 @@ jobs:
         name: codex-report-ui
         path: ${{ runner.temp }}/codex-ui
         if-no-files-found: ignore
-    - run: npm run test:agent
-      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
-    - run: npm run typecheck
-      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
-    - run: npm run build:production-cutover
-      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
-    - name: Verify built protocol
-      working-directory: .
-      run: python scripts/verify_release_contract.py
-      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
     - name: Verify successful exact-tree PR evidence
       if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
       env:
@@ -381,12 +371,13 @@ jobs:
     - name: Install and verify locked production dependencies
       run: python scripts/ci_environment.py prepare
     - name: Verify backend CI coverage and gate failure modes
-      run: |-
+      run: |
         python scripts/backend_ci.py verify
         python scripts/smoke_backend_ci.py
 
         python scripts/smoke_ci_evidence.py
         python scripts/smoke_ci_environment.py
+        python scripts/smoke_ci_chain_timing.py
     - name: Run isolated backend shard
       env:
         BACKEND_RESULT_DIR: ${{ runner.temp }}/backend-results
@@ -417,6 +408,7 @@ jobs:
     - documentation
     - frontend
     - codex-comparison
+    - frontend-build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -497,6 +489,31 @@ jobs:
     - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart
         httpx pytest
     - run: python -m pytest tests/codex_compare -q
+  frontend-build:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: local_inspection_service/frontend
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+    - run: npm ci
+    - run: npm run test:agent
+    - run: npm run typecheck
+    - run: npm run build:production-cutover
+    - name: Verify built protocol
+      working-directory: .
+      run: python scripts/verify_release_contract.py
 'on':
   pull_request: null
   push:

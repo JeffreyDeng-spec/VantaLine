@@ -68,11 +68,11 @@ def verify(manifest):
     pr_trigger = workflow.get('on', workflow.get(True, {})).get('pull_request')
     assert pr_trigger is None or isinstance(pr_trigger, dict) and 'paths' not in pr_trigger
     for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
-                 'documentation','frontend','codex-comparison']:
+                 'documentation','frontend','codex-comparison','frontend-build']:
         assert workflow['jobs'][name]['needs'] == ['ci-mode']
         assert workflow['jobs'][name]['if'] == ('${{ !cancelled() }}' if name in ('frontend','source-safety') else "${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}")
     gate_job = workflow['jobs']['backend-plc']
-    assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison'] and gate_job['if'] == 'always()'
+    assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
     triggers = performance.get('on', performance.get(True))
     assert triggers['schedule'] == [{'cron': '0 19 * * *'}]
@@ -139,6 +139,12 @@ def run_shard(manifest, shard, output):
     checks = [item for item in manifest['checks'] if item['shard'] == shard]
     failed = False
     try:
+        container=os.environ.get('VANTALINE_ORDINARY_CONTAINER')
+        if container:
+            version=subprocess.check_output(['docker','exec',container,'postgres','--version'],text=True).strip()
+            assert version.startswith('postgres (PostgreSQL) 16.'), 'wrong PostgreSQL major'
+            report['environment']['postgresql']=version
+        report['environment']['lock_sha256']=hashlib.sha256((ROOT/'requirements-production.lock').read_bytes()).hexdigest()
         for item in checks:
             if failed and not item.get('always'):
                 report['commands'].append({'id':item['id'], 'status':'skipped'})

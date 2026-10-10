@@ -2326,6 +2326,10 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 
 ## Full CI, trusted environments and exact-tree evidence
 
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
 Required `CI` runs 348 ordinary backend commands in 12 isolated shards alongside
 frontend, source safety, documentation, package and other correctness jobs. There
 is no change-path filter for ordinary PR correctness. The explicit manifest retains
@@ -2371,7 +2375,7 @@ superseded PR CI; main runs and begun production deployments remain uncancelled.
 
 Run `python scripts/backend_ci.py verify`, `python scripts/smoke_backend_ci.py`,
 `python scripts/smoke_ci_evidence.py`, `python scripts/smoke_ci_environment.py`,
-`python scripts/smoke_ci_benchmark_storage.py`, release/doc contracts, shell syntax
+`python scripts/smoke_ci_benchmark_storage.py`, `python scripts/smoke_ci_chain_timing.py`, release/doc contracts, shell syntax
 and `git diff --check`. Negative fixtures cover provider failures/partial reruns,
 forged success, wrong head/tree/parent/policy/attempt, expired or mismatched artifacts,
 missing commands, discovery timeout and corrupt/read-only caches. Mechanically
@@ -2386,7 +2390,10 @@ initial PR queueing and human review/merge waiting; include subsequent runner
 queueing and handoffs. Bootstrap must complete one full main run before business
 PRs can reuse evidence. Record an actual PR→main→production chain and the next
 three genuine release chains, with raw total, excluded human wait and stage/queue
-times. These are acceptance targets, not demonstrated production performance.
+times. These are acceptance targets, not demonstrated production performance. Use
+`python scripts/measure_ci_chain.py --repository OWNER/REPO --pr-run ID --main-run ID
+--release-run ID --output REPORT.json` to independently query successful runs/attempts
+and reconcile raw time, authorized exclusions, stage budgets and later queues.
 
 ## Detection without an empty-background step
 

@@ -1130,6 +1130,10 @@ The required artifact-storage CI includes the new real-photo prefix-cache Postgr
 
 ## Full CI evidence and immutable promotion
 
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
 `CI` runs all ordinary jobs concurrently with twelve isolated backend shards.
 `backend-plc` waits for the full ordinary inventory and publishes commit/run/attempt
 bound receipts only after every job succeeds. Required names `backend-plc`,

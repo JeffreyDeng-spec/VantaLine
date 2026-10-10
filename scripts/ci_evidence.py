@@ -25,7 +25,7 @@ import zipfile
 from backend_ci import ROOT, digest, load_manifest, validate_reports
 
 OTHER_JOBS = ['artifact-storage', 'doc-image-runtime', 'source-safety',
-              'release-package', 'documentation', 'frontend', 'codex-comparison']
+              'release-package', 'documentation', 'frontend', 'codex-comparison', 'frontend-build']
 FULL_JOBS = ['ci-mode', *OTHER_JOBS, *[f'backend-shard-{i}' for i in range(12)], 'backend-plc']
 POLICY_FILES = ['requirements-production.lock', 'scripts/ci_evidence.py',
     'scripts/ci_environment.py', 'scripts/backend_ci.py', 'scripts/backend_ci_manifest.json',
@@ -160,7 +160,9 @@ def validate_receipt(receipt, reports, run, jobs, artifact, pr, context, now):
     validate_reports(context['manifest'], reports, 'success', receipt['tested_sha'], str(run['id']), str(run['run_attempt']))
     assert len(receipt['environments']) == 12
     assert receipt['environments'] == [r['environment'] for r in reports]
-    assert all(e['python'].startswith('3.10.') and e['runner_os']=='Linux' for e in receipt['environments'])
+    assert all(e['python'].startswith('3.10.') and e['runner_os']=='Linux'
+               and e['postgresql'].startswith('postgres (PostgreSQL) 16.')
+               and e['lock_sha256']==context['lock_sha256'] for e in receipt['environments'])
 
 
 def context():
@@ -172,7 +174,8 @@ def context():
     return dict(repository=os.environ['GITHUB_REPOSITORY'], repository_id=int(os.environ['GITHUB_REPOSITORY_ID']),
         main_sha=sha, parent=parent, parents=git('rev-parse','HEAD^@').splitlines(),
         message=git('log','-1','--format=%B'), tree=git('rev-parse','HEAD^{tree}'), policy_hash=current_policy,
-        workflow_blob=git('rev-parse','HEAD:.github/workflows/ci.yml'), manifest=load_manifest())
+        workflow_blob=git('rev-parse','HEAD:.github/workflows/ci.yml'), manifest=load_manifest(),
+        lock_sha256=hashlib.sha256((ROOT/'requirements-production.lock').read_bytes()).hexdigest())
 
 
 def validate_merge_shape(main, head_sha, head_message):
@@ -230,17 +233,24 @@ def prepare(force_full=False, cold=False):
         and os.environ['GITHUB_RUN_ATTEMPT']=='1' and not force_full and not cold):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp)/'proof.json'
-            process = subprocess.Popen([sys.executable, __file__, 'resolve', '--output', str(path)],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             try:
-                out, err = process.communicate(timeout=20)
-                if process.returncode == 0:
-                    proof = json.loads(path.read_text())
-                else:
-                    proof['reason'] = 'source evidence unavailable or invalid; complete tests required'
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL);process.communicate()
-                proof['reason'] = '20-second discovery deadline; complete tests required'
+                process = subprocess.Popen([sys.executable, __file__, 'resolve', '--output', str(path)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+                try:
+                    process.communicate(timeout=20)
+                    if process.returncode == 0:
+                        candidate=json.loads(path.read_text())
+                        assert candidate['mode']=='reuse'
+                        proof=candidate
+                    else:
+                        proof['reason']='source evidence unavailable or invalid; complete tests required'
+                except subprocess.TimeoutExpired:
+                    try:os.killpg(process.pid,signal.SIGKILL)
+                    except ProcessLookupError:pass
+                    process.communicate()
+                    proof['reason']='20-second discovery deadline; complete tests required'
+            except (OSError,ValueError,KeyError,AssertionError,subprocess.SubprocessError):
+                proof=dict(mode='full',reason='evidence verifier exception; complete tests required')
     encoded = base64.b64encode(json.dumps(proof).encode()).decode()
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
