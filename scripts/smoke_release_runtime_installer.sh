@@ -16,7 +16,7 @@ if [[ "${1:-}" != --inside ]]; then
 fi
 scenario="${2:?scenario required}"
 source_root="$(cd "$(dirname "$0")/.." && pwd)"
-mount -t tmpfs -o size=3G tmpfs /opt
+mount -t tmpfs -o size=3G,mode=0755 tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
 base=/opt/vantaline
@@ -28,7 +28,8 @@ cp -R -P --preserve=mode,timestamps /etc/alternatives "$base/test-etc/"
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /etc
 cp -R -P --preserve=mode,timestamps "$base/test-etc/"* /etc/
 mkdir -p /etc/systemd/system /etc/vantaline
-ln -s "$(command -v python3)" "$base/venv/bin/python"
+ln -s /usr/bin/python3 "$base/venv/bin/python"
+printf 'home = /usr/bin\n' > "$base/venv/pyvenv.cfg"
 cat > "$base/testbin/sudo" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == -u ]]; then shift 2; fi
@@ -333,6 +334,7 @@ elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').ex
     raise SystemExit(23)
 PY_CHECKPOINT
 if [[ "$scenario" == managed_observe_* ]]; then
+  printf '%s' "$scenario" > "$base/observer-scenario"
   mkdir -p "$work/local_inspection_service/runtime"
   touch "$work/local_inspection_service/__init__.py" "$work/local_inspection_service/runtime/__init__.py"
   cat > "$work/local_inspection_service/runtime/observe_label_runtime.py" <<'PY_OBSERVE'
@@ -347,13 +349,18 @@ journal=pathlib.Path('/var/lib/vantaline-release/.runtime-transition-v2026.10.1.
 phase=json.loads(journal.read_text())['phase'] if journal.exists() else 'no-journal'
 if phase=='verified': assert (base/'maintenance').exists()
 with (base/'observer-events').open('a') as log:log.write(phase+'\n')
-scenario=os.environ['TEST_RUNTIME_SCENARIO']
+scenario=os.environ.get('TEST_RUNTIME_SCENARIO') or (base/'observer-scenario').read_text()
+if phase=='no-journal' and scenario=='managed_observe_success':
+    import sys
+    assert sys.flags.isolated and sys.flags.no_site
+    assert not any(key in os.environ for key in ('PYTHONPATH','PYTHONSTARTUP','DATABASE_URL','LD_PRELOAD'))
 if scenario in ('managed_observe_verified_recovery','managed_observe_accepted_recovery') and not (base/'observer-interrupted').exists():
     (base/'observer-interrupted').touch()
     os.kill(os.getppid(),signal.SIGKILL)
-if scenario=='managed_observe_failure' or os.environ.get('TEST_OBSERVATION_FAIL')=='1':
+if scenario=='managed_observe_failure' or os.environ.get('TEST_OBSERVATION_FAIL')=='1' or (base/'observation-fail').exists():
     raise SystemExit(23)
-print('PASS synthetic installer observation wiring only')
+before=[{'role':role,'instance':instance*32,'pid':pid,'sampled_at':10.0} for role,instance,pid in [('web','b',123),('label','c',456)]]
+print(json.dumps({'schema':1,'git_commit':args.commit,'release':args.release,'worker_mode':'external','config_revision':'d'*64,'maintenance':False,'paused':False,'queued_runs':0,'active_runs':0,'samples_before':before,'roles':[dict(row,sampled_at=12.0) for row in before],'periodic_progress':True}))
 PY_OBSERVE
 fi
 systemctl start vantaline
@@ -684,4 +691,62 @@ if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root
 fi
 test ! -e "/var/lib/vantaline-release/.runtime-transition-v2026.10.1.json"
 test ! -e "$base/backups/.production-release.lock"
+if [[ "$scenario" == managed_observe_success ]]; then
+  # Exercise the promoted sudo-whitelisted command after accept/finish. Synthetic
+  # samples prove wiring only; actual PostgreSQL progress has separate tests.
+  site_directory="$base/venv/lib/$(/usr/bin/python3 -I -S -c 'import sys;print("python%d.%d"%sys.version_info[:2])')/site-packages"
+  mkdir -p "$site_directory"
+  printf 'import pathlib; pathlib.Path("/opt/vantaline/unsafe-site-hook").touch()\n' > "$site_directory/poison.pth"
+  printf 'import pathlib; pathlib.Path("/opt/vantaline/unsafe-site-hook").touch()\n' > "$site_directory/sitecustomize.py"
+  env PYTHONPATH=/synthetic-attacker PYTHONSTARTUP=/synthetic-secret DATABASE_URL=synthetic-secret \
+    bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/postaccept.json"
+  test "$(tail -1 "$base/observer-events")" = no-journal
+  test ! -e "$base/unsafe-site-hook"
+  python3 - "$base/postaccept.json" <<'PY_POSTACCEPT'
+import json,sys
+value=json.load(open(sys.argv[1]));assert value['periodic_progress'] is True and len(value['roles'])==2
+PY_POSTACCEPT
+  # Execute the workflow's actual preflight body as an unprivileged account.
+  python3 - "$source_root/.github/workflows/release-production.yml" "$base/preflight.py" <<'PY_PREFLIGHT_SOURCE'
+import pathlib,sys
+lines=pathlib.Path(sys.argv[1]).read_text().splitlines()
+start=lines.index('          import os, pathlib, stat, sys')
+end=lines.index('          PY_OBSERVER_ENVIRONMENT',start)
+body='\n'.join(line[10:] for line in lines[start:end])+'\n'
+compile(body,'workflow-preflight','exec')
+pathlib.Path(sys.argv[2]).write_text(body)
+PY_PREFLIGHT_SOURCE
+  /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/preflight.json"
+  events_before="$(sha256sum "$base/runtime-events" "$base/control-events")"
+  pointer_before="$(readlink "$base/current")"
+  for bad in argument commit writable config interpreter module; do
+    args=(--observe-runtime --release v2026.10.1 --commit "$commit")
+    case "$bad" in
+      argument) args+=(--apply) ;;
+      commit) args=(--observe-runtime --release v2026.10.1 --commit "${commit%?}f") ;;
+      writable) chmod 777 "$base/venv" ;;
+      module) chmod 777 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py" ;;
+      config) printf 'home = /tmp\n' > "$base/venv/pyvenv.cfg" ;;
+      interpreter) rm "$base/venv/bin/python"; ln -s /bin/sh "$base/venv/bin/python" ;;
+    esac
+    if bash /usr/local/sbin/vantaline-install-release "${args[@]}" > "$base/rejected-observation.log" 2>&1; then exit 1; fi
+    if [[ "$bad" == writable || "$bad" == config || "$bad" == interpreter ]]; then
+      if /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/rejected-preflight.log" 2>&1; then exit 1; fi
+      test "$(cat "$base/rejected-preflight.log")" = 'Runtime observation environment preflight failed'
+    fi
+    chmod 755 "$base/venv"
+    chmod 644 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py"
+    printf 'home = /usr/bin\n' > "$base/venv/pyvenv.cfg"
+    rm "$base/venv/bin/python"; ln -s /usr/bin/python3 "$base/venv/bin/python"
+    test "$(readlink "$base/current")" = "$pointer_before"
+    test "$(sha256sum "$base/runtime-events" "$base/control-events")" = "$events_before"
+    test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+  done
+  touch "$base/observation-fail"
+  if bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/failed-observation.log" 2>&1; then exit 1; fi
+  test "$(readlink "$base/current")" = "$pointer_before"
+  test "$(sha256sum "$base/runtime-events" "$base/control-events")" = "$events_before"
+  if grep -q synthetic-secret "$base/failed-observation.log"; then exit 1; fi
+  test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json
+fi
 echo "PASS release runtime installer $scenario"

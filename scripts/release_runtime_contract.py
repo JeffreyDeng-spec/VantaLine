@@ -1,7 +1,8 @@
 """Strict label runtime protocol used by the release controller.
 
-Only data is read from a release/worker. The installer never runs a candidate
-validator as root. Paths, service names and runtime roles are controller-owned.
+Topology and transition contracts read data only; they do not run candidate
+validators. The separate read-only database observer runs only verified root-owned
+code with isolated imports. Paths, service names and roles are controller-owned.
 """
 from dataclasses import dataclass
 import json

@@ -91,6 +91,49 @@ jobs:
           chmod 600 ~/.ssh/vantaline_deploy
           printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+      - name: Check read-only observer environment before deployment
+        run: |
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            /usr/bin/python3 -I -S - <<'PY_OBSERVER_ENVIRONMENT'
+          import os, pathlib, stat, sys
+          def verify():
+              root = pathlib.Path('/opt/vantaline/venv')
+              interpreter = pathlib.Path('/usr/bin/python3').resolve(strict=True)
+              def check(path):
+                  value = path.lstat()
+                  assert value.st_uid == 0 and not stat.S_IMODE(value.st_mode) & 0o022
+                  assert stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode)
+              for path in [root, *root.parents, interpreter, *interpreter.parents]:
+                  check(path)
+              assert (root/'bin/python').resolve(strict=True) == interpreter
+              configuration = root/'pyvenv.cfg'
+              check(configuration)
+              assert configuration.stat().st_size <= 4096
+              fields = {}
+              for line in configuration.read_text().splitlines():
+                  if '=' in line:
+                      key, value = line.split('=', 1)
+                      assert key.strip() not in fields
+                      fields[key.strip()] = value.strip()
+              home = pathlib.Path(fields['home'])
+              assert home.is_absolute() and home.resolve(strict=True) == interpreter.parent
+              def fail(error):
+                  raise error
+              for folder, directories, files in os.walk(root, followlinks=False, onerror=fail):
+                  for name in directories + files:
+                      path = pathlib.Path(folder)/name
+                      if path.is_symlink():
+                          destination = path.resolve(strict=True)
+                          assert destination.is_relative_to(root) or (path.parent == root/'bin' and destination == interpreter)
+                      else:
+                          check(path)
+              print('PASS trusted read-only observation environment')
+          try:
+              verify()
+          except Exception:
+              print("Runtime observation environment preflight failed", file=sys.stderr)
+              raise SystemExit(1) from None
+          PY_OBSERVER_ENVIRONMENT
       - name: Upload and deploy exact release
         run: |
           artifact="release-output/$RELEASE_ID.tar.gz"
@@ -113,6 +156,11 @@ jobs:
           ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
             curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]' "$RELEASE_SHA" "$RELEASE_ID"
+      - name: Observe accepted runtime database heartbeats
+        run: |
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            sudo /usr/local/sbin/vantaline-install-release \
+              --observe-runtime --release "$RELEASE_ID" --commit "$RELEASE_SHA"
       - name: Publish successful GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
