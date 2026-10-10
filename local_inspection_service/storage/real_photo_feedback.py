@@ -150,7 +150,7 @@ class RealPhotoRepository:
         with self.tx() as c:
             job=self.read_job(c,identifier)
             if not job or job.get('attempt_id')!=attempt:raise ValueError('wrong attempt receipt')
-            if set(metadata)-{'external_call_started','usage','session_id','evidence','elapsed_seconds','crops'}:
+            if set(metadata)-{'external_call_started','usage','session_id','evidence','elapsed_seconds','crops','diagnostics'}:
                 raise ValueError('invalid receipt fields')
             job.setdefault('attempt_receipt',{}).update(metadata)
             self.save_job(c,job)

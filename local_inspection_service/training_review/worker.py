@@ -31,6 +31,22 @@ SKILL=MODULE/'skills'/'vantaline-training-review'
 MODEL_AGENT='gpt-6-astra'
 
 
+class ReviewFailure(RuntimeError):
+    def __init__(self, code, metadata):
+        super().__init__(code)
+        self.code = code
+        self.metadata = metadata
+
+
+def completion_failure(exit_code, complete, failed, report, session_id, refusals):
+    if exit_code != 0:return 'cli_exit_failed'
+    if failed:return 'cli_turn_failed'
+    if not complete:return 'cli_turn_incomplete'
+    if not report:return 'report_rejected' if refusals else 'report_missing'
+    if not session_id:return 'cli_session_missing'
+    return None
+
+
 def with_repo(fn):
     import psycopg
     selection=build_runtime_repository(postgres_connector=lambda d:psycopg.connect(d,connect_timeout=5,options='-c statement_timeout=10000'))
@@ -116,8 +132,9 @@ def prepare(job, directory, files):
                                             'prompt_version':VERSION,'deadline':job['deadline']}))
 
 
-def broker(job, token, path, report, auth_file):
+def broker(job, token, path, report, auth_file, diagnostics=None):
     lock=threading.Lock()
+    diagnostics = diagnostics if diagnostics is not None else {}
     auth=json.loads(Path(auth_file).read_text())
     secrets=[]
     def collect(value):
@@ -147,8 +164,22 @@ def broker(job, token, path, report, auth_file):
                         with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'evidence':payload}))
                         report.append(payload)
                 status=200;body={'accepted':True,'fingerprint':digest(payload)}
-            except (ValueError,TypeError,KeyError):pass
-            except Exception:status=503;body={'error':'storage unavailable'}
+            except (ValueError,TypeError,KeyError) as exc:
+                # Whitelisted classifications only; never persist exception/request text.
+                code={'bounded nonempty reason required':'reason_invalid',
+                      'integer outside permitted range':'threshold_invalid',
+                      'initialization fields required':'schema_invalid',
+                      'immutable report already submitted':'report_conflict',
+                      'inactive attempt':'attempt_inactive'}.get(str(exc),'report_invalid')
+                body={'error':'invalid or stale report','error_code':code}
+                with lock:
+                    counts=diagnostics.setdefault('report_refusals',{})
+                    counts[code]=min(counts.get(code,0)+1,100)
+            except Exception:
+                status=503;body={'error':'storage unavailable','error_code':'report_storage_unavailable'}
+                with lock:
+                    counts=diagnostics.setdefault('report_refusals',{})
+                    counts['report_storage_unavailable']=min(counts.get('report_storage_unavailable',0)+1,100)
             raw=encode(body).encode();self.send_response(status);self.send_header('Content-Length',str(len(raw)))
             self.end_headers();self.wfile.write(raw)
     return socketserver.UnixStreamServer(str(path),Handler)
@@ -156,13 +187,14 @@ def broker(job, token, path, report, auth_file):
 
 def review(job,token,config):
     report=[];metadata={};events=queue.Queue(maxsize=32);process=None;server=None;reader=None
+    diagnostics={'prompt_sha256':digest((SKILL/'SKILL.md').read_bytes())}
     with workspace(config) as directory, tempfile.TemporaryDirectory(prefix='rp-sock-') as socket_dir:
         for name in ('input','work','auth','bin','tmp'):(directory/name).mkdir(mode=0o700)
         prepare(job,directory/'input',BusinessFiles())
         shutil.copyfile(Path(config['auth_home'])/'auth.json',directory/'auth'/'auth.json')
         (directory/'auth'/'config.toml').write_text('model = "'+MODEL_AGENT+'"\nweb_search = "disabled"\n')
         (directory/'bin'/'vantaline').write_text('#!/bin/sh\nexec /usr/bin/python3 /tools/cli.py "$@"\n');(directory/'bin'/'vantaline').chmod(0o755)
-        server=broker(job,token,Path(socket_dir)/'report.sock',report,directory/'auth'/'auth.json')
+        server=broker(job,token,Path(socket_dir)/'report.sock',report,directory/'auth'/'auth.json',diagnostics)
         threading.Thread(target=server.serve_forever,daemon=True).start()
         try:
             command=sandbox_command(directory,directory/'auth',Path(config['binary']),token,MODEL_AGENT,
@@ -199,12 +231,14 @@ def review(job,token,config):
                         metadata['usage']={k:v for k,v in (event.get('usage') or {}).items()
                                            if k in {'input_tokens','output_tokens','cached_input_tokens','reasoning_output_tokens'} and type(v)is int and v>=0}
                 if not with_repo(lambda r:r.pulse(job['id'],token)) or time.time()>=job['deadline']:
-                    raise RuntimeError('review interrupted; no automatic retry')
+                    raise ReviewFailure('review_interrupted',{**metadata,'diagnostics':diagnostics})
                 last_pulse[0]=time.monotonic()
                 if metadata:with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],metadata))
                 if exited is not None and not reader.is_alive():
-                    if exited!=0 or not complete or failed or not report or not metadata.get('session_id'):
-                        raise RuntimeError('CLI did not complete review')
+                    diagnostics.update(exit_code=exited,turn_completed=complete,turn_failed=failed,report_accepted=bool(report))
+                    metadata['diagnostics']=diagnostics
+                    code=completion_failure(exited,complete,failed,report,metadata.get('session_id'),diagnostics.get('report_refusals'))
+                    if code:raise ReviewFailure(code,metadata)
                     metadata['crops']=crop_evidence(directory)
                     with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'crops':metadata['crops']}))
                     return report[0],metadata
@@ -266,7 +300,12 @@ def run(job,token,config):
                         'error_code':stage+'_failed','receipt':{'usage':{},'external_call_started':False}}
                 with_repo(lambda r:r.finish(job['id'],token,result,lambda state,current,c:apply_result(r,state,current,c)))
             else:
-                with_repo(lambda r:r.finish(job['id'],token,{'error_type':type(exc).__name__,**metadata},lambda *a:None,success=False))
+                if isinstance(exc,ReviewFailure):
+                    metadata.update(exc.metadata)
+                    with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],metadata))
+                result={'error_type':type(exc).__name__,**metadata}
+                if isinstance(exc,ReviewFailure):result['error_code']=exc.code
+                with_repo(lambda r:r.finish(job['id'],token,result,lambda *a:None,success=False))
         except Exception:pass  # claim recovery records uncertain attempts without requeueing.
     finally:stopped.set();thread.join(timeout=6)
 

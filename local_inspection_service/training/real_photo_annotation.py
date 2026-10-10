@@ -41,7 +41,17 @@ def canonical(data, *, max_edge=None):
 
 def image_content(data, *, max_edge):
     clean, meta = canonical(data, max_edge=max_edge)
-    return {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(clean).decode(), 'detail': 'high'}}, meta
+    # Provider-only copy: use the same JPEG90 transport as label comparison.
+    # canonical() remains lossless for review and dataset export.
+    output = io.BytesIO()
+    with Image.open(io.BytesIO(clean)) as pixels:
+        pixels.save(output, 'JPEG', quality=90)
+    encoded = output.getvalue()
+    with Image.open(io.BytesIO(encoded)) as decoded:
+        meta.update(canonical_pixel_sha256=meta['pixel_sha256'],
+                    pixel_sha256=digest(decoded.convert('RGB').tobytes()),
+                    input_sha256=digest(encoded), encoding='jpeg', jpeg_quality=90)
+    return {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(encoded).decode(), 'detail': 'high'}}, meta
 
 
 def annotate(image, classes, settings, read_reference, transport=invoke):
@@ -64,9 +74,11 @@ def annotate(image, classes, settings, read_reference, transport=invoke):
         raise ValueError('model input exceeds aggregate byte bound')
     receipt = {'model': MODEL, 'prompt_version': VERSION, 'prompt_sha256': digest(PROMPT),
                'input': meta, 'references': references, 'usage': {},
-               'input_policy_version': 'bounded-first-frame-v1'}
+               'input_policy_version': 'bounded-first-frame-jpeg-v2'}
+    stage = 'transport'
     try:
         status, raw = transport(payload, settings)
+        stage = 'response_validation'
         receipt['response_sha256'] = digest(raw.encode())
         receipt['response'] = raw[:1024*1024]
         receipt['http_status'] = status
@@ -84,4 +96,21 @@ def annotate(image, classes, settings, read_reference, transport=invoke):
         return {'status': 'completed', 'objects': result, 'receipt': receipt}
     except Exception as exc:
         # Store a classification, not exception text that may contain credentials/media.
-        return {'status': 'failed', 'objects': [], 'error_type': type(exc).__name__, 'receipt': receipt}
+        receipt['failure_stage'] = stage
+        known = {'ConnectionError', 'ProxyError', 'SSLError', 'ConnectTimeout',
+                 'ReadTimeout', 'Timeout', 'ProtocolError', 'RemoteDisconnected',
+                 'MaxRetryError', 'NewConnectionError', 'ConnectionResetError',
+                 'BrokenPipeError', 'JSONDecodeError', 'ValueError'}
+        pending = [exc]; seen = set(); types = []
+        while pending and len(seen) < 16:
+            error = pending.pop()
+            if id(error) in seen:continue
+            seen.add(id(error))
+            name = type(error).__name__
+            if name in known and name not in types:types.append(name)
+            pending.extend(v for v in (error.__cause__, error.__context__,
+                                       getattr(error, 'reason', None), *error.args)
+                           if isinstance(v, BaseException))
+        receipt['failure_types'] = types
+        return {'status': 'failed', 'objects': [], 'error_type': type(exc).__name__,
+                'error_code': stage + '_failed', 'receipt': receipt}

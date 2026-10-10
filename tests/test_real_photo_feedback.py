@@ -205,8 +205,10 @@ def test_large_reference_inputs_bounded_and_boxes_remain_in_original_coordinates
         images = [p for p in body['messages'][0]['content'] if p['type'] == 'image_url']
         assert len(json.dumps(body).encode()) < 48 * 1024 * 1024
         for index, part in enumerate(images):
+            assert part['image_url']['url'].startswith('data:image/jpeg;base64,')
             with Image.open(io.BytesIO(base64.b64decode(part['image_url']['url'].split(',', 1)[1]))) as im:
                 assert max(im.size) <= (1024 if index < 4 else 2048)
+                assert im.format == 'JPEG'
         return 200, json.dumps({'model': MODEL, 'choices': [{'finish_reason': 'stop', 'message': {
             'content': json.dumps({'objects': [{'class_id': '0', 'bbox': [0, 0, 500, 1000]}]})}}]})
     result = annotate(raw, cs, {'provider': 'doubao', 'model': MODEL, 'configured': True}, lambda c: raw, invoke)
@@ -217,3 +219,24 @@ def test_large_reference_inputs_bounded_and_boxes_remain_in_original_coordinates
     assert (meta['input_width'], meta['input_height']) == (2048, 1502)
     assert meta['source_sha256'] == digest(raw)
     assert meta['coordinate_transform'] == [2048 / 3000, 0, 0, 0, 1502 / 2200, 0]
+    assert meta['encoding'] == 'jpeg' and meta['jpeg_quality'] == 90
+    assert result['receipt']['input_policy_version'] == 'bounded-first-frame-jpeg-v2'
+    encoded = base64.b64decode(calls[0]['messages'][0]['content'][-1]['image_url']['url'].split(',', 1)[1])
+    assert meta['input_sha256'] == digest(encoded)
+    with Image.open(io.BytesIO(encoded)) as im:
+        assert meta['pixel_sha256'] == digest(im.convert('RGB').tobytes())
+
+
+def test_transport_failure_retains_safe_stage_without_replaying_or_leaking():
+    from requests.exceptions import ConnectionError
+    from urllib3.exceptions import ProtocolError
+    from http.client import RemoteDisconnected
+    calls = []
+    def invoke(body, settings):
+        calls.append(body)
+        raise ConnectionError(ProtocolError('private-endpoint SECRET', RemoteDisconnected('SECRET')))
+    result = annotate(image(), classes(), {'provider':'doubao','model':MODEL,'configured':True}, lambda c:image(), invoke)
+    assert len(calls) == 1 and result['status'] == 'failed' and result['objects'] == []
+    assert result['error_code'] == 'transport_failed'
+    assert set(result['receipt']['failure_types']) == {'ConnectionError','ProtocolError','RemoteDisconnected'}
+    assert 'SECRET' not in json.dumps(result) and 'private-endpoint' not in json.dumps(result)
