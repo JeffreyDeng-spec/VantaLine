@@ -71,6 +71,10 @@ def verify(manifest):
                  'documentation','frontend','codex-comparison','frontend-build']:
         assert workflow['jobs'][name]['needs'] == ['ci-mode']
         assert workflow['jobs'][name]['if'] == ('${{ !cancelled() }}' if name in ('frontend','source-safety') else "${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}")
+    setup = next(s for s in shards['steps'] if s.get('uses') == 'actions/setup-python@v5')
+    assert 'cache' not in setup['with'], 'hot environment must not restore redundant pip downloads'
+    fallback = [s for s in shards['steps'] if s.get('name') in ('Recover existing pip cache for a full fallback','Rebuild and verify all dependencies after a cache miss')]
+    assert len(fallback) == 2 and all("steps.cached-environment.outcome != 'success'" in s['if'] and "steps.cached-environment.outputs.ready != 'true'" in s['if'] for s in fallback)
     gate_job = workflow['jobs']['backend-plc']
     assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
@@ -194,7 +198,9 @@ def summarize(manifest, reports, jobs):
     # cannot be made smaller by adding runner concurrency delays.
     seconds = (datetime.now(timezone.utc)-earliest).total_seconds()
     lines = ['## Backend CI evidence',
-             f'Backend wall time through gate validation: **{seconds:.1f}s** (target ≤300s).',
+             f'Backend wall time through gate validation: **{seconds:.1f}s**.',
+             'Full PR CI budget: ≤170s from first CI job through completed aggregate, including artifact uploads.',
+             'Use completed GitHub job timestamps for acceptance; this live summary precedes final upload/cleanup.',
              'Includes setup, later shard queueing and aggregation; initial GitHub queue excluded.',
              '', '| Shard | Job seconds (setup + tests) | Test seconds |', '| --- | ---: | ---: |']
     by_shard = {r['shard']:r for r in reports}
