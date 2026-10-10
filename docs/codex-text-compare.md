@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 Codex comparison task-list and event-history repository reads now use short PostgreSQL transactions without the global comparison advisory lock. The SELECT, owner filter, ordering, limits and response projection are unchanged. Detail `get`, submission, claim, cancellation, report writes and worker prechecks still use the original serialized transaction; the HTTP events endpoint first performs a locked ownership/detail lookup, so this change does not make that whole request lock-free. No worker mode, model policy or paid-call retry changes.
 
 # Codex label inspection beta

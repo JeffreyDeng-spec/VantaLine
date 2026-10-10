@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / 'scripts'))
 
 ROOT = Path(tempfile.mkdtemp(prefix="vantaline_auth_smoke_"))
 (ROOT / "local_inspection_service" / "static").mkdir(parents=True, exist_ok=True)
@@ -591,6 +592,9 @@ def assert_created_and_owned(items: list[dict], owner: dict[str, str] | None, la
             raise AssertionError(f"{label}: expected owner {owner['id']}, got {item.get('owner_user_id')}")
 
 
+from scripts.training_auth_application_test_ports import with_training_auth_test_ports
+
+@with_training_auth_test_ports(server)
 def main() -> None:
     assert_api_route_permissions()
     assert_timestamp_ui_hooks()

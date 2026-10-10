@@ -18,6 +18,7 @@ os.environ["LOCAL_INSPECTION_ROOT"] = str(TMP_ROOT)
 os.environ["VANTALINE_DATA_STORE"] = "json"
 os.environ["VANTALINE_INCOMING_TEXT_AUTOMATIC_DECISIONS_VERIFIED"] = "true"
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'scripts'))
 
 from local_inspection_service.scripts import testclient_threadpool_shim  # noqa: E402
 from local_inspection_service import server  # noqa: E402
@@ -113,6 +114,9 @@ def activate_reference(client: TestClient, reference_id: str) -> dict:
     return response.json()
 
 
+from scripts.text_endpoint_application_test_ports import with_text_endpoint_test_ports,set_text_external_enabled
+
+@with_text_endpoint_test_ports(server,'incoming')
 def main() -> None:
     admin = TestClient(server.app, base_url="https://testserver")
     assert_status(admin.post("/api/auth/bootstrap", json={"username": "admin", "password": PASSWORD}), 200, "bootstrap")
@@ -224,7 +228,7 @@ def main() -> None:
     assert_status(immutable, 409, "active standard immutable")
 
     original_disk_usage = server.shutil.disk_usage
-    server.shutil.disk_usage = lambda _path: type("DiskUsage", (), {"free": server.INCOMING_TEXT_MIN_FREE_BYTES - 1})()
+    server.shutil.disk_usage = lambda _path: type("DiskUsage", (), {"free": server._default_application.values.INCOMING_TEXT_MIN_FREE_BYTES - 1})()
     try:
         no_space = manager.post(
             f"/api/incoming-text/tasks/{task_id}/inspect",

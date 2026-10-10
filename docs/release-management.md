@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 The default account visibility graph adds no schema, release topology or rollout setting. Existing authentication HTTP registration and SPA ordering remain unchanged. Its local permission/source checks are scoped evidence and do not replace final CI, performance or whole-release acceptance.
 
 The focused training completion graph is assembled by the default Web entry and adds no release topology or migration. Configuration/pipeline/candidate partial commit boundaries are retained; rollback continues to replace the whole immutable release. Local graph checks do not establish final hosted CI or production acceptance.

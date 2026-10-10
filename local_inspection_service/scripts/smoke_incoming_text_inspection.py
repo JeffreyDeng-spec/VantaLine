@@ -13,6 +13,7 @@ import numpy as np
 APP_DIR = Path(__file__).resolve().parents[1]
 ROOT = APP_DIR.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from local_inspection_service.incoming_text_inspection import (  # noqa: E402
     FAIL,
@@ -127,11 +128,14 @@ def main() -> None:
     assert 'UNIQUE ("owner_user_id", "task_id", "capture_id")' in ddl
     assert "uq_incoming_text_reference_active" in ddl
 
-    server_text = (APP_DIR / "server.py").read_text(encoding="utf-8")
+    from scripts.canonical_application_source_contract import read_checked_application_source
+    from scripts.application_integration_source_contract import restore_plc_domain_root
+    server_text = read_checked_application_source(APP_DIR / "server.py",encoding="utf-8")
+    registration_text = restore_plc_domain_root(server_text)
     task_create_text = (APP_DIR / "pipeline" / "task_create.py").read_text(encoding="utf-8")
     assert 'task_kind = str(request.task_kind or "product_inspection")' in task_create_text
     assert 'detection_method = "label_text_compare"' in task_create_text
-    assert 'create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)' in server_text
+    assert 'create_pipeline_task = register_pipeline_task_create_api(app, _pipeline_task_creator)' in registration_text
     assert "def _duplicate_incoming_capture" in server_text
     assert "review_incoming_text_inspection" in server_text
     analysis_text = (APP_DIR / "text_inspection" / "incoming_analysis.py").read_text(encoding="utf-8")

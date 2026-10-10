@@ -8,6 +8,7 @@ import numpy as np
 APP_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = APP_DIR.parent
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / 'scripts'))
 
 from local_inspection_service import text_compare_beta as beta
 from local_inspection_service.incoming_text_inspection import TextObservation
@@ -34,7 +35,8 @@ def main():
     assert mismatch["differences"][0]["region_normalized"]
     assert run([observation("MODEL: PPLBP-2020")], [observation("MODEL: PPLBP-2020", .72)])["decision"] == "REVIEW_REQUIRED"
     assert run([observation("MODEL")], [observation("MODEL")], aligned=False)["decision"] == "REVIEW_REQUIRED"
-    source = (APP_DIR / "server.py").read_text(encoding="utf-8")
+    from scripts.canonical_application_source_contract import read_checked_application_source
+    source = read_checked_application_source(APP_DIR / "server.py",encoding="utf-8")
     api_source = (APP_DIR / "text_inspection/beta_api.py").read_text(encoding="utf-8")
     assert '@app.post("/api/text-compare-beta/analyze")' in api_source
     assert 'from .text_inspection.beta_api import register as register_beta_comparison, BetaAccess' in source

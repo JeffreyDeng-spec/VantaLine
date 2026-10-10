@@ -7,11 +7,15 @@ import threading
 import time
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'scripts'))
 from scripts.provider_configuration_test_ports import set_provider_capability
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server,TestClient,PASSWORD,picture,docx,login
 from local_inspection_service import label_bbox
 
 
+from scripts.text_endpoint_application_test_ports import with_text_endpoint_test_ports,set_text_external_enabled
+
+@with_text_endpoint_test_ports(server,'bbox')
 def main():
     admin=TestClient(server.app,base_url="https://testserver")
     uid=admin.post("/api/auth/bootstrap",json={"username":"admin","password":PASSWORD}).json()["user"]["id"]
@@ -21,7 +25,7 @@ def main():
     assert create().status_code==403
     assert not admin.get("/api/text-inspection/extraction-capabilities").json()["bbox_enabled"]
     os.environ["VANTALINE_LABEL_BBOX_ACCOUNTS"]=uid
-    server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=True
+    set_text_external_enabled(server,True)
     server.ai_detection_settings=lambda *args:{"configured":True,"provider":"qwen","model":"frozen-fixture","api_key":"fixture-secret","base_url":"https://fixture.invalid"}
     calls=[];release=threading.Event()
     result={"isMultiLabel":True,"labelCount":6,"cropRect":{"x":.1,"y":.1,"w":.5,"h":.5}}

@@ -7,9 +7,13 @@ import time
 import threading
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[2] / 'scripts'))
 from local_inspection_service.scripts.smoke_text_inspection_v2_endpoints import server, TestClient, PASSWORD, assert_status, docx, picture, login
 
 
+from scripts.text_endpoint_application_test_ports import with_text_endpoint_test_ports,set_text_external_enabled
+
+@with_text_endpoint_test_ports(server,'extraction')
 def main():
     admin=TestClient(server.app,base_url="https://testserver")
     bootstrap=admin.post("/api/auth/bootstrap",json={"username":"admin","password":PASSWORD})
@@ -46,7 +50,7 @@ def main():
     confirmed=admin.post(route,json={"version":1,"polygon":points,"confirm":True,"standard_asset_id":asset["id"]})
     assert_status(confirmed,200,"confirm extraction")
     conf=confirmed.json(); compare["extraction_id"]=conf["id"]
-    server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=False
+    set_text_external_enabled(server,False)
     result=admin.post("/api/text-inspection/label/compare",data=compare)
     assert_status(result,200,"compare server crop")
     assert result.json()["diagnostics"]["extraction"]["crop_sha256"]==conf["crop_sha256"]
@@ -59,7 +63,7 @@ def main():
     class Provider:
         def generate_image(self,*args,**kwargs):
             calls.append(1); release.wait(5); raise TimeoutError("simulated")
-    server.TEXT_INSPECTION_EXTERNAL_VLM_ENABLED=True
+    set_text_external_enabled(server,True)
     server.image_generation_settings=lambda:{"configured":True,"provider":"gemini","model":"fixture","timeout_seconds":10}
     server.image_generation_provider_from_settings=lambda settings:Provider()
     attempt=create("ai_request_001","ai"); assert_status(attempt,200,"AI attempt")

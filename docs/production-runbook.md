@@ -1,3 +1,5 @@
+> **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
+
 Account visibility graph wiring preserves origin admission, model permission and output-media ownership checks. It adds no production switch or recovery action; deploy and roll back the complete immutable package through the existing joint topology gates.
 
 Training completion retains configuration save before pipeline synchronization and candidate synchronization after the pipeline task guard is released. The focused graph adds no retry on a partially completed chain, and operators must continue inspecting the existing task evidence. No runtime setting or worker switch is introduced by this wiring.
