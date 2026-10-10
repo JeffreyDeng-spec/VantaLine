@@ -50,6 +50,25 @@ def test_failed_chunk_blocks_round_admission_and_never_replayed(database):
     assert not any(j['kind']=='train' for j in repo.jobs('a','task'))
 
 
+def test_pause_archives_round_and_revokes_late_review_before_source_edit(database):
+    repo=ready(database);schedule(repo,'a','task')
+    before=repo.get('a','task');current=copy.deepcopy(before['round'])
+    job,token=repo.claim({'a'},{'review'},'model','fixture')
+    repo.enable('a','task',classes(),{},False)
+    state=repo.get('a','task')
+    assert not state['enabled'] and 'round' not in state
+    archived=state['rounds'][-1]
+    assert archived['id']==current['id'] and archived['sample_ids']==current['sample_ids']
+    assert archived['status']=='cancelled' and archived['cancelled_at']
+    assert state['initialization']==before['initialization']
+    assert state['samples']==before['samples']
+    assert {j['status'] for j in repo.jobs('a','task') if j['kind']=='review'}=={'cancelled','cancel_requested'}
+    with pytest.raises(ValueError):repo.finish(job['id'],token,{},lambda *a:None)
+    repo.enable('a','task',classes(),{},False)
+    assert len(repo.get('a','task')['rounds'])==1
+    assert repo.claim({'a'},{'review'},'model','fixture') is None
+
+
 def test_failed_initialization_diagnostics_survive_without_requeue(database):
     repo=database();repo.enable('a','task',classes(),{})
     job,token=repo.claim({'a'},{'initialize'},'gpt-6-astra','fixture')

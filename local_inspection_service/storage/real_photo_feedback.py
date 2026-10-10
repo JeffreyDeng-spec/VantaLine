@@ -113,6 +113,10 @@ class RealPhotoRepository:
                 state.pop('initialization', None)
                 state.pop('reference_cache', None)
             state['enabled'] = enabled
+            if not enabled and state.get('round'):
+                current = state.pop('round')
+                current.update(status='cancelled', cancelled_at=time.time())
+                state.setdefault('rounds', []).append(current)
             if not enabled or changed:
                 if (state.get('reference_cache') or {}).get('status')=='queued':
                     state['reference_cache']['status']='cancelled'
