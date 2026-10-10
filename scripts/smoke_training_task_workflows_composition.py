@@ -90,7 +90,8 @@ class TrainingTaskWorkflowsContracts(unittest.TestCase):
         verify_training_task_sources()
 
     def test_wrong_owner_shadow_and_route_mutants_are_rejected(self):
-        source=(ROOT/'local_inspection_service/server.py').read_text()
+        from canonical_application_source_contract import read_checked_application_source
+        source=read_checked_application_source(ROOT/'local_inspection_service/server.py',encoding='utf-8')
         mutations=(
             ('account=_training_account_state,', 'account=_training_user_state,'),
             ('_training_task_runtime = _training_account_state.records.runtime', '_training_task_runtime = TrainingTaskRuntime()'),

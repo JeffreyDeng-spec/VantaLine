@@ -35,7 +35,12 @@ def assert_default_trained_catalog(api):
     a,b,c=object(),object(),object()
     calls=((lookup.repository,app.infrastructure._runtime_repository_access,'runtime_postgres_repository_or_none',(),{},{}),(lookup.file_loader(),g._training_state_workflows,'load_training_task',(a,),{},{}),(catalog.config,app.infrastructure._app_configuration,'load_config',(),{},{}),(links.tasks,g._pipeline_task_store,'load_pipeline_tasks',(),{},{}),(links.name,app.infrastructure._resource_names,'task_record_name',(a,),{},{}),(catalog.files.roots,g._dataset_catalog,'training_run_roots',(),{},{}),(catalog.files.finder,lookup,'training_task_finder',(),{},{}),(catalog.files.task_path(),g._training_state_workflows,'training_task_path',(a,),{},{}),(catalog.files.resolve(),app.infrastructure._service_paths,'resolve_service_path',(a,),{},{'for_write':False}),(catalog.accessories.serialize,app.inspection._accessory_projection,'serialize_accessory',(a,),{},{}),(catalog.pipeline.tasks,g._pipeline_task_store,'load_pipeline_tasks',(),{},{}),(lambda *args:catalog.pipeline.link()(*args),links,'pipeline_task_link_for_training_run',(a,b),{},{}),(catalog.pipeline.method(),g._pipeline_task_metadata,'normalize_pipeline_detection_method',(a,),{},{}),(catalog.rules,app.http._detection_rule_requests,'apply_task_rule_override_to_spec',(a,b),{},{}))
     for selected,receiver,name,args,kwargs,expected in calls:assert_native_relay(case,selected,(receiver,name,args,kwargs,args,expected))
-    case.assertIs(catalog.files.output(),app.values.OUTPUT_DIR)
+    for alias,expected in (('_training_task_lookup',lookup),('_training_links',links),('_trained_model_catalog',catalog)):case.assertIs(getattr(api,alias),expected)
+    original=app.values.OUTPUT_DIR;case.assertIs(catalog.files.output(),original)
+    try:
+        object.__setattr__(app.values,'OUTPUT_DIR',b);case.assertIs(catalog.files.output(),b)
+    finally:object.__setattr__(app.values,'OUTPUT_DIR',original)
+    case.assertIs(catalog.files.output(),original)
     from scripts.training_records_application_test_ports import _frozen_slot
     from unittest.mock import Mock
     for selected,name,args in ((lookup.cache.get,'store_read_cache_get',(a,)),(lookup.cache.put,'store_read_cache_put',(a,b)),(catalog.files.read,'load_json_file_mtime_cached',(a,)),(lambda *args:catalog.access.audit()(*args),'record_audit_fields',(a,b)),(catalog.access.visible,'record_visible_to_user',(a,b))):
