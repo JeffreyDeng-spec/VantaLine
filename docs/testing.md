@@ -304,6 +304,10 @@ Synthetic snapshot scopes, task dictionaries and model responses cover retained 
 exception boundaries. The phase3d source contract now reads actual implementation methods and
 the current relative workspace route; its existing assertions remain. This source check does
 not claim full pipeline, paid model or physical-device commissioning.
+The inline `assert_react_pipeline_route` CI entry also locates the actual pipeline
+schedulers, trained-model linker, recommendation runtime and legacy worker methods.
+It checks the stale production path as an exact literal in the application value
+builder; changes in quoting or the retained entry export name are not behavior changes.
 
 `python scripts/smoke_agent_settings_api.py` covers 17 offline groups: ten original HTTP
 and handler contracts, five callback/failure-order checks and two construction/isolation checks.

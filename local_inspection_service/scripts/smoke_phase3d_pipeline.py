@@ -208,13 +208,13 @@ def assert_react_pipeline_route() -> None:
         "pose tool calls": "ensure_agent_mcp_pose_tool_calls",
         "pose asset materialization": "materialize_agent_mcp_pose_assets",
         "skip validation": "agent_mcp_missing_existing_asset_names",
-        "stale production prefix": '"/opt/vantalane/app"',
+        "stale production prefix": "/opt/vantalane/app",
         "missing tool state": "missing_configuration",
         "sample tool call": "log_agent_mcp_sample_tool_call",
         "training tool call": "log_agent_mcp_training_tool_call",
         "shared output visibility": "Shared/legacy outputs written to the OUTPUT_DIR root",
         "trained model linker": "def link_pipeline_trained_model",
-        "recommendation pregen": "def _run_pipeline_recommendation_pregen",
+        "recommendation pregen": "def run(self, task_id: str, stage: str, user:",
         "recommendation consume": "def consume_pipeline_recommendation",
         "recommendation scheduler": "def schedule_pipeline_recommendation_pregen",
         "worker training watcher": "def _worker_training_watch_once",
@@ -223,6 +223,14 @@ def assert_react_pipeline_route() -> None:
     }
     # Source contracts follow the actual class methods, not application adapters.
     implementation_methods = {
+        "gemini image generation": ("agent/pose_artifact_store.py", "PoseArtifactStore", "write_agent_mcp_pose_artifact"),
+        "auto agent scheduler": ("pipeline/execution_composition.py", "PipelineExecution", "schedule_pipeline_auto_agent"),
+        "trained model linker": ("pipeline/training_links.py", "PipelineTrainedModelLink", "link_pipeline_trained_model"),
+        "recommendation pregen": ("pipeline/recommendation_runtime.py", "PipelineRecommendationRuntime", "run"),
+        "recommendation consume": ("pipeline/recommendations.py", "PipelineRecommendations", "consume_pipeline_recommendation"),
+        "recommendation scheduler": ("pipeline/execution_composition.py", "PipelineExecution", "schedule_pipeline_recommendation_pregen"),
+        "worker training watcher": ("training/worker_watcher.py", None, "_worker_training_watch_once"),
+        "worker request retry": ("training/legacy_worker_requests.py", "LegacyWorkerRequests", "windows_worker_request_with_retry"),
         "shared output visibility": ("auth/account_projections.py", "AccountProjections", "output_path_visible_to_user"),
         "pose asset materialization": ("agent/pose_asset_materialization.py", "PoseAssetMaterialization", "materialize_agent_mcp_pose_assets"),
         "pose tool calls": ("agent/pose_call_registration.py", "PoseCallRegistration", "ensure_agent_mcp_pose_tool_calls"),
@@ -242,11 +250,25 @@ def assert_react_pipeline_route() -> None:
     implementation_sources = {}
     for label, (relative_path, class_name, method_name) in implementation_methods.items():
         source = (REPO_ROOT / "local_inspection_service" / relative_path).read_text(encoding="utf-8")
-        classes = [node for node in ast.parse(source).body if isinstance(node, ast.ClassDef) and node.name == class_name]
-        assert len(classes) == 1, f"Missing implementation class: {class_name}"
-        methods = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == method_name]
+        tree = ast.parse(source)
+        if class_name is None:
+            owner = tree
+        else:
+            classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name]
+            assert len(classes) == 1, f"Missing implementation class: {class_name}"
+            owner = classes[0]
+        methods = [node for node in owner.body if isinstance(node, ast.FunctionDef) and node.name == method_name]
         assert len(methods) == 1, f"Missing implementation method: {class_name}.{method_name}"
         implementation_sources[label] = ast.get_source_segment(source, methods[0])
+    values_source = (REPO_ROOT / "local_inspection_service" / "runtime" / "application_values.py").read_text(encoding="utf-8")
+    builders = [node for node in ast.parse(values_source).body if isinstance(node, ast.FunctionDef) and node.name == "build_application_values"]
+    assert len(builders) == 1, "Missing application value builder"
+    prefixes = [node for node in builders[0].body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "STALE_REPO_PATH_PREFIXES" for target in node.targets)]
+    assert len(prefixes) == 1, "Missing stale service path policy"
+    prefix_values = ast.literal_eval(prefixes[0].value)
+    assert isinstance(prefix_values, tuple), "Stale service path policy must be a tuple"
+    assert "/opt/vantalane/app" in prefix_values, "Missing exact stale production prefix value"
+    implementation_sources["stale production prefix"] = ast.get_source_segment(values_source, prefixes[0])
     feedback_api = (REPO_ROOT / "local_inspection_service" / "pipeline" / "agent_feedback_api.py").read_text(encoding="utf-8")
     assert "/api/pipeline/tasks/{task_id}/agent-feedback" in feedback_api and "register_pipeline_agent_feedback_api" in server
     chat_api = (REPO_ROOT / "local_inspection_service" / "pipeline" / "agent_chat_api.py").read_text(encoding="utf-8")
