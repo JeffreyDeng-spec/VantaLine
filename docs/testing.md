@@ -2377,3 +2377,8 @@ This avoids treating slow runner persistence as a different test scenario. All
 uncertain-outcome, worker-continuation, newer-final-evidence, single-audit and
 exactly-one-frame assertions remain unchanged; production dispatch and the real
 asyncio scheduler are not patched or modified by this release.
+
+The summary-migration regression explicitly drops its role-owned hostile temporary
+table and commits on the writer session before closing it and dropping the role
+from another session. This removes an asynchronous connection-termination cleanup
+race; migration, grant, hostile-search-path and transaction assertions are unchanged.
