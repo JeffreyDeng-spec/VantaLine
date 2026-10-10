@@ -617,3 +617,7 @@ keeps its prior environment. Both workflows enforce fsync, synchronous_commit
 and full_page_writes, distinct instance identities and original capacity limits.
 No database contents are cached or shared between runners; production storage,
 migrations and rollback remain unchanged.
+
+Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.
+
+Explicit source edits on disabled legacy states reuse the same round-archive helper as pause, within the existing mutate transaction. They do not enable state, create jobs or rewrite old job evidence; active-round rejection rolls back the group edit.

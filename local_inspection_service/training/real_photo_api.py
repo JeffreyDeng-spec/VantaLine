@@ -311,9 +311,13 @@ class FeedbackService:
             if sample is None: raise HTTPException(404,'样本不存在')
             if sample.get('source_group') in state.get('split_assignments', {}):
                 raise HTTPException(409,'已冻结数据集的来源组不能修改')
-            sample['source_group']=request.source_group.strip()
             if state.get('round'):
-                raise HTTPException(409,'审核轮次进行中，请先关闭回流再调整分组')
+                if state['enabled']:
+                    raise HTTPException(409,'审核轮次进行中，请先关闭回流再调整分组')
+                # Older releases left a revoked round behind when pausing.
+                # Explicit source editing can archive it without enabling paid work.
+                repo.cancel_round(state)
+            sample['source_group']=request.source_group.strip()
         with self.repo() as repo:repo.mutate(user['id'],identifier,update)
         return self.status(identifier)
 

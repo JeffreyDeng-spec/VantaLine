@@ -2386,3 +2386,7 @@ The summary-migration regression explicitly drops its role-owned hostile tempora
 table and commits on the writer session before closing it and dropping the role
 from another session. This removes an asynchronous connection-termination cleanup
 race; migration, grant, hostile-search-path and transaction assertions are unchanged.
+
+Disposable PostgreSQL coverage includes old cancelled/failed/interrupted/stale annotations followed by an explicit newer version: the cohort waits for the new version, queues review only after completion and preserves the old terminal attempt. Existing current-version failure tests still block training. No paid replay occurs in these fixtures.
+
+Real PostgreSQL API mutation coverage verifies disabled legacy-round source edits persist, remain disabled, archive membership once and leave the job set unchanged. Enabled active-round edits still return 409 and roll back the attempted source change.

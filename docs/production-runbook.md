@@ -1458,3 +1458,7 @@ continues to restore the whole previous immutable release without altering data.
 **Status: Authoritative**
 
 After this release, reload the detection page and verify a task with no saved environment background can submit image, video and camera inspection without a background dialog. Preserve existing backgrounds and training jobs; whole-release rollback restores the previous UI and no data restoration is required.
+
+When explicitly relabeling a failed or cancelled real original, verify the new version progresses to review without an old-version incomplete-cohort pause. Preserve previous receipts; the new version is one separately authorized call. Do not clear old jobs or retry their uncertain attempts to resolve the status.
+
+For a task already paused by an older release, edit its unfrozen source group directly after the compatibility release. The save archives the revoked round without temporarily enabling admission. Verify persisted groups and unchanged queued/running jobs before explicitly resuming labels.
