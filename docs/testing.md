@@ -2483,6 +2483,10 @@ pip fallback. The last shard started 47 seconds after CI began, with 93 seconds
 of tests; the aggregate gate then took 11 seconds. Initialization main overlapped
 this run, so a subsequent isolated measurement is required. This result fails the
 170-second PR budget and is retained without excluding later runner delay.
+Second final-policy full PR run [38083450430](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083450430)
+also passed, in **206 seconds**. No checks were removed. The 170-second budget
+remains unmet within the current runner resources; the next measurement retains
+the same fixed configuration.
 
 Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
 and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded
