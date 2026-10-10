@@ -1351,3 +1351,5 @@ Explicit real-photo pause clears the active review round into cancelled history,
 No background upload is required to start detection. This adds no configuration switch or database migration. Existing task background IDs and environment records remain readable and training keeps its established selected-background/default fallback. The compatibility environment-background endpoint is retained for existing integrations, while the current detection UI exposes no upload or capture step.
 
 The real-photo annotation-version recovery guard has no new setting, model binding, timeout or fallback. Source manifest v182 records the workflow change; historical snapshots and failed attempts remain unchanged.
+
+The v182 recovery change also permits source-group edits on legacy disabled states with revoked rounds, without enabling optimization or changing any model setting.

@@ -76,3 +76,5 @@ Connections idle for at least 30 seconds are retired before the next POST; any f
 Explicit pause archives the active review round as cancelled, retaining frozen membership/job IDs and completed evidence, and revokes outstanding jobs in the same transaction. This releases source-group editing while disabled; pause never recreates cancelled annotations or retries an uncertain paid call. Re-enabling retains initialization; failed cache recovery and cancelled images still require explicit restart/relabel actions.
 
 Incomplete-cohort checks match terminal annotation jobs by original sample ID and annotation version. A failed, interrupted, stale or cancelled older version remains auditable but cannot pause an explicitly requested newer queued version. A terminal current version still blocks admission; no old attempt is retried.
+
+An explicit source-group edit on a disabled task also archives any revoked round left by older pause implementations. It neither enables admission nor queues work. Enabled active rounds and frozen dataset groups still reject edits; repeated edits do not duplicate archived history.

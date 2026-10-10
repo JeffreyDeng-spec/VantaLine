@@ -99,6 +99,13 @@ class RealPhotoRepository:
             (job['id'], job['owner_user_id'], job['task_id'], job['kind'], job['status'],
              job['idempotency_key'], job['created_at'], encode(job)))
 
+    @staticmethod
+    def cancel_round(state):
+        current = state.pop('round', None)
+        if current:
+            current.update(status='cancelled', cancelled_at=time.time())
+            state.setdefault('rounds', []).append(current)
+
     def enable(self, owner, task, classes, profiles, enabled=True, context=None):
         with self.tx() as c:
             state = self.read_state(c, owner, task)
@@ -113,10 +120,8 @@ class RealPhotoRepository:
                 state.pop('initialization', None)
                 state.pop('reference_cache', None)
             state['enabled'] = enabled
-            if not enabled and state.get('round'):
-                current = state.pop('round')
-                current.update(status='cancelled', cancelled_at=time.time())
-                state.setdefault('rounds', []).append(current)
+            if not enabled:
+                self.cancel_round(state)
             if not enabled or changed:
                 if (state.get('reference_cache') or {}).get('status')=='queued':
                     state['reference_cache']['status']='cancelled'

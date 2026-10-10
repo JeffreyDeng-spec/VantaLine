@@ -69,6 +69,38 @@ def test_pause_archives_round_and_revokes_late_review_before_source_edit(databas
     assert repo.claim({'a'},{'review'},'model','fixture') is None
 
 
+@pytest.mark.parametrize('legacy_paused',[False,True])
+def test_source_edit_archives_legacy_paused_round_without_enabling_work(database,legacy_paused):
+    from contextlib import contextmanager
+    from fastapi import HTTPException
+    from local_inspection_service.training.real_photo_api import FeedbackService,GroupRequest
+    repo=ready(database);schedule(repo,'a','task')
+    frozen=copy.deepcopy(repo.get('a','task')['round'])
+    if legacy_paused:
+        repo.enable('a','task',classes(),{},False)
+        # Compatibility snapshot from the old pause implementation.
+        repo.mutate('a','task',lambda state,c:state.update(round=frozen,rounds=[]))
+    before=repo.get('a','task');jobs=repo.jobs('a','task')
+    service=FeedbackService.__new__(FeedbackService)
+    @contextmanager
+    def repository():yield repo
+    service.repo=repository
+    service.task=lambda *a,**kw:({'id':'a'}, {})
+    service.status=lambda identifier:repo.get('a',identifier)
+    if not legacy_paused:
+        with pytest.raises(HTTPException) as error:service.group('task','19',GroupRequest(source_group='confirmed-batch'))
+        assert error.value.status_code==409 and repo.get('a','task')==before
+    else:
+        state=service.group('task','19',GroupRequest(source_group='confirmed-batch'))
+        assert not state['enabled'] and 'round' not in state
+        assert state['samples'][-1]['source_group']=='confirmed-batch'
+        assert state['rounds'][-1]['id']==frozen['id'] and state['rounds'][-1]['status']=='cancelled'
+        assert state['rounds'][-1]['sample_ids']==frozen['sample_ids']
+        service.group('task','18',GroupRequest(source_group='confirmed-batch'))
+        assert len(repo.get('a','task')['rounds'])==1
+    assert repo.jobs('a','task')==jobs
+
+
 def test_failed_initialization_diagnostics_survive_without_requeue(database):
     repo=database();repo.enable('a','task',classes(),{})
     job,token=repo.claim({'a'},{'initialize'},'gpt-6-astra','fixture')
