@@ -1435,3 +1435,9 @@ Before admitting the reference-cache release, settle existing paid calls, reload
 After the connection/upload-budget release, settle active paid tasks before reviewer reload and verify that the independent worker uses the deployed immutable version. A prior failed prefix remains paused; explicitly restart it only from the frontend after inspecting evidence. Check upload/read timeout and pool-reset receipt fields, one POST per attempt, and live prefix/suffix results. Roll back the entire release with admission closed, retaining uncertain receipts and no automatic replay.
 
 To correct unfrozen real-photo source groups, pause from the frontend and wait for active attempts to settle; pause archives the active cohort and revokes its jobs. Verify each group save persists. Re-enable does not replay cancelled labels or uncertain cache requests: explicitly relabel missing images and explicitly restart failed cache creation after inspecting receipts.
+
+## Empty-background step removal
+
+**Status: Authoritative**
+
+After this release, reload the detection page and verify a task with no saved environment background can submit image, video and camera inspection without a background dialog. Preserve existing backgrounds and training jobs; whole-release rollback restores the previous UI and no data restoration is required.

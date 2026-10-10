@@ -372,3 +372,9 @@ In COS mode, photo-highlight ROI and mask persistence failures propagate before 
 Accessory readiness, image-worker status, ID matching and first-source convenience workflows are now owned by existing accessory services. Agent capabilities continue calling those services through the current explicit interfaces; provider/tool authorization and execution topology do not change.
 
 Operator PLC self-pair and self-config are explicit controller exceptions in the generated API manifest. The shared local PLC controls own human confirmation, browser identity and connection release; these operations are not exposed as Agent actions.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+The retired empty-background workbench workflow exposes neither detection_save_environment nor the upload_ai_task_environment_background API adapter. Detection Agent actions continue through the same image/video/camera methods; their model, busy, permission and PLC gates remain unchanged.

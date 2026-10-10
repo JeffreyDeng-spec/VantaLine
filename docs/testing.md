@@ -2323,3 +2323,9 @@ Reference-cache regression: include tests/test_real_photo_cache.py in the dispos
 Real-photo transport regression exercises the installed urllib3 socket-write timeout semantics, recent-pool reuse versus pre-POST idle retirement, and failed-pool cleanup without a second POST. Run the disposable PostgreSQL real-photo suite and model dependency/boundary/docs checks. A released frontend prefix request and subsequent cached annotation remain necessary to verify production behavior; fixtures or an increased timeout do not prove reliability.
 
 Disposable PostgreSQL regression verifies pause archives frozen round membership, releases the active round, retains originals and initialization, cancels queued review work, rejects the running review token and does not duplicate history on repeated pause. Verify source-group persistence through the released frontend after pause; changing an input alone is not evidence of a successful save.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.
