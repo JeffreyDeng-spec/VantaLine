@@ -10,6 +10,8 @@ import unittest
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from local_inspection_service.plc_web_serial import build_connection_check
+
 NAMES = {"plc_web_serial_claim_connecting_lease", "plc_web_serial_activate_lease"}
 POSTGRES = "--postgres" in sys.argv
 if POSTGRES:
@@ -70,7 +72,8 @@ class LeaseAcquisitionContract(unittest.TestCase):
             client_instance_id="browser-123", model_id="model-1", bundle_version="v4"
         )
         self.activate_request = types.SimpleNamespace(
-            session_id="session", lease_epoch=4, usb_vendor_id=1000, usb_product_id=2000
+            session_id="session", lease_epoch=4, usb_vendor_id=1000, usb_product_id=2000,
+            connection_check_id="check", connection_reads=[{"target": t, "response_hex": "0230303030034333"} for t in ("D205", "D206")]
         )
         self.target.current_auth_user = lambda: self.calls.append("user") or self.user
         self.target.current_release_version = lambda: self.calls.append("release") or {"consistent": True}
@@ -126,6 +129,7 @@ class LeaseAcquisitionContract(unittest.TestCase):
             "serial_info": {},
         }
         lease.update(changes)
+        lease["connection_check"] = build_connection_check(lease, {"enabled": True}, "check")
         self.state["lease"] = {"raw_json": lease}
 
     def test_claim_then_activate_state_and_return(self):
@@ -304,6 +308,8 @@ class LeaseAcquisitionContract(unittest.TestCase):
         self.seed_lease()
         class RebindUsb:
             session_id, lease_epoch = "session", 4
+            connection_check_id = "check"
+            connection_reads = [{"target": t, "response_hex": "0230303030034333"} for t in ("D205", "D206")]
             @property
             def usb_vendor_id(inner):
                 self.target._plc_workstation_lease_row = lambda row: {
@@ -331,6 +337,8 @@ class LeaseAcquisitionContract(unittest.TestCase):
         )
         class FailingUsb:
             session_id, lease_epoch = "session", 4
+            connection_check_id = "check"
+            connection_reads = [{"target": t, "response_hex": "0230303030034333"} for t in ("D205", "D206")]
             usb_vendor_id = 1000
             @property
             def usb_product_id(inner):
@@ -388,6 +396,8 @@ class LeaseAcquisitionContract(unittest.TestCase):
                     "bundle_version": "v4", "config_generation": 3,
                     "heartbeat_at": 190, "expires_at": 201, "serial_info": {},
                 }}
+            if method == "activate":
+                state["lease"]["raw_json"]["connection_check"] = build_connection_check(state["lease"]["raw_json"], {"enabled": True}, "check")
             def get(name, value):
                 return lambda: reads.append((label, name)) or value
             def mutate(sid, did, callback):
@@ -504,6 +514,7 @@ class LeaseAcquisitionContract(unittest.TestCase):
             self.assertEqual(committed["raw_json"]["session_id"], claim["session_id"])
             self.activate_request.session_id = claim["session_id"]
             self.activate_request.lease_epoch = claim["lease_epoch"]
+            self.activate_request.connection_check_id = claim["connection_check"]["id"]
             active = self.target.plc_web_serial_activate_lease("station", self.activate_request)
             self.assertEqual(active["state"], "active")
             observer = default_postgres_connector(dsn)

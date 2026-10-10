@@ -1325,3 +1325,9 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 Real-photo localization applies fixed longest-edge limits of 1024 for class references and 2048 for the actual original before lossless PNG encoding. Source byte/pixel limits and the 48 MiB serialized request limit still apply. This introduces no environment option or alternate model; original dimensions, first-frame orientation and scale evidence remain frozen. Preparation-stage failures display only fixed stage codes and exception types, never secret-bearing exception messages.
+
+## Operator-confirmed workstation setup
+
+**Status: Authoritative**
+
+`inspection` and `ai_detection` accounts may self-register/configure their current cookie-bound workstation. The first-use UI proposes D205 input, trigger 1, D206 result, blank Y and automatic capture enabled; operator confirmation is required before enabling the station. Existing configurations are preserved, and unconfirmed server defaults remain disabled. Transport parameters stay FX3GA-40MR / FX ASCII / 9600 / 7E1 / 500ms / zero write retries. Read-only connection verification is lease-scoped and separate from manual `profile_verified`. These APIs grant no global configuration or station takeover permission.

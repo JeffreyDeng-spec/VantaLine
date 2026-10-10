@@ -1783,3 +1783,9 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 COS child-directory enumeration now projects distinct immediate child names from latest ready artifact rows in PostgreSQL, rather than decoding every descendant file. Literal prefix reads use explicit C byte ordering and the additive idx_artifact_prefix_c index; the outside list ordering, generations, ownership projections and hybrid local-directory union remain unchanged. Real-photo VLM input bounds resize references to at most 1024 pixels on the longest edge and originals to at most 2048, without cropping or EXIF rotation. Normalized boxes still map to original dimensions; receipts retain input dimensions and the explicit source-to-input scale. Preparation failures become failed annotation versions with a bounded stage code and no external-call receipt, requiring explicit relabeling.
+
+## Local PLC self-service
+
+**Status: Authoritative**
+
+The detection workbench and ordinary-user device settings share `LocalPlcControls` and the browser Web Serial controller. Detector accounts self-register a cookie-bound workstation and save its confirmed local configuration without global settings permissions; they cannot list or take over other workstations. Local name changes preserve the cookie and do not rotate another browser's binding. Configuration edits disconnect first and reject live leases. A connecting lease supplies a read-only check for both configured D registers; activation validates bounded browser evidence. Current-generation communication verification gates active leases and production attempts while ordinary image/video detection stays available without PLC. Model selection may follow connection, but model binding and camera readiness gate production. Verification state extends existing raw JSON records without a schema migration; see the PLC contract for evidence limits and reconnect behavior.

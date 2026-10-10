@@ -1604,6 +1604,7 @@ from .schemas.plc import (
     PlcCaptureSessionHeartbeatRequest,
     PlcWebSerialConfigRequest,
     PlcWorkstationPairRequest,
+    PlcWorkstationSelfPairRequest,
     PlcWorkstationVerifyRequest,
     PlcWorkstationLeaseRequest,
     PlcWorkstationLeaseActivateRequest,
@@ -2007,8 +2008,8 @@ def plc_web_serial_pair(request: Request, response: Response, name: str, station
     return _plc_station_service.plc_web_serial_pair(request, response, name, station_id)
 
 
-def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any]) -> dict[str, Any]:
-    return _plc_station_service.plc_web_serial_update_config(station_id, candidate)
+def plc_web_serial_update_config(station_id: str, candidate: dict[str, Any], require_disconnected: bool = False) -> dict[str, Any]:
+    return _plc_station_service.plc_web_serial_update_config(station_id, candidate, require_disconnected)
 
 
 def plc_web_serial_set_verified(station_id: str, verified: bool) -> dict[str, Any]:
@@ -2090,6 +2091,7 @@ def _plc_web_serial_require_active_lease(
         lease.get("session_id") == session_id
         and lease.get("owner_user_id") == user_id
         and lease.get("state") == "active"
+        and lease.get("communication_verified") is True
         and int(lease.get("expires_at") or 0) > now
         and int(lease.get("config_generation") or -1) == int(station.get("config_generation") or 0)
         and lease.get("bundle_version") == WEB_SERIAL_PROTOCOL_VERSION
@@ -9183,6 +9185,50 @@ def verify_plc_web_serial_workstation_profile(
     payload: PlcWorkstationVerifyRequest,
 ) -> dict[str, Any]:
     return _plc_workstation_management.verify_profile(request, payload)
+
+
+def _require_plc_operator() -> None:
+    user = current_auth_user()
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not any(user_has_permission(user, permission) for permission in ("inspection", "ai_detection")):
+        raise HTTPException(status_code=403, detail="Inspection permission required")
+
+
+@app.post("/api/plc/workstation/self-pair")
+def self_pair_plc_workstation(request: Request, response: Response, payload: PlcWorkstationSelfPairRequest) -> dict[str, Any]:
+    _require_plc_operator()
+    station = plc_web_serial_station_from_request(request)
+    if station:
+        if payload.name is not None:
+            name = " ".join(payload.name.split())
+            if not name:
+                raise HTTPException(status_code=400, detail="工作站名称不能为空")
+            def rename(state):
+                record = _plc_web_serial_record(state.get("station"))
+                if not record:
+                    raise PlcConfigError("plc_workstation_not_found")
+                record.update(name=name, updated_at=int(time.time()))
+                state["station"] = _plc_workstation_row(record)
+            state = _plc_web_serial_mutate(str(station["id"]), None, rename)
+            station = _plc_web_serial_record(state.get("station"))
+        return plc_web_serial_station_payload(station)
+    try:
+        return plc_web_serial_pair(request, response, payload.name or "产线电脑")
+    except PlcConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/plc/workstation/self-config")
+def self_config_plc_workstation(request: Request, payload: PlcWebSerialConfigRequest) -> dict[str, Any]:
+    _require_plc_operator()
+    station = require_plc_web_serial_station(request)
+    try:
+        return plc_web_serial_update_config(str(station["id"]), payload.model_dump(), require_disconnected=True)
+    except PlcConfigError as exc:
+        if str(exc) == "plc_workstation_in_use_disconnect_before_config":
+            raise HTTPException(status_code=409, detail="请先断开本机 PLC 连接，再修改配置。") from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 _register_workstation_management_routes(

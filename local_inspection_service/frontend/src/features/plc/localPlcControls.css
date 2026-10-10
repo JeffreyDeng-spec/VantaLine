@@ -1,0 +1,9 @@
+.local-plc-controls { padding: 12px 0; }
+.local-plc-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; box-sizing: border-box; }
+.local-plc-dialog form { display: grid; gap: 16px; }
+.local-plc-dialog .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.local-plc-dialog .field { display: grid; gap: 6px; }
+.local-plc-dialog summary { cursor: pointer; margin-bottom: 12px; }
+
+.local-plc-dialog h3 { margin: 0 0 8px; }
+.local-plc-dialog > p { margin: 0 0 16px; line-height: 1.6; }

@@ -137,3 +137,15 @@ The dedicated camera request propagates its existing station/session identity as
 Real-photo source metadata binds ordinary/camera uploads to their exact payload hash and video feedback to the analyzed frame pixels. This adds no physical I/O or server serial access. Only the existing dedicated camera request still declares a browser dispatch; ordinary image/video feedback cannot create one.
 
 An ordinary upload's optional capture-session identifier is feedback grouping metadata only. It never asserts a PLC camera request, station lease or dispatch. Non-PLC camera frames can therefore remain in one dataset source group while using ordinary image detection.
+
+## Operator-owned local setup and connection verification
+
+**Status: Authoritative**
+
+Users with `inspection` or `ai_detection` may register and configure only the workstation identified by their browser cookie through `POST /api/plc/workstation/self-pair` and `self-config`. Self-pair accepts an optional name, never a station ID; an existing binding is reused without token rotation. Administrative list/rebind and profile-verification routes retain their existing permissions. A live connecting/active/draining lease must be released before operator configuration changes. Logout retains the binding; a different browser may self-register a new workstation without taking over an existing one.
+
+The shared local setup UI defaults newly confirmed operator configurations to automatic capture enabled, D205 trigger input, trigger 1, D206 result and blank Y. Stored configurations retain their existing values. The global unconfirmed configuration defaults stay disabled. Model selection is not required to establish local communication; model authorization and lease rebinding are required before camera production.
+
+Connecting leases contain a bounded `connection_check` with ID, station/session, epoch, generation, deadline and two read-only D-register frames. Activation requires that ID and exactly two bounded response evidences whose targets, framing and checksum match the plan. No register values are written during this check. Old activation requests receive `plc_connection_verification_required_reload_page`; leases without `communication_verified=true` cannot heartbeat, produce camera plans, declare attempts or report effective connection readiness. Verification is browser-reported communication evidence, not hardware attestation, proof of PLC model, address purpose or output behavior. It does not set the administrator's `profile_verified` flag.
+
+The native chooser runs in the click handler before network awaits. After port opening, a foreground browser validates both read responses and rejects residual bytes before activating. Failed/cancelled connection closes local resources and releases its lease. Background/unload, malformed response, timeout and removal cannot automatically replay writes. Existing administrator D206=6 diagnostics remain explicit and never form part of pairing. Successful connection permits existing reset-before-arm automatic camera capture only when model, camera and bound lease are ready; busy/not-ready edges remain missed rather than queued.

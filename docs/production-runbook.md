@@ -1419,3 +1419,9 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 Task-resource latency diagnosis: directory discovery should return immediate names rather than full descendant artifacts. Migration 2026_10_10_artifact_prefix_index adds a C-collated prefix index through the immutable release installer; it neither rewrites rows nor changes ownership. Compare response identity and unprofiled timings separately from profiler timings. For real-photo preparation failures, inspect the bounded stage code and source/input dimensions; resolve the cause before an explicit frontend relabel. Never replay uncertain paid attempts. Roll back the complete immutable release, retaining the additive index and all attempts.
+
+## Operator PLC connection commissioning
+
+**Status: Authoritative**
+
+After the immutable self-service release deploys, check `/api/version` for matching frontend/backend release and protocol consistency. Existing line browsers reload and manually reconnect; old unverified leases cannot continue production. An operator confirms the local D/Y configuration, grants the native serial chooser and waits for both read responses to validate before camera production. Confirm real ACKs and two-line isolation withon-site equipment; browser-reported read evidence and CI fixtures do not certify output wiring or register purpose. On failure, preserve current evidence, keep PLC action disabled and diagnose manually without replaying uncertain writes. Restore the previous whole immutable release for rollback, reload browsers and reconnect. No server serial operation or runtime schema migration is required.

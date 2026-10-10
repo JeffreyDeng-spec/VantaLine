@@ -1,5 +1,6 @@
 """Browser workstation lease claim and activation transitions."""
 from typing import Any
+from ..plc_web_serial import build_connection_check, validate_connection_check
 
 from .lease_acquisition_ports import LeaseAcquisitionPorts
 
@@ -19,7 +20,8 @@ class LeaseAcquisition:
             raise self.ports.config_error()("invalid_client_instance_id")
         if bundle_version != self.ports.protocol_version():
             raise self.ports.config_error()("plc_browser_protocol_version_mismatch")
-        self.ports.require_model_permission()(model_id or None)
+        if model_id:
+            self.ports.require_model_permission()(model_id)
 
         def mutate(state: dict[str, dict[str, Any] | None]) -> None:
             station = self.ports.record()(state.get("station"))
@@ -49,6 +51,8 @@ class LeaseAcquisition:
                 "expires_at": now + self.ports.connecting_ttl(),
                 "serial_info": {},
             }
+            lease["communication_verified"] = False
+            lease["connection_check"] = build_connection_check(lease, config, f"plccheck_{lease['session_id']}")
             state["lease"] = self.ports.lease_row()(lease)
 
         state = self.ports.mutate()(station_id, None, mutate)
@@ -72,6 +76,12 @@ class LeaseAcquisition:
                 raise self.ports.config_error()("plc_workstation_lease_expired")
             if int(lease.get("config_generation") or -1) != int(station.get("config_generation") or 0):
                 raise self.ports.config_error()("plc_workstation_generation_changed")
+            try:
+                validate_connection_check(lease, request.connection_check_id, request.connection_reads, now)
+            except ValueError as exc:
+                raise self.ports.config_error()(str(exc)) from exc
+            lease["communication_verified"] = True
+            lease["communication_verified_at"] = now
             lease["state"] = "active"
             lease["heartbeat_at"] = now
             lease["expires_at"] = now + self.ports.active_ttl()
