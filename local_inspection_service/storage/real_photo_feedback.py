@@ -111,8 +111,11 @@ class RealPhotoRepository:
                 state.update(classes=classes, profiles=profiles, epoch=uuid.uuid4().hex)
                 state.pop('round', None)
                 state.pop('initialization', None)
+                state.pop('reference_cache', None)
             state['enabled'] = enabled
             if not enabled or changed:
+                if (state.get('reference_cache') or {}).get('status')=='queued':
+                    state['reference_cache']['status']='cancelled'
                 state['epoch'] = uuid.uuid4().hex
                 c.execute(f'''SELECT raw_json FROM {self.table("jobs")}
                     WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running')''', (owner, task))
@@ -161,7 +164,7 @@ class RealPhotoRepository:
             jobs=self.rows(c)
         result={}
         for j in jobs:
-            kind='doubao' if j['kind']=='annotate' else 'agent' if j['kind'] in {'initialize','review','assess'} else j['kind']
+            kind='doubao' if j['kind']=='annotate' else 'doubao_reference_cache' if j['kind']=='reference_cache' else 'agent' if j['kind'] in {'initialize','review','assess'} else j['kind']
             group=result.setdefault(kind,{'attempts':0,'failures':0,'elapsed_seconds':0,'usage':{},'unknown_usage_count':0,'unknown_elapsed_count':0,'estimated_cost':None})
             receipt=j.get('attempt_receipt') or {}
             if not receipt.get('external_call_started'):continue
@@ -173,6 +176,9 @@ class RealPhotoRepository:
             if not usage:group['unknown_usage_count']+=1
             for key,value in usage.items():
                 if type(value)is int and value>=0:group['usage'][key]=group['usage'].get(key,0)+value
+            details=usage.get('input_tokens_details')
+            cached=details.get('cached_tokens') if isinstance(details,dict) else None
+            if type(cached)is int and cached>=0:group['usage']['cached_tokens']=group['usage'].get('cached_tokens',0)+cached
         return result
 
     def claim(self, owners, kinds, model, version):
@@ -190,6 +196,11 @@ class RealPhotoRepository:
                     if job['kind'] in {'initialize','review','assess'}:
                         state['pause_reason']='Agent会话中断或超时；请核查并明确重新启动'
                         self.save_state(c,state)
+                    if job['kind']=='reference_cache':
+                        if (state.get('reference_cache') or {}).get('job_id')==job['id']:
+                            state['reference_cache']['status']='interrupted'
+                            state['pause_reason']='参考图缓存调用中断或结果不确定；请核查后明确重新启动'
+                            self.save_state(c,state)
                     self.event(c, state, job['id'], {'kind':'interrupted'})
                 else:
                     return None
@@ -197,20 +208,30 @@ class RealPhotoRepository:
                 ON s.owner_user_id=j.owner_user_id AND s.task_id=j.task_id
                 WHERE j.kind=ANY(%s) AND j.status='queued' AND j.owner_user_id=ANY(%s)
                 AND s.raw_json->>'enabled'='true' AND j.raw_json->>'epoch'=s.raw_json->>'epoch'
+                AND (j.kind!='annotate' OR (s.raw_json->'reference_cache'->>'status'='ready'
+                     AND (s.raw_json->'reference_cache'->>'expires_at')::double precision > %s))
                 AND (j.kind='initialize' OR j.kind='mask' OR j.raw_json->'inputs'->>'explicit'='true'
                      OR (s.raw_json->'initialization' IS NOT NULL AND COALESCE(s.raw_json->>'pause_reason','')=''))
                 ORDER BY CASE WHEN j.kind='initialize' THEN 0
-                    WHEN j.kind IN ('review','assess') THEN 1 ELSE 2 END,j.created_at LIMIT 1''', (list(kinds), list(owners)))
+                    WHEN j.kind IN ('review','assess') THEN 1 WHEN j.kind='reference_cache' THEN 2 ELSE 3 END,j.created_at LIMIT 1''', (list(kinds), list(owners),time.time()+180))
             rows = self.rows(c)
             if not rows:
                 return None
             job = rows[0]; state = self.read_state(c, job['owner_user_id'], job['task_id'])
             if not state['enabled'] or job['epoch'] != state['epoch']:
                 job['status'] = 'stale'; self.save_job(c, job); return None
+            if job['kind']=='annotate':
+                from ..training.real_photo_cache import usable
+                if not usable(state):return None
+                job['reference_cache']=copy.deepcopy(state['reference_cache'])
+            if job['kind']=='reference_cache':
+                from ..training.real_photo_cache import cache_key
+                if (state.get('reference_cache') or {}).get('job_id')!=job['id'] or job['inputs']['cache_key']!=cache_key(state):
+                    job['status']='stale';self.save_job(c,job);return None
             token = secrets.token_urlsafe(32)
             job.update(status='running', attempt_id=uuid.uuid4().hex, token_hash=digest(token.encode()),
-                       started_at=time.time(), heartbeat=time.time(), deadline=time.time()+(180 if job['kind']=='annotate' else 600),
-                       model='doubao-seed-2-1-pro-260915' if job['kind']=='annotate' else model, runner_version=version)
+                       started_at=time.time(), heartbeat=time.time(), deadline=time.time()+(180 if job['kind'] in {'annotate','reference_cache'} else 600),
+                       model='doubao-seed-2-1-pro-260915' if job['kind'] in {'annotate','reference_cache'} else model, runner_version=version)
             self.save_job(c, job)
             return job, token
 
@@ -245,6 +266,10 @@ class RealPhotoRepository:
                 if job['kind']=='train':state['pause_reason']='实拍训练准备或提交失败；请核查配置和既有任务后明确恢复'
                 if job['kind'] in {'initialize','review','assess'}:
                     state['pause_reason']='Agent任务未完整成功；需处理原因并明确重新启动，不自动重放付费会话'
+                if job['kind']=='reference_cache':
+                    if (state.get('reference_cache') or {}).get('job_id')==identifier:
+                        state['reference_cache']['status']='failed'
+                    state['pause_reason']='参考图缓存失败；请核查后明确重新启动，不自动重放'
             self.event(c, state, identifier, {'kind': job['status'], 'result': result})
             self.save_job(c, job); self.save_state(c, state)
             return job

@@ -22,7 +22,8 @@ from ..storage.artifacts.runtime import get_runtime
 from ..model_profiles.repository import Repository as Profiles
 from ..model_profiles.service import validate_binding
 from ..training.real_photo_api import accounts
-from ..training.real_photo_annotation import annotate, canonical
+from ..training.real_photo_annotation import canonical
+from ..training.real_photo_cache import annotate_cached, create_prefix
 from ..training.real_photo_contracts import MODEL, VERSION, digest, encode, review_report
 from ..training.real_photo_workflow import apply_result, schedule
 
@@ -75,7 +76,9 @@ def settings(job, secret_file):
             except ValueError:values[key.strip()]=value
     key=values.get(profile['secret_ref'])
     if not isinstance(key,str) or not key:raise ValueError('model profile secret unavailable')
-    return {**{k:profile[k] for k in ('provider','model','base_url','timeout_seconds')},'api_key':key,'configured':True}
+    proxy=values.get(profile['proxy_ref']) if profile.get('proxy_ref') else ''
+    if profile.get('proxy_ref') and (not isinstance(proxy,str) or not proxy):raise ValueError('frozen proxy secret unavailable')
+    return {**{k:profile[k] for k in ('provider','model','base_url','timeout_seconds')},'api_key':key,'proxy_url_raw':proxy,'configured':True}
 
 
 @contextmanager
@@ -268,21 +271,32 @@ def run(job,token,config):
     thread=threading.Thread(target=heartbeat,daemon=True);thread.start()
     metadata={};call_started=False;stage='original_read'
     try:
-        if job['kind']=='annotate':
-            files=BusinessFiles();sample=job['inputs']['sample'];raw=files.read_bytes(sample['source_path'],max_bytes=32*1024*1024)
-            stage='original_identity'
-            if digest(raw)!=sample['image_sha256']:raise ValueError('original changed')
+        if job['kind'] in {'annotate','reference_cache'}:
+            files=BusinessFiles()
+            if job['kind']=='annotate':
+                sample=job['inputs']['sample'];raw=files.read_bytes(sample['source_path'],max_bytes=32*1024*1024)
+                stage='original_identity'
+                if digest(raw)!=sample['image_sha256']:raise ValueError('original changed')
+            transport_evidence={}
             def transport(body,model_settings):
-                nonlocal call_started
-                from ..model_profiles.transport import invoke
-                if not with_repo(lambda r:r.pulse(job['id'],token)):raise RuntimeError('annotation no longer authorized')
-                with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'external_call_started':True}))
-                call_started=True
-                return invoke(body,model_settings)
+                from ..training.real_photo_transport import invoke
+                def before_send():
+                    nonlocal call_started
+                    if not with_repo(lambda r:r.pulse(job['id'],token)):raise RuntimeError('annotation no longer authorized')
+                    with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'external_call_started':True}))
+                    call_started=True
+                try:return invoke(body,model_settings,transport_evidence,before_send)
+                finally:
+                    with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'diagnostics':transport_evidence}))
             stage='model_settings'
             model_settings=settings(job,config['secret_file'])
             stage='input_preparation'
-            result=annotate(raw,job['inputs']['classes'],model_settings,lambda c:files.read_bytes(c['reference_path'],max_bytes=32*1024*1024),transport=transport)
+            reader=lambda c:files.read_bytes(c['reference_path'],max_bytes=32*1024*1024)
+            if job['kind']=='reference_cache':
+                result=create_prefix(job['inputs']['classes'],model_settings,reader,transport)
+            else:
+                result=annotate_cached(raw,job['inputs']['classes'],job['reference_cache'],model_settings,reader,transport)
+            result['receipt']['transport']=transport_evidence
             metadata['usage']=result['receipt']['usage']
             # Failed annotations are complete attempts, not admissible training labels.
         else:result,metadata=review(job,token,config)
@@ -295,7 +309,7 @@ def run(job,token,config):
         with_repo(finish)
     except Exception as exc:
         try:
-            if job['kind']=='annotate' and not call_started:
+            if job['kind'] in {'annotate','reference_cache'} and not call_started:
                 result={'status':'failed','objects':[],'error_type':type(exc).__name__,
                         'error_code':stage+'_failed','receipt':{'usage':{},'external_call_started':False}}
                 with_repo(lambda r:r.finish(job['id'],token,result,lambda state,current,c:apply_result(r,state,current,c)))
@@ -335,7 +349,7 @@ def main():
         states=with_repo(lambda r:r.states(accounts()))
         for state in states:
             with_repo(lambda r:schedule(r,state['owner_user_id'],state['task_id']))
-        claimed=with_repo(lambda r:r.claim(accounts(),{'initialize','review','assess','annotate'},MODEL_AGENT,config['version']))
+        claimed=with_repo(lambda r:r.claim(accounts(),{'initialize','review','assess','reference_cache','annotate'},MODEL_AGENT,config['version']))
         if claimed:run(*claimed,config)
         else:time.sleep(2)
 

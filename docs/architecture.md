@@ -1786,7 +1786,7 @@ COS child-directory enumeration now projects distinct immediate child names from
 
 独立训练审核 worker 的报告 broker 在原有鉴权、版本与完整报告约束下记录固定拒绝分类。CLI 完成但报告缺失/被拒绝、非零退出或失败 turn 均阻塞训练；诊断不授予接纳或重试权限，不保存 CLI/异常原文。
 
-Real-photo provider copies use JPEG quality 90 after the same 1024/2048 longest-edge bounds. Full first-frame PNG canonicalization remains the review/dataset format. Receipts identify bounded-first-frame-jpeg-v2, encoded and decoded-input hashes, pre-encoding pixel hash and quality. Transport failures retain only fixed stage/type classifications; no automatic paid replay is added.
+Real-photo provider copies use fixed JPEG90 4:4:4 after 1024/2048 longest-edge bounds, with encoded-byte/request limits and original geometry evidence. A separate durable reference_cache job creates an owner/task/version-scoped, one-hour immutable Ark Responses prefix. Each annotation uploads one new image and always references the prefix, never another annotation answer. Claims require a ready non-expiring prefix; failed/uncertain creation blocks for explicit recovery. The dedicated pooled transport resolves the frozen profile proxy and has zero POST retries; transport/non-200 failures pause automatic paid admission. UI/API expose cache status and separate actual usage/elapsed evidence while provider IDs stay private. Canonical review/export remains lossless PNG; label and pretraining clients remain unchanged. See real-photo-feedback.md for bounds, billing caveats and commissioning gates.
 
 ## Local PLC self-service
 

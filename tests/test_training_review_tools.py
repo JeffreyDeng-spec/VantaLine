@@ -59,7 +59,7 @@ def test_annotation_preparation_failure_is_persisted_without_paid_call():
          patch.object(worker, 'BusinessFiles', lambda: SimpleNamespace(read_bytes=lambda *a, **kw: b'fixture')), \
          patch.object(worker, 'digest', lambda raw: 'digest'), \
          patch.object(worker, 'settings', side_effect=ValueError('sensitive exception text')), \
-         patch.object(worker, 'annotate', side_effect=AssertionError('must not call')):
+         patch.object(worker, 'annotate_cached', side_effect=AssertionError('must not call')):
         worker.run(job, 'token', {'secret_file':'private'})
     assert len(finished) == 1
     args, kwargs = finished[0]
