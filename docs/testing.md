@@ -2477,7 +2477,12 @@ passed all 22 ordinary jobs in [38081853788](https://github.com/JeffreyDeng-spec
 with a complete CI window of **308 seconds**. Its changed cache-policy hash was
 not yet available from trusted main, so it used the full installation fallback.
 After merge, trusted prewarm [38082713423](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38082713423)
-succeeded for the new rules. Final warm-path timing remains to be measured.
+succeeded for the new rules. First final-policy warm run [38083034860](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083034860)
+passed in **205 seconds**. All installed-environment caches were restored without
+pip fallback. The last shard started 47 seconds after CI began, with 93 seconds
+of tests; the aggregate gate then took 11 seconds. Initialization main overlapped
+this run, so a subsequent isolated measurement is required. This result fails the
+170-second PR budget and is retained without excluding later runner delay.
 
 Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
 and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded
