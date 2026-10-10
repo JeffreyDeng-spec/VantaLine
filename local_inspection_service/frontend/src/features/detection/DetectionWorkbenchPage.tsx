@@ -12,7 +12,6 @@ import {
   analyzeCamera,
   analyzeImage,
   analyzeVideo,
-  getAiTaskAutoOptimize,
   getAiTasks,
   getPipeline,
   getPlcWorkstation,
@@ -21,7 +20,6 @@ import {
   queryKeys,
   updateRules,
   updateTaskRules,
-  uploadAiTaskEnvironmentBackground,
   warmupYoloModel
 } from "../../api/queries";
 import type {
@@ -63,7 +61,6 @@ const AI_TASK_MODEL_PREFIX = "ai_detection__task_";
 const DETECTION_UPLOAD_MAX_BYTES = 1_500_000;
 const DETECTION_UPLOAD_MAX_SIDE = 1920;
 const DETECTION_UPLOAD_JPEG_QUALITY = 0.88;
-const ENVIRONMENT_UPLOAD_OPTION = "__upload_background__";
 const SOURCE_TABS: Array<{ value: SourceMode; label: string; Icon: LucideIcon }> = [
   { value: "image", label: "图片", Icon: FileImage },
   { value: "video", label: "视频", Icon: Video },
@@ -89,35 +86,6 @@ function warmupReadyForModel(warmup: ServiceStatusResponse["yolo_warmup"] | unde
   const loaded = warmup?.loaded_model_ids || [];
   const completed = warmup?.completed_model_ids || [];
   return loaded.includes(modelId) || completed.includes(modelId);
-}
-
-function environmentBackgroundSetId(
-  record:
-    | {
-        background_set_id?: string;
-        environment_background?: Record<string, unknown>;
-        background_set?: Record<string, unknown>;
-      }
-    | null
-    | undefined
-) {
-  const environment = record?.environment_background || {};
-  const backgroundSet = record?.background_set || {};
-  return String(record?.background_set_id || environment.background_set_id || backgroundSet.id || "");
-}
-
-function hasTaskEnvironmentBackground(
-  record:
-    | {
-        background_set_id?: string;
-        environment_background?: Record<string, unknown>;
-        background_set?: Record<string, unknown>;
-      }
-    | null
-    | undefined
-) {
-  const setId = environmentBackgroundSetId(record).trim();
-  return Boolean(setId && setId !== "green_conveyor");
 }
 
 function aiTaskModelId(task: AiDetectionLibraryTask | null | undefined) {
@@ -651,7 +619,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [searchParams] = useSearchParams();
   const decodedRouteTaskId = routeTaskId ? decodeURIComponent(routeTaskId) : "";
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const environmentVideoRef = useRef<HTMLVideoElement | null>(null);
   const fullscreenVideoRef = useRef<HTMLVideoElement | null>(null);
   const fullscreenShellRef = useRef<HTMLDivElement | null>(null);
   const requestedWarmupsRef = useRef<Set<string>>(new Set());
@@ -671,11 +638,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [environmentStream, setEnvironmentStream] = useState<MediaStream | null>(null);
-  const [environmentCaptureOpen, setEnvironmentCaptureOpen] = useState(false);
-  const [environmentInputMode, setEnvironmentInputMode] = useState<"camera" | "upload">("camera");
-  const [environmentUploadFile, setEnvironmentUploadFile] = useState<File | null>(null);
-  const [environmentCaptureStatus, setEnvironmentCaptureStatus] = useState("首次检测前需要拍摄一张空白生产环境。");
   const [cameraStatus, setCameraStatus] = useState("支持本机摄像头和已连接的 USB / 外接摄像头。");
   const [plcConnected, setPlcConnected] = useState(false);
   const [plcDiagnosticBusy, setPlcDiagnosticBusy] = useState(false);
@@ -766,28 +728,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     },
     onError: (nextError: Error) => notify({ title: "模型预热失败", description: nextError.message, tone: "error" })
   });
-  const environmentBackgroundMutation = useMutation({
-    mutationFn: ({ taskId, file }: { taskId: string; file: File }) => {
-      const form = new FormData();
-      form.append("file", file);
-      return uploadAiTaskEnvironmentBackground(taskId, form);
-    },
-    onSuccess: async (nextStatus) => {
-      queryClient.setQueryData(queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId), nextStatus);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId) });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
-      setEnvironmentCaptureOpen(false);
-      setEnvironmentCaptureStatus("空场景背景已保存。");
-      notify({ title: "空场景背景已保存", description: "后续 sprite 合成训练图会使用这张生产环境背景。", tone: "success" });
-    },
-    onError: (nextError: Error) => {
-      const message = nextError.message || "保存空场景背景失败";
-      setEnvironmentCaptureStatus(message);
-      notify({ title: "保存空场景背景失败", description: message, tone: "error" });
-    }
-  });
-
   const status = statusQuery.data;
   const taskOptions = useMemo(() => {
     const defaults = status?.available_models || [];
@@ -826,12 +766,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       ) || aiTasks.find((task) => aiTaskMatchesEntry(task, routeTask)) || null
     : null;
   const selectedAiTask = routeAiTask || aiTasks.find((task) => task.id === selectedAiTaskId) || null;
-  const environmentBackgroundTaskId =
-    selectedAiTask?.id ||
-    routeTask?.autoOptimizeTaskId ||
-    routeTask?.aiBaselineTaskId ||
-    routeTask?.aiTaskId ||
-    "";
   const realPhotoTaskId=routeTask
     ? routeTask.autoOptimizeTaskId || routeTask.aiBaselineTaskId || routeTask.aiTaskId || (isTaskEntryAi(routeTask) ? routeTask.sourceId : "")
     : isAi ? selectedAiTask?.id || "" : "";
@@ -841,21 +775,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     enabled:Boolean(realPhotoTaskId),refetchInterval:5000
   });
   const realPhotoSelected=Boolean(realPhotoFeedbackQuery.data?.selected);
-  const environmentBackgroundQuery = useQuery({
-    queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, environmentBackgroundTaskId),
-    queryFn: () => getAiTaskAutoOptimize(auth, environmentBackgroundTaskId),
-    enabled: Boolean(environmentBackgroundTaskId)
-  });
-  const routeTaskEnvironmentBackground = routeTask
-    ? {
-        background_set_id: routeTask.backgroundSetId,
-        environment_background: routeTask.environmentBackground
-      }
-    : null;
-  const environmentBackgroundReady =
-    hasTaskEnvironmentBackground(environmentBackgroundQuery.data) ||
-    hasTaskEnvironmentBackground(selectedAiTask) ||
-    hasTaskEnvironmentBackground(routeTaskEnvironmentBackground);
   const selectedAiModelId = aiTaskModelId(selectedAiTask);
   const allStatusModels = useMemo(() => {
     const specializedTaskModels = (status?.specialized_model_tasks || []).flatMap((task) => task.models || []);
@@ -905,7 +824,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const selectedModel = modelOptions.find((model) => model.id === selectedModelId) || null;
   const activeModelId = selectedModelId || (isAi ? selectedAiModelId : "");
   const realPhotoMode=realPhotoSelected || /^trained_train_real_[0-9a-f]{32}__yolo$/.test(activeModelId);
-  const environmentBackgroundRequired=Boolean(environmentBackgroundTaskId) && !realPhotoMode;
   const activeModelIsAi = selectedModel ? isAiModel(selectedModel) : isAi;
   const activeDetectionLabel = modelDetectionLabel(selectedModel, activeModelIsAi);
   const activeResultLabel = modelResultLabel(selectedModel, activeModelIsAi);
@@ -972,8 +890,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     : (pendingModelId ? displayedModelReady : selectedModelReady)
       ? "ready"
       : "warming";
-  const environmentSourceValue = environmentInputMode === "upload" ? ENVIRONMENT_UPLOAD_OPTION : selectedDeviceId;
-  const environmentBackgroundCanSave = environmentInputMode === "upload" ? Boolean(environmentUploadFile) : Boolean(environmentStream);
 
   function modelMatchesRequest(model: StatusModel, value: string) {
     if (!value) return false;
@@ -1292,12 +1208,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }, [stream]);
 
   useEffect(() => {
-    return () => {
-      environmentStream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [environmentStream]);
-
-  useEffect(() => {
     if (!fullscreenOpen || !fullscreenVideoRef.current || !stream) return;
     fullscreenVideoRef.current.srcObject = stream;
     fullscreenVideoRef.current.play().catch(() => undefined);
@@ -1480,123 +1390,11 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     }
   }
 
-  function stopEnvironmentCamera() {
-    environmentStream?.getTracks().forEach((track) => track.stop());
-    setEnvironmentStream(null);
-    if (environmentVideoRef.current) environmentVideoRef.current.srcObject = null;
-  }
-
-  async function startEnvironmentCamera(deviceId = selectedDeviceId) {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setEnvironmentCaptureStatus("当前浏览器不支持摄像头预览。");
-      return;
-    }
-    setEnvironmentInputMode("camera");
-    setEnvironmentUploadFile(null);
-    setEnvironmentCaptureStatus("正在打开摄像头。");
-    try {
-      environmentStream?.getTracks().forEach((track) => track.stop());
-      const nextStream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId ? { deviceId: { exact: deviceId } } : true,
-        audio: false
-      });
-      setEnvironmentStream(nextStream);
-      if (environmentVideoRef.current) {
-        environmentVideoRef.current.srcObject = nextStream;
-        await environmentVideoRef.current.play();
-      }
-      const track = nextStream.getVideoTracks()[0];
-      const settings = track?.getSettings?.() || {};
-      if (settings.deviceId) setSelectedDeviceId(settings.deviceId);
-      await refreshCameras();
-      setEnvironmentCaptureStatus(`摄像头已连接：${track?.label || "当前摄像头"}。请确认流水线为空，再拍摄背景。`);
-    } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setEnvironmentCaptureStatus(`摄像头不可用：${message}`);
-      notify({ title: "摄像头不可用", description: message, tone: "error" });
-    }
-  }
-
-  async function openEnvironmentCapture() {
-    setSource("camera");
-    setFullscreenOpen(false);
-    setEnvironmentCaptureOpen(true);
-    setEnvironmentInputMode("camera");
-    setEnvironmentUploadFile(null);
-    setEnvironmentCaptureStatus("首次检测前需要拍摄空白生产环境。");
-    await refreshCameras();
-    await startEnvironmentCamera();
-  }
-
-  async function ensureEnvironmentBackground() {
-    if (!environmentBackgroundRequired || environmentBackgroundReady) return true;
-    if (environmentBackgroundQuery.isLoading) {
-      notify({ title: "正在检查空场景背景", tone: "info" });
-      return false;
-    }
-    await openEnvironmentCapture();
-    return false;
-  }
-
-  function closeEnvironmentCapture() {
-    setEnvironmentCaptureOpen(false);
-    setEnvironmentInputMode("camera");
-    setEnvironmentUploadFile(null);
-    stopEnvironmentCamera();
-  }
-
-  function handleEnvironmentSourceChange(value: string) {
-    if (value === ENVIRONMENT_UPLOAD_OPTION) {
-      setEnvironmentInputMode("upload");
-      stopEnvironmentCamera();
-      setEnvironmentCaptureStatus("请选择一张空白生产环境照片。");
-      return;
-    }
-    setEnvironmentInputMode("camera");
-    setEnvironmentUploadFile(null);
-    setSelectedDeviceId(value);
-    void startEnvironmentCamera(value);
-  }
-
-  function handleEnvironmentUploadChange(file: File | null | undefined) {
-    if (!file) {
-      setEnvironmentUploadFile(null);
-      setEnvironmentCaptureStatus("请选择一张空白生产环境照片。");
-      return;
-    }
-    setEnvironmentUploadFile(file);
-    setEnvironmentCaptureStatus(`已选择：${file.name}`);
-  }
-
-  async function saveEnvironmentBackground() {
-    if (!environmentBackgroundTaskId) {
-      notify({ title: "当前任务没有可绑定的 AI 任务", tone: "error" });
-      return;
-    }
-    try {
-      const file =
-        environmentInputMode === "upload"
-          ? environmentUploadFile
-          : await captureVideoFrame(environmentVideoRef.current, "environment_background");
-      if (!file) {
-        setEnvironmentCaptureStatus("请先选择一张空白生产环境照片。");
-        return;
-      }
-      await environmentBackgroundMutation.mutateAsync({ taskId: environmentBackgroundTaskId, file });
-      stopEnvironmentCamera();
-    } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setEnvironmentCaptureStatus(message);
-      notify({ title: "拍摄空场景失败", description: message, tone: "error" });
-    }
-  }
-
   async function runAnalysis(
     kind: SourceMode,
     file: File,
     options?: { requiredPlcState?: PlcBrowserConnectionState; cameraRequestId?: string }
   ) {
-    if (!(await ensureEnvironmentBackground())) return false;
     if (!activeModelId) {
       notify({ title: "当前任务暂无可用模型", tone: "error" });
       return false;
@@ -1681,7 +1479,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     busyRef.current = "camera";
     setBusy("camera");
     try {
-      if (!(await ensureEnvironmentBackground())) return false;
       if (!stream) {
         if (options?.requiredPlcState) return false;
         await startCamera();
@@ -1795,7 +1592,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     {name:"plc_request_connection",domain:"detection",description:"Request the existing workstation connection flow. A human must use the visible connect control to grant the native serial permission.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>({status:"requires_user_input",data:{instruction:"Use the workbench PLC connect control to select the physical port."},next_action:"detection_get_state"})},
     {name:"plc_disconnect",domain:"detection",description:"Disconnect using the existing Web Serial controller and release the workstation lease.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>disconnectPlc()},
     {name:"plc_run_diagnostic",domain:"detection",description:"Run the existing serialized PLC diagnostic with the current workstation lease. Query state for its outcome; never automatically retry.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},available:()=>!plcConnected || busy || plcDiagnosticBusy ? "PLC must be connected and idle" : null,execute:async()=>{await runPlcDiagnostic();return {status:"accepted",next_action:"detection_get_state"};}},
-    {name:"detection_save_environment",domain:"detection",description:"Save the current environment capture/upload using the existing background workflow.",readOnly:false,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>saveEnvironmentBackground()}
   ]);
   if (!decodedRouteTaskId && !requestedTaskId) {
     return (
@@ -2090,69 +1886,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       </div>
 
       <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} />
-
-      {environmentCaptureOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section className="modal-panel wide task-rule-modal" role="dialog" aria-modal="true" aria-label="拍摄空场景背景">
-            <header className="modal-head">
-              <div>
-                <h3>拍摄空场景背景</h3>
-                <span>{routeTask?.label || selectedAiTask?.name || "当前检测任务"}</span>
-              </div>
-              <button className="icon-only" type="button" aria-label="关闭" onClick={closeEnvironmentCapture}>
-                <X size={18} aria-hidden="true" />
-              </button>
-            </header>
-            <div className="modal-body settings-form">
-              <p className="hint-line">请保持流水线为空，不要放配件。保存后，后续训练集会把 sprite 叠加到这张真实生产环境背景上。</p>
-              <label className="toolbar-field">
-                背景来源
-                <select value={environmentSourceValue} onChange={(event) => handleEnvironmentSourceChange(event.currentTarget.value)}>
-                  <option value="">自动选择摄像头</option>
-                  <option value={ENVIRONMENT_UPLOAD_OPTION}>上传照片</option>
-                  {devices.length ? (
-                    devices.map((device, index) => (
-                      <option value={device.deviceId} key={device.deviceId || index}>
-                        {device.label || `摄像头 ${index + 1}`}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">未检测到摄像头</option>
-                  )}
-                </select>
-              </label>
-              {environmentInputMode === "upload" ? (
-                <FileDropZone className="dropzone compact-dropzone" accept="image/*" disabled={environmentBackgroundMutation.isPending} ariaLabel="拖拽或选择空白生产环境照片" onFiles={(files) => handleEnvironmentUploadChange(files[0])}>
-                  <span className="dropzone-file-action">选择照片</span>
-                  <strong>上传空白生产环境照片</strong>
-                  <span className="dropzone-file-name">{environmentUploadFile?.name || "拖拽照片到这里，或点击选择"}</span>
-                </FileDropZone>
-              ) : (
-                <div className="camera-preview">
-                  <video ref={environmentVideoRef} autoPlay playsInline muted />
-                  {!environmentStream ? <div className="camera-empty">正在打开摄像头</div> : null}
-                </div>
-              )}
-              <p className={`hint-line ${environmentCaptureStatus.includes("失败") || environmentCaptureStatus.includes("不可用") ? "danger-text" : ""}`}>{environmentCaptureStatus}</p>
-            </div>
-            <footer className="modal-footer">
-              <button className="secondary compact-action" type="button" onClick={closeEnvironmentCapture}>
-                稍后
-              </button>
-              {environmentInputMode === "camera" ? (
-                <button className="secondary compact-action" type="button" disabled={environmentBackgroundMutation.isPending} onClick={() => startEnvironmentCamera()}>
-                  <RefreshCw size={15} aria-hidden="true" />
-                  重新连接
-                </button>
-              ) : null}
-              <button className="primary compact-action" type="button" disabled={!environmentBackgroundCanSave || environmentBackgroundMutation.isPending} onClick={saveEnvironmentBackground}>
-                <Camera size={15} aria-hidden="true" />
-                {environmentBackgroundMutation.isPending ? "保存中" : environmentInputMode === "upload" ? "保存上传背景" : "拍摄并保存背景"}
-              </button>
-            </footer>
-          </section>
-        </div>
-      ) : null}
 
       {rulesOpen && !activeModelIsAi ? (
         <div className="modal-backdrop" role="presentation">
