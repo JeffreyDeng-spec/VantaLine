@@ -2472,7 +2472,21 @@ succeeded in **210 seconds**, above the 170-second budget. Environment restore t
 60–118 s; one later runner start was 35 s behind the first ordinary job. This led
 to cache-first preparation (pip restoration only on fallback) and another fixed
 longest-group-first balance estimated at 82.6–82.7 test seconds per shard.
-These are optimizations awaiting a fresh final-configuration measurement.
+Refinement PR [#290](https://github.com/JeffreyDeng-spec/VantaLine/pull/290)
+passed all 22 ordinary jobs in [38081853788](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38081853788),
+with a complete CI window of **308 seconds**. Its changed cache-policy hash was
+not yet available from trusted main, so it used the full installation fallback.
+After merge, trusted prewarm [38082713423](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38082713423)
+succeeded for the new rules. First final-policy warm run [38083034860](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083034860)
+passed in **205 seconds**. All installed-environment caches were restored without
+pip fallback. The last shard started 47 seconds after CI began, with 93 seconds
+of tests; the aggregate gate then took 11 seconds. Initialization main overlapped
+this run, so a subsequent isolated measurement is required. This result fails the
+170-second PR budget and is retained without excluding later runner delay.
+Second final-policy full PR run [38083450430](https://github.com/JeffreyDeng-spec/VantaLine/actions/runs/38083450430)
+also passed, in **206 seconds**. No checks were removed. The 170-second budget
+remains unmet within the current runner resources; the next measurement retains
+the same fixed configuration.
 
 Pending: three consecutive full PR runs at ≤170 seconds, one cold-cache measurement,
 and a real PR→main→production chain at ≤300 seconds. Keep raw wall time, excluded
