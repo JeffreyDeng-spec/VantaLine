@@ -1438,6 +1438,11 @@ To correct unfrozen real-photo source groups, pause from the frontend and wait f
 
 ## Full CI latency and evidence diagnosis
 
+Automatic promotion also requires the successful main CI commit to equal the
+workflow-run event's current default-branch commit before a deployment job starts.
+A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
+and `cancel-in-progress: false` remain unchanged; begun deployments finish normally.
+
 Frontend browser contracts remain serial within their runner to avoid shared-port
 conflicts. Agent generation checks, type checking and the production build run in
 an independent `frontend-build` job; `backend-plc` also requires that job's success.

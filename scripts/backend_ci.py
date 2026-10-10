@@ -79,6 +79,9 @@ def verify(manifest):
     release = yaml.safe_load((ROOT/'.github/workflows/release-production.yml').read_text())
     release_triggers = release.get('on', release.get(True))
     assert release_triggers['workflow_run']['workflows'] == ['CI']
+    for predicate in ("conclusion == 'success'","head_branch == 'main'","event == 'push'",'head_sha == github.sha'):
+        assert predicate in release['jobs']['release']['if']
+    assert release['concurrency']['cancel-in-progress'] is False
     for item in inventory:
         subprocess.run(['bash', '-n', '-c', item['run']], check=True)
     print(f"Coverage: {len(manifest['checks'])} ordinary commands + 5 unchanged benchmarks; 12 isolated shards.")

@@ -2326,6 +2326,11 @@ Disposable PostgreSQL regression verifies pause archives frozen round membership
 
 ## Full CI, trusted environments and exact-tree evidence
 
+Automatic promotion also requires the successful main CI commit to equal the
+workflow-run event's current default-branch commit before a deployment job starts.
+A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
+and `cancel-in-progress: false` remain unchanged; begun deployments finish normally.
+
 Frontend browser contracts remain serial within their runner to avoid shared-port
 conflicts. Agent generation checks, type checking and the production build run in
 an independent `frontend-build` job; `backend-plc` also requires that job's success.
