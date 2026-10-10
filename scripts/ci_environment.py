@@ -44,7 +44,7 @@ def files_digest(directory):
     records=[]
     for p in sorted(directory.rglob('*')):
         relative=p.relative_to(directory)
-        if p.name==MARKER or '__pycache__' in relative.parts or p.suffix=='.pyc':continue
+        if p==directory/MARKER:continue
         if p.is_symlink():records.append((str(relative),'link',os.readlink(p)))
         elif p.is_file():records.append((str(relative),'file',sha(p)))
     return hashlib.sha256(json.dumps(records).encode()).hexdigest()
@@ -89,7 +89,7 @@ def seal():
 
 def prune():
     assert os.environ['GITHUB_REF']=='refs/heads/main'
-    repo=os.environ['GITHUB_REPOSITORY'];key=cache_key(descriptor())
+    repo=os.environ['GITHUB_REPOSITORY']
     result=subprocess.check_output(['gh','api',f'repos/{repo}/actions/caches?ref=refs/heads/main&key={PREFIX}&per_page=100'],text=True)
     for cache in json.loads(result)['actions_caches']:
         if cache['key'].startswith(PREFIX):

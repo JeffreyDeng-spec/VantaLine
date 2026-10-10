@@ -38,7 +38,9 @@ jobs:
       - name: Measure compressed cache capacity
         run: |
           tar -I zstd -cf "$RUNNER_TEMP/environment-size.tar.zst" -C "$RUNNER_TEMP/vantaline-ci-venv" .
-          test "$(stat -c %s "$RUNNER_TEMP/environment-size.tar.zst")" -le 1610612736
+          cache_bytes=$(stat -c %s "$RUNNER_TEMP/environment-size.tar.zst")
+          echo "Compressed locked environment: $cache_bytes bytes (ceiling 1610612736)"
+          test "$cache_bytes" -le 1610612736
       - name: Remove only prior environments owned by this workflow
         env:
           GH_TOKEN: ${{ github.token }}

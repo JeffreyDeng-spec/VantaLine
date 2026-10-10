@@ -24,6 +24,13 @@ class EnvironmentContract(unittest.TestCase):
             (root/'package.py').write_text('tampered')
             with self.assertRaises(AssertionError):env.validate(root,info)
 
+    def test_compiled_package_code_is_also_integrity_bound(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);cache=root/'__pycache__';cache.mkdir()
+            bytecode=cache/'module.pyc';bytecode.write_bytes(b'original bytecode')
+            before=env.files_digest(root);bytecode.write_bytes(b'corrupt bytecode')
+            self.assertNotEqual(before,env.files_digest(root))
+
     def test_cache_miss_and_corruption_install_the_entire_lock(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)/'venv';root.mkdir();(root/'unexpected').write_text('bad')
