@@ -1,16 +1,43 @@
 name: CI
-
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
-
+  actions: read
 jobs:
+  ci-mode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      proof: ${{ steps.mode.outputs.proof }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Choose full tests or exact-tree verification
+      id: mode
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FORCE_FULL: ${{ inputs.force-full }}
+        COLD_CACHE: ${{ inputs.cold-cache }}
+      run: 'args=()
+
+        if [ "$FORCE_FULL" = true ]; then args+=(--force-full); fi
+
+        if [ "$COLD_CACHE" = true ]; then args+=(--cold-cache); fi
+
+        python scripts/ci_evidence.py prepare "${args[@]}"'
   artifact-storage:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -19,223 +46,324 @@ jobs:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: storage_fixture
           POSTGRES_DB: vantaline_cos_storage_test
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       ARTIFACT_TEST_DATABASE_URL: postgresql://vantaline:storage_fixture@127.0.0.1:5432/vantaline_cos_storage_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install -c requirements-production.lock pillow fastapi httpx 'psycopg[binary]' cos-python-sdk-v5 opencv-python numpy python-multipart
-      - run: python scripts/smoke_artifact_storage.py
-      - run: python scripts/smoke_artifact_integrations.py
-      - run: python scripts/smoke_artifact_postgres.py
-      - name: Real-photo feedback contracts and PostgreSQL competition
-        env:
-          REAL_PHOTO_TEST_DATABASE_URL: ${{ env.ARTIFACT_TEST_DATABASE_URL }}
-        run: |
-          pip install pytest requests PyYAML
-          python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py tests/test_real_photo_provenance.py tests/test_real_photo_cache.py
-      - name: Verify Linux kernel capacity and cross-user cache leases
-        run: sudo "$(command -v python)" scripts/smoke_artifact_volumes.py
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: pip install -c requirements-production.lock pillow fastapi httpx 'psycopg[binary]' cos-python-sdk-v5 opencv-python
+        numpy python-multipart
+    - run: python scripts/smoke_artifact_storage.py
+    - run: python scripts/smoke_artifact_integrations.py
+    - run: python scripts/smoke_artifact_postgres.py
+    - name: Real-photo feedback contracts and PostgreSQL competition
+      env:
+        REAL_PHOTO_TEST_DATABASE_URL: ${{ env.ARTIFACT_TEST_DATABASE_URL }}
+      run: 'pip install pytest requests PyYAML
+
+        python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py
+        tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py tests/test_real_photo_provenance.py
+        tests/test_real_photo_cache.py
+
+        '
+    - name: Verify Linux kernel capacity and cross-user cache leases
+      run: sudo "$(command -v python)" scripts/smoke_artifact_volumes.py
   doc-image-runtime:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install Pillow
-      - run: python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
-      - name: Validate locked runtime
-        run: VANTALINE_DOC_IMAGE_BUNDLE="$RUNNER_TEMP/doc-image-bundle" python -c 'from local_inspection_service.document_images import _runtime; _runtime()'
+    - uses: actions/checkout@v4
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: pip install Pillow
+    - run: python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
+    - name: Validate locked runtime
+      run: VANTALINE_DOC_IMAGE_BUNDLE="$RUNNER_TEMP/doc-image-bundle" python -c 'from local_inspection_service.document_images
+        import _runtime; _runtime()'
   source-safety:
+    if: ${{ !cancelled() }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Reject tracked runtime and secret files
-        shell: bash
-        run: |
-          set -euo pipefail
-          forbidden='(^|/)(\.env($|\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\.(pem|key|sqlite3?|db|dump)$|server\.py\.bak'
-          if git ls-files | grep -E "$forbidden"; then
-            echo 'Forbidden generated, runtime, backup, database, or secret file is tracked.' >&2
-            exit 1
-          fi
-      - name: Verify PLC release contract
-        run: python scripts/verify_release_contract.py
-      - name: Verify COS evacuation integrity and failure boundaries
-        run: python scripts/smoke_cos_migrate.py
-      - name: Verify browser camera and file-drop contracts
-        run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
-      - name: Validate release shell syntax
-        run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
-      - name: Verify deterministic runtime controller and isolated contracts
-        run: |
-          python scripts/render_release_installer.py
-          python scripts/smoke_release_runtime_contract.py
-          python scripts/smoke_release_runtime_storage.py
-          python scripts/smoke_release_runtime_client.py
-          python scripts/smoke_release_runtime_transition.py
-          python scripts/smoke_release_services.py
-          bash scripts/install_release.sh --capabilities
-      - name: Exercise managed runtime installer faults in a private mount namespace
-        run: |
-          VANTALINE_BASE_INSTALLER=scripts/install_release.sh bash scripts/smoke_release_runtime_installer.sh
-      - name: Exercise embedded installer faults in a private mount namespace
-        run: |
-          git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
-          VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
-      - name: Verify root journal bridge against the installed controller and UID998 layout
-        run: |
-          git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_handoff
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_journal_promotion_failure
-      - name: Verify commissioned Web allowance with the frozen root-storage predecessor
-        run: |
-          git fetch --no-tags --depth=1 origin efb80cdccd0ad713a4b984c29f36a3a094881fe4
-          git show efb80cdccd0ad713a4b984c29f36a3a094881fe4:scripts/install_release.sh > "$RUNNER_TEMP/root-storage-installer.sh"
-          sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/root-storage-installer.sh" bash scripts/smoke_release_runtime_installer.sh --inside managed_root_budget_handoff
-      - name: Keep mutable backgrounds outside immutable releases
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/smoke_canonical_application_source_contract.py
-          grep -F "BACKGROUND_DIR = DATA_DIR / 'backgrounds'" local_inspection_service/runtime/application_values.py
-          grep -F 'BACKGROUND_DIR = _default_application.values.BACKGROUND_DIR' local_inspection_service/server.py
-          grep -F 'shared_backgrounds="$base/shared/data/backgrounds"' scripts/install_release.sh
-          grep -F 'install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"' scripts/install_release.sh
-          grep -F 'mv -Tf "$installer_tmp" "$installer_path"' scripts/install_release.sh
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Reject tracked runtime and secret files
+      shell: bash
+      run: "set -euo pipefail\nforbidden='(^|/)(\\.env($|\\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\\\
+        .(pem|key|sqlite3?|db|dump)$|server\\.py\\.bak'\nif git ls-files | grep -E \"$forbidden\"; then\n  echo 'Forbidden\
+        \ generated, runtime, backup, database, or secret file is tracked.' >&2\n  exit 1\nfi\n"
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify PLC release contract
+      run: python scripts/verify_release_contract.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify COS evacuation integrity and failure boundaries
+      run: python scripts/smoke_cos_migrate.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify browser camera and file-drop contracts
+      run: python local_inspection_service/scripts/smoke_frontend_media_inputs.py
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Validate release shell syntax
+      run: bash -n scripts/bootstrap_release_host.sh scripts/install_release.sh
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify deterministic runtime controller and isolated contracts
+      run: 'python scripts/render_release_installer.py
 
+        python scripts/smoke_release_runtime_contract.py
+
+        python scripts/smoke_release_runtime_storage.py
+
+        python scripts/smoke_release_runtime_client.py
+
+        python scripts/smoke_release_runtime_transition.py
+
+        python scripts/smoke_release_services.py
+
+        bash scripts/install_release.sh --capabilities
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Exercise managed runtime installer faults in a private mount namespace
+      run: 'VANTALINE_BASE_INSTALLER=scripts/install_release.sh bash scripts/smoke_release_runtime_installer.sh
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Exercise embedded installer faults in a private mount namespace
+      run: 'git show 825f96337a47088a5a90bf756a912a16ab7921b2:scripts/install_release.sh > "$RUNNER_TEMP/legacy-installer-v566.sh"
+
+        VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/legacy-installer-v566.sh" bash scripts/smoke_release_installer_bridge.sh
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify root journal bridge against the installed controller and UID998 layout
+      run: 'git show db29353bff54258d88c9b07ff62b2db41042327a:scripts/install_release.sh > "$RUNNER_TEMP/installed-controller-a.sh"
+
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh
+        --inside managed_root_journal_handoff
+
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/installed-controller-a.sh" bash scripts/smoke_release_runtime_installer.sh
+        --inside managed_root_journal_promotion_failure
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify commissioned Web allowance with the frozen root-storage predecessor
+      run: 'git fetch --no-tags --depth=1 origin efb80cdccd0ad713a4b984c29f36a3a094881fe4
+
+        git show efb80cdccd0ad713a4b984c29f36a3a094881fe4:scripts/install_release.sh > "$RUNNER_TEMP/root-storage-installer.sh"
+
+        sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="$RUNNER_TEMP/root-storage-installer.sh" bash scripts/smoke_release_runtime_installer.sh
+        --inside managed_root_budget_handoff
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Keep mutable backgrounds outside immutable releases
+      shell: bash
+      run: 'set -euo pipefail
+
+        python scripts/smoke_canonical_application_source_contract.py
+
+        grep -F "BACKGROUND_DIR = DATA_DIR / ''backgrounds''" local_inspection_service/runtime/application_values.py
+
+        grep -F ''BACKGROUND_DIR = _default_application.values.BACKGROUND_DIR'' local_inspection_service/server.py
+
+        grep -F ''shared_backgrounds="$base/shared/data/backgrounds"'' scripts/install_release.sh
+
+        grep -F ''install -o root -g root -m 0755 "$target/scripts/install_release.sh" "$installer_tmp"'' scripts/install_release.sh
+
+        grep -F ''mv -Tf "$installer_tmp" "$installer_path"'' scripts/install_release.sh
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+      run: python3 scripts/ci_evidence.py assert-reuse --check source-safety
+      working-directory: .
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
   release-package:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: local_inspection_service/frontend/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Build and inspect immutable embedded package
-        run: |
-          (cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)
-          python scripts/build_doc_image_extractor.py --output "$RUNNER_TEMP/doc-image-bundle"
-          python scripts/build_release_artifact.py \
-            --release v2026.10.0 --git-commit "$(git rev-parse HEAD)" \
-            --built-at 2026-10-03T00:00:00Z \
-            --doc-image-bundle "$RUNNER_TEMP/doc-image-bundle" \
-            --output "$RUNNER_TEMP/bridge-package.tar.gz"
-          mkdir -p "$RUNNER_TEMP/bridge-extract"
-          tar -xzf "$RUNNER_TEMP/bridge-package.tar.gz" -C "$RUNNER_TEMP/bridge-extract"
-          (cd "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" && sha256sum -c SHA256SUMS)
-          cmp scripts/install_release.sh "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0/scripts/install_release.sh"
-          python3 - "$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0" <<'PY'
-          import hashlib, json, pathlib, subprocess, sys
-          root = pathlib.Path(sys.argv[1])
-          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          version = json.loads((root / 'VERSION.json').read_text())
-          topology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())
-          assert version['git_commit'] == commit
-          assert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,
-                              'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}
-          sums = {path: digest for digest, path in (line.split('  ', 1) for line in (root / 'SHA256SUMS').read_text().splitlines())}
-          for path in ('local_inspection_service/runtime/label_observation.py',
-                       'local_inspection_service/runtime/observe_label_runtime.py'):
-              assert (root / path).is_file()
-              assert hashlib.sha256((root / path).read_bytes()).hexdigest() == sums[path]
-          PY
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Build and inspect immutable embedded package
+      run: "(cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)\npython scripts/build_doc_image_extractor.py\
+        \ --output \"$RUNNER_TEMP/doc-image-bundle\"\npython scripts/build_release_artifact.py \\\n  --release v2026.10.0\
+        \ --git-commit \"$(git rev-parse HEAD)\" \\\n  --built-at 2026-10-03T00:00:00Z \\\n  --doc-image-bundle \"$RUNNER_TEMP/doc-image-bundle\"\
+        \ \\\n  --output \"$RUNNER_TEMP/bridge-package.tar.gz\"\nmkdir -p \"$RUNNER_TEMP/bridge-extract\"\ntar -xzf \"$RUNNER_TEMP/bridge-package.tar.gz\"\
+        \ -C \"$RUNNER_TEMP/bridge-extract\"\n(cd \"$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0\" && sha256sum -c SHA256SUMS)\n\
+        cmp scripts/install_release.sh \"$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0/scripts/install_release.sh\"\npython3\
+        \ - \"$RUNNER_TEMP/bridge-extract/vantaline-v2026.10.0\" <<'PY'\nimport hashlib, json, pathlib, subprocess, sys\n\
+        root = pathlib.Path(sys.argv[1])\ncommit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()\n\
+        version = json.loads((root / 'VERSION.json').read_text())\ntopology = json.loads((root / 'RUNTIME_TOPOLOGY.json').read_text())\n\
+        assert version['git_commit'] == commit\nassert topology == {'schema': 2, 'runtime_protocol': 1, 'git_commit': commit,\n\
+        \                    'worker_mode': 'external', 'services': ['vantaline', 'vantaline-label-worker']}\nsums = {path:\
+        \ digest for digest, path in (line.split('  ', 1) for line in (root / 'SHA256SUMS').read_text().splitlines())}\nfor\
+        \ path in ('local_inspection_service/runtime/label_observation.py',\n             'local_inspection_service/runtime/observe_label_runtime.py'):\n\
+        \    assert (root / path).is_file()\n    assert hashlib.sha256((root / path).read_bytes()).hexdigest() == sums[path]\n\
+        PY\n"
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
   documentation:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Test documentation impact fixtures
-        run: python scripts/verify_docs_contract.py --self-test
-      - name: Verify documentation contract and PR impact
-        env:
-          BASE_REF: ${{ github.event.pull_request.base.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          args=()
-          if [[ -n "${BASE_REF:-}" ]]; then args+=(--base-ref "$BASE_REF"); fi
-          python scripts/verify_docs_contract.py "${args[@]}"
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - name: Test documentation impact fixtures
+      run: python scripts/verify_docs_contract.py --self-test
+    - name: Verify documentation contract and PR impact
+      env:
+        BASE_REF: ${{ github.event.pull_request.base.sha }}
+      shell: bash
+      run: 'set -euo pipefail
 
+        args=()
+
+        if [[ -n "${BASE_REF:-}" ]]; then args+=(--base-ref "$BASE_REF"); fi
+
+        python scripts/verify_docs_contract.py "${args[@]}"
+
+        '
   frontend:
+    if: ${{ !cancelled() }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: local_inspection_service/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: local_inspection_service/frontend/package-lock.json
-      - run: npm ci
-      - run: npm run test:plc-capture
-      - name: Install pinned navigation test browser
-        run: npx --no-install playwright install --with-deps chromium
-      - run: npm run test:plc-connection
-      - run: node ../../scripts/test_detection_without_background.cjs
-      - name: Verify public/workspace navigation
-        env:
-          NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
-        run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs && node ../../scripts/test_settings_ui.cjs
-      - name: Upload navigation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: navigation-ui
-          path: ${{ runner.temp }}/navigation-ui
-          if-no-files-found: ignore
-      - name: Verify Codex comparison report UI
-        env:
-          REVIEW_UI_BASE: http://127.0.0.1:5190/react-preview
-          CODEX_UI_OUTPUT: ${{ runner.temp }}/codex-ui
-        run: |
-          npm run dev -- --host 127.0.0.1 --port 5190 > "$RUNNER_TEMP/codex-vite.log" 2>&1 &
-          preview_pid=$!
-          trap 'kill "$preview_pid"' EXIT
-          curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html >/dev/null
-          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
-          PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_label_batch_ui.cjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: codex-report-ui
-          path: ${{ runner.temp }}/codex-ui
-          if-no-files-found: ignore
-      - run: npm run test:agent
-      - run: npm run typecheck
-      - run: npm run build:production-cutover
-      - name: Verify built protocol
-        working-directory: .
-        run: python scripts/verify_release_contract.py
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm ci
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run test:plc-capture
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Install pinned navigation test browser
+      run: npx --no-install playwright install --with-deps chromium
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: npm run test:plc-connection
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - run: node ../../scripts/test_detection_without_background.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify public/workspace navigation
+      env:
+        NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
+      run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs && node ../../scripts/test_settings_ui.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Upload navigation evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: navigation-ui
+        path: ${{ runner.temp }}/navigation-ui
+        if-no-files-found: ignore
+    - name: Verify Codex comparison report UI
+      env:
+        REVIEW_UI_BASE: http://127.0.0.1:5190/react-preview
+        CODEX_UI_OUTPUT: ${{ runner.temp }}/codex-ui
+      run: 'npm run dev -- --host 127.0.0.1 --port 5190 > "$RUNNER_TEMP/codex-vite.log" 2>&1 &
 
-  backend-plc:
+        preview_pid=$!
+
+        trap ''kill "$preview_pid"'' EXIT
+
+        curl --retry 10 --retry-delay 1 --retry-connrefused --fail http://127.0.0.1:5190/react-preview/tests/codex-compare.html
+        >/dev/null
+
+        PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_codex_compare_ui.cjs
+
+        PLAYWRIGHT_MODULE="$PWD/node_modules/playwright" node ../../scripts/test_label_batch_ui.cjs
+
+        '
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - uses: actions/upload-artifact@v4
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
+      with:
+        name: codex-report-ui
+        path: ${{ runner.temp }}/codex-ui
+        if-no-files-found: ignore
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+      run: python3 scripts/ci_evidence.py assert-reuse --check frontend
+      working-directory: .
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
+  backend-shards:
+    name: backend-shard-${{ matrix.shard }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        shard:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
     services:
       postgres:
         image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
@@ -244,12 +372,8 @@ jobs:
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
       postgres_benchmark:
         image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
@@ -257,520 +381,149 @@ jobs:
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
         ports:
-          - 5433:5432
-        options: >-
-          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648
-          --memory=3221225472 --memory-swap=3221225472
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        - 5433:5432
+        options: --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648 --memory=3221225472 --memory-swap=3221225472
+          --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
       VANTALINE_BENCHMARK_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5433/vantaline
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: pip
-      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
-      - run: python scripts/verify_production_dependencies.py requirements-production.lock
-      - name: Verify ordinary disk and bounded benchmark database isolation
-        env:
-          VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
-          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
-        run: |
-          python scripts/smoke_ci_benchmark_storage.py
-          python scripts/verify_ci_benchmark_storage.py
-      - name: Verify additive-only migrations
-        run: python scripts/verify_migration_safety.py
-      - run: python scripts/smoke_migration_safety.py
-      - run: python -m py_compile local_inspection_service/server.py local_inspection_service/plc_fx_ascii.py local_inspection_service/plc_web_serial.py local_inspection_service/release_version.py
-      # Phase 1/1-hardening exercise the retired server-side pyserial dispatcher.
-      # Production v4 is browser-owned Web Serial and the server must perform 0
-      # serial I/O, so only the frozen-history verifier remains in source.
-      - run: python scripts/smoke_plc_self_service.py
-      - run: python scripts/smoke_plc_request_models.py
-      - run: python local_inspection_service/scripts/smoke_plc_web_serial_v3.py
-      - run: python local_inspection_service/scripts/smoke_plc_frontend_contract.py
-      - run: python scripts/smoke_plc_workstation_management.py
-      - run: python scripts/smoke_plc_connection_lease_api.py
-      - run: python scripts/smoke_plc_lease_maintenance.py --postgres
-      - run: python scripts/smoke_plc_lease_acquisition.py --postgres
-      - run: python scripts/smoke_plc_lease_rebind.py --postgres
-      - run: python scripts/smoke_plc_diagnostic_state.py --postgres
-      - run: python scripts/smoke_plc_diagnostic_confirm.py --postgres
-      - run: python scripts/smoke_plc_diagnostic_finish.py --postgres
-      - run: python scripts/smoke_plc_dispatch_diagnostic_api.py
-      - run: python scripts/smoke_plc_config_diagnostics.py
-      - run: python local_inspection_service/scripts/smoke_release_version.py
-      - run: python local_inspection_service/scripts/smoke_navigation_endpoints.py
-      - run: python local_inspection_service/scripts/smoke_postgres_runtime_repository.py
-      - name: Verify text inspection comparison and document contracts
-        run: |
-          python scripts/verify_backend_contract.py
-          python scripts/smoke_application_factory.py
-          APPLICATION_FACTORY_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_application_factory_postgres.py
-          python scripts/smoke_canonical_application_source_contract.py
-          python scripts/smoke_web_shell_composition.py
-          python scripts/smoke_retired_entry_tails.py
-          python scripts/smoke_model_dependency_contract.py
-          python scripts/verify_backend_boundaries.py
-          python scripts/smoke_foundation_policies.py
-          python scripts/smoke_artifact_file_policies.py
-          python scripts/smoke_runtime_repository_access.py
-          python scripts/smoke_repository_composition.py --postgres
-          python scripts/smoke_service_paths.py
-          python scripts/smoke_read_cache_ownership.py
-          python scripts/smoke_directory_lifecycle.py
-          python scripts/smoke_label_history_benchmark.py
-          python scripts/smoke_label_history_statistics.py
-          python scripts/smoke_manual_history_baseline.py --postgres
-          python scripts/smoke_legacy_list_projection.py
-          python scripts/smoke_label_beta_summaries.py
-          python scripts/smoke_label_beta_benchmark.py
-          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_history_statistics.py
-          python scripts/smoke_account_projections.py
-          python scripts/smoke_public_network_policy.py
-          python scripts/smoke_plc_activation_policy.py
-          python scripts/smoke_plc_runtime_coordination.py
-          python scripts/smoke_plc_dispatch_records.py
-          python scripts/smoke_plc_legacy_operations.py
-          python scripts/smoke_admin_documentation_composition.py
-          python scripts/smoke_authentication_composition.py --postgres
-          python scripts/smoke_record_composition.py
-          python scripts/smoke_application_foundation.py
-          python scripts/smoke_infrastructure.py
-          python scripts/smoke_training_persistence_graph.py
-          python scripts/smoke_account_visibility.py
-          python scripts/smoke_provider_transports_composition.py
-          python scripts/smoke_real_photo_composition.py
-          python scripts/smoke_http_application.py
-          python scripts/smoke_http_upload_runtime.py
-          python scripts/smoke_http_artifact_ports.py
-          python scripts/smoke_incoming_artifact_ports.py
-          python scripts/smoke_background_file_ports.py
-          python scripts/smoke_background_image_ports.py
-          python scripts/smoke_background_generation_ports.py
-          python scripts/smoke_training_file_ports.py
-          python scripts/smoke_training_image_ports.py
-          python scripts/smoke_training_resource_ports.py
-          python scripts/smoke_accessory_file_ports.py
-          python scripts/smoke_accessory_evidence_ports.py
-          python scripts/smoke_accessory_catalog_ports.py
-          python scripts/smoke_accessory_gallery_ports.py
-          python scripts/smoke_accessory_edit_ports.py
-          python scripts/smoke_accessory_preprocessor_ports.py
-          python scripts/smoke_agent_reference_ports.py
-          python scripts/smoke_agent_pose_storage_ports.py
-          python scripts/smoke_agent_photo_image_ports.py
-          python scripts/smoke_agent_background_image_ports.py
-          python scripts/smoke_artifact_runtime_provider.py
-          python scripts/smoke_web_artifact_composition.py
-          python scripts/smoke_bootstrap_locations.py
-          python scripts/smoke_provider_proxy_runtime.py
-          python scripts/smoke_mcp_client_runtime.py
-          python scripts/smoke_mcp_drain.py
-          python scripts/smoke_mcp_warmup_ownership.py
-          python scripts/smoke_mcp_runtime_policy.py
-          python scripts/smoke_image_payload_codec.py
-          python scripts/smoke_detection_rule_composition.py
-          python scripts/smoke_analysis_composition.py --postgres
-          python scripts/smoke_accessory_selection_dimensions.py
-          python scripts/smoke_accessory_workflow_ownership.py
-          python scripts/smoke_image_worker_ownership.py
-          python scripts/smoke_image_worker_drain.py
-          python scripts/smoke_pipeline_runtime_ownership.py
-          python scripts/smoke_auto_optimization_runtime_ownership.py
-          python scripts/smoke_auto_optimization_settings_composition.py
-          python scripts/smoke_model_configuration_composition.py
-          python scripts/smoke_plc_legacy_worker_ownership.py
-          python scripts/smoke_resource_names.py
-          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_beta_summaries.py
-          python scripts/smoke_label_summary_reads.py
-          python scripts/smoke_label_reader_readiness.py
-          python scripts/smoke_label_benchmark_evidence.py
-          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_summary_reads.py
-          python scripts/smoke_label_run_summary.py
-          python scripts/smoke_label_summary_worker.py
-          python scripts/smoke_label_run_projection.py
-          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_projection.py
-          python scripts/smoke_label_public_projection.py
-          python scripts/smoke_label_summary_migration.py
-          python scripts/smoke_service_status_requests.py
-          python scripts/smoke_application_configuration_composition.py
-          python scripts/smoke_path_configuration_graph.py
-          python scripts/smoke_app_config_store.py
-          python scripts/smoke_stream_config.py
-          python scripts/smoke_protected_config_ownership.py
-          python scripts/smoke_local_model_config.py
-          python scripts/smoke_model_tool_dispatch.py
-          python scripts/smoke_model_tools_composition.py
-          python scripts/smoke_accessory_text_preparation.py
-          python scripts/smoke_pose_collection_prompts.py
-          python scripts/smoke_image_worker_diagnostics.py
-          python scripts/smoke_pose_collection_jobs.py
-          python scripts/smoke_accessory_reference_media.py
-          python scripts/smoke_accessory_image_composition.py
-          python scripts/smoke_image_job_queue.py
-          python scripts/smoke_training_asset_preparation.py
-          python scripts/smoke_image_provider_configuration.py
-          python scripts/smoke_image_job_execution.py
-          python scripts/smoke_image_job_management.py
-          python scripts/smoke_candidate_artifacts.py
-          python scripts/smoke_pipeline_auto_optimization_links.py
-          python scripts/smoke_pipeline_task_projection.py
-          python scripts/smoke_pipeline_candidate_flow.py
-          python scripts/smoke_pipeline_task_metadata.py
-          python scripts/smoke_pipeline_task_mutations.py
-          python scripts/smoke_pipeline_ai_activation.py
-          python scripts/smoke_auto_optimization_settings.py
-          python scripts/smoke_auto_optimization_recommendations.py
-          python scripts/smoke_auto_optimization_initialization.py
-          python scripts/smoke_auto_optimization_state_store.py --postgres
-          python scripts/smoke_auto_optimization_readiness.py
-          python scripts/smoke_auto_optimization_capture.py
-          python scripts/smoke_auto_optimization_status.py
-          python scripts/smoke_auto_optimization_mask_policy.py
-          python scripts/smoke_auto_optimization_mask_verification.py
-          python scripts/smoke_auto_optimization_label_generation.py
-          python scripts/smoke_auto_optimization_sprites.py
-          python scripts/smoke_auto_optimization_rendering.py
-          python scripts/smoke_auto_optimization_synthetic_batch.py
-          python scripts/smoke_auto_optimization_dataset.py
-          python scripts/smoke_auto_optimization_training_scheduling.py
-          python scripts/smoke_auto_optimization_label_processing.py
-          python scripts/smoke_auto_optimization_shadow_evaluation.py
-          python scripts/smoke_auto_optimization_core_composition.py
-          python scripts/smoke_auto_optimization_execution_composition.py
-          python scripts/smoke_auto_optimization_workflow_composition.py
-          python scripts/smoke_auto_optimization_requests.py
-          python scripts/smoke_auto_optimization_sprite_publication.py
-          python scripts/smoke_plc_event_projection.py
-          python scripts/smoke_plc_transition_policy.py
-          python scripts/smoke_plc_persisted_validation.py
-          python scripts/smoke_plc_event_commands.py
-          python scripts/smoke_plc_dispatch_mutations.py
-          python scripts/smoke_plc_lease_diagnostic_composition.py --postgres
-          python scripts/smoke_plc_workstation_composition.py --postgres
-          python scripts/smoke_plc_station_service.py
-          python scripts/smoke_plc_active_lease.py
-          python scripts/smoke_plc_browser_dispatch.py
-          python scripts/smoke_plc_workstation_repository.py
-          python scripts/smoke_plc_legacy_dispatch.py
-          python scripts/smoke_plc_dispatch_runtime_state.py
-          python scripts/smoke_plc_capture_state.py
-          python scripts/smoke_plc_capture_composition.py --postgres
-          python scripts/smoke_runtime_lifecycle.py --postgres
-          python scripts/smoke_cost_ledger.py
-          python scripts/smoke_cost_composition.py
-          python scripts/smoke_analysis_records.py --postgres
-          python scripts/smoke_analysis_projections.py
-          python scripts/smoke_auth_foundation.py --postgres
-          python scripts/smoke_auth_access.py
-          python scripts/smoke_auth_api.py
-          python scripts/smoke_record_ownership.py
-          python scripts/smoke_record_audit.py
-          python scripts/smoke_record_access.py
-          python scripts/smoke_accessory_catalog.py --postgres
-          python scripts/smoke_accessory_candidates.py --postgres --root
-          python scripts/smoke_accessory_files.py
-          python scripts/smoke_accessory_management.py
-          python scripts/smoke_accessory_gallery.py
-          python scripts/smoke_image_job_metadata.py
-          python scripts/smoke_accessory_preparation.py
-          python scripts/smoke_accessory_routing.py
-          python scripts/smoke_label_dependencies.py
-          python scripts/smoke_label_media_runtime_ports.py
-          python scripts/smoke_pdf_import_drain.py
-          python scripts/smoke_label_worker_lifecycle.py
-          python scripts/smoke_label_runtime_identity.py
-          python scripts/smoke_label_runtime_bootstrap.py
-          python scripts/smoke_label_runtime_signals.py
-          python scripts/smoke_label_control_connections.py
-          python scripts/smoke_runtime_configuration_contract.py
-          python scripts/smoke_runtime_configuration_io.py
-          python scripts/smoke_release_runtime_configuration.py
-          python scripts/smoke_label_runtime_pause.py
-          python scripts/smoke_codex_dependencies.py
-          python scripts/smoke_codex_api_runtime_port.py
-          python scripts/smoke_codex_environment.py
-          python scripts/smoke_comparison_media_owner.py
-          python scripts/smoke_history_dependencies.py
-          python scripts/smoke_document_job_dependencies.py
-          python scripts/smoke_agent_dependencies.py
-          AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python local_inspection_service/scripts/smoke_agent_operations_postgres.py
-          AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python scripts/smoke_agent_policy_read_transactions.py
-          python scripts/smoke_extraction_dependencies.py
-          python scripts/smoke_text_cleanup_file_ports.py
-          python scripts/smoke_extraction_thread_drain.py
-          python scripts/smoke_preparation_dependencies.py
-          python scripts/smoke_text_job_drain.py
-          python scripts/smoke_comparison_dependencies.py
-          python scripts/smoke_comparison_cleanup.py
-          python scripts/smoke_comparison_thread_drain.py
-          python scripts/smoke_text_record_store.py --root --postgres
-          python scripts/smoke_text_media.py --root
-          python scripts/smoke_text_media_runtime_port.py
-          python scripts/smoke_text_revisions.py --root
-          python scripts/smoke_text_standards.py
-          python scripts/smoke_text_standard_composition.py
-          python scripts/smoke_text_comparison_api.py --root
-          python scripts/smoke_text_comparison_composition.py
-          python scripts/smoke_text_storage_composition.py
-          python scripts/smoke_incoming_composition.py
-          python scripts/smoke_incoming_text_store.py --root --postgres
-          python scripts/smoke_incoming_text_analysis.py --root
-          python scripts/smoke_incoming_text_workflows.py
-          python scripts/smoke_accessory_requirements.py
-          python scripts/smoke_presence_contracts.py
-          python scripts/smoke_profile_cache.py
-          python scripts/smoke_detection_upload.py
-          python scripts/smoke_detection_artifact_ports.py
-          python scripts/smoke_camera_detection_request.py
-          python scripts/smoke_detection_media.py
-          python scripts/smoke_detection_media_ports.py
-          python scripts/smoke_provider_foundations.py
-          python scripts/smoke_openai_transport.py
-          python scripts/smoke_provider_metering.py
-          python scripts/smoke_gemini_transport.py
-          python scripts/smoke_image_provider_transports.py
-          python scripts/smoke_provider_orchestration.py
-          python scripts/smoke_public_status.py
-          python scripts/smoke_legacy_provider_settings.py
-          python scripts/smoke_provider_configuration_policy.py
-          python scripts/smoke_provider_key_registry.py
-          python scripts/smoke_key_material.py
-          python scripts/smoke_agent_settings.py
-          python scripts/smoke_agent_invocation.py
-          python scripts/smoke_agent_settings_api.py
-          python scripts/smoke_agent_pipeline_decisions.py
-          python scripts/smoke_agent_pipeline_actions.py
-          python scripts/smoke_agent_state_graph.py
-          python scripts/smoke_agent_planning_graph.py
-          python scripts/smoke_agent_execution_graph.py
-          python scripts/smoke_agent_state.py
-          python scripts/smoke_agent_pose_assets.py
-          python scripts/smoke_agent_pose_planning.py
-          python scripts/smoke_agent_pose_render.py
-          python scripts/smoke_agent_pose_execution.py
-          python scripts/smoke_agent_pose_materialization.py
-          python scripts/smoke_photo_highlight_workflow.py
-          python scripts/smoke_photo_highlight_image.py
-          python scripts/smoke_photo_highlight_builder.py
-          python scripts/smoke_crop_components.py
-          python scripts/smoke_object_preprocessing.py
-          python scripts/smoke_sprite_geometry.py
-          python scripts/smoke_sprite_metadata.py
-          python scripts/smoke_sprite_publication.py
-          python scripts/smoke_material_alpha.py
-          python scripts/smoke_cutout_runtime.py
-          python scripts/smoke_cutout_geometry.py
-          python scripts/smoke_pose_policy.py
-          python scripts/smoke_preview_pose_policy.py
-          python scripts/smoke_materialized_assets.py
-          python scripts/smoke_preview_sprites.py
-          python scripts/smoke_compositing.py
-          python scripts/smoke_preview_assets.py
-          python scripts/smoke_reference_evidence.py
-          python scripts/smoke_accessory_labels.py
-          python scripts/smoke_accessory_profile.py
-          python scripts/smoke_accessory_dimensions.py
-          python scripts/smoke_accessory_profile_payloads.py
-          python scripts/smoke_accessory_profile_generation.py
-          python scripts/smoke_background_evidence.py
-          python scripts/smoke_background_library_selection.py
-          python scripts/smoke_pipeline_background_publication.py
-          python scripts/smoke_pipeline_ai_task_sync.py
-          python scripts/smoke_pipeline_recommendations.py
-          python scripts/smoke_pipeline_task_snapshots.py
-          python scripts/smoke_pipeline_resource_status.py
-          python scripts/smoke_pipeline_status_file_ports.py
-          python scripts/smoke_pipeline_task_update.py
-          python scripts/smoke_pipeline_task_create.py
-          python scripts/smoke_pipeline_task_delete.py
-          python scripts/smoke_pipeline_advance_control.py
-          python scripts/smoke_pipeline_agent_chat.py
-          python scripts/smoke_pipeline_task_list.py
-          python scripts/smoke_pipeline_agent_feedback.py
-          python scripts/smoke_pipeline_accessory_routes.py
-          python scripts/smoke_pipeline_reconciliation.py
-          python scripts/smoke_pipeline_training_status.py
-          python scripts/smoke_pipeline_trained_model_link.py
-          python scripts/smoke_pipeline_recommendation_runtime.py
-          python scripts/smoke_pipeline_execution_composition.py --postgres
-          python scripts/smoke_pipeline_query_composition.py --postgres
-          python scripts/smoke_agent_pipeline_composition.py
-          python scripts/smoke_pipeline_stage_composition.py
-          python scripts/smoke_pipeline_task_composition.py --postgres
-          python scripts/smoke_pipeline_runtime_composition.py --postgres
-          python scripts/smoke_pipeline_auto_agent_runtime.py
-          python scripts/smoke_pipeline_advance_runtime.py
-          python scripts/smoke_pipeline_thread_drain.py
-          python scripts/smoke_real_photo_dispatcher_runtime.py
-          python scripts/smoke_web_shutdown.py
-          python scripts/smoke_pipeline_stage_advance.py
-          python scripts/smoke_pipeline_decision_contract.py
-          python -c "from local_inspection_service.scripts.smoke_phase3d_pipeline import assert_react_pipeline_route; assert_react_pipeline_route()"
-          python scripts/smoke_presence_inspection.py
-          python scripts/smoke_detection_analysis.py
-          python scripts/smoke_ai_detection_analysis.py
-          python scripts/smoke_detection_workflows_composition.py
-          python scripts/smoke_detection_annotation.py
-          python scripts/smoke_presence_results.py
-          python scripts/smoke_detection_failures.py
-          python scripts/smoke_detection_results.py
-          python scripts/smoke_detection_ocr.py
-          python scripts/smoke_detection_task_store.py --postgres
-          python scripts/smoke_detection_task_catalog.py
-          python scripts/smoke_detection_task_requests.py
-          python scripts/smoke_dashboard_task_ownership.py
-          python scripts/smoke_detection_rules.py
-          python scripts/smoke_local_model_runtime.py
-          python scripts/smoke_local_model_selection.py
-          python scripts/smoke_yolo_warmup.py
-          python scripts/smoke_yolo_warmup_drain.py
-          python scripts/smoke_model_warmup_api.py
-          python scripts/smoke_model_catalog_composition.py
-          python scripts/smoke_trained_model_catalog.py --postgres
-          python scripts/smoke_training_record_store.py --postgres
-          python scripts/smoke_training_task_lifecycle.py --postgres
-          python scripts/smoke_application_integration_source_contract.py
-          python scripts/smoke_training_state_workflows_composition.py
-          python scripts/smoke_training_task_workflows_composition.py
-          python scripts/smoke_training_executor_client.py
-          python scripts/smoke_training_state_services.py
-          python scripts/smoke_training_runner.py
-          python scripts/smoke_training_runner_file_port.py
-          python scripts/smoke_training_thread_drain.py
-          python scripts/smoke_codex_background_drain.py
-          python scripts/smoke_transfer_progress_drain.py
-          python scripts/smoke_auto_optimization_thread_drain.py
-          python scripts/smoke_auto_optimization_pool_scope.py
-          python scripts/smoke_auto_optimization_model_binding.py
-          python scripts/smoke_training_dataset.py
-          python scripts/smoke_training_runpod_flow.py
-          python scripts/smoke_runpod_transport_runtime_ports.py
-          python scripts/smoke_training_artifacts.py
-          python scripts/smoke_runpod_artifact_runtime_ports.py
-          python scripts/smoke_training_resource_catalog.py
-          python scripts/smoke_training_catalog_file_ports.py
-          python scripts/smoke_training_resource_mutations.py --postgres
-          python scripts/smoke_training_backgrounds.py
-          python scripts/smoke_training_preview_layout.py
-          python scripts/smoke_training_preview_renderer.py
-          python scripts/smoke_training_preview_workflows.py
-          python scripts/smoke_training_input_state.py
-          python scripts/smoke_training_launch_workflows.py
-          python scripts/smoke_training_runpod_transfer.py
-          python scripts/smoke_training_jobs_api.py
-          python scripts/smoke_training_background_catalog.py
-          python scripts/smoke_training_background_writes.py
-          python scripts/smoke_training_background_tasks.py
-          python scripts/smoke_training_background_api.py
-          python scripts/smoke_training_remote_compatibility.py
-          python scripts/smoke_training_worker_transfers.py
-          python scripts/smoke_training_worker_bundle.py
-          python scripts/smoke_training_worker_artifacts.py
-          python scripts/smoke_training_worker_watcher.py
-          python scripts/smoke_training_worker_retired_requests.py
-          python scripts/smoke_training_worker_retired_flows.py
-          python local_inspection_service/scripts/smoke_unique_resource_names.py
-          python scripts/smoke_pipeline_stores.py --postgres
-          python scripts/smoke_pipeline_persistence_composition.py --postgres
-          python local_inspection_service/scripts/smoke_training_dataset_delete_missing.py
-          python local_inspection_service/scripts/smoke_phase3a_resources.py
-          python local_inspection_service/scripts/smoke_phase3b_detection.py
-          python local_inspection_service/scripts/smoke_auth_rbac.py
-          python local_inspection_service/scripts/smoke_data_analysis.py
-          python local_inspection_service/scripts/smoke_postgres_endpoint_source_contract.py
-          python local_inspection_service/scripts/smoke_endpoint_runtime_store_probe.py
-          git fetch --no-tags --depth=1 origin d16b33c28c7f78acc74e9c569ee4bc7076efed07
-          test "$(git rev-parse 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py')" = '1f89c00266ca4e2978e1fb66af3d5b2db9fa97a9'
-          git show 'd16b33c28c7f78acc74e9c569ee4bc7076efed07:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_v564_api.py"
-          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_v564_api.py" python scripts/smoke_label_run_batch.py
-          python scripts/smoke_label_list_payloads.py
-          git fetch --no-tags --depth=1 origin 0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd
-          test "$(git rev-parse '0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd:local_inspection_service/label_inspection/api.py')" = 'fab9c59d49a6f1f1864479981b29ffb8bd766567'
-          git show '0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_parent_api.py"
-          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_parent_api.py" python scripts/smoke_label_legacy_index.py
-          git fetch --no-tags --depth=1 origin cf9c61577c0ccb1f32404e88b46ec07cb9e482e5
-          test "$(git rev-parse 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py')" = '36e55d6a78ff5e0b146e856a89c1f2a50ff301a4'
-          git show 'cf9c61577c0ccb1f32404e88b46ec07cb9e482e5:local_inspection_service/label_inspection/api.py' > "$RUNNER_TEMP/label_legacy_v550_api.py"
-          VANTALINE_LABEL_LIST_BASELINE_SOURCE="$RUNNER_TEMP/label_legacy_v550_api.py" python scripts/benchmark_label_legacy_index.py
-          python scripts/smoke_label_read_transactions.py
-          python scripts/smoke_label_runtime_migration.py
-          python scripts/smoke_label_runtime_state.py
-          python scripts/smoke_label_runtime_control.py
-          python scripts/smoke_label_runtime_monitor.py
-          python scripts/smoke_label_runtime_observation.py
-          python scripts/smoke_label_runtime_observation_postgres.py
-          python scripts/smoke_label_runtime_http.py
-          python scripts/smoke_label_runtime_deployment.py
-          python scripts/smoke_label_process.py
-          python scripts/smoke_label_external_deployment.py
-          VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" python scripts/benchmark_label_run_batch.py
-          python local_inspection_service/scripts/smoke_label_inspection.py
-          python local_inspection_service/scripts/smoke_model_profiles.py
-          python scripts/smoke_model_profile_read_transactions.py
-          python scripts/smoke_model_profile_initialize_fast_path.py
-          python scripts/smoke_model_profile_snapshot_reads.py
-          python scripts/smoke_model_profile_public_read.py
-          python local_inspection_service/scripts/smoke_model_profile_routing.py
-          python local_inspection_service/scripts/smoke_doc_images.py
-          python local_inspection_service/scripts/smoke_document_label_classifier.py
-          python local_inspection_service/scripts/smoke_document_jobs_endpoints.py
-          python -m local_inspection_service.scripts.smoke_standard_preparation
-          python -m local_inspection_service.scripts.smoke_standard_preparation_recovery
-          python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
-          python -m local_inspection_service.scripts.smoke_qwen_ocr_evidence
-          python -m local_inspection_service.scripts.smoke_local_evidence_search
-          python -m local_inspection_service.scripts.smoke_local_ocr_reread
-          python -m local_inspection_service.scripts.smoke_model_audit_preview
-          PREPARATION_TEST_QWEN=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
-          PREPARATION_TEST_INCOMPLETE=1 python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
-          for mode in success timeout interrupted; do
-            PREPARATION_TEST_RECOVERY="$mode" python -m local_inspection_service.scripts.smoke_standard_preparation_endpoints
-          done
-          PREPARATION_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN" python -m local_inspection_service.scripts.smoke_standard_preparation_postgres
-          python local_inspection_service/scripts/smoke_document_review.py
-          python local_inspection_service/scripts/smoke_document_review_postgres.py
-          python local_inspection_service/scripts/smoke_text_compare_beta.py
-          python -m local_inspection_service.scripts.smoke_comparison_history
-          python scripts/smoke_text_inspection_v2.py
-          python local_inspection_service/scripts/smoke_label_extraction.py
-          python local_inspection_service/scripts/smoke_label_extraction_endpoints.py
-          python local_inspection_service/scripts/smoke_label_bbox.py
-          python local_inspection_service/scripts/smoke_label_bbox_endpoints.py
-          python local_inspection_service/scripts/smoke_label_extraction_postgres.py
-      - name: Verify text inspection API fail-closed mode
-        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
-      - name: Verify text inspection API external-only mode
-        env:
-          VANTALINE_TEXT_V2_SMOKE_MODE: external_only
-        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
-      - name: Verify text inspection API enabled mode
-        env:
-          VANTALINE_TEXT_V2_SMOKE_MODE: enabled
-        run: python local_inspection_service/scripts/smoke_text_inspection_v2_endpoints.py
-      - name: Verify text inspection PostgreSQL contract
-        run: python local_inspection_service/scripts/smoke_text_inspection_v2_postgres_contract.py
-      - name: Keep legacy incoming-text rollback path readable
-        run: |
-          python local_inspection_service/scripts/smoke_incoming_text_inspection.py
-          python local_inspection_service/scripts/smoke_incoming_text_endpoints.py
-          python local_inspection_service/scripts/smoke_incoming_text_postgres.py
-      - name: Validate generated schema with PostgreSQL 16
-        run: python local_inspection_service/scripts/smoke_postgres_schema_real_engine.py --postgres-bin-dir /usr/lib/postgresql/16/bin
-      - name: Retain final benchmark capacity and isolation evidence
-        if: always()
-        env:
-          VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
-          VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
-        run: python scripts/verify_ci_benchmark_storage.py
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: ${{ inputs.cold-cache != true && 'pip' || '' }}
+        cache-dependency-path: requirements-production.lock
+    - name: Identify immutable dependency environment
+      id: environment
+      run: python scripts/ci_environment.py key
+    - name: Restore main-built dependency environment
+      if: ${{ inputs.cold-cache != true }}
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/vantaline-ci-venv
+        key: ${{ steps.environment.outputs.key }}
+      continue-on-error: true
+    - name: Install and verify locked production dependencies
+      run: python scripts/ci_environment.py prepare
+    - name: Verify backend CI coverage and gate failure modes
+      run: 'python scripts/backend_ci.py verify
 
+        python scripts/smoke_backend_ci.py
+
+
+        python scripts/smoke_ci_evidence.py
+
+        python scripts/smoke_ci_environment.py
+
+        python scripts/smoke_ci_chain_timing.py
+
+        '
+    - name: Run isolated backend shard
+      env:
+        BACKEND_RESULT_DIR: ${{ runner.temp }}/backend-results
+        VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+        VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+      run: python scripts/backend_ci.py run --shard ${{ matrix.shard }} --output "$BACKEND_RESULT_DIR"
+    - name: Upload command timings and results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+        path: ${{ runner.temp }}/backend-results/
+        if-no-files-found: error
+        retention-days: 30
+    needs:
+    - ci-mode
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+  backend-plc:
+    name: backend-plc
+    if: always()
+    needs:
+    - ci-mode
+    - backend-shards
+    - artifact-storage
+    - doc-image-runtime
+    - source-safety
+    - release-package
+    - documentation
+    - frontend
+    - codex-comparison
+    - frontend-build
+    - backend-performance
+    - manual-history-performance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: backend-shard-${{ github.run_attempt }}-*
+        path: backend-results
+        merge-multiple: true
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - uses: actions/download-artifact@v4
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+      with:
+        name: backend-performance-${{ github.run_attempt }}
+        path: backend-performance
+    - uses: actions/download-artifact@v4
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+      with:
+        name: manual-history-performance-${{ github.run_attempt }}
+        path: manual-history-performance
+    - name: Fail closed and summarize backend latency
+      env:
+        SHARD_RESULT: ${{ needs.backend-shards.result }}
+        GH_TOKEN: ${{ github.token }}
+        CI_NEEDS: ${{ toJSON(needs) }}
+      run: 'gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" > "$RUNNER_TEMP/backend-jobs.json"
+
+        python scripts/backend_ci.py gate --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json" --matrix-result
+        "$SHARD_RESULT"
+
+
+        python scripts/ci_evidence.py publish --results backend-results --jobs "$RUNNER_TEMP/backend-jobs.json"'
+      if: ${{ needs.ci-mode.outputs.mode == 'full' }}
+    - name: Verify successful exact-tree PR evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'reuse' }}
+      env:
+        CI_REUSE_PROOF: ${{ needs.ci-mode.outputs.proof }}
+        CI_NEEDS: ${{ toJSON(needs) }}
+      run: python scripts/ci_evidence.py assert-reuse --check backend-plc
+    - name: Reject an absent or failed mode decision
+      if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
+        'reuse') }}
+      run: exit 1
+    - name: Publish full CI receipt
+      if: ${{ success() && needs.ci-mode.outputs.mode == 'full' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-evidence-${{ github.run_attempt }}
+        path: backend-results/*.json
+        if-no-files-found: error
+        retention-days: 30
+    - name: Retain verified main provenance
+      if: ${{ success() && needs.ci-mode.outputs.mode == 'reuse' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: main-ci-evidence-${{ github.run_attempt }}
+        path: reuse-evidence.json
+        if-no-files-found: error
+        retention-days: 30
   codex-comparison:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
     runs-on: ubuntu-22.04
     services:
       postgres:
@@ -779,21 +532,45 @@ jobs:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s --health-timeout 5s --health-retries 10
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       CODEX_TEST_DATABASE_URL: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap
-      - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart httpx pytest
-      - run: python -m pytest tests/codex_compare -q
-
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - run: sudo apt-get update && sudo apt-get install -y bubblewrap
+    - run: pip install -c requirements-production.lock pillow opencv-python-headless 'psycopg[binary]' fastapi python-multipart
+        httpx pytest
+    - run: python -m pytest tests/codex_compare -q
+  frontend-build:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs:
+    - ci-mode
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: local_inspection_service/frontend
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+    - run: npm ci
+    - run: npm run test:agent
+    - run: npm run typecheck
+    - run: npm run build:production-cutover
+    - name: Verify built protocol
+      working-directory: .
+      run: python scripts/verify_release_contract.py
   manual-history-performance:
     runs-on: ubuntu-latest
     services:
@@ -804,35 +581,111 @@ jobs:
           POSTGRES_PASSWORD: vantaline_ci
           POSTGRES_DB: vantaline
         ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U vantaline"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: pip
-      - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
-      - run: python scripts/smoke_manual_history_protocol.py
-      - run: python scripts/smoke_manual_history_index.py --postgres
-      - run: python scripts/smoke_manual_history_baseline.py --postgres
-      - name: Verify ready legacy projection performance
-        run: python scripts/benchmark_manual_history.py --projection --report "$RUNNER_TEMP/legacy-projection.json"
-      - name: Verify fixed manual-history first-page performance
-        run: python scripts/benchmark_manual_history.py --report "$RUNNER_TEMP/manual-history.json"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: manual-history-performance
-          path: |
-            ${{ runner.temp }}/manual-history.json
-            ${{ runner.temp }}/legacy-projection.json
-          if-no-files-found: warn
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: pip
+    - run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
+    - run: python scripts/smoke_manual_history_protocol.py
+    - run: python scripts/smoke_manual_history_index.py --postgres
+    - run: python scripts/smoke_manual_history_baseline.py --postgres
+    - name: Verify ready legacy projection performance
+      run: python scripts/benchmark_manual_history.py --projection --report "$RUNNER_TEMP/legacy-projection.json"
+    - name: Verify fixed manual-history first-page performance
+      run: python scripts/benchmark_manual_history.py --report "$RUNNER_TEMP/manual-history.json"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: manual-history-performance-${{ github.run_attempt }}
+        path: '${{ runner.temp }}/manual-history.json
+
+          ${{ runner.temp }}/legacy-projection.json
+
+          '
+        if-no-files-found: error
+    needs:
+    - ci-mode
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    timeout-minutes: 180
+  backend-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
+      postgres_benchmark:
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+        - 5433:5432
+        options: --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648 --memory=3221225472 --memory-swap=3221225472
+          --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+      VANTALINE_BENCHMARK_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5433/vantaline
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: pip
+        cache-dependency-path: requirements-production.lock
+    - name: Install locked production dependencies
+      run: 'pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
+
+        python scripts/verify_production_dependencies.py requirements-production.lock
+
+        '
+    - name: Full unchanged benchmark protocols
+      env:
+        VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+        VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+      run: python scripts/backend_ci.py performance --output "$RUNNER_TEMP/backend-performance"
+    - name: Upload benchmark reports and capacity evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-performance-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/backend-performance/
+        if-no-files-found: error
+        retention-days: 30
+    needs:
+    - ci-mode
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+'on':
+  pull_request: null
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+    inputs:
+      cold-cache:
+        description: Measure backend setup without restoring or saving the pip cache
+        type: boolean
+        default: false
+      force-full:
+        description: Run every test; never reuse prior PR evidence
+        type: boolean
+        default: false
+  schedule:
+  - cron: 0 20 * * *

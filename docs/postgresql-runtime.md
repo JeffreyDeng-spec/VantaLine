@@ -853,6 +853,23 @@ Transport budget and pool-retirement evidence use additive fields in existing at
 
 Real-photo pause archives the active round with cancelled status/time in the existing state JSON and clears the active pointer inside the same fenced transaction that revokes queued/running jobs. Repeated pause does not duplicate history. No schema migration, historical annotation rewrite or automatic paid replay is introduced.
 
+## Parallel backend CI storage
+
+Full CI backend correctness contracts run on 12 separate runners, each with an independent
+ordinary disk-backed PostgreSQL 16 instance. Existing schemas, concurrency and
+durability assertions are unchanged; tests within one shard remain serial. The
+storage-isolation dependency group also inspects the separate bounded synthetic
+benchmark instance and retains final capacity evidence after assertion failure.
+
+The six complete label performance matrices execute in the required CI
+`backend-performance` job. The five SQL benchmarks override only their individual
+command DSNs to the bounded second instance; the fake legacy benchmark retains
+its prior environment. CI and scheduled performance enforce fsync, synchronous_commit
+and full_page_writes, distinct instance identities and original capacity limits.
+Exact-tree main reuse validates the complete PR database evidence; it does not restore
+a test database. No database contents are cached or shared between runners; production storage,
+migrations and rollback remain unchanged.
+
 Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.
 
 Explicit source edits on disabled legacy states reuse the same round-archive helper as pause, within the existing mutate transaction. They do not enable state, create jobs or rewrite old job evidence; active-round rejection rolls back the group edit.
@@ -861,3 +878,26 @@ Explicit source edits on disabled legacy states reuse the same round-archive hel
 ## Real-photo source confirmation
 
 Real-photo source confirmation uses additive fields in the existing fenced state JSON: group confirmation, source version, actor/time and prior group history. No DDL or historical-state rewrite is required. Group edits run under the existing owner/task mutation fence, preserve active/frozen guards, and return without version/history/recheck changes for an identical save. A changed reviewed source schedules at most one explicit recheck ID; it does not insert a paid job. Approved queries and frozen dataset validation independently exclude pending sources, including historical accepted records.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.

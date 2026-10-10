@@ -8,11 +8,11 @@ The focused training completion graph is assembled by the default Web entry and 
 
 Codex comparison list/event read-transaction separation is a schema-free, Web-compatible release. It changes no worker topology, model binding, paid-call retry or database write fence. Existing `get` and the HTTP events ownership lookup still serialize. CI requires isolated PostgreSQL visibility and lock-wait checks; restore only the previous complete immutable release on failure.
 
-The ephemeral legacy label-record index is a Web-compatible, schema-free release with source manifest v133 (341 entries). The CI backend job reads the exact first-parent `api.py` for projection replay, and separately fetches and verifies the immutable v550 API blob for 1,000/10,000-record same-run performance benchmarks; future CI runs retain that benchmark baseline. It changes no worker topology, cursor, write transaction, model binding or paid-call behavior. Restore the previous complete immutable release on failure; leave records and snapshots intact.
+The ephemeral legacy label-record index is a Web-compatible, schema-free release with source manifest v133 (341 entries). Backend shards fetch the fixed `0b22d32a69c2b7eb9652f3f5d667bfb9efe25afd` API and verify blob `fab9c59d49a6f1f1864479981b29ffb8bd766567` for projection replay. The required CI performance job and scheduled Backend performance workflow fetch and verify the immutable v550 API blob for unchanged 1,000/10,000-record same-run performance benchmarks. It changes no worker topology, cursor, write transaction, model binding or paid-call behavior. Restore the previous complete immutable release on failure; leave records and snapshots intact.
 
 Label read-transaction separation is a Web-compatible release with unchanged schema, cursor format, worker topology and business API. Only three list-oriented methods lose the advisory lock; write and model-snapshot paths retain it. Source manifest v132 has 341 entries. CI requires isolated PostgreSQL lock/visibility/rollback evidence and the existing label concurrency/pagination smoke. Restore the previous complete immutable release on failure without rewriting task, snapshot or paid-call evidence.
 
-The v131 native-run batching release changed only first-page read/query grouping; at that point the advisory read lock was unchanged. The v132 release removes that lock from three pure-list reads while retaining the 15-minute cursor format, embedded worker, database schema and write lock. Accepted-source projection is replayed locally; CI runs candidate contract checks and isolated PostgreSQL benchmarks before merge. Roll back to the previous complete immutable release without rewriting task or call evidence.
+The v131 native-run batching release changed only first-page read/query grouping; at that point the advisory read lock was unchanged. The v132 release removes that lock from three pure-list reads while retaining the 15-minute cursor format, embedded worker, database schema and write lock. Accepted-source projection is replayed locally; Required CI runs candidate contract checks and the complete isolated PostgreSQL performance protocols; scheduled Backend performance provides additional review evidence. Roll back to the previous complete immutable release without rewriting task or call evidence.
 
 The PLC diagnostic receipt extraction ships in a complete Web-compatible release with unchanged API, PostgreSQL mutation and browser serial ownership. Source manifest v130 retains 339 actual source entries. Replay accepted-original behavior locally; CI checks candidate isolated PostgreSQL and existing PLC/HTTP contracts. Rollback restores the previous complete immutable release without rewriting lease or browser evidence.
 
@@ -1046,7 +1046,7 @@ The derived-label list reader preserves the predecessor release topology. CI com
 
 Reader activation includes a first-startup prerequisite on the actual Web repository connection. Failed verification prevents candidate control readiness and separate-worker startup; the existing installed controller follows whole-release rollback. It runs after the ordinary switch and may extend a failed restart window. No new root-executed candidate validator or installer bridge is introduced. CI includes restricted-role startup rejection and controller rollback, and the HTTP contract baseline changes only by the explicit new first startup callback.
 
-The reader evidence revision changes benchmark/CI diagnostics only, with three mandatory complete A/B repetitions and a separate A/A control. Existing latency/memory/query gates remain unchanged. A failure blocks release; an earlier failed main run must not be described as accepted. New passing CI remains empirical evidence, not proof that the original tail-latency failure was environmental. Whole-release rollback remains the recovery unit.
+The reader evidence revision changes benchmark/CI diagnostics only, with three mandatory complete A/B repetitions and a separate A/A control. Existing latency/memory/query gates remain unchanged. A full benchmark failure remains evidence and blocks the required CI performance job; an earlier failed main run must not be described as accepted. New passing CI remains empirical evidence, not proof that the original tail-latency failure was environmental. Whole-release rollback remains the recovery unit.
 
 Package `runtime/service_paths.py` and its typed ports with callers and the updated prompt-source manifest. Require both-platform original/candidate path checks and neighboring media/auth/HTTP/model contracts, followed by exact-head review and managed complete-release validation. No independent file deployment is supported.
 
@@ -1104,7 +1104,7 @@ Image payload codecs extend the existing fingerprinted provider module under man
 
 Historical integration record (before PR266; not the current bundled architecture): That model/provider integration followed the accepted reader-readiness source manifest and retained its prerequisite. Its bundled manifest was v168 with 494 unique sources (including `label_inspection/readiness.py`); historical slice counts above refer to their original isolated candidates. The existing fixed reader benchmark protocol remained mandatory; that historical candidate did not include native-history aggregation. The current integration retains the native-history implementation accepted in PR266.
 
-This model/provider integration is based on main ad1292a after PR267 and preserves the native-history and reader-readiness implementation accepted in PR266. Its production and test sources match the independently reviewed model candidate 63df072. The complete bundled manifest is v169 with495 unique sources; earlier slice counts describe isolated candidates. Both fixed reader19 and history28 benchmark gates remain mandatory. Publication requires acceptance of the identity release, followed by this candidate’s own CI and independent review; the prerequisite’s first main CI AA failure remains recorded.
+This model/provider integration is based on main ad1292a after PR267 and preserves the native-history and reader-readiness implementation accepted in PR266. Its production and test sources match the independently reviewed model candidate 63df072. The complete bundled manifest is v169 with495 unique sources; earlier slice counts describe isolated candidates. Both fixed reader19 and history28 protocols remain mandatory within Backend performance; those historical matrices were independent review checks at that checkpoint; the current complete refactor CI requires both full matrices before release. Publication requires acceptance of the identity release, followed by this candidate’s own CI and independent review; the prerequisite’s first main CI AA failure remains recorded.
 
 Detection request services and typed capabilities ship together with application routes. Require original/candidate workflow contracts and existing HTTP/auth/detection/pipeline checks, then exact-head CI, independent review and whole-release verification. This structural change must not be combined with CRUD policy or concurrency changes.
 
@@ -1670,8 +1670,76 @@ The operator setup UI, self-service permissions and verified connection activati
 
 The required artifact-storage CI includes the new real-photo prefix-cache PostgreSQL contracts. Release the dedicated cache-aware worker, API redaction/statistics and frontend cache status together; a legacy worker must not process new cache jobs. Before reviewer reload or whole-release rollback, close admission and settle/reconcile existing paid sessions. Preserve additive raw-JSON jobs/cache generations and all provider receipts; rollback never replays an uncertain attempt. Live frontend prefix/suffix commissioning remains separate from passing CI.
 
+## Full CI evidence and immutable promotion
+
+Automatic promotion also requires the successful main CI commit to equal the
+workflow-run event's current default-branch commit before a deployment job starts.
+A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
+and `cancel-in-progress: false` remain unchanged; begun deployments finish normally.
+
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
+`CI` runs all ordinary jobs concurrently with twelve isolated backend shards.
+`backend-plc` waits for the full ordinary inventory and both performance jobs,
+publishing commit/run/attempt bound receipts only after every job succeeds. Required names `backend-plc`,
+`frontend` and `source-safety` are unchanged. Full synthetic performance is required
+inside CI and preserves its existing protocols and assertions.
+
+Main may accept complete same-repository final-head PR evidence only after independent
+GitHub success checks, explicit artifact digest verification, exact tested tree and
+first-parent equivalence, unchanged CI/dependency/validation policy, and a maximum
+24-hour age. The three required checks execute verification jobs on this path.
+Ambiguous merge association, rebase/fork, partial rerun, missing/failed checks or any
+validation/API anomaly trigger full CI within a twenty-second discovery budget.
+Manual force-full/cold-cache and reruns/scheduled main inspection are always full.
+The CI-policy initialization merge runs full CI before later business PR reuse.
+
+`Release and deploy production` still accepts only a successful `CI` main **push**.
+It rebuilds from that exact main SHA, creates one immutable frontend/backend package,
+verifies commit/package/install health and `/api/version`, and retains the existing
+whole-release rollback. It never promotes a PR package. Manual/scheduled CI,
+dependency warming and `Backend performance` do not trigger deployment. Only
+superseded PR CI is automatically cancelled; main and begun deployments complete.
+
+Trusted main alone builds/saves exact-key Python environments; PRs only restore
+and still install/verify the full production lock. Cache misses or invalid environments
+rebuild dependencies. Cache scope, capacity and ownership are documented in testing;
+no database/source/secret/customer state or extra paid runner resources are introduced.
+
+Five-minute promotion is a measured acceptance target (170/30/90/10 seconds), not
+an unconditional guarantee. Keep three final full-CI timing results, a cold run and
+an actual production-chain record; count subsequent queueing/handoffs and report
+human waiting separately. Record the following three real chains as well. Evidence
+fallback may exceed five minutes and must remain visible. Revert the reviewed CI PR
+to restore the prior policy; runtime rollback restores one complete immutable release.
+
 ## Empty-background step removal
 
 **Status: Authoritative**
 
 The frontend CI acceptance suite includes detection without a background-photo step. Removal ships as one immutable frontend/backend release; no endpoint removal or stored-background cleanup is performed.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.

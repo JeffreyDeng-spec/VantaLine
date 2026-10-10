@@ -2979,7 +2979,7 @@ Real-photo JPEG transport regression verifies high-entropy references encode as 
 
 Run `python scripts/smoke_plc_self_service.py` and `npm --prefix local_inspection_service/frontend run test:plc-connection` in addition to the existing PLC, auth, release and frontend checks. The browser test uses the real controls/controller with synthetic API and serial streams; `PLC_TEST_BROWSER=chrome` selects an installed desktop Chrome locally. CI uses its pinned Playwright Chromium. Coverage includes first-use confirmation, saved setup, chooser before network writes, cancellation/no device, occupied port, timeout, short/malformed/checksum/extra/residual responses, unplug, local-only permissions, account logout persistence, two-workstation isolation, stale/absent verification and configuration fencing. Automated checks perform no physical PLC I/O. Real commissioning additionally requires two line computers, real read frames, production ACKs and removal recovery; do not describe synthetic evidence as completed hardware acceptance.
 
-The PLC request-model smoke includes self-pair fields and bounded connection evidence. CI runs it alongside self-service checks before the long text/history benchmarks so malformed public PLC schemas fail early; no existing verification is omitted.
+The PLC request-model smoke includes self-pair fields and bounded connection evidence. Required CI runs it alongside self-service checks as ordinary correctness commands in isolated shards. Full text/history performance matrices run independently; no existing assertion is omitted.
 
 Reference-cache regression: include tests/test_real_photo_cache.py in the disposable PostgreSQL real-photo suite and required artifact-storage CI. Cover one prefix across two single-image suffixes, immutable-prefix isolation, real cached-token accounting, class/profile/owner/task key changes, changed-reference rejection, known expiry, no idle renewal, multi-worker creation/claim, cancelled admission, interrupted/failed no-replay and revoked late publication. Strict Responses validation covers truncated/refused/wrong-model/unknown-class/malformed outputs; transport fixtures verify pooled zero-retry POST, explicit proxy and safe nested timeout evidence. High-entropy JPEG tests exercise actual encoded bytes and original-space geometry with JPEG90 4:4:4. Run frontend typecheck/build, pretraining/label regression, migration/boundary/docs contracts and diff checks. These fixtures do not replace two released frontend business calls with screenshots, actual usage and visual quality checks.
 
@@ -2987,11 +2987,104 @@ Real-photo transport regression exercises the installed urllib3 socket-write tim
 
 Disposable PostgreSQL regression verifies pause archives frozen round membership, releases the active round, retains originals and initialization, cancels queued review work, rejects the running review token and does not duplicate history on repeated pause. Verify source-group persistence through the released frontend after pause; changing an input alone is not evidence of a successful save.
 
+## Full CI, trusted environments and exact-tree evidence
+
+Automatic promotion also requires the successful main CI commit to equal the
+workflow-run event's current default-branch commit before a deployment job starts.
+A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
+and `cancel-in-progress: false` remain unchanged; begun deployments finish normally.
+
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
+Required `CI` runs 461 ordinary backend commands in 12 isolated shards alongside
+frontend, source safety, documentation, package and other correctness jobs. There
+is no change-path filter for ordinary PR correctness. The explicit manifest retains
+the original shell/environment variants and keeps each ordered dependency group
+on one runner. Python 3.10, PostgreSQL 16, the production lock and independent
+ordinary disk-backed databases remain mandatory. CI includes all six complete
+label performance protocols and both complete manual-history protocols as required
+jobs. The separate `Backend performance` workflow runs at 03:00 Asia/Shanghai or
+manually; it never independently triggers deployment. Samples, baselines,
+assertions and bounded benchmark storage remain unchanged.
+
+`backend-plc`, `frontend` and `source-safety` retain their required names. Full CI's
+aggregate waits for every ordinary and required performance job. It rejects failures, cancellations, skips,
+missing/duplicate commands, stale commits and partial-attempt results. Successful
+runs publish `ci-evidence.json` and all twelve reports for 30 days, bound to repository,
+PR head/base, actual tested commit/tree/first parent, run/attempt, policy hashes and
+environments. The summary includes setup and the slowest twenty commands.
+
+`Prepare CI dependencies` builds a fresh environment only on trusted main when its
+lock/build rules change, daily at 02:00 Asia/Shanghai, or manually. The exact cache
+key binds Ubuntu and runner image versions, architecture, actual Python patch and
+interpreter, lock and environment rules. PRs restore this environment without saving
+it or using restore keys. Every shard validates its file manifest, installs the full
+lock even on a hit, verifies versions and initializes the locked font cache. A missing,
+invalid or unavailable environment falls back to full installation with the existing
+pip cache. Only the environment directory is cached; source, database state, secrets
+and runtime/customer data are excluded. The builder checks a 1.5 GiB compressed
+ceiling and removes only its own prior main environment keys; account capacity,
+billing and runner tiers are unchanged.
+
+A first-attempt main push may reuse the newest completed successful same-repository
+PR `CI`. The validator independently queries GitHub jobs/run/attempt/artifact identity,
+checks the downloaded ZIP's SHA-256 against GitHub's artifact digest, and verifies
+the tested Git tree and first parent against actual main. Final head, unchanged
+workflow/dependency/validation policy, complete command results and a 24-hour age
+limit are mandatory. Ordinary merge and unambiguous squash are supported; rebase,
+forks, indistinguishable custom squash messages and all uncertainty select full CI.
+Discovery is killed after twenty seconds. Each required check then runs a validator;
+a skipped job never substitutes for a required success. Policy-changing initialization,
+API failures and invalid evidence run the full suite. Manual `force-full`, `cold-cache`,
+all push-run reruns and daily 04:00 Asia/Shanghai main inspections also run full CI.
+Manual/scheduled runs and performance runs never deploy. New PR commits cancel
+superseded PR CI; main runs and begun production deployments remain uncancelled.
+
+Run `python scripts/backend_ci.py verify`, `python scripts/smoke_backend_ci.py`,
+`python scripts/smoke_ci_evidence.py`, `python scripts/smoke_ci_environment.py`,
+`python scripts/smoke_ci_benchmark_storage.py`, `python scripts/smoke_ci_chain_timing.py`, release/doc contracts, shell syntax
+and `git diff --check`. Negative fixtures cover provider failures/partial reruns,
+forged success, wrong head/tree/parent/policy/attempt, expired or mismatched artifacts,
+missing commands, discovery timeout and corrupt/read-only caches. Mechanically
+compare preserved ordinary job commands/environment/cwd against latest main.
+Keep the baseline and refactor delta frozen. Rebalancing requires a separately
+reviewed inventory revision; do not remove assertions to meet a time target.
+
+The inherited five-minute optimization budget (170/30/90/10 seconds) is an
+unverified target. The required full refactor performance matrices remain in CI
+and currently prevent promising that budget for the complete release chain. Measure three
+consecutive final-configuration full runs plus one cold-cache run. Exclude only
+initial PR queueing and human review/merge waiting; include subsequent runner
+queueing and handoffs. Bootstrap must complete one full main run before business
+PRs can reuse evidence. Record an actual PR→main→production chain and the next
+three genuine release chains, with raw total, excluded human wait and stage/queue
+times. These are acceptance targets, not demonstrated production performance. Use
+`python scripts/measure_ci_chain.py --repository OWNER/REPO --pr-run ID --main-run ID
+--release-run ID --output REPORT.json` to independently query successful runs/attempts
+and reconcile raw time, authorized exclusions, stage budgets and later queues.
+
 ## Detection without an empty-background step
 
 **Status: Authoritative**
 
 Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.
+
+The retained legacy-dispatch synthetic deadline regression keeps the real
+before-write timeout case. Its during-write case retains the real 0.5-second
+deadline and waits for the actual fake transport write-start event before invoking
+the unchanged deadline snapshot. The fixture releases the write and waits for
+worker completion in finally; it does not replace the dispatch clock.
+This orders snapshot evidence without changing the actual asyncio scheduler. All
+uncertain-outcome, worker-continuation, newer-final-evidence, single-audit and
+exactly-one-frame assertions remain unchanged; production dispatch and the real
+asyncio scheduler are not patched or modified by this release.
+
+The summary-migration regression explicitly drops its role-owned hostile temporary
+table and commits on the writer session before closing it and dropping the role
+from another session. This removes an asynchronous connection-termination cleanup
+race; migration, grant, hostile-search-path and transaction assertions are unchanged.
 
 Disposable PostgreSQL coverage includes old cancelled/failed/interrupted/stale annotations followed by an explicit newer version: the cohort waits for the new version, queues review only after completion and preserves the old terminal attempt. Existing current-version failure tests still block training. No paid replay occurs in these fixtures.
 
@@ -3003,3 +3096,26 @@ Real PostgreSQL API mutation coverage verifies disabled legacy-round source edit
 Real-photo source-confirmation checks cover legacy accepted pending-source records, explicit false flags, empty groups, server rejection of accept decisions, and refusal to export old frozen datasets containing such sources. Real PostgreSQL API tests verify source history/actor/time, one review identity change, idempotent repeated saves, no paid jobs on editing, explicit confirmation and rejection of a confirmed placeholder. The assembled API baseline includes only the additive optional confirmation field; verify the full application contract after updating it. Run the seven focused real-photo feedback/workflow/review-tools/dataset/dispatch/training-config/cache suites against a disposable PostgreSQL database, plus frontend typecheck/production build, boundaries, model dependency and docs contracts.
 
 The full application-factory smoke also sends real ASGI requests through its native authentication, identity, route registration and feedback owner. Only task lookup and persistence use disposable replacements. It checks anonymous 401, a different authenticated owner 403, omitted/null/false/true confirmation, rejection of numeric/string/container values with 422 before mutation, confirmed-placeholder rejection, pending counts and source-version history. These HTTP checks complement the independent real PostgreSQL mutation suite; they do not claim PostgreSQL-backed ASGI requests, worker execution or paid inference. The current five-source main289 guard preserves original API hash oracles and rejects coordinated source/hash edits to the API and its confirmation collaborators.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.

@@ -1114,7 +1114,7 @@ A connection-cleanup exception marks that consumer generation failed even after 
 
 Attempted threads are tracked before native launch. Any startup exception fails that controller even if no thread is currently live, because launch may already have happened. Registration is serialized per process to prevent duplicate hooks during concurrent composition. Synthetic tests cover failure before and after native launch and concurrent registration.
 
-If the label batch or payload benchmark blocks main CI, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Automatic release stays blocked until the normal CI gate succeeds; production remains on the last accepted complete release.
+If the independent Backend performance workflow fails, retain its per-case raw samples and limits before investigating latency. Do not infer runner noise or loosen the P95 guard from a bare assertion. Complete label and manual performance matrices are required jobs in CI; automatic release requires the complete correctness, safety and performance gate to succeed.
 
 Source-inaccessible acceptance must include application startup with existing image-job records: guide/provenance hashes use the same COS file adapter as business media. Verify production dependencies and SDK imports as both actual service accounts before installation; a root-only successful import does not establish readable package metadata for systemd services.
 
@@ -1336,7 +1336,7 @@ The list cache reader must follow the accepted empty-table/invalidation and publ
 
 The reader prerequisite is enforced during candidate Web startup, after the normal package switch but before background callbacks, control readiness or HTTP serving. Missing source/projection SELECT/schema or a timed-out SQL check rejects readiness with a fixed safe error; the installed controller cannot start the candidate worker or accept/open admission and performs its existing complete-release rollback. This can extend the ordinary restart interruption on failure; it is not a pre-switch or zero-downtime check. The query uses the actual business connection and only required columns with LIMIT 0, accepting column-level grants. It uses a read-only transaction, 1 s lock and 1.5 s statement limits, followed by rollback and connection release. These SQL limits are not an end-to-end network/connect deadline. Do not grant permissions automatically or change DSNs to pass the check.
 
-Reader benchmark diagnostics run only on isolated synthetic PostgreSQL. They do not query production, change runtime topology, retry model calls or relax deployment gates. A failed benchmark leaves release unaccepted; continue using the last accepted complete package until the new commit passes the normal CI and release verification.
+Reader benchmark diagnostics run only on isolated synthetic PostgreSQL. They do not query production, change runtime topology, retry model calls or relax deployment gates. A failed benchmark remains evidence and blocks the required performance job. Release acceptance requires the complete CI correctness, safety and performance gate plus whole-release verification.
 
 Service-path relocation preserves existing file migration and output placement semantics and changes no production data automatically. File writes retain the original error and partial-effect behavior. Request identity is resolved for each placement call. Rollback restores the previous complete Web/worker package.
 
@@ -1932,6 +1932,53 @@ After the connection/upload-budget release, settle active paid tasks before revi
 
 To correct unfrozen real-photo source groups, pause from the frontend and wait for active attempts to settle; pause archives the active cohort and revokes its jobs. Verify each group save persists. Re-enable does not replay cancelled labels or uncertain cache requests: explicitly relabel missing images and explicitly restart failed cache creation after inspecting receipts.
 
+## Full CI latency and evidence diagnosis
+
+Automatic promotion also requires the successful main CI commit to equal the
+workflow-run event's current default-branch commit before a deployment job starts.
+A slower obsolete CI cannot replace a newer release. Existing deployment concurrency
+and `cancel-in-progress: false` remain unchanged; begun deployments finish normally.
+
+Frontend browser contracts remain serial within their runner to avoid shared-port
+conflicts. Agent generation checks, type checking and the production build run in
+an independent `frontend-build` job; `backend-plc` also requires that job's success.
+
+Use required `backend-plc`'s ordinary-job and twelve-shard summaries plus 30-day
+command/receipt artifacts. Full PR CI includes every correctness, safety, migration
+and compatibility check concurrently; complete performance matrices are required
+jobs inside the same CI run. Keep the Python 3.10 lock, PostgreSQL 16 and isolated disk-backed
+ordinary databases. A failed setup/assertion, cancellation, skip or absent report
+blocks promotion. A successful performance run cannot substitute for CI.
+
+A main push's `ci-mode` reports full execution or verified PR reuse. Reuse requires
+independent GitHub run/job/attempt success, final same-repository PR head, exact
+actual tested tree and first parent, unchanged policy, recent complete evidence and
+explicit artifact SHA-256 equality. The three required checks execute validators.
+Fork/rebase/ambiguous association or custom squash, stale/malformed evidence,
+partial reruns and API failure select full CI after at most twenty seconds of
+discovery. Use manual `force-full=true` for diagnosis; `cold-cache=true`, push-run
+reruns and the daily 04:00 Asia/Shanghai inspection also force full CI and do not
+automatically deploy. The initialization merge must first finish full main CI.
+
+The trusted main dependency workflow runs at 02:00 Asia/Shanghai and on lock/build
+rule changes. Inspect its exact Ubuntu/image/architecture/Python/lock/rule key and
+1.5 GiB capacity check. PR runners only restore the environment, check integrity,
+install the full lock and verify versions; invalid/unavailable caches fall back to
+pip installation. The workflow deletes only its own old main environment keys.
+Do not increase cache capacity/billing/runner tier or cache databases/runtime state.
+
+Only successful main push `CI` triggers immutable main-SHA packaging and deployment.
+Inspect install/health checks and `/api/version` against the release commit, never a
+PR bundle. Record PR CI, main validation, packaging/deploy/health and workflow
+handoffs against the 170/30/90/10-second targets. Exclude initial PR queue and human
+review/merge waiting only; record raw elapsed time and count later queueing. Require
+three final full-CI timing measurements and a cold-cache record before claiming
+the inherited optimization target. Complete refactor acceptance instead requires
+all existing performance protocols and actual production checks; do not drop
+them to obtain a ≤300-second chain. Record actual complete release elapsed time.
+PR supersession does not cancel main CI or begun deployments. Revert CI through
+a reviewed PR; runtime recovery restores the entire previous immutable release.
+
 ## Empty-background step removal
 
 **Status: Authoritative**
@@ -1948,3 +1995,26 @@ For a task already paused by an older release, edit its unfrozen source group di
 After the source-confirmation release, reload both frontend and the idle independent reviewer from the immutable deployed version. Trace actual capture provenance before checking “拍摄来源已核实”; keep undated/untraceable photos pending even if visually useful. Verify persisted group/flag/version/history, pending counts and unchanged paid jobs while paused. Such photos may be annotated, but do not count toward training or independent splits. Do not manufacture source groups to reach the minimum. Whole-release rollback retains additive JSON history and evidence; close new admission and reconcile current attempts first.
 
 Rollback to a release predating source confirmation preserves readable additive JSON but does not preserve the new admission policy: its review key ignores source versions and its approved-sample filter ignores the confirmation flag. Keep real-photo training admission disabled in that older release, retain existing attempts and evidence, and review affected source edits before reopening. Label-worker admission restoration alone does not enforce this separate real-photo boundary. Prefer the actual preceding complete release that already includes source confirmation when that release has passed deployment acceptance.
+
+
+The complete refactor CI retains the original 353-command inventory and its
+fingerprint. A separately frozen refactor delta adds 111 ordinary commands,
+replaces the parent-dependent legacy helper with the fixed 0b22 commit/blob
+proof, and inserts the full Beta protocol after history statistics. Twelve
+isolated ordinary shards and both required performance jobs feed the same
+fail-closed `backend-plc` gate. The six label protocols retain initial/final
+storage inspection; manual history retains both ready and dirty seven-case
+protocols and its two actual JSON artifacts. The gate checks the unchanged
+strict numeric verifier, command order, current SHA/run/attempt and actual
+artifact digest/member bytes. Complete receipt reuse includes these performance
+proofs; changing any CI policy requires a full first main run.
+
+Ordinary commands have a 900-second timeout and shards a 45-minute budget;
+performance commands have a 7,200-second bound and jobs a 180-minute budget.
+These are execution budgets, not relaxed sample counts, latency or memory
+thresholds. The 300-second ordinary target is reported separately from complete
+performance and aggregate timing and requires actual runner measurements.
+Independent performance runs remain scheduled or explicit; PR performance is
+required inside CI. Frozen inventory rebalancing requires a reviewed revision.
+
+Manual artifacts use an attempt-specific name, and their creation time must fall within the successful current producer job. The gate compares both actual JSON reports and their final ledgers against that job's original stdout; reuse rechecks the original job log and artifact. Each required reuse validator unconditionally checks out source and initializes Python 3.10 before validation.

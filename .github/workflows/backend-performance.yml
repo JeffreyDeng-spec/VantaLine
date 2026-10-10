@@ -1,0 +1,65 @@
+name: Backend performance
+'on':
+  schedule:
+  - cron: 0 19 * * *
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: backend-performance-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+        - 5432:5432
+        options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
+      postgres_benchmark:
+        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        env:
+          POSTGRES_USER: vantaline
+          POSTGRES_PASSWORD: vantaline_ci
+          POSTGRES_DB: vantaline
+        ports:
+        - 5433:5432
+        options: --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2147483648 --memory=3221225472 --memory-swap=3221225472
+          --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      VANTALINE_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5432/vantaline
+      VANTALINE_BENCHMARK_POSTGRES_DSN: postgresql://vantaline:vantaline_ci@127.0.0.1:5433/vantaline
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: pip
+        cache-dependency-path: requirements-production.lock
+    - name: Install locked production dependencies
+      run: 'pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-production.lock
+
+        python scripts/verify_production_dependencies.py requirements-production.lock
+
+        '
+    - name: Full unchanged benchmark protocols
+      env:
+        VANTALINE_BENCHMARK_CONTAINER: ${{ job.services.postgres_benchmark.id }}
+        VANTALINE_ORDINARY_CONTAINER: ${{ job.services.postgres.id }}
+      run: python scripts/backend_ci.py performance --output "$RUNNER_TEMP/backend-performance"
+    - name: Upload benchmark reports and capacity evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-performance
+        path: ${{ runner.temp }}/backend-performance/
+        if-no-files-found: error
+        retention-days: 30

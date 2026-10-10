@@ -82,8 +82,8 @@ class StorageContracts(unittest.TestCase):
             with self.assertRaises(AssertionError):storage.main()
         inspect.assert_called_once()
 
-    def check_benchmark_routing(self, workflow):
-        backend=workflow['jobs']['backend-plc']
+    def check_benchmark_routing(self, workflow, manifest=None):
+        backend=workflow['jobs']['backend-performance']
         self.assertEqual(backend['env']['VANTALINE_POSTGRES_DSN'],storage.NORMAL_DSN)
         self.assertEqual(backend['env']['VANTALINE_BENCHMARK_POSTGRES_DSN'],storage.BENCHMARK_DSN)
         ordinary=backend['services']['postgres'];self.assertEqual(ordinary['ports'],['5432:5432'])
@@ -92,14 +92,18 @@ class StorageContracts(unittest.TestCase):
         actual_invocations=[]
         commands=['python scripts/benchmark_label_'+name+'.py' for name in ['history_statistics','beta_summaries','summary_reads','projection','run_batch']]
         prefix='VANTALINE_POSTGRES_DSN="$VANTALINE_BENCHMARK_POSTGRES_DSN" AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN" '
-        for step in backend['steps']:
-            self.assertNotIn('VANTALINE_POSTGRES_DSN',step.get('env',{}))
-            for line in step.get('run','').splitlines():
-                if any(command in line for command in commands):
-                    self.assertIn(line,[prefix+command for command in commands])
-                    actual_invocations.append(line[len(prefix):])
-                if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
-                    self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
+        from backend_ci import load_manifest
+        manifest=load_manifest() if manifest is None else manifest
+        for item in manifest['checks']:
+            self.assertNotIn('$VANTALINE_BENCHMARK_POSTGRES_DSN',item['run'])
+            self.assertNotIn('VANTALINE_POSTGRES_DSN',item['env'])
+        for item in manifest['performance']:
+            line=item['run']
+            if any(command in line for command in commands):
+                self.assertIn(line,[prefix+command for command in commands])
+                actual_invocations.append(line[len(prefix):])
+            if '$VANTALINE_BENCHMARK_POSTGRES_DSN' in line:
+                self.assertTrue(line.startswith(prefix));selected.append(line[len(prefix):])
         self.assertEqual(selected,commands)
         self.assertEqual(actual_invocations,commands)
 
@@ -116,14 +120,16 @@ class StorageContracts(unittest.TestCase):
         command='python scripts/benchmark_label_beta_summaries.py'
         for mode in ('bare','ordinary','wrong-secondary','duplicate','bare-extra'):
             workflow=copy.deepcopy(original)
-            step=next(s for s in workflow['jobs']['backend-plc']['steps'] if prefix+command in s.get('run',''))
+            from backend_ci import load_manifest
+            manifest=copy.deepcopy(load_manifest())
+            step=next(s for s in manifest['performance'] if s['run']==prefix+command)
             replacement={'bare':command, 'ordinary':prefix.replace('$VANTALINE_BENCHMARK_POSTGRES_DSN','$VANTALINE_POSTGRES_DSN')+command,
                          'wrong-secondary':prefix.replace('AGENT_TEST_DATABASE_URL="$VANTALINE_BENCHMARK_POSTGRES_DSN"','AGENT_TEST_DATABASE_URL="$VANTALINE_POSTGRES_DSN"')+command,
                          'duplicate':prefix+command+'\n'+prefix+command,
                          'bare-extra':command+'\n'+prefix+command}[mode]
             step['run']=step['run'].replace(prefix+command,replacement)
             with self.subTest(mode=mode),self.assertRaises(AssertionError):
-                self.check_benchmark_routing(workflow)
+                self.check_benchmark_routing(workflow,manifest)
 
 
 if __name__=='__main__':unittest.main()
