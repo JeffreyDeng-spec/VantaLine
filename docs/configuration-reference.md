@@ -1325,3 +1325,5 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 Real-photo localization applies fixed longest-edge limits of 1024 for class references and 2048 for the actual original before lossless PNG encoding. Source byte/pixel limits and the 48 MiB serialized request limit still apply. This introduces no environment option or alternate model; original dimensions, first-frame orientation and scale evidence remain frozen. Preparation-stage failures display only fixed stage codes and exception types, never secret-bearing exception messages.
+
+训练审核诊断随不可变 worker 发布，无新增运行开关或模型配置。尝试回执包含固定诊断及提示词 SHA-256；1000 字符的 reason/gap 限制在版本化审核 skill 中显式说明。CLI/model/报告约束保持不变。

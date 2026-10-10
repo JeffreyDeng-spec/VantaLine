@@ -1783,3 +1783,5 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 COS child-directory enumeration now projects distinct immediate child names from latest ready artifact rows in PostgreSQL, rather than decoding every descendant file. Literal prefix reads use explicit C byte ordering and the additive idx_artifact_prefix_c index; the outside list ordering, generations, ownership projections and hybrid local-directory union remain unchanged. Real-photo VLM input bounds resize references to at most 1024 pixels on the longest edge and originals to at most 2048, without cropping or EXIF rotation. Normalized boxes still map to original dimensions; receipts retain input dimensions and the explicit source-to-input scale. Preparation failures become failed annotation versions with a bounded stage code and no external-call receipt, requiring explicit relabeling.
+
+独立训练审核 worker 的报告 broker 在原有鉴权、版本与完整报告约束下记录固定拒绝分类。CLI 完成但报告缺失/被拒绝、非零退出或失败 turn 均阻塞训练；诊断不授予接纳或重试权限，不保存 CLI/异常原文。

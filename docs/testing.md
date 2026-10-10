@@ -2307,3 +2307,5 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 Regression additions: high-entropy 3000×2200 JPEG references reproduce PNG expansion and verify bounded model inputs, preserved source hashes/scales and original-space boxes. A worker preparation failure verifies one persisted failed annotation, no provider invocation and no exception-text leakage. The disposable artifact PostgreSQL suite compares literal prefixes, immediate children, Unicode/wildcard names, flat files, replacements/tombstones and retained descendants; it applies the new prefix index migration twice and retains concurrent CAS tests. Fixture correctness does not establish live provider quality or browser latency.
+
+训练审核诊断回归覆盖正常 CLI 退出但缺失报告仍失败且保留 usage、Unix socket broker 拒绝超长理由并只返回安全分类，以及拒绝报告与 CLI 退出/turn/session 失败的区分。运行 tests/test_training_review_tools.py 和真实 PostgreSQL 的 real-photo suite；这些夹具不证明生产 Agent 筛选效果。

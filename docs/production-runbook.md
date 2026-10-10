@@ -1419,3 +1419,5 @@ The dedicated review crop tool supports the system Pillow legacy `Image.LANCZOS`
 
 
 Task-resource latency diagnosis: directory discovery should return immediate names rather than full descendant artifacts. Migration 2026_10_10_artifact_prefix_index adds a C-collated prefix index through the immutable release installer; it neither rewrites rows nor changes ownership. Compare response identity and unprofiled timings separately from profiler timings. For real-photo preparation failures, inspect the bounded stage code and source/input dimensions; resolve the cause before an explicit frontend relabel. Never replay uncertain paid attempts. Roll back the complete immutable release, retaining the additive index and all attempts.
+
+训练审核失败时先核查 error_code、固定诊断和已有 usage。历史 RuntimeError 没有完整退出/报告证据，不可据此猜测原因或反复收费试错。新 worker 记录 CLI 完成/退出与报告拒绝分类；发布后仅在旧付费尝试结算且无运行中任务时重启独立服务，随后通过前端主动恢复验证。不得将诊断补齐视为历史会话成功，回滚仍保留证据且不自动重放。
