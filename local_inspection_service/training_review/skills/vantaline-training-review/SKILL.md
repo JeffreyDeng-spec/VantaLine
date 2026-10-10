@@ -13,7 +13,7 @@ You may accept or reject entire images only. Never add, delete, move or relabel 
 
 An annotation whose status is not completed must be exclude or uncertain, even if the image appears empty. An invalid VLM response cannot become a training negative through this review.
 
-Submit exactly the task's JSON schema once: write `/work/report.json`, then `vantaline submit --file /work/report.json`. No tools for training, production configuration, image modification, or annotation edits exist.
+Submit exactly the task's JSON schema once: write `/work/report.json`, then `vantaline submit --file /work/report.json`. Every reason and gap must be a nonempty string of at most 1000 characters. Keep initialization reasons concise. A final chat message does not submit a report; verify that the submit command returns `accepted: true` before completing. A refused report does not authorize a second submission in this invocation. No tools for training, production configuration, image modification, or annotation edits exist.
 
 Initialization sets review_trigger and approved_real_target independently, each integer 20–50, with a reason based on the task and history. Review returns a decision for every listed sample and its exact review_key: accept_positive, accept_negative, exclude or uncertain, each with a reason.
 
