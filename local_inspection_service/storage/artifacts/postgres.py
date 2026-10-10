@@ -47,11 +47,29 @@ class PostgresLocations:
         with self.transaction() as cursor:
             # Literal prefix: '%' and '_' in user paths are not SQL wildcards.
             cursor.execute("SELECT logical_path,generation,sha256,size_bytes,state,mtime_ns FROM ("
-                           "SELECT DISTINCT ON (logical_path) logical_path,generation,sha256,size_bytes,state,mtime_ns "
-                           "FROM vantaline.artifact_locations WHERE left(logical_path,%s)=%s "
-                           "ORDER BY logical_path,generation DESC) latest "
-                           "WHERE state='ready' ORDER BY logical_path", (len(prefix), prefix))
+                           "SELECT DISTINCT ON (logical_path COLLATE \"C\") logical_path,generation,sha256,size_bytes,state,mtime_ns "
+                           "FROM vantaline.artifact_locations WHERE logical_path COLLATE \"C\" >= %s AND logical_path COLLATE \"C\" < %s "
+                           "ORDER BY logical_path COLLATE \"C\",generation DESC) latest "
+                           "WHERE state='ready' ORDER BY logical_path", (prefix, prefix[:-1] + "0"))
             return [self.decode(row) for row in cursor.fetchall()]
+
+    def directories(self, prefix: str) -> list[str]:
+        """Project immediate child names without transferring descendant artifacts."""
+        prefix = logical_path(prefix).rstrip("/") + "/"
+        with self.transaction() as cursor:
+            # Keep the literal-prefix and latest-generation semantics of list().
+            # Explicit byte ordering makes [prefix/, prefix0) a literal range.
+            cursor.execute("SELECT DISTINCT split_part(relative_path,'/',1) FROM ("
+                           "SELECT substring(logical_path FROM %s) AS relative_path,state FROM ("
+                           "SELECT DISTINCT ON (logical_path COLLATE \"C\") logical_path,state "
+                           "FROM vantaline.artifact_locations WHERE logical_path COLLATE \"C\" >= %s AND logical_path COLLATE \"C\" < %s "
+                           "ORDER BY logical_path COLLATE \"C\",generation DESC) latest) children "
+                           "WHERE state='ready' AND strpos(relative_path,'/')>0 ORDER BY 1",
+                           (len(prefix) + 1, prefix, prefix[:-1] + "0"))
+            names = [row[0] for row in cursor.fetchall()]
+            for name in names:
+                logical_path(prefix + name)
+            return names
 
     def publish(self, artifact: Artifact, *, expected_generation: int) -> Artifact:
         if artifact.generation != expected_generation + 1:

@@ -32,6 +32,9 @@ class PostgresTests(unittest.TestCase):
         with psycopg.connect(DSN, autocommit=True) as conn:
             conn.execute(migration)
             conn.execute(migration)
+            index = (ROOT / "local_inspection_service/storage/migrations/2026_10_10_artifact_prefix_index.sql").read_text()
+            conn.execute(index)
+            conn.execute(index)
 
     def setUp(self):
         with psycopg.connect(DSN) as conn:
@@ -71,6 +74,42 @@ class PostgresTests(unittest.TestCase):
             self.repo.publish(self.row(path), expected_generation=0)
         self.assertEqual([r.path for r in self.repo.list("outputs/users/a_")], [paths[0]])
         self.assertEqual([r.path for r in self.repo.list("outputs/users/a%")], [paths[2]])
+
+    def test_directory_projection_matches_latest_ready_descendants(self):
+        paths = ["outputs/users/a_/file.png", "outputs/users/a%/deep/file.png",
+                 "outputs/users/中文/file.png", "outputs/users/flat.png",
+                 "outputs/users/deleted/file.png", "outputs/users/retained/one.png",
+                 "outputs/users/retained/two.png", "outputs/users2/foreign/file.png"]
+        for path in paths:
+            self.repo.publish(self.row(path), expected_generation=0)
+        for path in [paths[4], paths[5]]:
+            self.repo.publish(self.row(path, generation=2, state="deleted"), expected_generation=1)
+        for prefix in ["outputs/users", "outputs/users/a_", "outputs/users/a%", "outputs/users/retained"]:
+            base = prefix + "/"
+            with psycopg.connect(DSN) as connection:
+                old = connection.execute(
+                    "SELECT logical_path,generation,sha256,size_bytes,state,mtime_ns FROM ("
+                    "SELECT DISTINCT ON (logical_path) logical_path,generation,sha256,size_bytes,state,mtime_ns "
+                    "FROM vantaline.artifact_locations WHERE left(logical_path,%s)=%s "
+                    "ORDER BY logical_path,generation DESC) latest WHERE state='ready' ORDER BY logical_path",
+                    (len(base), base)).fetchall()
+            self.assertEqual(self.repo.list(prefix), [self.repo.decode(row) for row in old])
+            expected = sorted({r[0][len(base):].split("/", 1)[0]
+                               for r in old if "/" in r[0][len(base):]})
+            self.assertEqual(sorted(self.repo.directories(prefix)), expected)
+        self.assertEqual(set(self.repo.directories("outputs/users")), {"a_", "a%", "中文", "retained"})
+
+    def test_directory_projection_rejects_invalid_child_name(self):
+        row = self.row()
+        with psycopg.connect(DSN) as connection:
+            connection.execute(
+                "INSERT INTO vantaline.artifact_locations "
+                "(logical_path,generation,object_key,sha256,size_bytes,state,created_at) "
+                "VALUES (%s,1,%s,%s,1,'ready',1)",
+                ("outputs/users/../invalid.png", row.key, row.sha256))
+        with self.assertRaises(ValueError):
+            self.repo.directories("outputs/users")
+        self.assertEqual(self.repo.directories("outputs/other"), [])
 
     def test_conflict_rolls_back_and_next_operation_works(self):
         first = self.repo.publish(self.row(), expected_generation=0)

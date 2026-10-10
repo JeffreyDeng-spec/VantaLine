@@ -232,17 +232,23 @@ def run(job,token,config):
                 if not with_repo(lambda r:r.pulse(job['id'],token)):return
             except Exception:return
     thread=threading.Thread(target=heartbeat,daemon=True);thread.start()
-    metadata={}
+    metadata={};call_started=False;stage='original_read'
     try:
         if job['kind']=='annotate':
             files=BusinessFiles();sample=job['inputs']['sample'];raw=files.read_bytes(sample['source_path'],max_bytes=32*1024*1024)
+            stage='original_identity'
             if digest(raw)!=sample['image_sha256']:raise ValueError('original changed')
             def transport(body,model_settings):
+                nonlocal call_started
                 from ..model_profiles.transport import invoke
                 if not with_repo(lambda r:r.pulse(job['id'],token)):raise RuntimeError('annotation no longer authorized')
                 with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],{'external_call_started':True}))
+                call_started=True
                 return invoke(body,model_settings)
-            result=annotate(raw,job['inputs']['classes'],settings(job,config['secret_file']),lambda c:files.read_bytes(c['reference_path'],max_bytes=32*1024*1024),transport=transport)
+            stage='model_settings'
+            model_settings=settings(job,config['secret_file'])
+            stage='input_preparation'
+            result=annotate(raw,job['inputs']['classes'],model_settings,lambda c:files.read_bytes(c['reference_path'],max_bytes=32*1024*1024),transport=transport)
             metadata['usage']=result['receipt']['usage']
             # Failed annotations are complete attempts, not admissible training labels.
         else:result,metadata=review(job,token,config)
@@ -254,7 +260,13 @@ def run(job,token,config):
             return repo.finish(job['id'],token,result,apply)
         with_repo(finish)
     except Exception as exc:
-        try:with_repo(lambda r:r.finish(job['id'],token,{'error_type':type(exc).__name__,**metadata},lambda *a:None,success=False))
+        try:
+            if job['kind']=='annotate' and not call_started:
+                result={'status':'failed','objects':[],'error_type':type(exc).__name__,
+                        'error_code':stage+'_failed','receipt':{'usage':{},'external_call_started':False}}
+                with_repo(lambda r:r.finish(job['id'],token,result,lambda state,current,c:apply_result(r,state,current,c)))
+            else:
+                with_repo(lambda r:r.finish(job['id'],token,{'error_type':type(exc).__name__,**metadata},lambda *a:None,success=False))
         except Exception:pass  # claim recovery records uncertain attempts without requeueing.
     finally:stopped.set();thread.join(timeout=6)
 

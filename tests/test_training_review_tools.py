@@ -46,3 +46,28 @@ def test_crop_pixels_and_transform_support_legacy_system_pillow(tmp_path,legacy)
     import json
     assert json.loads(Path(str(target)+'.transform.json').read_text())==evidence
     assert evidence['crop_pixels']==[3,4,13,14] and evidence['resampler']=='LANCZOS'
+
+
+def test_annotation_preparation_failure_is_persisted_without_paid_call():
+    import time
+    from local_inspection_service.training_review import worker
+    job = {'id':'job', 'kind':'annotate', 'attempt_id':'attempt', 'started_at':time.time(),
+           'inputs': {'sample': {'source_path':'fixture', 'image_sha256':'digest'}, 'classes':[]}}
+    finished = []
+    repo = SimpleNamespace(finish=lambda *a, **kw: finished.append((a, kw)))
+    with patch.object(worker, 'with_repo', lambda fn: fn(repo)), \
+         patch.object(worker, 'BusinessFiles', lambda: SimpleNamespace(read_bytes=lambda *a, **kw: b'fixture')), \
+         patch.object(worker, 'digest', lambda raw: 'digest'), \
+         patch.object(worker, 'settings', side_effect=ValueError('sensitive exception text')), \
+         patch.object(worker, 'annotate', side_effect=AssertionError('must not call')):
+        worker.run(job, 'token', {'secret_file':'private'})
+    assert len(finished) == 1
+    args, kwargs = finished[0]
+    result = args[2]
+    assert result['status'] == 'failed' and result['error_code'] == 'model_settings_failed'
+    assert result['receipt']['external_call_started'] is False
+    assert 'sensitive' not in str(result) and 'success' not in kwargs
+    state = {}; current = {'result':result}
+    with patch.object(worker, 'apply_result') as apply:
+        args[3](state, current, 'cursor')
+        apply.assert_called_once_with(repo, state, current, 'cursor')
