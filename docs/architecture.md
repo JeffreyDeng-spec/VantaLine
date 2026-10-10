@@ -1807,3 +1807,8 @@ Detection no longer collects or requires an empty production-background photo. I
 Real-photo preparation settlement is version-aware: old terminal annotation evidence cannot mark a newer explicit version incomplete. The current version retains its normal failure gate; new labels still await completed whole-image review before training.
 
 Paused-state compatibility allows explicit source editing to archive a revoked legacy round in the same fenced state transaction, without an enable/pause detour or new paid job. Active enabled rounds and frozen splits retain their existing guards.
+
+
+## Real-photo source confirmation
+
+Real-photo capture provenance now includes an explicit confirmation flag and versioned group history. Pending placeholder groups and explicitly unconfirmed sources cannot pass Agent acceptance, approved-count aggregation or dataset export. Legacy non-placeholder groups retain their existing semantics without rewriting JSON. A source edit changes the review identity once; unchanged saves do not cause repeated paid review. The frontend exposes pending counts and an explicit source confirmation checkbox; appearance/upload frequency cannot establish capture provenance.

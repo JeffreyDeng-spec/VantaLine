@@ -1672,6 +1672,17 @@
             "source_group": {
               "title": "Source Group",
               "type": "string"
+            },
+            "source_group_confirmed": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Group Confirmed"
             }
           },
           "required": [

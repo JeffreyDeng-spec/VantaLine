@@ -1353,3 +1353,8 @@ No background upload is required to start detection. This adds no configuration 
 The real-photo annotation-version recovery guard has no new setting, model binding, timeout or fallback. Source manifest v182 records the workflow change; historical snapshots and failed attempts remain unchanged.
 
 The v182 recovery change also permits source-group edits on legacy disabled states with revoked rounds, without enabling optimization or changing any model setting.
+
+
+## Real-photo source confirmation
+
+Real-photo source confirmation is per-sample metadata, not a deployment flag or a reduced training threshold. `source_group_confirmed=false` and pending placeholder group names exclude the sample from approved counts and independent dataset groups. The frontend group request accepts an optional strict boolean; omitted legacy requests derive confirmation from a non-placeholder group. Source version/history are additive JSON fields. Existing 20-photo, positive-sample and three-source-group gates remain unchanged.

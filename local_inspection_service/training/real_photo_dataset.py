@@ -35,6 +35,7 @@ def build(job, files, output):
         files.write_text(label,'\n'.join(rows)+('\n' if rows else ''),encoding='utf-8')
         records.append({'image':str(image),'labels':str(label),'split':split,'source_sample_id':s['sample_id'],
                         'image_sha256':s['image_sha256'],'source_group':s['source_group'],
+                        'source_group_confirmed':True,'source_group_version':s.get('source_group_version',0),
                         'annotation_version':s['annotation']['version'],'review_key':s['review']['key'],
                         'review_job_id':s['review']['job_id'],'label_count':len(rows),'sample_type':'real_photo'})
     yaml=root/'dataset.yaml';manifest=root/'manifest.json'

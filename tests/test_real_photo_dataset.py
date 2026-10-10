@@ -24,7 +24,18 @@ def test_dataset_only_accepted_originals_full_classes_group_split(tmp_path):
     import yaml
     assert yaml.safe_load(open(value['dataset_yaml']))['test']=='images/test'
     for row in value['samples']:
+        assert row['source_group_confirmed'] is True and row['source_group_version']==0
         label=open(row['labels']).read().strip()
         if label:assert all(0<float(v)<=1 for v in label.split()[1:])
     state['samples'][0]['annotation']['version']+=1
     with pytest.raises(ValueError):build(job,BusinessFiles(runtime_provider=lambda:None),tmp_path/'bad')
+
+
+@pytest.mark.parametrize('explicit',[False,True])
+def test_old_frozen_proposal_with_unconfirmed_source_refuses_export(tmp_path,explicit):
+    state=state_fixture();selected,splits,unsupported=dataset_gate(state,20)
+    if explicit:selected[0]['source_group_confirmed']=False
+    else:selected[0]['source_group']='historical-task-unconfirmed'
+    job={'inputs':{'samples':selected,'classes':state['classes'],'splits':splits}}
+    with pytest.raises(ValueError,match='accepted real photos'):build(job,None,tmp_path/'dataset')
+    assert not (tmp_path/'dataset').exists()
