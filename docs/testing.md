@@ -2363,3 +2363,9 @@ the deterministic longest-group-first assignment. Verify the final commit with
 three consecutive ≤300-second runs and separately record a cold-cache run using manual `CI` dispatch with `cold-cache=true`. Rerun the
 whole CI workflow for this gate; reports from earlier attempts are deliberately
 rejected, including partial reruns that reuse previously successful shard reports.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+Run node scripts/test_detection_without_background.cjs (DETECTION_TEST_BROWSER=chrome for installed local Chrome) against the real app with isolated API and fake camera fixtures. It checks missing/default/existing task backgrounds, direct image/video/camera submissions, an unavailable compatibility background service, no background query/upload/dialog and no PLC provenance when disconnected. CI runs this after installing its pinned Chromium. Run the existing background upload/API/read/render/dataset/synthetic-batch smoke suites to preserve training compatibility, plus Agent contracts, frontend typecheck/build and both PLC source contracts. These fixtures do not perform real model, camera or PLC operations.

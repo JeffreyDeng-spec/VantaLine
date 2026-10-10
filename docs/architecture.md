@@ -1797,3 +1797,9 @@ The detection workbench and ordinary-user device settings share `LocalPlcControl
 The real-photo Responses transport applies a bounded 30-second connection/upload budget, since urllib3 uses the connect socket timeout while writing image bodies. It retires pools after 30 seconds idle and on failure, preserving recent successful pooling and zero POST retries. Shared label/pretraining transport is unchanged.
 
 Pausing real-photo feedback archives and clears the active review round while revoking its jobs atomically. Source groups can then be corrected without an old frozen cohort blocking the UI. Existing initialization, original/annotation/review evidence and historical rounds remain intact; late reports remain fenced.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+Detection no longer collects or requires an empty production-background photo. Image, video and dedicated camera inspection use the selected authorized model directly, subject to existing model/camera/PLC gates. The workbench removes its background dialog, camera stream, readiness query and upload workflow. Background libraries, stored task environment records, training selection/hydration and the compatibility server upload endpoint remain unchanged; synthetic training retains its existing selected-background or green_conveyor fallback.

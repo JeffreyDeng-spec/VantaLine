@@ -1146,3 +1146,9 @@ production deployments are not cancelled by this change.
 CI configuration rollback uses a reviewed revert. If runtime promotion has
 occurred, restore one complete previous immutable release under the existing
 rollback procedure; never copy individual workflow/application files to a host.
+
+## Empty-background step removal
+
+**Status: Authoritative**
+
+The frontend CI acceptance suite includes detection without a background-photo step. Removal ships as one immutable frontend/backend release; no endpoint removal or stored-background cleanup is performed.

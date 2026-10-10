@@ -9,7 +9,7 @@ const checker = program.getTypeChecker();
 const source = program.getSourceFile(path.join(root, 'src/api/queries.ts'));
 const groups = {
   core: 'getAuthStatus getTaskNavigationPreferences saveTaskNavigationPreferences getServiceStatus getConfigSummary',
-  detection: 'warmupYoloModel getAiTasks getAiTaskAutoOptimize updateAiTaskAutoOptimize uploadAiTaskEnvironmentBackground deleteAiTaskAutoOptimizeSample retryAiTaskAutoOptimizeSample approveAiTaskAutoOptimizeSample updateTaskRules deleteAiTask',
+  detection: 'warmupYoloModel getAiTasks getAiTaskAutoOptimize updateAiTaskAutoOptimize deleteAiTaskAutoOptimizeSample retryAiTaskAutoOptimizeSample approveAiTaskAutoOptimizeSample updateTaskRules deleteAiTask',
   accessories: 'getAccessories getAccessoryCandidate previewAccessory createAccessory confirmAccessory addAccessoryFiles deleteAccessory setAccessoryRoute',
   text: 'listTextInspectionStandards getTextInspectionStandard classifyTextInspectionStandard deleteTextInspectionStandard importTextInspectionStandard addTextInspectionStandardAsset patchTextInspectionAsset confirmTextInspectionStandard getIncomingTextTask getIncomingTextInspectors uploadIncomingTextReference saveIncomingTextRules cloneIncomingTextReference inspectIncomingText reviewIncomingTextInspection getIncomingTextInspections compareTextInspectionLabel',
   training: 'getTrainingResources getTrainingDatasetDetail updateTrainingDataset deleteTrainingDataset deleteTrainingDatasetSample updateTrainingModel deleteTrainingModel updateTrainingTask',
@@ -38,7 +38,7 @@ const exceptions = {
 };
 const accessoryFields = ['name','material_type','material_alpha_policy','training_role','pipeline_context','paper_preset','paper_width_mm','paper_height_mm','object_length_mm','object_width_mm','object_height_mm','size_reference','files'];
 const formFields = {
-  uploadAiTaskEnvironmentBackground: ['file', 'source'], previewAccessory: accessoryFields, createAccessory: [...accessoryFields,'class_id'], addAccessoryFiles: ['files'],
+  previewAccessory: accessoryFields, createAccessory: [...accessoryFields,'class_id'], addAccessoryFiles: ['files'],
   importTextInspectionStandard: ['file','name','material_code','version_label','standard_type'], addTextInspectionStandardAsset: ['file','expected_revision'], uploadIncomingTextReference: ['file','version_label'], inspectIncomingText: ['file','capture_id'], compareTextInspectionLabel: ['captured_file','standard_asset_id','comparison_id','extraction_id']
 };
 const object = (properties, required = []) => ({ type: 'object', properties, required, additionalProperties: false });

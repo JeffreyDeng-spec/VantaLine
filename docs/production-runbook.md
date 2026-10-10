@@ -1452,3 +1452,9 @@ cold-cache run before claiming the target achieved. PR supersession cancellation
 is scoped to that PR; main runs and production deployments retain their existing
 completion behavior. Revert CI changes through a reviewed PR; runtime rollback
 continues to restore the whole previous immutable release without altering data.
+
+## Empty-background step removal
+
+**Status: Authoritative**
+
+After this release, reload the detection page and verify a task with no saved environment background can submit image, video and camera inspection without a background dialog. Preserve existing backgrounds and training jobs; whole-release rollback restores the previous UI and no data restoration is required.

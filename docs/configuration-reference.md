@@ -1343,3 +1343,9 @@ The reference-prefix release increments prompt source manifest to v180 and inclu
 Real-photo connection/upload timeout is min(profile timeout, 30 seconds), response reads remain capped at 120 seconds. This is fixed transport policy, with no new setting or model fallback. Source manifest v181 records the change; stored profiles and historical snapshots are not rewritten.
 
 Explicit real-photo pause clears the active review round into cancelled history, without changing model profiles or automatically resubmitting work. Re-enable retains initialization. Failed cache creation and cancelled annotation attempts still require owner-authorized explicit recovery.
+
+## Detection without an empty-background step
+
+**Status: Authoritative**
+
+No background upload is required to start detection. This adds no configuration switch or database migration. Existing task background IDs and environment records remain readable and training keeps its established selected-background/default fallback. The compatibility environment-background endpoint is retained for existing integrations, while the current detection UI exposes no upload or capture step.
