@@ -1341,3 +1341,5 @@ Real-photo bbox transport resolves the immutable bbox_annotation profile proxy_r
 The reference-prefix release increments prompt source manifest to v180 and includes training/real_photo_cache.py and training/real_photo_transport.py. Stored historical model-profile/task fingerprints remain immutable.
 
 Real-photo connection/upload timeout is min(profile timeout, 30 seconds), response reads remain capped at 120 seconds. This is fixed transport policy, with no new setting or model fallback. Source manifest v181 records the change; stored profiles and historical snapshots are not rewritten.
+
+Explicit real-photo pause clears the active review round into cancelled history, without changing model profiles or automatically resubmitting work. Re-enable retains initialization. Failed cache creation and cancelled annotation attempts still require owner-authorized explicit recovery.
