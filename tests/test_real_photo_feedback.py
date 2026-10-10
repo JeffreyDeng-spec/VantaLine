@@ -189,3 +189,31 @@ def test_definition_sync_revokes_old_jobs_once_without_polling_image_reads(datab
     assert repo.get('a','task')['classes'][0]['definition']=='new definition'
     before=len(reads);service.status('task');assert len(reads)==before
     assert len([j for j in repo.jobs('a','task') if j['kind']=='initialize' and j['status']=='queued'])==1
+
+
+def test_large_reference_inputs_bounded_and_boxes_remain_in_original_coordinates():
+    import base64
+    from local_inspection_service.training.real_photo_contracts import digest
+    # High entropy reproduces photographic PNG expansion; solid-color fixtures cannot.
+    raw = io.BytesIO()
+    Image.frombytes('RGB', (3000, 2200), os.urandom(3000 * 2200 * 3)).save(raw, 'JPEG', quality=90)
+    raw = raw.getvalue()
+    cs = [{**classes()[0], 'class_id': str(i), 'reference_sha256': digest(raw)} for i in range(4)]
+    calls = []
+    def invoke(body, settings):
+        calls.append(body)
+        images = [p for p in body['messages'][0]['content'] if p['type'] == 'image_url']
+        assert len(json.dumps(body).encode()) < 48 * 1024 * 1024
+        for index, part in enumerate(images):
+            with Image.open(io.BytesIO(base64.b64decode(part['image_url']['url'].split(',', 1)[1]))) as im:
+                assert max(im.size) <= (1024 if index < 4 else 2048)
+        return 200, json.dumps({'model': MODEL, 'choices': [{'finish_reason': 'stop', 'message': {
+            'content': json.dumps({'objects': [{'class_id': '0', 'bbox': [0, 0, 500, 1000]}]})}}]})
+    result = annotate(raw, cs, {'provider': 'doubao', 'model': MODEL, 'configured': True}, lambda c: raw, invoke)
+    assert len(calls) == 1 and result['status'] == 'completed'
+    assert result['objects'][0]['bbox'] == [0, 0, 1500, 2200]
+    meta = result['receipt']['input']
+    assert (meta['width'], meta['height']) == (3000, 2200)
+    assert (meta['input_width'], meta['input_height']) == (2048, 1502)
+    assert meta['source_sha256'] == digest(raw)
+    assert meta['coordinate_transform'] == [2048 / 3000, 0, 0, 0, 1502 / 2200, 0]

@@ -15,7 +15,7 @@ bbox必须是明确0–1000归一化xyxy：按最后原图宽高归一化，右�
 无目标返回空objects。不要输出mask、解释或参考图的检测结果。'''
 
 
-def canonical(data):
+def canonical(data, *, max_edge=None):
     if len(data) > 32*1024*1024:
         raise ValueError('image exceeds byte bound')
     with Image.open(io.BytesIO(data)) as im:
@@ -25,6 +25,9 @@ def canonical(data):
         orientation = im.getexif().get(274, 1)
         im.seek(0)
         pixels = im.convert('RGB')
+        if max_edge is not None and max(pixels.size) > max_edge:
+            pixels.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+        input_width, input_height = pixels.size
         output = io.BytesIO()
         # Lossless decoded first frame, no implicit EXIF rotation, no gain-map frame.
         pixels.save(output, 'PNG')
@@ -32,11 +35,12 @@ def canonical(data):
         return clean, {'source_sha256': digest(data), 'input_sha256': digest(clean),
                        'pixel_sha256': digest(pixels.tobytes()), 'width': width, 'height': height,
                        'source_orientation': orientation, 'frame': 0,
-                       'coordinate_transform': [1, 0, 0, 0, 1, 0], 'encoding': 'png'}
+                       'input_width': input_width, 'input_height': input_height,
+                       'coordinate_transform': [input_width / width, 0, 0, 0, input_height / height, 0], 'encoding': 'png'}
 
 
-def image_content(data):
-    clean, meta = canonical(data)
+def image_content(data, *, max_edge):
+    clean, meta = canonical(data, max_edge=max_edge)
     return {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + base64.b64encode(clean).decode(), 'detail': 'high'}}, meta
 
 
@@ -45,21 +49,22 @@ def annotate(image, classes, settings, read_reference, transport=invoke):
         raise ValueError('fixed bbox model must be explicitly configured')
     content = []; references = []; input_bytes=0
     for c in classes:
-        part, meta = image_content(read_reference(c))
+        part, meta = image_content(read_reference(c), max_edge=1024)
         if meta['source_sha256'] != c['reference_sha256']:
             raise ValueError('reference changed after task snapshot')
         input_bytes+=len(part['image_url']['url'])+len(c['definition'].encode())
         if input_bytes>48*1024*1024:raise ValueError('references exceed aggregate byte bound')
         content += [{'type': 'text', 'text': json.dumps({'class_id': c['class_id'], 'name': c['name'], 'definition': c['definition']}, ensure_ascii=False)}, part]
         references.append({'class_id': c['class_id'], **meta})
-    part, meta = image_content(image)
+    part, meta = image_content(image, max_edge=2048)
     content += [{'type': 'text', 'text': PROMPT}, part]
     payload = {'messages': [{'role': 'user', 'content': content}], 'temperature': 0,
                'max_tokens': 4096, 'thinking': {'type': 'disabled'}}
     if len(json.dumps(payload).encode()) > 48*1024*1024:
         raise ValueError('model input exceeds aggregate byte bound')
     receipt = {'model': MODEL, 'prompt_version': VERSION, 'prompt_sha256': digest(PROMPT),
-               'input': meta, 'references': references, 'usage': {}}
+               'input': meta, 'references': references, 'usage': {},
+               'input_policy_version': 'bounded-first-frame-v1'}
     try:
         status, raw = transport(payload, settings)
         receipt['response_sha256'] = digest(raw.encode())
