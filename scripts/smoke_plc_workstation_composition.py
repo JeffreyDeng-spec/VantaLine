@@ -63,7 +63,7 @@ def build(rows, identity, *, poison=None, repository=None):
 def seed(owner, rows, identity, *, now=None):
     station = {'id': 'same-station', 'name': identity, 'token_hash': owner._plc_web_serial_token_hash('same-cookie'),
                'config_generation': 3, 'config': {**protocol.DEFAULT_WEB_SERIAL_CONFIG, 'enabled': True}, 'profile_verified': True}
-    lease = {'station_id': station['id'], 'session_id': 'same-session', 'owner_user_id': identity, 'state': 'active', 'lease_epoch': 7,
+    lease = {'station_id': station['id'], 'session_id': 'same-session', 'owner_user_id': identity, 'state': 'active', 'communication_verified': True, 'lease_epoch': 7,
              'expires_at': (rows.now if now is None else now) + 300, 'model_id': 'model', 'client_instance_id': 'client', 'bundle_version': protocol.WEB_SERIAL_PROTOCOL_VERSION,
              'config_generation': 3, 'heartbeat_at': 100}
     rows.upsert_row('plc_workstations', owner._plc_workstation_row(station))
@@ -130,6 +130,14 @@ class WorkstationCompositionContracts(unittest.TestCase):
             with self.assertRaises(PlcConfigError): owner.plc_web_serial_begin_camera_detection('same-station', 'same-session', 'request-002', 'model', 'fp')
             self.assertEqual(rows.tables, before)
         self.assertIsNot(self.owner.repository, owner_b.repository)
+    def test_unverified_active_lease_cannot_admit_detection(self):
+        lease=self.rows.tables['plc_workstation_leases']['same-station']['raw_json']
+        lease.pop('communication_verified')
+        before=copy.deepcopy(self.rows.tables)
+        with self.assertRaisesRegex(PlcConfigError,'plc_workstation_lease_fenced'):
+            self.owner.plc_web_serial_begin_camera_detection('same-station','same-session','request-001','model','fp')
+        self.assertEqual(self.rows.tables,before)
+
     def test_declare_persists_before_projection_error_and_never_retries(self):
         owner = self.owner; rows = self.rows
         begun, _ = owner.plc_web_serial_begin_camera_detection('same-station', 'same-session', 'request-001', 'model', 'fp')
@@ -167,7 +175,7 @@ class WorkstationCompositionContracts(unittest.TestCase):
             updated = owner.plc_web_serial_update_config(station_id, {**protocol.DEFAULT_WEB_SERIAL_CONFIG, 'enabled': True})
             generation = updated['config_generation']
             self.assertEqual(generation, 1)
-            lease = {'station_id': station_id, 'session_id': 'same-session', 'owner_user_id': label, 'state': 'active', 'lease_epoch': 7,
+            lease = {'station_id': station_id, 'session_id': 'same-session', 'owner_user_id': label, 'state': 'active', 'communication_verified': True, 'lease_epoch': 7,
                      'expires_at': 300, 'model_id': 'model', 'client_instance_id': 'client', 'bundle_version': protocol.WEB_SERIAL_PROTOCOL_VERSION,
                      'config_generation': generation, 'heartbeat_at': 100}
             rows.upsert_row('plc_workstation_leases', owner._plc_workstation_lease_row(lease))

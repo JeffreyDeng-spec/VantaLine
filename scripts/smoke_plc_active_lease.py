@@ -46,7 +46,7 @@ class ActiveLeaseContract(unittest.TestCase):
         self.events = []
         self.state = {
             "station": {"id": "station", "config_generation": 3, "config": {"enabled": True}},
-            "lease": {"session_id": "session", "owner_user_id": "owner", "state": "active",
+            "lease": {"session_id": "session", "owner_user_id": "owner", "state": "active", "communication_verified": True,
                       "expires_at": 101, "config_generation": 3, "bundle_version": "v4", "lease_epoch": 4},
             "clock": {"now": 100},
         }
@@ -91,6 +91,19 @@ class ActiveLeaseContract(unittest.TestCase):
                 with self.assertRaisesRegex(ConfigError, "lease_fenced"):
                     self.invoke()
                 self.assertNotIn("config", self.events)
+
+    @unittest.skipIf(BASELINE, "historical baseline predates connection verification")
+    def test_unverified_lease_is_fenced_without_state_changes(self):
+        for value in (None, False, 1, 'true'):
+            with self.subTest(value=value):
+                self.setUp()
+                if value is None: self.state['lease'].pop('communication_verified')
+                else: self.state['lease']['communication_verified']=value
+                before=copy.deepcopy(self.state)
+                with self.assertRaisesRegex(ConfigError,'lease_fenced'):
+                    self.invoke()
+                self.assertEqual(self.state,before)
+                self.assertNotIn('config',self.events)
 
     def test_short_circuit_and_optional_epoch(self):
         self.state["lease"].update(session_id="other", expires_at="bad", lease_epoch="bad")

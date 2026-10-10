@@ -38,6 +38,15 @@ def operations(workstation, rows, *, poison=None, events=None):
             clock=get(lambda: rows.now), ceil=get(math.ceil), protocol_version=get(protocol.WEB_SERIAL_PROTOCOL_VERSION),
             frames=get(protocol.build_web_serial_diagnostic_plan), compare_digest=get(secrets.compare_digest), current_user=poison or current))
 
+def activation_request(lease):
+    """Synthetic read evidence follows the actual connecting lease plan."""
+    return SimpleNamespace(
+        session_id=lease['session_id'], lease_epoch=lease['lease_epoch'],
+        usb_vendor_id=1, usb_product_id=2,
+        connection_check_id=lease['connection_check']['id'],
+        connection_reads=[{'target': frame['target'], 'response_hex': '0230303030034333'}
+                          for frame in lease['connection_check']['frames']])
+
 class LeaseDiagnosticContracts(unittest.TestCase):
     def graph(self, identity):
         rows=Rows(); user={'id':identity}; workstation=build(rows,user); seed(workstation,rows,identity)
@@ -45,10 +54,28 @@ class LeaseDiagnosticContracts(unittest.TestCase):
         return operations(workstation,rows),rows,user
     def claim_activate(self, owner):
         claimed=owner.plc_web_serial_claim_connecting_lease('same-station',SimpleNamespace(client_instance_id='client-001',model_id='model',bundle_version=protocol.WEB_SERIAL_PROTOCOL_VERSION))
-        request=SimpleNamespace(session_id=claimed['session_id'],lease_epoch=claimed['lease_epoch'],usb_vendor_id=1,usb_product_id=2)
+        request=activation_request(claimed)
         activated=owner.plc_web_serial_activate_lease('same-station',request)
         self.assertEqual(activated['state'],'active')
+        self.assertIs(activated['communication_verified'],True)
         return activated
+    def test_activation_requires_valid_read_evidence_and_rolls_back(self):
+        owner,rows,_=self.graph('A')
+        lease=owner.plc_web_serial_claim_connecting_lease('same-station',SimpleNamespace(client_instance_id='client-001',model_id='model',bundle_version=protocol.WEB_SERIAL_PROTOCOL_VERSION))
+        before=copy.deepcopy(rows.tables)
+        for mode in ('missing_id','missing_read','invalid_response'):
+            with self.subTest(mode=mode):
+                request=activation_request(lease)
+                if mode=='missing_id': request.connection_check_id=None
+                elif mode=='missing_read': request.connection_reads=request.connection_reads[:1]
+                else: request.connection_reads[0]['response_hex']='0230303030030000'
+                with self.assertRaisesRegex(PlcConfigError,'plc_connection_'):
+                    owner.plc_web_serial_activate_lease('same-station',request)
+                self.assertEqual(rows.tables,before)
+        activated=owner.plc_web_serial_activate_lease('same-station',activation_request(lease))
+        self.assertIs(activated['communication_verified'],True)
+        self.assertEqual(activated['state'],'active')
+
     def test_constructor_poison_partial_failure_and_internal_getters(self):
         workstation=build(Rows(),{'id':'A'})
         def poison(): self.fail('constructor selected external supplier')
@@ -189,7 +216,7 @@ if POSTGRES:
                                 lease=owner.plc_web_serial_claim_connecting_lease('same-station',SimpleNamespace(client_instance_id='client-001',model_id='model',bundle_version=protocol.WEB_SERIAL_PROTOCOL_VERSION))
                             except PlcConfigError as error:
                                 self.assertEqual(str(error),'plc_workstation_in_use');return False
-                            activated=owner.plc_web_serial_activate_lease('same-station',SimpleNamespace(session_id=lease['session_id'],lease_epoch=lease['lease_epoch'],usb_vendor_id=1,usb_product_id=2))
+                            activated=owner.plc_web_serial_activate_lease('same-station',activation_request(lease))
                             self.assertEqual(activated['owner_user_id'],'account-'+str(index));return True
                     with ThreadPoolExecutor(4) as pool:
                         results=[future.result(timeout=20) for future in [pool.submit(claim_activate,index) for index in (0,0,1,1)]]
