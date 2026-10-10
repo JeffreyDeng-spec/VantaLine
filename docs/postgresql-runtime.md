@@ -602,6 +602,23 @@ Transport budget and pool-retirement evidence use additive fields in existing at
 
 Real-photo pause archives the active round with cancelled status/time in the existing state JSON and clears the active pointer inside the same fenced transaction that revokes queued/running jobs. Repeated pause does not duplicate history. No schema migration, historical annotation rewrite or automatic paid replay is introduced.
 
+## Parallel backend CI storage
+
+Full CI backend correctness contracts run on 12 separate runners, each with an independent
+ordinary disk-backed PostgreSQL 16 instance. Existing schemas, concurrency and
+durability assertions are unchanged; tests within one shard remain serial. The
+storage-isolation dependency group also inspects the separate bounded synthetic
+benchmark instance and retains final capacity evidence after assertion failure.
+
+The five complete performance matrices execute in `Backend performance`, rather
+than the required backend gate. The four SQL benchmarks still override only their
+individual command DSNs to the bounded second instance; the fake legacy benchmark
+keeps its prior environment. Both workflows enforce fsync, synchronous_commit
+and full_page_writes, distinct instance identities and original capacity limits.
+Exact-tree main reuse validates the complete PR database evidence; it does not restore
+a test database. No database contents are cached or shared between runners; production storage,
+migrations and rollback remain unchanged.
+
 Real-photo incomplete preparation reads existing terminal job JSON and matches sample ID plus annotation version against pending current samples. It adds no SQL write, table, index or migration. Old terminal evidence is retained; queue fencing, at-most-once claims and current-version failure behavior remain unchanged.
 
 Explicit source edits on disabled legacy states reuse the same round-archive helper as pause, within the existing mutate transaction. They do not enable state, create jobs or rewrite old job evidence; active-round rejection rolls back the group edit.

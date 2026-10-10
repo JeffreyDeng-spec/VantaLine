@@ -228,6 +228,11 @@ def main():
         print("real lock timeout, interrupted transaction rollback and successful retry passed", flush=True)
     finally:
         writer.rollback()
+        # close() sends termination without waiting for the backend to remove
+        # temporary objects. Drop this role-owned fixture and wait for COMMIT
+        # before another session attempts DROP ROLE.
+        execute("DROP TABLE IF EXISTS pg_temp.label_run_projection", conn=writer)
+        writer.commit()
         writer.close()
         connection.rollback()
         for name in schemas:
