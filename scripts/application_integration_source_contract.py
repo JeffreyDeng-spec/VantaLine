@@ -80,6 +80,9 @@ def verify_actual_compositions():
     assert set(MAIN283_PLC["business_sources"]) == set(main_sources), "PLC integration source inventory changed"
     for path, expected in main_sources.items():
         assert MAIN283_PLC["business_sources"][path]["main_sha256"] == expected, "PLC upstream source changed: " + path
+        actual_expected = ("a4b8e046f355e9a310bf46507da9f65a18146ee5af9d91f957723fcae4c4ac4c"
+                           if path.endswith("/station_service.py") else expected)
+        assert MAIN283_PLC["business_sources"][path]["actual_sha256"] == actual_expected, "Unreviewed PLC integration source: " + path
     assert digest(ast.parse((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text())) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
         assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path

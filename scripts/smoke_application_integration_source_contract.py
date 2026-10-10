@@ -1,6 +1,7 @@
 """Positive and adverse checks for immutable assembly replay and real owners."""
 import ast
 import copy
+import hashlib
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -22,7 +23,7 @@ class IntegrationContracts(unittest.TestCase):
 
     def test_main_plc_delta_cannot_extend_or_replace_the_reviewed_baseline(self):
         path = "local_inspection_service/plc/station_service.py"
-        for mode in ("extra-path", "missing-path", "schema", "upstream", "parent", "main-hash", "old-hash"):
+        for mode in ("extra-path", "missing-path", "schema", "upstream", "parent", "main-hash", "actual-hash", "old-hash"):
             altered = copy.deepcopy(contract.MAIN283_PLC)
             if mode == "extra-path":
                 altered["business_sources"]["local_inspection_service/pipeline/task_metadata.py"] = copy.deepcopy(altered["business_sources"][path])
@@ -36,10 +37,29 @@ class IntegrationContracts(unittest.TestCase):
                 altered["previous_candidate"] = "0" * 40
             elif mode == "main-hash":
                 altered["business_sources"][path]["main_sha256"] = "0" * 64
+            elif mode == "actual-hash":
+                altered["business_sources"][path]["actual_sha256"] = "0" * 64
             else:
                 altered["business_sources"][path]["previous_sha256"] = "0" * 64
             with self.subTest(mode=mode), patch.object(contract, "MAIN283_PLC", altered), self.assertRaises(AssertionError):
                 contract.verify_actual_compositions()
+
+    def test_coordinated_plc_source_and_fixture_hash_change_is_rejected(self):
+        relative = "local_inspection_service/plc/station_service.py"
+        target = (contract.ROOT / relative).resolve()
+        original_read = Path.read_bytes
+        original = original_read(target).replace(b"\r\n", b"\n")
+        predicate = b'            and lease.get("communication_verified") is True\n'
+        prefix, marker, body = original.partition(b"    def _plc_web_serial_require_active_lease(")
+        self.assertTrue(marker)
+        self.assertEqual(body.count(predicate), 1)
+        changed = prefix + marker + body.replace(predicate, b"", 1)
+        altered = copy.deepcopy(contract.MAIN283_PLC)
+        altered["business_sources"][relative]["actual_sha256"] = hashlib.sha256(changed).hexdigest()
+        def read(path):
+            return changed if path.resolve() == target else original_read(path)
+        with patch.object(Path, "read_bytes", read), patch.object(contract, "MAIN283_PLC", altered), self.assertRaisesRegex(AssertionError, "Unreviewed PLC integration source"):
+            contract.verify_actual_compositions()
 
     def test_pose_actual_owners_and_outer_fixture_mutations_fail(self):
         original_read = Path.read_text
