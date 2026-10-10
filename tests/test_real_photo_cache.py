@@ -166,7 +166,9 @@ def test_postgres_cancelled_prefix_does_not_block_explicit_reenable(database):
 def test_pooled_transport_explicit_proxy_single_post_and_safe_failure(monkeypatch):
     from local_inspection_service.training import real_photo_transport as client
     from requests.exceptions import ConnectionError
-    calls=[];evidence={}
+    calls=[];evidence={};closed=[]
+    monkeypatch.setattr(client,'_last_finished',None)
+    monkeypatch.setattr(client._session,'close',lambda:closed.append(True))
     def post(endpoint,**kwargs):calls.append((endpoint,kwargs));raise ConnectionError('PRIVATE_KEY URL')
     monkeypatch.setattr(client._session,'post',post)
     config={**SETTINGS,'base_url':'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
@@ -174,6 +176,49 @@ def test_pooled_transport_explicit_proxy_single_post_and_safe_failure(monkeypatc
     with pytest.raises(ConnectionError):client.invoke({'model':MODEL},config,evidence)
     assert len(calls)==1 and calls[0][0].endswith('/api/v3/responses')
     assert calls[0][1]['proxies']['https']==config['proxy_url_raw']
+    assert calls[0][1]['timeout']==(30,120)
+    assert closed==[True] and evidence['pool_failure_reset']
     assert not client._session.trust_env and client._session.adapters['https://'].max_retries.total==0
     assert evidence['automatic_retries']==0 and evidence['transport_stage']=='send_wait_headers'
     assert 'PRIVATE_KEY' not in json.dumps(evidence)
+
+
+def test_transport_reuses_recent_pool_but_retires_idle_connection_before_next_post(monkeypatch):
+    from local_inspection_service.training import real_photo_transport as client
+    from unittest.mock import Mock
+    session=Mock();events=[]
+    class Response:
+        status_code=200
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def iter_content(self,*args):yield b'{"status":"completed"}'
+    def post(*args,**kwargs):events.append('post');return Response()
+    session.post.side_effect=post;session.close.side_effect=lambda:events.append('close')
+    monkeypatch.setattr(client,'_session',session)
+    monkeypatch.setattr(client,'_last_finished',None)
+    ticks=iter([100,100,101,101,110,110,111,111,145,145,146,146])
+    monkeypatch.setattr(client.time,'monotonic',lambda:next(ticks))
+    config={**SETTINGS,'base_url':'https://fixture.invalid/api/v3','api_key':'PRIVATE',
+            'timeout_seconds':120}
+    receipts=[]
+    for _ in range(3):
+        evidence={};assert client.invoke({},config,evidence)[0]==200;receipts.append(evidence)
+    assert events==['post','post','close','post']
+    assert [r['pool_idle_reset'] for r in receipts]==[False,False,True]
+    assert all(r['transport_stage']=='complete' and r['automatic_retries']==0 for r in receipts)
+    assert session.cookies.clear.call_count==3
+
+
+def test_socket_write_uses_connect_budget_not_later_response_read_budget():
+    # Exercise the production urllib3 implementation, not an assumed requests
+    # timeout meaning: both reused headers and body inherit this socket budget.
+    from urllib3.connection import HTTPConnection
+    class Socket:
+        def __init__(self):self.timeout=None;self.writes=[]
+        def settimeout(self,value):self.timeout=value
+        def sendall(self,data):self.writes.append((self.timeout,data))
+    connection=HTTPConnection('fixture.invalid',timeout=30)
+    connection.sock=Socket()
+    connection.request('POST','/api/v3/responses',body=b'image-body',headers={'Content-Length':'10'})
+    assert connection.sock.writes[-1]==(30,b'image-body')
+    assert all(timeout==30 for timeout,_ in connection.sock.writes)

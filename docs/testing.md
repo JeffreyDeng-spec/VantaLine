@@ -2320,6 +2320,10 @@ The PLC request-model smoke includes self-pair fields and bounded connection evi
 
 Reference-cache regression: include tests/test_real_photo_cache.py in the disposable PostgreSQL real-photo suite and required artifact-storage CI. Cover one prefix across two single-image suffixes, immutable-prefix isolation, real cached-token accounting, class/profile/owner/task key changes, changed-reference rejection, known expiry, no idle renewal, multi-worker creation/claim, cancelled admission, interrupted/failed no-replay and revoked late publication. Strict Responses validation covers truncated/refused/wrong-model/unknown-class/malformed outputs; transport fixtures verify pooled zero-retry POST, explicit proxy and safe nested timeout evidence. High-entropy JPEG tests exercise actual encoded bytes and original-space geometry with JPEG90 4:4:4. Run frontend typecheck/build, pretraining/label regression, migration/boundary/docs contracts and diff checks. These fixtures do not replace two released frontend business calls with screenshots, actual usage and visual quality checks.
 
+Real-photo transport regression exercises the installed urllib3 socket-write timeout semantics, recent-pool reuse versus pre-POST idle retirement, and failed-pool cleanup without a second POST. Run the disposable PostgreSQL real-photo suite and model dependency/boundary/docs checks. A released frontend prefix request and subsequent cached annotation remain necessary to verify production behavior; fixtures or an increased timeout do not prove reliability.
+
+Disposable PostgreSQL regression verifies pause archives frozen round membership, releases the active round, retains originals and initialization, cancels queued review work, rejects the running review token and does not duplicate history on repeated pause. Verify source-group persistence through the released frontend after pause; changing an input alone is not evidence of a successful save.
+
 ## Detection without an empty-background step
 
 **Status: Authoritative**
