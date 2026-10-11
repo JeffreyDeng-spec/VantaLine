@@ -77,6 +77,14 @@ exec /usr/bin/stat "$@"
 SH
 cat > "$base/testbin/chown" <<'SH'
 #!/usr/bin/env bash
+# Exercise the installer's real promotion of runner-owned dependency files.
+# /opt is a private tmpfs; retain the other synthetic service-user operations.
+if [[ $# -eq 3 && "$1" == -R && "$2" == root:root ]]; then
+  case "$3" in
+    /opt/vantaline/releases/v2026.09.1|/opt/vantaline/releases/v2026.10.0|/opt/vantaline/releases/v2026.10.1|/opt/vantaline/releases/v2026.10.2)
+      exec /usr/bin/chown "$@" ;;
+  esac
+fi
 exit 0
 SH
 cat > "$base/testbin/systemctl" <<'SH'
