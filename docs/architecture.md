@@ -2425,3 +2425,7 @@ Real-photo review scheduling now emits five-image chunks under the unchanged 600
 Real-photo review recovery reconciles current review keys before admitting a new round. A completed chunk does not remain a pending recheck. Explicit restart can retain the exact pending frozen training job and its collection increment; the transactional owner/task/epoch/fingerprint fence prevents replacement datasets or duplicate paid admission. Uncertain and terminal attempts remain auditable and are never replayed.
 
 The strict integration source replay binds the completed-review recovery workflow to one exact descendant hash while preserving the immutable #302 workflow/worker checkpoint and all earlier source assertions. Unknown workflow changes still fail; focused scheduling tests establish the new behavior independently.
+
+## Real-photo task process data
+
+Task detail selects its process-data adapter from owner-scoped real-photo status. Selected paused tasks keep three drawers; unknown/error status does not show legacy data. Shared sample previews/details/history use scoped query invalidation. The additive read-only sample endpoint in real-photo-feedback.md uses an anchored cursor over existing stored originals and server-owned current-review classification, never definition reconciliation or paid work. Frozen datasets and current eligible originals are displayed separately. Candidates remain manually selected through the existing picker.

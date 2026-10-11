@@ -1938,3 +1938,7 @@ The root-only runtime observer validates private configuration and immutable ide
 Real-photo review chunk size is fixed at five by the server, while the CLI hard input limit remains ten and attempt timeout remains 600 seconds. No new environment setting or model change is introduced. Prompt source inventory v284 accompanies the changed scheduling/worker evidence; existing task snapshots are retained.
 
 Real-photo recovery adds no setting or model change. Current-version recheck reconciliation and exact pending-training preservation are server rules. Prompt source inventory v285 records the workflow change; historical task profiles and queued training inputs are unchanged.
+
+## Real-photo process-data viewing
+
+No new configuration or permission is introduced. Existing allowlisting, task ownership and read authorization apply to `/real-photo/samples`; category, decision, cursor, limit and sample_id are read-only query parameters. Advanced source/relabel/mask/restart tools still use the existing authorized endpoints and frozen-group/active-round restrictions. Display mode follows selected rather than enabled, so pause retains the real-photo view.

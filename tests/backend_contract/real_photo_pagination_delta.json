@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "parent_sha256": "6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494",
+  "current_sha256": "40887aacd85e92fe2e093f439c081b3c6de5dc91ff9b9b8782e27b2f7a6f9ece",
+  "regions": [
+    {
+      "start": 2,
+      "end": 4,
+      "original": [],
+      "expected": [
+        "import base64\n",
+        "import json\n"
+      ]
+    },
+    {
+      "start": 9,
+      "end": 10,
+      "original": [
+        "from fastapi import HTTPException, Response\n"
+      ],
+      "expected": [
+        "from fastapi import HTTPException, Response, Query\n"
+      ]
+    },
+    {
+      "start": 179,
+      "end": 180,
+      "original": [],
+      "expected": [
+        "                'agent_filtered_count':sum(s.get('review',{}).get('decision') in {'exclude','uncertain'} and s['review'].get('key') == review_key(s,state['classes']) for s in state['samples']),\n"
+      ]
+    },
+    {
+      "start": 185,
+      "end": 260,
+      "original": [],
+      "expected": [
+        "\n",
+        "    def sample_page(self, identifier, category='all', decision=None, cursor=None, limit=24, sample_id=None):\n",
+        "        \"\"\"Read-only projection. The initial anchor excludes later arrivals across pages.\"\"\"\n",
+        "        user, task = self.task(identifier)\n",
+        "        if user['id'] not in accounts():\n",
+        "            raise HTTPException(403, '\u5b9e\u62cd\u56de\u6d41\u5c1a\u672a\u4e3a\u6b64\u8d26\u6237\u542f\u7528')\n",
+        "        if category not in {'all', 'agent_filtered', 'approved'} or decision not in {None, 'exclude', 'uncertain'}:\n",
+        "            raise HTTPException(422, '\u65e0\u6548\u6837\u672c\u7b5b\u9009')\n",
+        "        if decision and category != 'agent_filtered':\n",
+        "            raise HTTPException(422, '\u7b5b\u9009\u7ed3\u8bba\u4ec5\u9002\u7528\u4e8e Agent \u7b5b\u9009\u7ed3\u679c')\n",
+        "        if not 1 <= limit <= 100:\n",
+        "            raise HTTPException(422, '\u6bcf\u9875\u9700\u89811\u81f3100\u5f20')\n",
+        "        with self.repo() as repo:\n",
+        "            state = repo.get(user['id'], identifier)\n",
+        "        if not state:\n",
+        "            return {'samples': [], 'total': 0, 'next_cursor': None}\n",
+        "        # Never call sync_definitions here: browsing cannot enqueue paid work.\n",
+        "        try:\n",
+        "            current = self.class_metadata(task, user)\n",
+        "            definitions_current = current == [{k:v for k,v in c.items() if k != 'reference_sha256'} for c in state['classes']]\n",
+        "        except (HTTPException, ValueError, OSError):\n",
+        "            definitions_current = False\n",
+        "        accepted_ids = {s['sample_id'] for s in approved(state)} if definitions_current else set()\n",
+        "        entries = state['samples']\n",
+        "        scope = digest([user['id'], identifier, category, decision, sample_id])\n",
+        "        anchor = len(entries) - 1\n",
+        "        before = len(entries)\n",
+        "        if cursor:\n",
+        "            try:\n",
+        "                value = json.loads(base64.urlsafe_b64decode(cursor.encode('ascii')))\n",
+        "                if set(value) != {'scope', 'anchor', 'before'} or value['scope'] != scope:\n",
+        "                    raise ValueError()\n",
+        "                indexes = {s['sample_id']: i for i, s in enumerate(entries)}\n",
+        "                anchor, before = indexes[value['anchor']], indexes[value['before']]\n",
+        "                if before > anchor:\n",
+        "                    raise ValueError()\n",
+        "            except (ValueError, KeyError, TypeError, UnicodeError):\n",
+        "                raise HTTPException(422, '\u5206\u9875\u6e38\u6807\u65e0\u6548\uff0c\u8bf7\u5237\u65b0\u5217\u8868') from None\n",
+        "        matches = []\n",
+        "        for index in range(anchor, -1, -1):\n",
+        "            sample = entries[index]\n",
+        "            if sample_id and sample['sample_id'] != sample_id:\n",
+        "                continue\n",
+        "            annotation = sample.get('annotation') or {}\n",
+        "            review = sample.get('review') or {}\n",
+        "            valid_review = definitions_current and review.get('key') == review_key(sample, state['classes'])\n",
+        "            current_decision = review.get('decision') if valid_review else None\n",
+        "            if category == 'approved' and sample['sample_id'] not in accepted_ids:\n",
+        "                continue\n",
+        "            if category == 'agent_filtered' and (current_decision not in {'exclude', 'uncertain'} or (decision and current_decision != decision)):\n",
+        "                continue\n",
+        "            if current_decision in {'exclude', 'uncertain'}:\n",
+        "                status = current_decision\n",
+        "            elif sample['sample_id'] in accepted_ids:\n",
+        "                status = current_decision\n",
+        "            elif annotation.get('status') == 'failed':\n",
+        "                status = 'annotation_failed'\n",
+        "            elif annotation.get('status') != 'completed':\n",
+        "                status = 'pending_annotation'\n",
+        "            elif not source_confirmed(sample):\n",
+        "                status = 'unconfirmed_source'\n",
+        "            else:\n",
+        "                status = 'pending_review'\n",
+        "            public = {k:sample.get(k) for k in ('sample_id', 'source_group', 'source_group_version', 'source_kind', 'created_at', 'geometry')}\n",
+        "            public.update(source_group_confirmed=source_confirmed(sample), current_status=status,\n",
+        "                          annotation={k:annotation.get(k) for k in ('status', 'version', 'objects', 'error_code', 'error_type')} if annotation else None,\n",
+        "                          review={'decision':current_decision, 'reason':str(review.get('reason') or '')[:4000]} if valid_review else None)\n",
+        "            matches.append((index, public))\n",
+        "        eligible = [(i, s) for i, s in matches if i < before]\n",
+        "        page = eligible[:limit]\n",
+        "        next_cursor = None\n",
+        "        if len(eligible) > limit:\n",
+        "            next_cursor = base64.urlsafe_b64encode(json.dumps({'scope':scope, 'anchor':entries[anchor]['sample_id'],\n",
+        "                                                              'before':page[-1][1]['sample_id']}).encode()).decode()\n",
+        "        return {'samples':[s for _, s in page], 'total':len(matches), 'next_cursor':next_cursor}\n"
+      ]
+    },
+    {
+      "start": 508,
+      "end": 513,
+      "original": [],
+      "expected": [
+        "    @app.get('/api/ai/tasks/{task_id}/real-photo/samples')\n",
+        "    def samples(task_id: str, category: str = 'all', decision: str | None = None,\n",
+        "                cursor: str | None = Query(default=None, max_length=2048), limit: int = Query(default=24, ge=1, le=100),\n",
+        "                sample_id: str | None = Query(default=None, max_length=200)):\n",
+        "        return service.sample_page(task_id, category, decision, cursor, limit, sample_id)\n"
+      ]
+    }
+  ]
+}

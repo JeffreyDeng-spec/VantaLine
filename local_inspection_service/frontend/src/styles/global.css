@@ -6180,3 +6180,14 @@ button.pipeline-params-chip:hover {
 .text-standard-document-actions button { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; cursor: pointer; }
 .text-standard-document-actions .text-standard-delete-order { color: #b91c1c; border-color: #fecaca; }
 .text-standard-document-actions button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Real-photo adapters keep task controls compact and reuse process-data cards. */
+.real-photo-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.task-drawer-entry-grid.real-photo-entry-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
