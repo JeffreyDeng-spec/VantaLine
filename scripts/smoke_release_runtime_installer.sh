@@ -772,17 +772,24 @@ if [[ "$scenario" == managed_observe_success ]]; then
 import json,sys
 value=json.load(open(sys.argv[1]));assert value['periodic_progress'] is True and len(value['roles'])==2
 PY_POSTACCEPT
-  # Execute the workflow's actual preflight body as an unprivileged account.
-  python3 - "$source_root/.github/workflows/release-production.yml" "$base/preflight.py" <<'PY_PREFLIGHT_SOURCE'
+  # The owner removed the workflow environment preflight. Keep the actual
+  # isolated POST fault matrix below and verify the replacement provenance.
+  python3 - "$source_root/.github/workflows/release-production.yml" <<'PY_WORKFLOW_OBSERVATION'
 import pathlib,sys
-lines=pathlib.Path(sys.argv[1]).read_text().splitlines()
-start=lines.index('          import os, pathlib, stat, sys')
-end=lines.index('          PY_OBSERVER_ENVIRONMENT',start)
-body='\n'.join(line[10:] for line in lines[start:end])+'\n'
-compile(body,'workflow-preflight','exec')
-pathlib.Path(sys.argv[2]).write_text(body)
-PY_PREFLIGHT_SOURCE
-  /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/preflight.json"
+source=pathlib.Path(sys.argv[1]).read_text()
+assert 'PY_OBSERVER_ENVIRONMENT' not in source
+assert 'Check read-only observer environment before deployment' not in source
+provenance='      - name: Record current release and installer provenance\n'
+upload='      - name: Upload and deploy exact release\n'
+post='      - name: Observe accepted runtime database heartbeats\n'
+publish='      - name: Publish successful GitHub Release\n'
+assert all(source.count(step)==1 for step in (provenance,upload,post,publish))
+assert source.index(provenance)<source.index(upload)<source.index(post)<source.index(publish)
+body=source.split(provenance,1)[1].split(upload,1)[0]
+assert 'sha256sum /usr/local/sbin/vantaline-install-release' in body
+assert '/api/version' in body and 'prior_git_commit' in body and 'prior_release' in body
+assert '.venv' not in body and 'pyvenv.cfg' not in body and 'PY_OBSERVER' not in body
+PY_WORKFLOW_OBSERVATION
   events_before="$(sha256sum "$base/runtime-events" "$base/control-events")"
   pointer_before="$(readlink "$base/current")"
   dependency="$base/releases/v2026.10.1/release/observer_bundle"
