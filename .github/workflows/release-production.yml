@@ -1,6 +1,7 @@
 name: Release and deploy production
 
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -13,8 +14,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  observer-environment-diagnostics:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_USER: ${{ secrets.PROD_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH identity for read-only diagnostics
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' '${{ secrets.PROD_SSH_PRIVATE_KEY }}' > ~/.ssh/vantaline_deploy
+          chmod 600 ~/.ssh/vantaline_deploy
+          printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Diagnose fixed observer environment without deployment
+        run: |
+          timeout 60 ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            /usr/bin/python3 -I -S -B - < scripts/diagnose_observer_environment.py
   release:
     if: >-
+      github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.event == 'push' &&
