@@ -4,13 +4,16 @@
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version` and post-install runtime observation remain
-> required. The owner explicitly removed the workflow observer-environment
-> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
+> health and exact `/api/version` remain required. The owner explicitly removed
+> both the workflow observer-environment preflight and separate post-install
+> heartbeat observation. Neither observation success nor environment repair is
+> claimed. This temporary exception supersedes CI-required rollout descriptions
 > below; it does not authorize disabling deployment acceptance. Main's three CI
 > status requirements must be explicitly paused separately before untested PRs can
 > merge; other branch protection remains in place. Restore the workflows, trigger
 > and status requirements together before claiming normal CI has resumed.
+
+The explicit diagnostic dispatch also reports fixed Web/label service states, a bounded and filtered loopback public version, and the installed controller digest. Unknown or unavailable results remain unknown; these read-only fields do not prove database progress or authorize recovery. No application imports, virtual-environment execution, service changes or customer data reads are performed.
 
 For this observer corrective release, the CI workflow is temporarily enabled only for explicit manual `workflow_dispatch` validation with `force-full=true`. Its automatic PR, push and schedule triggers remain absent. This exception does not restore normal automatic CI, change branch protection, or authorize reuse of historical results. Before merge, verify the complete current candidate run and that its tree matches the intended main result; the main push immediately starts production deployment and does not wait for a later CI run.
 

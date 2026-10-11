@@ -5,20 +5,23 @@
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version` and post-install runtime observation remain
-> required. The owner explicitly removed the workflow observer-environment
-> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
+> health and exact `/api/version` remain required. The owner explicitly removed
+> both the workflow observer-environment preflight and separate post-install
+> heartbeat observation. Neither observation success nor environment repair is
+> claimed. This temporary exception supersedes CI-required rollout descriptions
 > below; it does not authorize disabling deployment acceptance. Main's three CI
 > status requirements must be explicitly paused separately before untested PRs can
 > merge; other branch protection remains in place. Restore the workflows, trigger
 > and status requirements together before claiming normal CI has resumed.
+
+The explicit diagnostic dispatch also reports fixed Web/label service states, a bounded and filtered loopback public version, and the installed controller digest. Unknown or unavailable results remain unknown; these read-only fields do not prove database progress or authorize recovery. No application imports, virtual-environment execution, service changes or customer data reads are performed.
 
 For this observer corrective release, the CI workflow is temporarily enabled only for explicit manual `workflow_dispatch` validation with `force-full=true`. Its automatic PR, push and schedule triggers remain absent. This exception does not restore normal automatic CI, change branch protection, or authorize reuse of historical results. Before merge, verify the complete current candidate run and that its tree matches the intended main result; the main push immediately starts production deployment and does not wait for a later CI run.
 
 
 Authenticated observer snapshots are verified with `python scripts/smoke_observer_snapshot.py`: fixed controller authorization, actual file descriptors, hash tampering, terminal links, hardlinks, FIFOs, modes/ownership, bounded identity reads, cleanup and the complete 11-module import closure. Unit tests supply only ownership on CI accounts; actual root permissions and service-owned ancestors are covered by the private installer matrix. The synthetic observer fixture embeds its explicit fixture hashes into its private installer only; the production renderer has no runtime authorization override. These synthetic samples do not establish real database or production progress.
 
-The installer matrix verifies that the retired workflow environment preflight remains absent and that the unique read-only provenance step precedes upload, POST observation and publication. Its complete POST fault, service-owned environment, permissions, poison, cleanup and rollback scenarios remain; it no longer extracts or executes the removed workflow body.
+The installer matrix verifies that the retired workflow environment preflight and automatic POST step remain absent and that the unique read-only provenance step precedes upload and publication. The separate `observe-runtime.yml` workflow permits only explicit manual observation of the installed exact commit; it has no deployment or publication action. The matrix's complete direct POST fault, service-owned environment, permissions, poison, cleanup and rollback scenarios remain; it no longer extracts or executes the removed workflow body.
 
 Immutable observer dependencies are verified with `python scripts/smoke_observer_bundle.py`. This checks bounded metadata reads, duplicate keys, malformed locks, complete inventories, checksums, site hooks, links, writable code, runtime incompatibility and scan failures. The source-safety job uses Ubuntu 22.04 and checks the actual `/usr/bin/python3` CPython 3.10 Linux x86_64 ABI before the complete existing installer fault matrices. Observer namespace fixtures use real hash-locked wheel contents; their synthetic heartbeat samples validate launcher wiring, not PostgreSQL progress. The separate PostgreSQL observation smoke exercises read-only transactions and advancing runtime records. Shared service virtual-environment ownership, configuration and interpreter changes cannot affect the observer or trigger permission repairs.
 

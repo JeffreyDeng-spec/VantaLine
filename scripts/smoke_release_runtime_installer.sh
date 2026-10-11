@@ -781,14 +781,20 @@ assert 'PY_OBSERVER_ENVIRONMENT' not in source
 assert 'Check read-only observer environment before deployment' not in source
 provenance='      - name: Record current release and installer provenance\n'
 upload='      - name: Upload and deploy exact release\n'
-post='      - name: Observe accepted runtime database heartbeats\n'
 publish='      - name: Publish successful GitHub Release\n'
-assert all(source.count(step)==1 for step in (provenance,upload,post,publish))
-assert source.index(provenance)<source.index(upload)<source.index(post)<source.index(publish)
+assert '      - name: Observe accepted runtime database heartbeats\n' not in source
+assert all(source.count(step)==1 for step in (provenance,upload,publish))
+assert source.index(provenance)<source.index(upload)<source.index(publish)
 body=source.split(provenance,1)[1].split(upload,1)[0]
 assert 'sha256sum /usr/local/sbin/vantaline-install-release' in body
 assert '/api/version' in body and 'prior_git_commit' in body and 'prior_release' in body
 assert '.venv' not in body and 'pyvenv.cfg' not in body and 'PY_OBSERVER' not in body
+manual=pathlib.Path(sys.argv[1]).with_name('observe-runtime.yml').read_text()
+assert '  workflow_dispatch:\n' in manual
+assert '  push:' not in manual and '  workflow_run:' not in manual and '  schedule:' not in manual
+assert "if: github.event_name == 'workflow_dispatch'" in manual
+assert '--observe-runtime --release "$observed_release" --commit "$observed_commit"' in manual
+assert '--apply' not in manual and 'scp ' not in manual and 'gh release' not in manual
 PY_WORKFLOW_OBSERVATION
   events_before="$(sha256sum "$base/runtime-events" "$base/control-events")"
   pointer_before="$(readlink "$base/current")"
