@@ -905,3 +905,12 @@ Manual artifacts use an attempt-specific name, and their creation time must fall
 Only fixed silent Git preparation checks `check-298` and `check-299` may record zero-byte logs with the empty-content SHA-256. PostgreSQL benchmark/storage logs remain nonempty and retain all complete numeric and durability checks; database behavior and performance thresholds are unchanged.
 
 The visible-object localization prompt refinement adds no tables or data rewrite. Prompt hashes already scope cached prefixes; existing raw annotation and review histories remain untouched. Only explicit new-version requests create annotations, with their matching review keys. Preserve old failed/excluded records and the source-group evidence during rollout and whole-release rollback.
+
+The installer heartbeat observer reads and rechecks root-owned configuration as
+root, but creates its PostgreSQL connection with the existing `vantaline` account's
+effective UID, primary group and supplementary groups. This matches production
+peer authentication without granting root database access or changing credentials.
+It restores root immediately after connection establishment, including failure,
+then retains the read-only/repeatable-read transaction and both-role progress
+checks. Missing accounts, authentication errors or identity restoration failures
+reject acceptance; rollback always restores the previous complete release.

@@ -1787,3 +1787,12 @@ Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
 SQLSTATE category before its generic failure message. It never logs exception
 text, configuration, connection strings or database records. All acceptance and
 whole-release rollback gates remain required.
+
+The installer heartbeat observer reads and rechecks root-owned configuration as
+root, but creates its PostgreSQL connection with the existing `vantaline` account's
+effective UID, primary group and supplementary groups. This matches production
+peer authentication without granting root database access or changing credentials.
+It restores root immediately after connection establishment, including failure,
+then retains the read-only/repeatable-read transaction and both-role progress
+checks. Missing accounts, authentication errors or identity restoration failures
+reject acceptance; rollback always restores the previous complete release.

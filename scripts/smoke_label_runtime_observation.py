@@ -18,6 +18,9 @@ from local_inspection_service.runtime import observe_label_runtime
 
 class ProgressTests(unittest.TestCase):
     def setUp(self):
+        identity = patch.object(observe_label_runtime, "application_database_identity", nullcontext)
+        identity.start()
+        self.addCleanup(identity.stop)
         self.first = RuntimeObservation("a" * 32, True, True, 3, 0,
                           (("web", "b" * 32, 11, 100), ("label", "c" * 32, 12, 100)))
         self.elapsed = 0
@@ -144,6 +147,45 @@ class ProgressTests(unittest.TestCase):
         result, output = self.run_cli_with_snapshots([old, new])
         self.assertEqual(result, 1)
         self.assertEqual(output.call_args.args, ("Runtime database observation failed",))
+
+
+class DatabaseIdentityTests(unittest.TestCase):
+    def identity(self, *, root=True, account_uid=1234, failure=False):
+        import pwd
+        account = SimpleNamespace(pw_name="vantaline", pw_uid=account_uid, pw_gid=4321)
+        calls = []
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(pwd, "getpwnam", return_value=account))
+            for name, value in (("geteuid", 0 if root else 99), ("getegid", 0),
+                                ("getgroups", [0, 8]), ("getgrouplist", [4321, 5678])):
+                stack.enter_context(patch.object(observe_label_runtime.os, name, create=True, return_value=value))
+            for name in ("seteuid", "setegid", "setgroups"):
+                stack.enter_context(patch.object(observe_label_runtime.os, name, create=True,
+                    side_effect=lambda value, name=name: calls.append((name, value))))
+            try:
+                with observe_label_runtime.application_database_identity():
+                    calls.append(("connect", "read_only"))
+                    if failure:
+                        raise RuntimeError("synthetic authentication failure")
+            except RuntimeError:
+                if not failure and root and account_uid != 0:
+                    raise
+        return calls
+
+    def test_connection_uses_application_identity_then_restores_root(self):
+        self.assertEqual(self.identity(), [("setgroups", [4321, 5678]), ("setegid", 4321),
+            ("seteuid", 1234), ("connect", "read_only"), ("seteuid", 0),
+            ("setegid", 0), ("setgroups", [0, 8])])
+
+    def test_failed_connection_restores_root_and_groups_without_retry(self):
+        calls = self.identity(failure=True)
+        self.assertEqual(calls[-3:], [("seteuid", 0), ("setegid", 0), ("setgroups", [0, 8])])
+        self.assertEqual(sum(name == "connect" for name, _ in calls), 1)
+
+    def test_nonroot_or_root_application_account_never_connects(self):
+        self.assertEqual(self.identity(root=False), [])
+        self.assertEqual(self.identity(account_uid=0), [])
 
 
 if __name__ == "__main__":

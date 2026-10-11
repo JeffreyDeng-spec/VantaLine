@@ -3205,3 +3205,8 @@ For the visible-target prompt refinement, run the seven focused real-photo suite
 `python scripts/smoke_label_runtime_observation.py` verifies observer failure
 stages and SQLSTATE classification do not expose driver/configuration secrets.
 The real PostgreSQL observer smoke retains read-only, snapshot and progress gates.
+
+Observer regression additionally verifies the exact effective UID/group switch
+order, restoration after failed authentication, no connection retry and rejection
+of non-root callers or a root-mapped application account. Real PostgreSQL smoke
+checks the unchanged read-only, repeatable-read, fencing and heartbeat progress.

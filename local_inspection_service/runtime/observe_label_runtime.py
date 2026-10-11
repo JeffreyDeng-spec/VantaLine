@@ -1,5 +1,6 @@
 """Root-only immutable-release observer. Output contains no configuration or media."""
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,26 @@ from .configuration_contract import CONFIGURATION_LIMIT, CONFIGURATION_ENVIRONME
 from .label_identity import read_identity, RuntimeUnavailable
 from .label_observation import read_observation, observe_progress
 from ..storage.postgres_runtime_repository import PostgresRuntimeRepository
+
+
+@contextmanager
+def application_database_identity():
+    """Peer authentication uses the Web account; this single-process CLI restores root."""
+    import pwd
+    account = pwd.getpwnam("vantaline")
+    uid, gid, groups = os.geteuid(), os.getegid(), os.getgroups()
+    if uid != 0 or account.pw_uid == 0:
+        raise RuntimeUnavailable("Runtime database identity unavailable")
+    try:
+        os.setgroups(os.getgrouplist(account.pw_name, account.pw_gid))
+        os.setegid(account.pw_gid)
+        os.seteuid(account.pw_uid)
+        yield
+    finally:
+        # Regain the saved effective root identity before restoring groups.
+        os.seteuid(uid)
+        os.setegid(gid)
+        os.setgroups(groups)
 
 
 def main(argv=None):
@@ -43,9 +64,12 @@ def main(argv=None):
                 os.environ[key] = value
         stage = "database_driver"
         import psycopg
-        stage = "database_connect"
-        with psycopg.connect(config["environment"]["DATABASE_URL"], connect_timeout=2,
-                options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read -c statement_timeout=2000") as connection:
+        stage = "database_identity"
+        with application_database_identity():
+            stage = "database_connect"
+            connection = psycopg.connect(config["environment"]["DATABASE_URL"], connect_timeout=2,
+                options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read -c statement_timeout=2000")
+        with connection:
             stage = "database_progress"
             repository = PostgresRuntimeRepository(connection, "redacted")
             progress = observe_progress(lambda: read_observation(repository, identity),
