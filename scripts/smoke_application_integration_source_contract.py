@@ -60,6 +60,27 @@ class IntegrationContracts(unittest.TestCase):
         self.assertNotEqual(contract.digest(tree), original)
         self.assertEqual(contract.source_digest('value = 1\n'), original)
 
+    def test_pagination_delta_preserves_checkpoint_and_rejects_extra_changes(self):
+        import json
+        target = contract.ROOT / 'local_inspection_service/training/real_photo_api.py'
+        actual = target.read_bytes()
+        restored = contract.pagination_checkpoint_bytes(actual)
+        self.assertEqual(hashlib.sha256(restored).hexdigest(), '6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494')
+        for changed in (actual + b'\nunreviewed = True\n', actual.replace(b'limit=24', b'limit=25')):
+            with self.assertRaises(AssertionError):
+                contract.pagination_checkpoint_bytes(changed)
+        fixture_path = contract.ROOT / 'tests/backend_contract/real_photo_pagination_delta.json'
+        original = Path.read_text
+        def read(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path == fixture_path:
+                altered = json.loads(value)
+                altered['current_sha256'] = '0' * 64
+                return json.dumps(altered)
+            return value
+        with patch.object(Path, 'read_text', read), self.assertRaises(AssertionError):
+            contract.pagination_checkpoint_bytes(actual)
+
     def test_current_root_and_actual_owner_bindings_pass_before_replay(self):
         contract.verify_actual_compositions()
         original = contract.restore_integrated_root(self.source)

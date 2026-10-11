@@ -216,6 +216,23 @@ MAIN302_REAL_PHOTO_SOURCE_SHA256 = {'local_inspection_service/training/real_phot
 # Exact completed-review recovery descendant; the #302 checkpoint remains immutable.
 COMPLETED_REVIEW_RECOVERY_SOURCE_SHA256 = {'local_inspection_service/training/real_photo_workflow.py': 'b53de47aea11df303a2e9d19034d5c4bb57c6118268ae5c87edab794d74f90b1'}
 
+def pagination_checkpoint_bytes(actual):
+    """Validate each additive region, then verify the unchanged immutable API checkpoint."""
+    fixture = json.loads((ROOT / "tests/backend_contract/real_photo_pagination_delta.json").read_text())
+    assert fixture["schema"] == 1
+    assert fixture["current_sha256"] == "40887aacd85e92fe2e093f439c081b3c6de5dc91ff9b9b8782e27b2f7a6f9ece", "Unreviewed pagination checkpoint"
+    assert fixture["parent_sha256"] == "6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494"
+    assert hashlib.sha256(actual).hexdigest() == fixture["current_sha256"], "Pagination descendant changed"
+    lines = actual.decode().splitlines(keepends=True)
+    for region in reversed(fixture["regions"]):
+        start, end = region["start"], region["end"]
+        assert lines[start:end] == region["expected"], "Pagination delta changed"
+        lines[start:end] = region["original"]
+    restored = "".join(lines).encode()
+    assert hashlib.sha256(restored).hexdigest() == fixture["parent_sha256"], "Historical API changed"
+    return restored
+
+
 def verify_main289_real_photo_sources():
     assert MAIN289_REAL_PHOTO["schema"] == 1, "Unknown confirmed-source integration schema"
     assert MAIN289_REAL_PHOTO["upstream_sha"] == "e31a3bf44791441f87625ae6ac7ff7075e9d08ad", "Unreviewed confirmed-source upstream"
@@ -237,6 +254,8 @@ def verify_main289_real_photo_sources():
                                                         'actual_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86'}}, "Unreviewed confirmed-source integration source"
     for path, accepted in MAIN289_REAL_PHOTO["business_sources"].items():
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        if path == "local_inspection_service/training/real_photo_api.py":
+            actual = pagination_checkpoint_bytes(actual)
         assert hashlib.sha256(actual).hexdigest() == COMPLETED_REVIEW_RECOVERY_SOURCE_SHA256.get(path, MAIN302_REAL_PHOTO_SOURCE_SHA256.get(path, accepted["actual_sha256"])), "Confirmed-source business changed: " + path
 
 
@@ -263,7 +282,10 @@ def restore_real_photo_workflows_root(source):
             accepted = MAIN289_REAL_PHOTO["business_sources"][path]
             assert expected == accepted["previous_sha256"], "Historical main288 source changed: " + path
             expected = accepted["actual_sha256"]
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        if path == "local_inspection_service/training/real_photo_api.py":
+            actual = pagination_checkpoint_bytes(actual)
+        assert hashlib.sha256(actual).hexdigest() == expected, path
     if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source

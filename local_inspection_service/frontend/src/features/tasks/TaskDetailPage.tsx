@@ -1,5 +1,6 @@
+import { TaskProcessDrawer } from "./TaskProcessDrawer";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { RealPhotoFeedback } from './RealPhotoFeedback';
+import { RealPhotoControls, RealPhotoDrawer, useRealPhotoFeedback } from './RealPhotoFeedback';
 import { workspacePath } from "../../app/paths";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { CheckCircle2, ChevronRight, Eye, Loader2, PauseCircle, Play, RefreshCw, RotateCcw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
@@ -682,7 +683,12 @@ export function TaskDetailPage() {
     ]);
   }, [task]);
   const autoOptimizeTaskId = autoOptimizeTaskIdFor(task);
-  const [realPhotoSelected, setRealPhotoSelected] = useState(false);
+  const realPhoto = useRealPhotoFeedback(autoOptimizeTaskId);
+  const realPhotoSelected = Boolean(realPhoto.query.data?.selected);
+  const feedbackModeKnown = !autoOptimizeTaskId || Boolean(realPhoto.query.data);
+  const showLegacyFeedback = feedbackModeKnown && !realPhotoSelected;
+  const realState = realPhoto.query.data;
+  useEffect(() => { setActiveDrawer(null); }, [autoOptimizeTaskId]);
 
   const datasetStatus = task?.datasetStatus || "";
   // Frequent polling is only useful while background work can still change the
@@ -692,13 +698,13 @@ export function TaskDetailPage() {
   const datasetQuery = useQuery({
     queryKey: queryKeys.trainingDatasetDetail(primaryDatasetId),
     queryFn: () => getTrainingDatasetDetail(primaryDatasetId),
-    enabled: shouldLoadDataset,
+    enabled: shouldLoadDataset && showLegacyFeedback,
     refetchInterval: shouldLoadDataset ? (taskWorkActive ? 10_000 : 30_000) : false
   });
   const autoOptimizeQuery = useQuery({
     queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId),
     queryFn: () => getAiTaskAutoOptimize(auth, autoOptimizeTaskId),
-    enabled: Boolean(autoOptimizeTaskId),
+    enabled: Boolean(autoOptimizeTaskId) && showLegacyFeedback,
     refetchInterval: autoOptimizeTaskId ? 10_000 : false
   });
   const autoOptimizeActive = Boolean(autoOptimizeQuery.data?.enabled);
@@ -710,7 +716,7 @@ export function TaskDetailPage() {
       responses.flatMap((response) => response.records || []).forEach((record) => byId.set(record.record_id, record));
       return Array.from(byId.values()).sort((a, b) => Number(b.updated_at || b.created_at || 0) - Number(a.updated_at || a.created_at || 0));
     },
-    enabled: Boolean(task && analysisTaskIds.length),
+    enabled: Boolean(task && analysisTaskIds.length) && showLegacyFeedback,
     refetchInterval: task && analysisTaskIds.length ? (taskWorkActive || autoOptimizeActive ? 15_000 : 45_000) : false
   });
   const deleteSampleMutation = useMutation({
@@ -897,8 +903,8 @@ export function TaskDetailPage() {
   const rejectedCount = maskReviewCount + reviewSamples.length;
   const baseProgress = progressValue(task, displayRecords.length, Number(dataset?.sample_count || samples.length || 0), rejectedCount);
   const progress = autoOptimizeDisplayProgress(task, autoOptimize, baseProgress);
-  const displayStatus = autoOptimizeDisplayStatus(task, autoOptimize);
-  const displayStage = autoOptimizeDisplayStage(task, autoOptimize);
+  const displayStatus = realPhotoSelected ? (realState?.pause_reason ? "已阻塞" : realState?.enabled ? "运行中" : "已暂停") : autoOptimizeDisplayStatus(task, autoOptimize);
+  const displayStage = realPhotoSelected ? (realState?.jobs?.some(j=>j.kind==="train" && ["queued","running"].includes(j.status)) ? "实拍训练" : "自动采集与 Agent 筛选") : autoOptimizeDisplayStage(task, autoOptimize);
   const progressLabel = isAiDrivenTask(task) ? "YOLO 可接管成熟度" : "任务推进进度";
   const showPipelineAutoAdvance = task.kind === "pipeline" && !isAiDrivenTask(task);
   const rows = accessoryRows(task);
@@ -962,7 +968,7 @@ export function TaskDetailPage() {
           <span className={`pill ${taskStatusTone(displayStatus)}`}>{displayStatus}</span>
         </div>
 
-        <div className="task-progress-block">
+        {showLegacyFeedback ? <div className="task-progress-block">
           <div className="progress-copy">
             <strong>{progressLabel} · {displayStage}</strong>
             <span>{Math.round(progress)}%</span>
@@ -973,11 +979,12 @@ export function TaskDetailPage() {
           <p>{isAiDrivenTask(task) ? "AI 任务的进度表示 YOLO 从无到可生产接管的成熟度；只有候选模型质量达标并上线后才会跑满。" : "进度表示当前任务在样本、训练和模型上线流程中的推进状态。"}</p>
         </div>
 
+        : null}
         <div className="metric-grid">
           <MetricCard label="当前状态" value={displayStatus} detail={displayStage} tone={taskStatusTone(displayStatus)} />
-          <MetricCard label="采集记录" value={displayRecords.length} detail={analysisQuery.isFetching ? "刷新中" : `待人工确认 ${rejectedCount}`} tone={rejectedCount ? "warn" : "neutral"} />
-          <MetricCard label="训练样本" value={datasetDeleted ? resourceStatusLabel(task.datasetStatus) : autoOptimizeDatasetCount || dataset?.sample_count || samples.length || 0} detail={datasetDetail} tone={resourceStatusTone(task.datasetStatus)} />
-          <MetricCard label="训练模型" value={modelValue} detail={modelDetail} tone={modelTone} />
+          <MetricCard label="采集记录" value={realPhotoSelected ? realState?.candidate_count ?? 0 : showLegacyFeedback ? displayRecords.length : "—"} detail={realPhotoSelected ? "自动采集与筛选" : showLegacyFeedback ? (analysisQuery.isFetching ? "刷新中" : `待人工确认 ${rejectedCount}`) : "确认模式中"} tone={rejectedCount ? "warn" : "neutral"} />
+          <MetricCard label="训练样本" value={realPhotoSelected ? realState?.approved_count ?? 0 : showLegacyFeedback ? (datasetDeleted ? resourceStatusLabel(task.datasetStatus) : autoOptimizeDatasetCount || dataset?.sample_count || samples.length || 0) : "—"} detail={realPhotoSelected ? "当前合格实拍样本" : datasetDetail} tone={resourceStatusTone(task.datasetStatus)} />
+          <MetricCard label="训练模型" value={realPhotoSelected ? realState?.candidate_models?.slice(-1)[0]?.model_id || "尚无候选模型" : modelValue} detail={realPhotoSelected ? "候选模型由检测工作台手动切换" : modelDetail} tone={modelTone} />
         </div>
 
         <div className="task-detail-grid">
@@ -1040,8 +1047,8 @@ export function TaskDetailPage() {
           </div>
         ) : null}
 
-        {autoOptimizeTaskId ? <RealPhotoFeedback key={autoOptimizeTaskId} taskId={autoOptimizeTaskId} onSelection={setRealPhotoSelected}/> : null}
-        {supportsAutoOptimize && !realPhotoSelected ? (
+        {autoOptimizeTaskId ? <RealPhotoControls feedback={realPhoto} onResults={() => setActiveDrawer("manual")}/> : null}
+        {supportsAutoOptimize && showLegacyFeedback ? (
           <div className="task-detail-section task-inline-controls">
             <strong>自动优化训练</strong>
             <div className="resource-card-head">
@@ -1112,11 +1119,11 @@ export function TaskDetailPage() {
             <ChevronRight size={14} aria-hidden="true" />
             <span>生产采样</span>
             <ChevronRight size={14} aria-hidden="true" />
-            <span>自动标注</span>
+            <span>{realPhotoSelected ? "自动出框 / Agent 筛选" : "自动标注"}</span>
             <ChevronRight size={14} aria-hidden="true" />
             <span>YOLO 训练</span>
             <ChevronRight size={14} aria-hidden="true" />
-            <span>影子对比 / 自动切换</span>
+            <span>{realPhotoSelected ? "候选模型 / 手动切换" : "影子对比 / 自动切换"}</span>
           </div>
         </div>
       </section>
@@ -1127,8 +1134,13 @@ export function TaskDetailPage() {
             <h3>任务过程数据</h3>
             <p>过程图和训练图片默认收起，需要时打开对应入口查看。</p>
           </div>
-          <span className="pill neutral">{displayRecords.length + syntheticSamples.length + samples.length} 项</span>
+          <span className="pill neutral">{realPhotoSelected ? `${realState?.candidate_count ?? 0} 张实拍图` : showLegacyFeedback ? `${displayRecords.length + syntheticSamples.length + samples.length} 项` : "加载中"}</span>
         </div>
+        {realPhotoSelected ? <div className="task-drawer-entry-grid real-photo-entry-grid">
+          <button className="task-drawer-entry" onClick={()=>setActiveDrawer("collection")}><span>采集样本与自动标注</span><strong>{realState?.candidate_count ?? 0} 张实拍图</strong><em>全部采集与自动处理状态</em></button>
+          <button className="task-drawer-entry" onClick={()=>setActiveDrawer("manual")}><span>Agent 筛选结果</span><strong>{realState?.agent_filtered_count ?? 0} 张</strong><em>排除 / 不确定及原因</em></button>
+          <button className="task-drawer-entry" onClick={()=>setActiveDrawer("dataset")}><span>实拍训练集</span><strong>{realState?.approved_count ?? 0} 张合格样本</strong><em>训练集 / 训练状态 / 候选模型</em></button>
+        </div> : showLegacyFeedback ? (
         <div className="task-drawer-entry-grid">
           <button className="task-drawer-entry" type="button" onClick={() => setActiveDrawer("collection")}>
             <span>采集样本与自动标注</span>
@@ -1151,27 +1163,13 @@ export function TaskDetailPage() {
             <em>{dataset ? dataset.display_name || dataset.id : autoOptimizeDatasetName || "尚未打包"}</em>
           </button>
         </div>
+        ) : <p role="status">正在确认任务过程数据模式</p>}
       </section>
+      {realPhotoSelected && activeDrawer && activeDrawer !== "synthetic" ? <RealPhotoDrawer key={`${autoOptimizeTaskId}:${activeDrawer}`} feedback={realPhoto} kind={activeDrawer}
+        title={activeDrawer === "collection" ? "采集样本与自动标注" : activeDrawer === "manual" ? "Agent 筛选结果" : "实拍训练集"} close={()=>setActiveDrawer(null)}/> : null}
 
-      {activeDrawer === "collection" ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="采集样本与自动标注">
-          <section className="modal-panel wide task-drawer-modal">
-            <header className="modal-head">
-              <div>
-                <span>{task.label}</span>
-                <h2>采集样本与自动标注</h2>
-              </div>
-              <div className="modal-head-actions">
-                <Link className="secondary compact-action" to={workspacePath(`/data-analysis?task_id=${encodeURIComponent(task.aiTaskId || task.sourceId)}`)}>
-                  <Eye size={15} aria-hidden="true" />
-                  数据分析
-                </Link>
-                <button className="icon-button" type="button" aria-label="关闭" onClick={() => setActiveDrawer(null)}>
-                  <X size={18} aria-hidden="true" />
-                </button>
-              </div>
-            </header>
-            <div className="modal-body task-drawer-modal-body">
+      {showLegacyFeedback && activeDrawer === "collection" ? (
+        <TaskProcessDrawer title="采集样本与自动标注" context={task.label} close={()=>setActiveDrawer(null)} actions={<Link className="secondary compact-action" to={workspacePath(`/data-analysis?task_id=${encodeURIComponent(task.aiTaskId || task.sourceId)}`)}><Eye size={15} aria-hidden="true"/>数据分析</Link>}>
               <div className="task-drawer-summary">
                 <MetricCard label="实拍记录" value={collectionRecords.length} detail={analysisQuery.isFetching ? "刷新中" : "当前任务"} />
                 <MetricCard label="已隔离人工处理" value={manualSamples.length} detail="不在此窗口展示" tone={manualSamples.length ? "warn" : "neutral"} />
@@ -1233,24 +1231,12 @@ export function TaskDetailPage() {
                   })}
                 </div>
               )}
-            </div>
-          </section>
-        </div>
+
+        </TaskProcessDrawer>
       ) : null}
 
-      {activeDrawer === "manual" ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="需要人工处理">
-          <section className="modal-panel wide task-drawer-modal">
-            <header className="modal-head">
-              <div>
-                <span>{task.label}</span>
-                <h2>需要人工处理</h2>
-              </div>
-              <button className="icon-button" type="button" aria-label="关闭" onClick={() => setActiveDrawer(null)}>
-                <X size={18} aria-hidden="true" />
-              </button>
-            </header>
-            <div className="modal-body task-drawer-modal-body">
+      {showLegacyFeedback && activeDrawer === "manual" ? (
+        <TaskProcessDrawer title="需要人工处理" context={task.label} close={()=>setActiveDrawer(null)}>
               <div className="task-drawer-summary">
                 <MetricCard label="待处理" value={manualSamples.length} detail="从正常采集窗口隔离" tone={manualSamples.length ? "warn" : "neutral"} />
                 <MetricCard label="待 Review" value={reviewSamples.length} detail="AI 结果与 mask 需确认" tone={reviewSamples.length ? "warn" : "neutral"} />
@@ -1296,24 +1282,12 @@ export function TaskDetailPage() {
               ) : (
                 <div className="empty-panel compact-empty">没有需要人工处理的数据。</div>
               )}
-            </div>
-          </section>
-        </div>
+
+        </TaskProcessDrawer>
       ) : null}
 
-      {activeDrawer === "synthetic" ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="合成训练图">
-          <section className="modal-panel wide task-drawer-modal">
-            <header className="modal-head">
-              <div>
-                <span>{task.label}</span>
-                <h2>合成训练图</h2>
-              </div>
-              <button className="icon-button" type="button" aria-label="关闭" onClick={() => setActiveDrawer(null)}>
-                <X size={18} aria-hidden="true" />
-              </button>
-            </header>
-            <div className="modal-body task-drawer-modal-body">
+      {showLegacyFeedback && activeDrawer === "synthetic" ? (
+        <TaskProcessDrawer title="合成训练图" context={task.label} close={()=>setActiveDrawer(null)}>
               <div className="task-drawer-summary">
                 <MetricCard label="可用 Sprite" value={String(spritePool.length)} detail="来自真实图 AI mask" />
                 <MetricCard label="真实画框原图" value={String(realBboxSamples.length)} detail="通过 / 人工通过 · train x3" />
@@ -1370,24 +1344,12 @@ export function TaskDetailPage() {
                   </div>
                 </details>
               ) : null}
-            </div>
-          </section>
-        </div>
+
+        </TaskProcessDrawer>
       ) : null}
 
-      {activeDrawer === "dataset" ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="正式训练集">
-          <section className="modal-panel wide task-drawer-modal">
-            <header className="modal-head">
-              <div>
-                <span>{task.label}</span>
-                <h2>正式训练集</h2>
-              </div>
-              <button className="icon-button" type="button" aria-label="关闭" onClick={() => setActiveDrawer(null)}>
-                <X size={18} aria-hidden="true" />
-              </button>
-            </header>
-            <div className="modal-body task-drawer-modal-body">
+      {showLegacyFeedback && activeDrawer === "dataset" ? (
+        <TaskProcessDrawer title="正式训练集" context={task.label} close={()=>setActiveDrawer(null)}>
               <div className="task-drawer-summary">
                 <MetricCard label="训练集状态" value={datasetDeleted ? resourceStatusLabel(task.datasetStatus) : dataset ? "可用" : "未生成"} detail={dataset?.display_name || task.datasetId || "-"} tone={resourceStatusTone(task.datasetStatus)} />
                 <MetricCard label="图片数" value={String(samples.length || dataset?.sample_count || 0)} detail="正式 dataset manifest" />
@@ -1439,9 +1401,8 @@ export function TaskDetailPage() {
                   ))}
                 </div>
               ) : null}
-            </div>
-          </section>
-        </div>
+
+        </TaskProcessDrawer>
       ) : null}
 
       {autoOptimizeSettingsOpen ? (

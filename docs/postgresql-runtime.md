@@ -913,3 +913,7 @@ The root-only runtime observer validates private configuration and immutable ide
 The late parent-only attempt receipt now retains failed reviewer elapsed seconds alongside bounded event classifications. This receipt can be stored after attempt expiry but cannot apply review decisions, revive a lease, enqueue another call or start training. Five-image chunk scheduling preserves frozen round membership, version matching and the all-chunks-success admission fence.
 
 Real-photo scheduling reconciles recheck keys and reads pending training jobs on the same locked state transaction/cursor. Preservation requires the same owner, task, epoch and frozen dataset fingerprint plus a completed train assessment. No schema migration, historical rewrite or paid attempt replay occurs. The queued training snapshot remains unchanged through explicit recovery.
+
+## Read-only real-photo sample pages
+
+Pages read the existing owner/task real_photo_states JSON through RealPhotoRepository.get. There is no migration, write/event insertion or job enqueue. HTTP page size is bounded, but the existing whole-state JSON read remains; this is not a database latency optimization. A capture anchor excludes later originals until refresh. Filters re-evaluate current review identity on each read, so explicit source/version edits can change membership. Historical evidence and frozen datasets remain intact.

@@ -1,11 +1,13 @@
 """Opt-in real-photo API and capture adapter with explicit composition ports."""
 import os
+import base64
+import json
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Callable, Any
-from fastapi import HTTPException, Response
+from fastapi import HTTPException, Response, Query
 from pydantic import BaseModel, StrictBool
 from .real_photo_annotation import canonical
 from .real_photo_contracts import MODEL, STRATEGY, digest, approved, review_key, objects, source_confirmed
@@ -175,11 +177,87 @@ class FeedbackService:
                 'pending_review_count':sum(s.get('annotation',{}).get('status')=='completed' and s.get('review',{}).get('key')!=review_key(s,state['classes']) for s in state['samples'])}
         return {'available':True,'selected':True,'strategy':STRATEGY,'enabled':state['enabled'],
                 'candidate_count':len(state['samples']), 'samples':samples,'jobs':public_jobs,**counts,
+                'agent_filtered_count':sum(s.get('review',{}).get('decision') in {'exclude','uncertain'} and s['review'].get('key') == review_key(s,state['classes']) for s in state['samples']),
                 **{k:state.get(k) for k in ('initialization','review_trigger','approved_real_target','assessment','pause_reason','candidate_models')},
                 'review_running':bool(state.get('round')),
                 'call_statistics':stats,
                 'reference_cache':{k:v for k,v in (state.get('reference_cache') or {}).items() if k in {'status','expires_at','generation'}},
                 'datasets':[{k:d.get(k) for k in ('id','created_at','sample_count','real_source_count','unsupported_by_real_data','snapshot_fingerprint')} for d in state['datasets']]}
+
+    def sample_page(self, identifier, category='all', decision=None, cursor=None, limit=24, sample_id=None):
+        """Read-only projection. The initial anchor excludes later arrivals across pages."""
+        user, task = self.task(identifier)
+        if user['id'] not in accounts():
+            raise HTTPException(403, '实拍回流尚未为此账户启用')
+        if category not in {'all', 'agent_filtered', 'approved'} or decision not in {None, 'exclude', 'uncertain'}:
+            raise HTTPException(422, '无效样本筛选')
+        if decision and category != 'agent_filtered':
+            raise HTTPException(422, '筛选结论仅适用于 Agent 筛选结果')
+        if not 1 <= limit <= 100:
+            raise HTTPException(422, '每页需要1至100张')
+        with self.repo() as repo:
+            state = repo.get(user['id'], identifier)
+        if not state:
+            return {'samples': [], 'total': 0, 'next_cursor': None}
+        # Never call sync_definitions here: browsing cannot enqueue paid work.
+        try:
+            current = self.class_metadata(task, user)
+            definitions_current = current == [{k:v for k,v in c.items() if k != 'reference_sha256'} for c in state['classes']]
+        except (HTTPException, ValueError, OSError):
+            definitions_current = False
+        accepted_ids = {s['sample_id'] for s in approved(state)} if definitions_current else set()
+        entries = state['samples']
+        scope = digest([user['id'], identifier, category, decision, sample_id])
+        anchor = len(entries) - 1
+        before = len(entries)
+        if cursor:
+            try:
+                value = json.loads(base64.urlsafe_b64decode(cursor.encode('ascii')))
+                if set(value) != {'scope', 'anchor', 'before'} or value['scope'] != scope:
+                    raise ValueError()
+                indexes = {s['sample_id']: i for i, s in enumerate(entries)}
+                anchor, before = indexes[value['anchor']], indexes[value['before']]
+                if before > anchor:
+                    raise ValueError()
+            except (ValueError, KeyError, TypeError, UnicodeError):
+                raise HTTPException(422, '分页游标无效，请刷新列表') from None
+        matches = []
+        for index in range(anchor, -1, -1):
+            sample = entries[index]
+            if sample_id and sample['sample_id'] != sample_id:
+                continue
+            annotation = sample.get('annotation') or {}
+            review = sample.get('review') or {}
+            valid_review = definitions_current and review.get('key') == review_key(sample, state['classes'])
+            current_decision = review.get('decision') if valid_review else None
+            if category == 'approved' and sample['sample_id'] not in accepted_ids:
+                continue
+            if category == 'agent_filtered' and (current_decision not in {'exclude', 'uncertain'} or (decision and current_decision != decision)):
+                continue
+            if current_decision in {'exclude', 'uncertain'}:
+                status = current_decision
+            elif sample['sample_id'] in accepted_ids:
+                status = current_decision
+            elif annotation.get('status') == 'failed':
+                status = 'annotation_failed'
+            elif annotation.get('status') != 'completed':
+                status = 'pending_annotation'
+            elif not source_confirmed(sample):
+                status = 'unconfirmed_source'
+            else:
+                status = 'pending_review'
+            public = {k:sample.get(k) for k in ('sample_id', 'source_group', 'source_group_version', 'source_kind', 'created_at', 'geometry')}
+            public.update(source_group_confirmed=source_confirmed(sample), current_status=status,
+                          annotation={k:annotation.get(k) for k in ('status', 'version', 'objects', 'error_code', 'error_type')} if annotation else None,
+                          review={'decision':current_decision, 'reason':str(review.get('reason') or '')[:4000]} if valid_review else None)
+            matches.append((index, public))
+        eligible = [(i, s) for i, s in matches if i < before]
+        page = eligible[:limit]
+        next_cursor = None
+        if len(eligible) > limit:
+            next_cursor = base64.urlsafe_b64encode(json.dumps({'scope':scope, 'anchor':entries[anchor]['sample_id'],
+                                                              'before':page[-1][1]['sample_id']}).encode()).decode()
+        return {'samples':[s for _, s in page], 'total':len(matches), 'next_cursor':next_cursor}
 
     def relabel(self, identifier, sample_id):
         user,_=self.task(identifier,True)
@@ -428,6 +506,11 @@ class FeedbackService:
 def compose(app, service):
     @app.get('/api/ai/tasks/{task_id}/real-photo')
     def status(task_id:str):return service.status(task_id)
+    @app.get('/api/ai/tasks/{task_id}/real-photo/samples')
+    def samples(task_id: str, category: str = 'all', decision: str | None = None,
+                cursor: str | None = Query(default=None, max_length=2048), limit: int = Query(default=24, ge=1, le=100),
+                sample_id: str | None = Query(default=None, max_length=200)):
+        return service.sample_page(task_id, category, decision, cursor, limit, sample_id)
     @app.patch('/api/ai/tasks/{task_id}/real-photo')
     def enable(task_id:str,request:EnableRequest):return service.enable(task_id,request)
     @app.patch('/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/group')
