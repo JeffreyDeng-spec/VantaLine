@@ -5,9 +5,10 @@
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version` and post-install runtime observation remain
-> required. The owner explicitly removed the workflow observer-environment
-> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
+> health and exact `/api/version` remain required. The owner explicitly removed
+> both the workflow observer-environment preflight and separate post-install
+> heartbeat observation. Neither observation success nor environment repair is
+> claimed. This temporary exception supersedes CI-required rollout descriptions
 > below; it does not authorize disabling deployment acceptance. Main's three CI
 > status requirements must be explicitly paused separately before untested PRs can
 > merge; other branch protection remains in place. Restore the workflows, trigger
@@ -16,11 +17,12 @@
 The owner-authorized release workflow omits the observer-environment preflight
 before deployment. It uploads one immutable main-SHA package, verifies the archive
 and promoted installer, runs existing installer acceptance/rollback, and checks the
-exact live `/api/version`. The separate post-install `--observe-runtime` check remains
-required before publishing the GitHub Release. A failed post-install check leaves
-the release draft after installation has committed; it does not automatically roll
-back that installed version. The removed environment check is not claimed repaired;
-restore it only after validating the separate observation-environment repair.
+exact live `/api/version`. At the owner's separate explicit authorization, the
+workflow also omits its post-install `--observe-runtime` invocation and publishes
+after successful install/version verification. The installer's own acceptance and
+rollback logic remains unchanged. No separate post-install heartbeat observation
+is claimed. Restore workflow observation gates only after validating their
+observation environment through a reviewed change.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
@@ -1780,7 +1782,7 @@ The upstream #290 ordinary-only shard rebalance does not replace this refactor's
 ## Restoring the temporary CI pause
 
 Revert the temporary release-trigger, automatic-test-trigger and environment-
-preflight removal PRs to restore the successful `CI` / main / push
+preflight and post-install observation removal PRs to restore the successful `CI` / main / push
 workflow-run deployment trigger. Re-enable `ci.yml`, `backend-performance.yml` and
 `ci-dependencies.yml` with GitHub Actions workflow enable. Restore main required
 status checks with strict=true and contexts `backend-plc`, `frontend`, `source-safety`
@@ -1790,6 +1792,7 @@ The test workflows and assertions remain in Git; disabling workflows does not de
 or weaken their tests. During the pause, release IDs use the production workflow's
 unique run ID instead of a CI run number. Reruns reuse the same immutable release ID.
 The observer-environment preflight is removed by explicit owner instruction.
-The post-install runtime observation remains required and its environment repair
-remains separate; workflow removal does not establish environment correctness.
+The separate workflow post-install runtime observation is also removed with
+explicit owner authorization. Its environment repair remains separate; removal
+does not establish environment correctness or heartbeat-observation success.
 Rollback of production still installs an entire previous immutable release.

@@ -4,9 +4,10 @@
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version` and post-install runtime observation remain
-> required. The owner explicitly removed the workflow observer-environment
-> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
+> health and exact `/api/version` remain required. The owner explicitly removed
+> both the workflow observer-environment preflight and separate post-install
+> heartbeat observation. Neither observation success nor environment repair is
+> claimed. This temporary exception supersedes CI-required rollout descriptions
 > below; it does not authorize disabling deployment acceptance. Main's three CI
 > status requirements must be explicitly paused separately before untested PRs can
 > merge; other branch protection remains in place. Restore the workflows, trigger
