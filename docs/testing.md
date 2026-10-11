@@ -3212,3 +3212,5 @@ Record the next three genuine production promotions after the first accepted cha
 Do not create artificial releases to fill this table or treat a skipped release job as
 a deployed release. `measure_ci_chain.py` reconciles successful run/attempt metadata;
 the release's exact-SHA install and `/api/version` checks must also have succeeded.
+
+For the visible-target prompt refinement, run the seven focused real-photo suites against disposable PostgreSQL, model-dependency/docs/boundary checks and diff checks. Existing fixture coverage verifies blind prefix/suffix context, prompt-key isolation, exact annotation/review versions and no automatic paid replay. Fixtures cannot prove paper tightness or reference identity: released frontend new-version calls plus real whole-image CLI review on private photos are the quality acceptance gate.
