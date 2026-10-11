@@ -73,6 +73,15 @@ def main(argv=None):
         reason = {"28000": "database_authentication", "28P01": "database_authentication",
                   "3D000": "database_missing", "42501": "database_permission"}.get(
                       getattr(error, "sqlstate", None), "unavailable")
+        # libpq connection failures may omit SQLSTATE. Match fixed tokens only;
+        # the message itself must never reach stdout/stderr.
+        if stage == "database_connect" and error.args and isinstance(error.args[0], str):
+            for token, category in (("Peer authentication failed", "database_peer_authentication"),
+                                    ("password authentication failed", "database_authentication"),
+                                    ("no password supplied", "database_password_missing")):
+                if token in error.args[0]:
+                    reason = category
+                    break
         print(f"Runtime database observation stage={stage} reason={reason}", file=sys.stderr)
         # Driver/configuration exceptions can contain passwords and private paths.
         print("Runtime database observation failed", file=sys.stderr)
