@@ -210,6 +210,9 @@ def verify_main288_real_photo_sources():
     }, "Unreviewed paused-source integration source"
 
 
+# Exact upstream #302 overrides only the reviewed workflow/worker files.
+MAIN302_REAL_PHOTO_SOURCE_SHA256 = {'local_inspection_service/training/real_photo_workflow.py': '18a440357fb1afbd7a907905fd39ff969c1ef085c80054e76f9dc8779c40392d', 'local_inspection_service/training_review/worker.py': '007df9c310a9956e7d7d018095f054594c4f195e033245617702ac3ead5238ba'}
+
 def verify_main289_real_photo_sources():
     assert MAIN289_REAL_PHOTO["schema"] == 1, "Unknown confirmed-source integration schema"
     assert MAIN289_REAL_PHOTO["upstream_sha"] == "e31a3bf44791441f87625ae6ac7ff7075e9d08ad", "Unreviewed confirmed-source upstream"
@@ -231,7 +234,7 @@ def verify_main289_real_photo_sources():
                                                         'actual_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86'}}, "Unreviewed confirmed-source integration source"
     for path, accepted in MAIN289_REAL_PHOTO["business_sources"].items():
         actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
-        assert hashlib.sha256(actual).hexdigest() == accepted["actual_sha256"], "Confirmed-source business changed: " + path
+        assert hashlib.sha256(actual).hexdigest() == MAIN302_REAL_PHOTO_SOURCE_SHA256.get(path, accepted["actual_sha256"]), "Confirmed-source business changed: " + path
 
 
 def restore_real_photo_workflows_root(source):
