@@ -1,5 +1,5 @@
 {
-  "version": 282,
+  "version": 283,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",

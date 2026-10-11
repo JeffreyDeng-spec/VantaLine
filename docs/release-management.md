@@ -1,18 +1,4 @@
-> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
-> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
-> GitHub Actions. Their push, PR and schedule triggers are also removed; only
-> manually dispatched recovery remains in source. Automated correctness, safety, migration, compatibility and
-> performance tests are not being executed; no test-evidence reuse or CI-success
-> claim applies. After the release-trigger PR is merged, main pushes directly
-> trigger immutable production packaging/deployment. Package integrity, installer
-> health and exact `/api/version` remain required. The owner explicitly removed
-> both the workflow observer-environment preflight and separate post-install
-> heartbeat observation. Neither observation success nor environment repair is
-> claimed. This temporary exception supersedes CI-required rollout descriptions
-> below; it does not authorize disabling deployment acceptance. Main's three CI
-> status requirements must be explicitly paused separately before untested PRs can
-> merge; other branch protection remains in place. Restore the workflows, trigger
-> and status requirements together before claiming normal CI has resumed.
+> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger immutable production packaging/deployment. Record available focused local checks and state that CI was skipped. Package integrity, installer acceptance, exact `/api/version` and whole-release rollback remain required. Preserve the separately owner-authorized omission of workflow observer preflight and post-install heartbeat observation; do not claim either observation or environment repair succeeded. This policy supersedes older CI-required or temporary-pause descriptions below.
 
 The explicit diagnostic dispatch also reports fixed Web/label service states, a bounded and filtered loopback public version, and the installed controller digest. Unknown or unavailable results remain unknown; these read-only fields do not prove database progress or authorize recovery. No application imports, virtual-environment execution, service changes or customer data reads are performed.
 
