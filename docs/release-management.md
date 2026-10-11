@@ -5,8 +5,9 @@
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version`, and existing runtime-observer acceptance remain
-> required. This temporary exception supersedes CI-required rollout descriptions
+> health, exact `/api/version` and post-install runtime observation remain
+> required. The owner explicitly removed the workflow observer-environment
+> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
 > below; it does not authorize disabling deployment acceptance. Main's three CI
 > status requirements must be explicitly paused separately before untested PRs can
 > merge; other branch protection remains in place. Restore the workflows, trigger
@@ -20,7 +21,7 @@ The isolated POST `--observe-runtime` entry copies only its installed controller
 
 This trust guarantee applies to the separate POST read-only entry. The existing operator-authorized full `--apply` flow retains its candidate pre-acceptance observation through the shared service environment; an older installer without that gate retains its original behavior. Do not describe POST isolation as a change to all application installation execution paths. A future candidate is not authorized by the previous controller's fixed observation-source hashes.
 
-The release workflow now invokes the promoted installer with fixed `--observe-runtime --release ID --commit SHA` arguments before publishing success. Before installation, an unprivileged read-only SSH preflight checks the fixed root-owned system interpreter: Linux x86_64, CPython 3.10 and glibc 2.17 or newer. The immutable release contains only three exact SHA-256-locked wheels (psycopg 3.3.4, psycopg-binary 3.3.4 and typing_extensions 4.15.0), verified before extraction and again by the root observer against its complete member manifest, root ownership and non-writable modes. The observer runs /usr/bin/python3 with -I -S -B, imports the binary driver only from that bundle, and rejects missing, additional or modified dependencies. The POST entry never executes, imports or changes the shared service virtual environment. There is no production pip install or source-driver fallback. Python site hooks and caller environment are disabled. This read-only post-acceptance check uses the existing installer sudo rule; it verifies the immutable current package, root-owned code/interpreter, captured configuration and advancing database heartbeats for the declared Web/label roles. Caller-selected Python paths, modules and environment are not accepted. It is required on the first deployment even when the previously installed controller has no pre-acceptance observer. A failed post-acceptance check leaves the GitHub Release draft; installation has already committed and its transition journal is finished. Recover through a complete revert/release, preserving task/call evidence, secrets and incremental tables. Do not claim automatic installer rollback for this later gate or reapply an already installed non-current release ID.
+The release workflow now invokes the promoted installer with fixed `--observe-runtime --release ID --commit SHA` arguments before publishing success. The owner-authorized workflow omits the observer-environment preflight. A separate read-only provenance step records the executing installer SHA-256 and consistent public version before upload; it does not inspect or repair the virtual environment, ABI, ownership or permissions. The isolated POST observer retains its own interpreter, bundle and snapshot trust checks. The immutable release contains only three exact SHA-256-locked wheels (psycopg 3.3.4, psycopg-binary 3.3.4 and typing_extensions 4.15.0), verified before extraction and again by the root observer against its complete member manifest, root ownership and non-writable modes. The observer runs /usr/bin/python3 with -I -S -B, imports the binary driver only from that bundle, and rejects missing, additional or modified dependencies. The POST entry never executes, imports or changes the shared service virtual environment. There is no production pip install or source-driver fallback. Python site hooks and caller environment are disabled. This read-only post-acceptance check uses the existing installer sudo rule; it verifies the immutable current package, root-owned code/interpreter, captured configuration and advancing database heartbeats for the declared Web/label roles. Caller-selected Python paths, modules and environment are not accepted. It is required on the first deployment even when the previously installed controller has no pre-acceptance observer. A failed post-acceptance check leaves the GitHub Release draft; installation has already committed and its transition journal is finished. Recover through a complete revert/release, preserving task/call evidence, secrets and incremental tables. Do not claim automatic installer rollback for this later gate or reapply an already installed non-current release ID.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
@@ -1779,7 +1780,8 @@ The upstream #290 ordinary-only shard rebalance does not replace this refactor's
 
 ## Restoring the temporary CI pause
 
-Revert both the release-trigger and automatic-test-trigger pause PRs to restore the successful `CI` / main / push
+Revert the temporary release-trigger, automatic-test-trigger and environment-
+preflight removal PRs to restore the successful `CI` / main / push
 workflow-run deployment trigger. Re-enable `ci.yml`, `backend-performance.yml` and
 `ci-dependencies.yml` with GitHub Actions workflow enable. Restore main required
 status checks with strict=true and contexts `backend-plc`, `frontend`, `source-safety`
@@ -1788,6 +1790,7 @@ Run a complete CI on current main; policy-changing merges must not reuse old evi
 The test workflows and assertions remain in Git; disabling workflows does not delete
 or weaken their tests. During the pause, release IDs use the production workflow's
 unique run ID instead of a CI run number. Reruns reuse the same immutable release ID.
-The known observer-preflight failure still requires its separate reviewed repair;
-pausing CI does not establish that production environment acceptance is repaired.
+The observer-environment preflight is removed by explicit owner instruction.
+The post-install runtime observation remains required and its environment repair
+remains separate; workflow removal does not establish environment correctness.
 Rollback of production still installs an entire previous immutable release.

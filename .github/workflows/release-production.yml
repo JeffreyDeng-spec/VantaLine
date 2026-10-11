@@ -118,31 +118,8 @@ jobs:
           chmod 600 ~/.ssh/vantaline_deploy
           printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-      - name: Check read-only observer environment before deployment
+      - name: Record current release and installer provenance
         run: |
-          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
-            /usr/bin/python3 -I -S - <<'PY_OBSERVER_ENVIRONMENT'
-          import os, pathlib, stat, sys
-          def verify():
-              interpreter = pathlib.Path('/usr/bin/python3').resolve(strict=True)
-              for path in [interpreter, *interpreter.parents]:
-                  value = path.lstat()
-                  assert value.st_uid == 0 and not stat.S_IMODE(value.st_mode) & 0o022
-                  assert stat.S_ISDIR(value.st_mode) or stat.S_ISREG(value.st_mode)
-              assert stat.S_ISREG(interpreter.lstat().st_mode)
-              assert sys.platform == 'linux' and os.uname().machine == 'x86_64'
-              assert sys.implementation.name == 'cpython'
-              assert sys.implementation.cache_tag == 'cpython-310'
-              assert sys.version_info[:2] == (3, 10)
-              libc = os.confstr('CS_GNU_LIBC_VERSION').split()
-              assert libc[0] == 'glibc' and tuple(int(v) for v in libc[1].split('.')) >= (2, 17)
-              print('PASS trusted read-only observation environment')
-          try:
-              verify()
-          except Exception:
-              print("Runtime observation environment preflight failed", file=sys.stderr)
-              raise SystemExit(1) from None
-          PY_OBSERVER_ENVIRONMENT
           executing_installer_sha="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" sha256sum /usr/local/sbin/vantaline-install-release | awk '{print $1}')"
           [[ "$executing_installer_sha" =~ ^[0-9a-f]{64}$ ]]
           printf 'executing_installer_sha256=%s\n' "$executing_installer_sha"
