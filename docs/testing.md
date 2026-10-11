@@ -1,17 +1,4 @@
-> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
-> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
-> GitHub Actions. Their push, PR and schedule triggers are also removed; only
-> manually dispatched recovery remains in source. Automated correctness, safety, migration, compatibility and
-> performance tests are not being executed; no test-evidence reuse or CI-success
-> claim applies. After the release-trigger PR is merged, main pushes directly
-> trigger immutable production packaging/deployment. Package integrity, installer
-> health, exact `/api/version` and post-install runtime observation remain
-> required. The owner explicitly removed the workflow observer-environment
-> preflight before deployment; no environment-preflight success is claimed. This temporary exception supersedes CI-required rollout descriptions
-> below; it does not authorize disabling deployment acceptance. Main's three CI
-> status requirements must be explicitly paused separately before untested PRs can
-> merge; other branch protection remains in place. Restore the workflows, trigger
-> and status requirements together before claiming normal CI has resumed.
+> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger the existing immutable production packaging/deployment. Record available focused local checks and explicitly state that CI was skipped. Package integrity, installer acceptance, exact `/api/version`, post-install runtime observation and whole-release rollback remain required. This policy supersedes older CI-required or temporary-pause descriptions below and does not disable deployment acceptance.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
