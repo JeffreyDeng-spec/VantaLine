@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from render_release_installer import verify as verify_installer, SOURCES, TEMPLATE, CONFIGURATION_SOURCE
+from build_observer_bundle import build_observer_bundle
 
 
 def sha256(path: Path) -> str:
@@ -44,6 +45,7 @@ release_script_diff = subprocess.run(
     ["git", "diff", "--quiet", "HEAD", "--",
      "scripts/build_release_artifact.py", "scripts/install_release.sh",
      "scripts/render_release_installer.py", "scripts/"+TEMPLATE,
+     "scripts/build_observer_bundle.py", "scripts/observer_bundle_contract.py", "release/observer-dependencies.json",
      CONFIGURATION_SOURCE, *OBSERVATION_SOURCES, *("scripts/"+name for name in SOURCES)],
     cwd=root, check=False,
 )
@@ -80,6 +82,7 @@ with tempfile.TemporaryDirectory(prefix="vantaline-release-") as temp:
     for relative in OBSERVATION_SOURCES:
         if not (stage / relative).is_file():
             raise SystemExit("Release runtime observer source missing")
+    build_observer_bundle(stage / 'release/observer_bundle', stage / 'release/observer-dependencies.json')
     shutil.copytree(dist, stage / "local_inspection_service/frontend/dist-production")
     doc_bundle = args.doc_image_bundle.resolve()
     manifest = json.loads((doc_bundle / "manifest.json").read_text())

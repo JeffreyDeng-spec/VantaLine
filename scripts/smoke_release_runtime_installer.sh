@@ -4,11 +4,15 @@ set -euo pipefail
 # Runs the actual installer in a private mount namespace. No host service,
 # database, or release directory is used.
 if [[ "${1:-}" != --inside ]]; then
+  source_root="$(cd "$(dirname "$0")/.." && pwd)"
+  observer_fixture="$(mktemp -d /tmp/vantaline-observer-fixture.XXXXXXXX)"
+  trap 'rm -rf -- "$observer_fixture"' EXIT
+  python3 "$source_root/scripts/build_observer_bundle.py" --output "$observer_fixture/bundle"
   for scenario in managed_observe_success managed_observe_failure managed_observe_verified_recovery managed_observe_accepted_recovery managed_observe_already_installed managed_legacy_queued_rollback managed_interrupt_rollback managed_journal_failure managed_interrupt_stopped managed_interrupt_switched managed_embedded_bridge managed_success managed_worker_failure managed_health_failure managed_database_failure managed_interrupted_accept managed_pointer_checkpoint managed_paused_rollback managed_embedded_510 managed_embedded_510_rollback managed_reject_web_499 managed_reject_web_511 managed_reject_worker_510 managed_reject_kill_mode; do
     if [[ "$EUID" -ne 0 ]]; then
-      sudo unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
+      sudo unshare -m --propagation private env VANTALINE_OBSERVER_FIXTURE="$observer_fixture" VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     else
-      unshare -m --propagation private env VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
+      unshare -m --propagation private env VANTALINE_OBSERVER_FIXTURE="$observer_fixture" VANTALINE_BASE_INSTALLER="${VANTALINE_BASE_INSTALLER:?}" bash "$0" --inside "$scenario"
     fi
   done
   echo 'PASS managed release installer fault matrix'
@@ -16,6 +20,19 @@ if [[ "${1:-}" != --inside ]]; then
 fi
 scenario="${2:?scenario required}"
 source_root="$(cd "$(dirname "$0")/.." && pwd)"
+observer_fixture=''
+observer_fixture_owned=0
+if [[ "$scenario" == managed_observe_* ]]; then
+  # Download/verify before the private /etc hides the host CA trust store.
+  observer_fixture="${VANTALINE_OBSERVER_FIXTURE:-}"
+  if [[ -z "$observer_fixture" ]]; then
+    observer_fixture="$(mktemp -d /tmp/vantaline-observer-fixture.XXXXXXXX)"
+    observer_fixture_owned=1
+    if ! python3 "$source_root/scripts/build_observer_bundle.py" --output "$observer_fixture/bundle"; then
+      rm -rf -- "$observer_fixture"; exit 1
+    fi
+  fi
+fi
 mount -t tmpfs -o size=3G,mode=0755 tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
 mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
@@ -334,6 +351,11 @@ elif scenario=='managed_interrupt_rollback' and not (base/'interrupted-once').ex
     raise SystemExit(23)
 PY_CHECKPOINT
 if [[ "$scenario" == managed_observe_* ]]; then
+  # Real hash-locked driver code is part of the private immutable package.
+  mkdir -p "$work/release"
+  cp -a "$observer_fixture/bundle" "$work/release/observer_bundle"
+  if [[ "$observer_fixture_owned" == 1 ]]; then rm -rf -- "$observer_fixture"; fi
+  cp "$source_root/release/observer-dependencies.json" "$work/release/observer-dependencies.json"
   printf '%s' "$scenario" > "$base/observer-scenario"
   mkdir -p "$work/local_inspection_service/runtime"
   touch "$work/local_inspection_service/__init__.py" "$work/local_inspection_service/runtime/__init__.py"
@@ -702,6 +724,14 @@ if [[ "$scenario" == managed_observe_success ]]; then
     bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/postaccept.json"
   test "$(tail -1 "$base/observer-events")" = no-journal
   test ! -e "$base/unsafe-site-hook"
+  # Service-owned and even malformed shared environments are outside the
+  # observer trust boundary. Never repair or execute them as root.
+  /usr/bin/chown 998:998 "$base/venv"
+  printf 'home = /tmp\n' > "$base/venv/pyvenv.cfg"
+  rm "$base/venv/bin/python"; ln -s /bin/sh "$base/venv/bin/python"
+  bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/service-owned-observation.json"
+  test "$(/usr/bin/stat -c '%u' "$base/venv")" = 998
+  test ! -e "$base/unsafe-site-hook"
   python3 - "$base/postaccept.json" <<'PY_POSTACCEPT'
 import json,sys
 value=json.load(open(sys.argv[1]));assert value['periodic_progress'] is True and len(value['roles'])==2
@@ -719,25 +749,23 @@ PY_PREFLIGHT_SOURCE
   /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/preflight.json"
   events_before="$(sha256sum "$base/runtime-events" "$base/control-events")"
   pointer_before="$(readlink "$base/current")"
-  for bad in argument commit writable config interpreter module; do
+  dependency="$base/releases/v2026.10.1/release/observer_bundle"
+  cp "$dependency/manifest.json" "$base/observer-manifest.before"
+  for bad in argument commit writable checksum missing module; do
     args=(--observe-runtime --release v2026.10.1 --commit "$commit")
     case "$bad" in
       argument) args+=(--apply) ;;
       commit) args=(--observe-runtime --release v2026.10.1 --commit "${commit%?}f") ;;
-      writable) chmod 777 "$base/venv" ;;
+      writable) chmod 777 "$dependency" ;;
       module) chmod 777 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py" ;;
-      config) printf 'home = /tmp\n' > "$base/venv/pyvenv.cfg" ;;
-      interpreter) rm "$base/venv/bin/python"; ln -s /bin/sh "$base/venv/bin/python" ;;
+      checksum) printf '\n' >> "$dependency/typing_extensions.py" ;;
+      missing) mv "$dependency/psycopg_binary/__init__.py" "$base/binary-init.before" ;;
     esac
     if bash /usr/local/sbin/vantaline-install-release "${args[@]}" > "$base/rejected-observation.log" 2>&1; then exit 1; fi
-    if [[ "$bad" == writable || "$bad" == config || "$bad" == interpreter ]]; then
-      if /usr/bin/python3 -I -S -c 'import os,runpy;os.setgid(65534);os.setuid(65534);runpy.run_path("/opt/vantaline/preflight.py",run_name="__main__")' > "$base/rejected-preflight.log" 2>&1; then exit 1; fi
-      test "$(cat "$base/rejected-preflight.log")" = 'Runtime observation environment preflight failed'
-    fi
-    chmod 755 "$base/venv"
+    chmod 755 "$dependency"
+    if [[ "$bad" == checksum ]]; then truncate -s -1 "$dependency/typing_extensions.py"; fi
+    if [[ "$bad" == missing ]]; then mv "$base/binary-init.before" "$dependency/psycopg_binary/__init__.py"; fi
     chmod 644 "$base/releases/v2026.10.1/local_inspection_service/runtime/observe_label_runtime.py"
-    printf 'home = /usr/bin\n' > "$base/venv/pyvenv.cfg"
-    rm "$base/venv/bin/python"; ln -s /usr/bin/python3 "$base/venv/bin/python"
     test "$(readlink "$base/current")" = "$pointer_before"
     test "$(sha256sum "$base/runtime-events" "$base/control-events")" = "$events_before"
     test ! -e /var/lib/vantaline-release/.runtime-transition-v2026.10.1.json

@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SOURCES = ('release_runtime_contract.py', 'release_runtime_client.py', 'release_services.py',
-           'release_runtime_configuration.py', 'release_runtime_transition.py', 'release_runtime_main.py')
+           'release_runtime_configuration.py', 'release_runtime_transition.py', 'observer_bundle_contract.py', 'release_runtime_main.py')
 CONFIGURATION_SOURCE = 'local_inspection_service/runtime/configuration_contract.py'
 CONFIGURATION_MODULE = 'local_inspection_service.runtime.configuration_contract'
 TEMPLATE = 'install_release.template.sh'
