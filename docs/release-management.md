@@ -1,4 +1,20 @@
-The release workflow supports an explicit read-only observer-environment diagnostic dispatch. This dispatch runs only the diagnostic job, with read-only repository permission and the existing pinned SSH identity. It does not upload, install, stop services, repair permissions, execute virtual-environment code, or publish a release. The isolated system interpreter checks fixed environment paths and emits only finite stage/reason codes, booleans, interpreter major/minor and a bounded entry count. Configuration values, filesystem paths and exception text are omitted. A failed or incomplete diagnostic is not a trust or deployment acceptance. For diagnosis on a reviewed branch, verify the actual workflow dispatch event, branch and head SHA before using its output. Normal automatic releases retain the original complete CI and deployment gates.
+> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
+> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
+> GitHub Actions. Their push, PR and schedule triggers are also removed; only
+> manually dispatched recovery remains in source. Automated correctness, safety, migration, compatibility and
+> performance tests are not being executed; no test-evidence reuse or CI-success
+> claim applies. After the release-trigger PR is merged, main pushes directly
+> trigger immutable production packaging/deployment. Package integrity, installer
+> health, exact `/api/version`, and existing runtime-observer acceptance remain
+> required. This temporary exception supersedes CI-required rollout descriptions
+> below; it does not authorize disabling deployment acceptance. Main's three CI
+> status requirements must be explicitly paused separately before untested PRs can
+> merge; other branch protection remains in place. Restore the workflows, trigger
+> and status requirements together before claiming normal CI has resumed.
+
+For this observer corrective release, the CI workflow is temporarily enabled only for explicit manual `workflow_dispatch` validation with `force-full=true`. Its automatic PR, push and schedule triggers remain absent. This exception does not restore normal automatic CI, change branch protection, or authorize reuse of historical results. Before merge, verify the complete current candidate run and that its tree matches the intended main result; the main push immediately starts production deployment and does not wait for a later CI run.
+
+The release workflow supports an explicit read-only observer-environment diagnostic dispatch. This dispatch runs only the diagnostic job, with read-only repository permission and the existing pinned SSH identity. It does not upload, install, stop services, repair permissions, execute virtual-environment code, or publish a release. The isolated system interpreter checks fixed environment paths and emits only finite stage/reason codes, booleans, interpreter major/minor and a bounded entry count. Configuration values, filesystem paths and exception text are omitted. A failed or incomplete diagnostic is not a trust or deployment acceptance. For diagnosis on a reviewed branch, verify the actual workflow dispatch event, branch and head SHA before using its output. Automatic main pushes now trigger immutable release deployment directly under the temporary CI pause. This corrective release is separately verified through a manually dispatched complete CI run before merge; diagnostic dispatch does not deploy.
 
 The isolated POST `--observe-runtime` entry copies only its installed controller's fixed authorized file set into a root-private temporary directory under `/var/lib/vantaline-release`: 11 observation Python sources, the dependency lock, and the 126 driver files plus their manifest. The deterministic renderer embeds every expected SHA-256; caller-provided hashes or candidate manifests cannot authorize root execution. Files are opened without following terminal symlinks, read with bounds, and checked for regular type, root ownership, single link, non-writable modes and exact authorized bytes. Only this private snapshot enters the isolated child import path. Existing service-owned `/opt/vantaline` ancestors remain unchanged and are only data sources. Active-release identity reads use the same topology algorithm with an explicit bounded, nonblocking, no-follow reader before and after database observation; no fallback to the ordinary reader is allowed. The current link, declared build/topology, configuration revision and persisted heartbeat generation must still agree. Snapshot directories are removed on normal and exceptional exit. Source/bundle authorization remains independent of mutable release metadata.
 
@@ -1760,3 +1776,18 @@ Manual artifacts use an attempt-specific name, and their creation time must fall
 The fixed silent Git preparation checks `check-298` and `check-299` may have zero-byte logs only with the empty-content SHA-256. No benchmark or storage protocol receives that exception; complete current-attempt evidence and all deployment gates remain required.
 
 The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.
+
+## Restoring the temporary CI pause
+
+Revert both the release-trigger and automatic-test-trigger pause PRs to restore the successful `CI` / main / push
+workflow-run deployment trigger. Re-enable `ci.yml`, `backend-performance.yml` and
+`ci-dependencies.yml` with GitHub Actions workflow enable. Restore main required
+status checks with strict=true and contexts `backend-plc`, `frontend`, `source-safety`
+(all GitHub Actions app_id 15368), retaining every other branch-protection field.
+Run a complete CI on current main; policy-changing merges must not reuse old evidence.
+The test workflows and assertions remain in Git; disabling workflows does not delete
+or weaken their tests. During the pause, release IDs use the production workflow's
+unique run ID instead of a CI run number. Reruns reuse the same immutable release ID.
+The known observer-preflight failure still requires its separate reviewed repair;
+pausing CI does not establish that production environment acceptance is repaired.
+Rollback of production still installs an entire previous immutable release.

@@ -1,14 +1,5 @@
 name: Prepare CI dependencies
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'requirements-production.lock'
-      - 'scripts/ci_environment.py'
-      - 'scripts/verify_production_dependencies.py'
-      - '.github/workflows/ci-dependencies.yml'
-  schedule:
-    - cron: '0 18 * * *'
   workflow_dispatch:
 permissions:
   contents: read
