@@ -15,6 +15,7 @@ class PipelineTaskCreateRequest(BaseModel):
     accessory_counts: dict[str, int] | None = None
     detection_method: str | None = None
     auto_advance: bool | None = None
+    # Deprecated compatibility input, ignored by creation and update.
     expected_production_count: int | None = None
     task_kind: str | None = None
     material_code: str | None = None
@@ -29,6 +30,7 @@ class PipelineTaskUpdateRequest(BaseModel):
     detection_method: str | None = None
     params: dict[str, Any] | None = None
     auto_advance: bool | None = None
+    # Deprecated compatibility input, ignored by creation and update.
     expected_production_count: int | None = None
     material_code: str | None = None
     material_name: str | None = None

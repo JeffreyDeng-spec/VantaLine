@@ -24,7 +24,6 @@ export interface TaskEntry {
   referenceVersionLabel?: string;
   optimizationRoute?: string;
   autoAdvance?: boolean;
-  expectedProductionCount?: number;
   autoOptimizeInitialization?: Record<string, unknown>;
   autoOptimizeTaskId?: string;
   aiBaselineTaskId?: string;
@@ -136,7 +135,6 @@ export function taskEntriesFromTrainingResources(
         referenceVersionLabel: task.reference_version_label,
         optimizationRoute: task.optimization_route,
         autoAdvance: task.auto_advance,
-        expectedProductionCount: Number(task.expected_production_count || task.params?.expected_production_count || 0),
         autoOptimizeInitialization: task.auto_optimize_initialization,
         autoOptimizeTaskId: task.auto_optimize_task_id,
         aiBaselineTaskId: task.ai_baseline_task_id,

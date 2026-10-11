@@ -26,7 +26,6 @@ class PipelineTaskUpdater:
                     or request.detection_method not in {None, "label_text_compare"}
                     or request.params is not None
                     or request.auto_advance is not None
-                    or request.expected_production_count is not None
                 ):
                     raise self.access.http_error()(status_code=409, detail="包材文字任务不进入配件或训练配置")
                 if request.material_code is not None:
@@ -81,7 +80,7 @@ class PipelineTaskUpdater:
                 task.pop("agent_mcp", None)
             if request.params is not None:
                 params = dict(task.get("params") or {})
-                for key in ("sample_count", "epochs", "image_size", "expected_production_count"):
+                for key in ("sample_count", "epochs", "image_size"):
                     if key in request.params:
                         try:
                             params[key] = int(request.params[key])
@@ -104,15 +103,6 @@ class PipelineTaskUpdater:
                     params["epochs"] = max(1, min(500, int(params["epochs"])))
                 if "image_size" in params:
                     params["image_size"] = max(320, min(1280, int(params["image_size"])))
-                if "expected_production_count" in params:
-                    params["expected_production_count"] = self.policy.normalize_expected_count()(params["expected_production_count"])
-                    task["expected_production_count"] = params["expected_production_count"]
-                task["params"] = params
-            if request.expected_production_count is not None:
-                expected_production_count = self.policy.normalize_expected_count()(request.expected_production_count)
-                task["expected_production_count"] = expected_production_count
-                params = dict(task.get("params") or {})
-                params["expected_production_count"] = expected_production_count
                 task["params"] = params
             if request.auto_advance is not None:
                 task["auto_advance"] = bool(request.auto_advance)

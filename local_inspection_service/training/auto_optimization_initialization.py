@@ -4,7 +4,6 @@ import json
 from typing import Any
 
 from .auto_optimization_initialization_ports import AutoOptimizationAdvisorPorts, AutoOptimizationTaskInitializationPorts
-from .auto_optimization_settings import normalize_expected_production_count
 
 
 @dataclass(frozen=True)
@@ -44,7 +43,7 @@ class AutoOptimizationInitialization:
             )
         system = (
             "你是工业视觉质检平台的自动优化初始化 Agent。"
-            "根据任务预计产量、配件数量、图片/画像复杂度，判断是否值得在当前生产任务内开启自动优化训练。"
+            "根据配件数量、图片/画像复杂度，建议自动优化训练的样本阈值和参数。"
             "只输出 JSON 对象，不要输出解释文本。字段："
             '{"enabled": bool, "complexity": string, "min_trainable_samples": int, '
             '"min_positive_samples": int, "min_negative_samples": int, "negative_samples_per_real_image": int, '
@@ -53,11 +52,9 @@ class AutoOptimizationInitialization:
             '"auto_promote": bool, "reason": "中文一句话理由"}。'
             "samples_per_real_image 表示每张真实照片总共派生多少训练图；"
             "negative_samples_per_real_image 表示这些派生图里有多少张是负样本，不是额外追加的负样本。"
-            "如果所需样本超过总产量，或超过前 30% 产量能采集到的样本量，enabled 必须为 false。"
+            "训练准入由实际可用样本和质量门槛决定；不得根据预计产量或生产进度限制训练。"
         )
         prompt = {
-            "expected_production_count": expected_production_count,
-            "front_30_percent_quota": int(expected_production_count * 0.3) if expected_production_count else 0,
             "accessories": payload_accessories,
             "fallback": fallback,
             "policy": {
@@ -97,9 +94,8 @@ class AutoOptimizationInitialization:
         ai_task_id = self.task.sanitize_ai_detection_task_id()(task.get("ai_task_id"))
         if not ai_task_id:
             return {}
-        expected_count = normalize_expected_production_count(
-            task.get("expected_production_count") or (task.get("params") or {}).get("expected_production_count")
-        )
+        # Compatibility argument is inert; historical production estimates are ignored.
+        expected_count = 0
         accessory_ids = self.task.canonical_pipeline_accessory_ids()(config, [str(item_id) for item_id in task.get("accessory_ids") or []])
         fallback = self.task.auto_optimize_complexity_rule_recommendation()(config, accessory_ids, expected_count)
         recommendation = self.task.agent_auto_optimize_initialization_recommendation()(config, accessory_ids, expected_count, fallback)
@@ -141,16 +137,12 @@ class AutoOptimizationInitialization:
                     "owner_username": task.get("owner_username") or state.get("owner_username") or "",
                     "selected_accessory_ids": accessory_ids,
                     "required_accessory_counts": task.get("accessory_counts") or state.get("required_accessory_counts") or {},
-                    "expected_production_count": expected_count,
                     "auto_optimize_initialization": recommendation,
                     "settings": settings,
                 }
             )
             self.task.save_auto_optimize_state()(state)
         task["auto_optimize_initialization"] = recommendation
-        task["expected_production_count"] = expected_count
-        if isinstance(task.get("params"), dict):
-            task["params"]["expected_production_count"] = expected_count
         if recommendation.get("enabled"):
             self.task.start_auto_optimize_label_worker()(ai_task_id)
         return recommendation

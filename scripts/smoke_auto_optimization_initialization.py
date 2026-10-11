@@ -101,7 +101,7 @@ class InitializationContract(unittest.TestCase):
         self.assertTrue(all(not event[1] for event in f.events if not isinstance(event,str) and event[0] not in {'load','defaults','save'}))
         self.assertEqual(f.state['settings']['negative_samples_per_real_image'],0)
         self.assertEqual(f.state['settings']['custom'],'keep');self.assertEqual(f.state['settings']['serving_mode'],'api_primary')
-        self.assertEqual(f.task['params']['expected_production_count'],10000)
+        self.assertEqual(f.task['params'].get('expected_production_count'),10000 if BASELINE else None)
         self.assertEqual(next(event for event in f.events if isinstance(event,tuple) and event[0]=='canonical')[2][1],['a','7','a'])
 
     def test_missing_id_and_disabled_recommendation(self):
@@ -128,7 +128,7 @@ class InitializationContract(unittest.TestCase):
         f.replace('start_auto_optimize_label_worker',start)
         with self.assertRaises(RuntimeError) as raised:f.service.initialize_auto_optimize_for_pipeline_task(f.task,f.config)
         self.assertIs(raised.exception,sentinel);self.assertIs(f.task['auto_optimize_initialization'],f.recommendation)
-        self.assertEqual(f.task['params']['expected_production_count'],10000)
+        self.assertEqual(f.task['params'].get('expected_production_count'),10000 if BASELINE else None)
         self.assertTrue(any(isinstance(event,tuple) and event[0]=='save' for event in f.events))
 
     def test_advisor_failure_is_before_lock_and_settings_failure_releases_lock(self):
@@ -150,9 +150,21 @@ class InitializationContract(unittest.TestCase):
         result=f.service.agent_auto_optimize_initialization_recommendation(f.config,['a','missing','a'],10000,fallback)
         provider=next(event for event in f.events if isinstance(event,tuple) and event[0]=='provider')
         self.assertEqual(provider[3],{'max_tokens':800,'max_attempts':1})
-        self.assertEqual(hashlib.sha256(provider[2][1].encode('utf-8')).hexdigest(),'ffed9108aa362e61cdd649214e544869145a81ec6a9f37f7a57be29d42b6beeb')
-        prompt=json.loads(provider[2][2][0]['text']);self.assertEqual(prompt['expected_production_count'],10000)
-        self.assertEqual(prompt['front_30_percent_quota'],3000);self.assertEqual([item['id'] for item in prompt['accessories']],['a','missing','a'])
+        if BASELINE:
+            self.assertEqual(hashlib.sha256(provider[2][1].encode('utf-8')).hexdigest(),'ffed9108aa362e61cdd649214e544869145a81ec6a9f37f7a57be29d42b6beeb')
+        else:
+            self.assertIn('根据配件数量、图片/画像复杂度',provider[2][1])
+            self.assertNotIn('30%',provider[2][1])
+            self.assertIn('实际可用样本和质量门槛',provider[2][1])
+        prompt=json.loads(provider[2][2][0]['text'])
+        if BASELINE:
+            self.assertEqual(prompt['expected_production_count'],10000)
+        else:
+            self.assertNotIn('expected_production_count',prompt)
+            self.assertNotIn('front_30_percent_quota',prompt)
+        if BASELINE:
+            self.assertEqual(prompt['front_30_percent_quota'],3000)
+        self.assertEqual([item['id'] for item in prompt['accessories']],['a','missing','a'])
         self.assertEqual(prompt['policy']['negative_samples_per_real_image_default'],3)
         self.assertEqual(result,{'enabled':True,'provider':'synthetic','model':'stub','latency_ms':12.5,'usage_metadata':{'tokens':1}})
         self.assertEqual(fallback,{'original':True})

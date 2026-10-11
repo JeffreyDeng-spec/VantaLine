@@ -206,7 +206,14 @@ def main():
         assert error is None and ("owner", "other") in events and ("config.scope", "other") in events
 
         _, error, events, saves, _ = exercise({"detection_method": "ai"})
-        assert isinstance(error, HTTPException) and error.status_code == 400 and not saves and "clock" not in events
+        if baseline_source:
+            assert isinstance(error, HTTPException) and error.status_code == 400 and not saves and "clock" not in events
+        else:
+            assert error is None and saves
+            for count in (None, 0, 1, 1000000):
+                result, error, _, saves, _ = exercise({"detection_method": "ai", "expected_production_count": count, "accessory_ids": ["a"]}, ai=True)
+                assert error is None and len(saves) == 2
+                assert "expected_production_count" not in result and "expected_production_count" not in result["params"]
 
         result, error, events, saves, _ = exercise({"detection_method": "ai", "expected_production_count": 3, "accessory_ids": ["a"]}, ai=True)
         assert error is None and len(saves) == 2 and saves[0]["ai_task_id"] == "ai-1"

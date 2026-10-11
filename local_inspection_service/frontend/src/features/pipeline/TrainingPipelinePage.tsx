@@ -1347,23 +1347,16 @@ function CreateTaskModal({
 }) {
   const [name, setName] = useState("");
   const [method, setMethod] = useState<PipelineMethod>("yolo_ocr");
-  const [expectedProductionCount, setExpectedProductionCount] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     try {
-      const expectedCount = Math.max(0, Math.round(Number(expectedProductionCount || 0)));
-      if (method === "ai" && (!Number.isFinite(expectedCount) || expectedCount <= 0)) {
-        window.alert("创建 AI 任务需要填写预计产量。");
-        return;
-      }
       await onCreate({
         name: name.trim(),
         detection_method: method,
-        auto_advance: method === "ai" ? false : true,
-        expected_production_count: expectedCount || undefined
+        auto_advance: method === "ai" ? false : true
       });
       onClose();
     } finally {
@@ -1398,19 +1391,7 @@ function CreateTaskModal({
             任务名称
             <input value={name} placeholder="例如：说明书齐套训练" onChange={(event) => setName(event.currentTarget.value)} />
           </label>
-          <label className="field">
-            预计产量
-            <input
-              type="number"
-              min="1"
-              max="1000000"
-              step="1"
-              value={expectedProductionCount}
-              placeholder={method === "ai" ? "AI 任务必填，例如：3000" : "可选"}
-              onChange={(event) => setExpectedProductionCount(event.currentTarget.value)}
-              required={method === "ai"}
-            />
-          </label>
+
           <div className="pipeline-task-detail-entry">
             <span>详情</span>
             <strong>任务卡片会显示已选配件、当前阶段、推荐路线和暂停状态。</strong>

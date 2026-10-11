@@ -1,5 +1,8 @@
 The POST runtime observer reuses the existing label identity algorithm with an explicit bounded, nonblocking metadata reader and runs only controller-authorized sources in a root-private temporary snapshot. Default Web/worker identity callers retain their original reader and topology contract. This adds no business setting or model/PLC behavior; historical task snapshots remain unchanged. See docs/release-management.md for the separate POST and existing full-apply trust boundaries.
 
+预计产量环节已取消：任务创建与详情不再展示或提交产量；新任务无需填写。旧客户端的 `expected_production_count` 输入仅为兼容保留并忽略，旧记录字段不删除、不覆盖，也不影响训练或当前状态。自动优化初始化按配件复杂度建议样本阈值，取消总产量及前 30% 配额判断；实际样本、正负样本、质量和影子评估门槛继续执行。规则回退每周期标注预算为 3，默认不自动晋级；显式 Agent 晋级建议仍须经过现有影子检查。既有暂停/启用设置不自动重写，实拍候选模型仍手动切换。没有数据迁移。新任务的提示来源清单版本为 286，历史模型快照和指纹保持原值。
+
+
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
 Account visibility composition adds no setting. CORS origins/regex, authentication/access checks, output directory, model catalog, configuration and masked URL supplier retain their existing operation-time selection. Manifest v274 contains 588 actual source files; new fingerprints include the graph without rewriting historical task snapshots.

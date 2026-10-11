@@ -50,6 +50,19 @@ class IntegrationContracts(unittest.TestCase):
             altered.update(copy.deepcopy(fixture))
             self.assertEqual(contract.restore_delta(current, altered), expected)
 
+    def test_quota_delta_rejects_owner_and_fixture_mutations(self):
+        relative='local_inspection_service/pipeline/task_create.py'
+        target=contract.ROOT / relative
+        parent=contract.reviewed_business_bytes(relative)
+        self.assertEqual(hashlib.sha256(parent).hexdigest(),'f40024be92843e31041592f857ce421344bfa51569431fd06ead300ae8e18365')
+        original=Path.read_bytes
+        for path in (target,contract.ROOT / 'tests/backend_contract/production_quota_removal_delta.json'):
+            def read(instance):
+                value=original(instance)
+                return value+b'\n' if instance==path else value
+            with patch.object(Path,'read_bytes',read),self.assertRaises(AssertionError):
+                contract.reviewed_business_bytes(relative)
+
     def test_text_summary_keeps_original_ast_semantics(self):
         original = contract.source_digest('value = 1\n')
         self.assertEqual(contract.source_digest('value=1\n'), original)
