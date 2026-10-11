@@ -12,6 +12,8 @@ from pathlib import Path
 
 from release_runtime_contract import ContractError, Topology, WEB, LABEL, read_object, sync_directory
 from release_runtime_transition import RuntimeTransition
+from observer_bundle_contract import verify_observer_bundle, ObserverBundleError
+from release_observer_snapshot import observer_snapshot, OBSERVER_EXECUTION_FILES
 
 
 RUNTIME_STORAGE = Path('/var/lib/vantaline-release')
@@ -69,8 +71,6 @@ def observe_runtime(release, commit):
         raise ContractError('Invalid runtime observation request')
     base = Path('/opt/vantaline')
     target = base / 'releases' / release
-    for path in reversed(target.parents):
-        trusted_directory(path)
     current = base / 'current'
     if (not current.is_symlink() or current.lstat().st_uid != 0
             or current.resolve(strict=True) != target):
@@ -79,48 +79,41 @@ def observe_runtime(release, commit):
     identity = RuntimeTransition.identity(target)
     if identity['topology']['commit'] != commit or not identity['topology']['runtime_protocol']:
         raise ContractError('Runtime observation identity mismatch')
-    venv = base / 'venv'
-    executable = venv / 'bin/python'
+    executable = Path('/usr/bin/python3')
     interpreter = executable.resolve(strict=True)
-    if interpreter != Path('/usr/bin/python3').resolve(strict=True):
-        raise ContractError('Untrusted observation base interpreter')
     for path in reversed(interpreter.parents):
         trusted_directory(path)
     info = interpreter.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
         raise ContractError('Untrusted observation interpreter')
-    configuration = venv / 'pyvenv.cfg'
-    info = configuration.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
-        raise ContractError('Untrusted observation interpreter configuration')
-    if info.st_size > 4096:
-        raise ContractError('Invalid observation interpreter configuration')
-    fields = {}
-    for line in configuration.read_text(encoding='utf-8').splitlines():
-        if '=' in line:
-            key, value = line.split('=', 1)
-            key = key.strip()
-            if key in fields:
-                raise ContractError('Invalid observation interpreter configuration')
-            fields[key] = value.strip()
-    home = fields.get('home')
-    if not home or not Path(home).is_absolute() or Path(home).resolve(strict=True) != interpreter.parent:
-        raise ContractError('Untrusted observation interpreter home')
-    interpreter_links = {path: Path(os.readlink(path)) for path in (venv / 'bin').iterdir()
-                         if path.is_symlink() and path.resolve(strict=True) == interpreter}
-    trusted_observation_tree(venv, links=interpreter_links)
-    trusted_observation_tree(target, links={
-        target / '.venv': venv,
-        target / 'models': base / 'shared/models',
-        target / 'local_inspection_service/data': base / 'shared/data',
-    })
+    # Existing service-owned ancestors are only metadata/data sources. Privileged
+    # imports use an authenticated copy under independently trusted root storage.
+    runtime_storage()
+    trusted_directory(target / 'release/observer_bundle')
     # -I -S ignores Python environment, user site, .pth and sitecustomize.
-    # Only verified fixed site-packages and the immutable package are added. No caller-selected path/module/code is run.
-    code = "import sys,runpy; sys.path.insert(0,'/opt/vantaline/venv/lib/python%d.%d/site-packages'%sys.version_info[:2]); sys.path.insert(0,sys.argv.pop(1)); runpy.run_module('local_inspection_service.runtime.observe_label_runtime',run_name='__main__')"
-    result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(target),
-                             '--release', release, '--commit', commit], cwd=target,
-                            env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'},
-                            capture_output=True, text=True, timeout=45, check=True)
+    # Only the hash-locked immutable bundle and release are added. Service venv code is never imported.
+    code = ("import sys,runpy,pathlib; root=sys.argv.pop(1); "
+            "bundle=pathlib.Path(root)/'release/observer_bundle'; "
+            "sys.path[:0]=[str(bundle),root]; import psycopg,psycopg_binary,typing_extensions; "
+            "assert pathlib.Path(psycopg.__file__).resolve()==bundle/'psycopg/__init__.py'; "
+            "assert pathlib.Path(psycopg_binary.__file__).resolve()==bundle/'psycopg_binary/__init__.py'; "
+            "assert pathlib.Path(typing_extensions.__file__).resolve()==bundle/'typing_extensions.py'; "
+            "assert psycopg.pq.__impl__ == 'binary'; "
+            "runpy.run_module('local_inspection_service.runtime.observe_label_runtime',run_name='__main__')")
+    with observer_snapshot(target, RUNTIME_STORAGE, OBSERVER_EXECUTION_FILES) as snapshot:
+        trusted_observation_tree(snapshot, links={})
+        bundle = snapshot / 'release/observer_bundle'
+        try:
+            verify_observer_bundle(bundle, snapshot / 'release/observer-dependencies.json')
+        except (ObserverBundleError, OSError, ValueError, KeyError, TypeError):
+            raise ContractError('Untrusted observation dependency bundle') from None
+        result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(snapshot),
+                                 '--release', release, '--commit', commit, '--active-root', str(target)], cwd=snapshot,
+                                env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PSYCOPG_IMPL': 'binary'},
+                                capture_output=True, text=True, timeout=45, check=True)
+    if (not current.is_symlink() or current.lstat().st_uid != 0
+            or current.resolve(strict=True) != target or RuntimeTransition.identity(target) != identity):
+        raise ContractError('Runtime observation generation changed')
     if len(result.stdout) > 65536:
         raise ContractError('Invalid runtime observation response')
     value = json.loads(result.stdout)

@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import stat
 import time
 
 from .configuration import private_bytes
@@ -12,6 +13,22 @@ from .configuration_contract import CONFIGURATION_LIMIT, CONFIGURATION_ENVIRONME
 from .label_identity import read_identity, RuntimeUnavailable
 from .label_observation import read_observation, observe_progress
 from ..storage.postgres_runtime_repository import PostgresRuntimeRepository
+
+
+def observation_object(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as handle:
+        info = os.fstat(handle.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o022):
+            raise RuntimeUnavailable('Runtime observation identity unavailable')
+        data = handle.read(16384 + 1)
+    if len(data) > 16384:
+        raise RuntimeUnavailable('Runtime observation identity unavailable')
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        raise RuntimeUnavailable('Runtime observation identity unavailable')
+    return value
 
 
 @contextmanager
@@ -41,6 +58,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--commit", required=True)
     parser.add_argument("--release", required=True)
+    parser.add_argument("--active-root")
     args = parser.parse_args(argv)
     stage = "root"
     try:
@@ -48,6 +66,13 @@ def main(argv=None):
         if os.geteuid() != 0:
             raise RuntimeUnavailable("Root observation required")
         root = Path(__file__).resolve().parents[2]
+        if args.active_root is not None:
+            active = Path('/opt/vantaline/releases') / args.release
+            if args.active_root != str(active):
+                raise RuntimeUnavailable("Runtime observation identity mismatch")
+            root = active  # Identity data only; imported code remains in the root-private snapshot.
+
+
         stage = "configuration_read"
         config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                            owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
@@ -55,7 +80,7 @@ def main(argv=None):
         revision = configuration_validate(config)
         stage = "identity"
         identity = read_identity(root, current=Path("/opt/vantaline/current"),
-                                 configuration_revision=lambda: revision)
+                                 configuration_revision=lambda: revision, object_reader=observation_object)
         if identity is None or identity.commit != args.commit or identity.release != args.release:
             raise RuntimeUnavailable("Runtime observation identity mismatch")
         # This short-lived process consumes captured libpq defaults, never Web globals.
@@ -81,7 +106,8 @@ def main(argv=None):
                                  owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
         stage = "final_identity"
         final_identity = read_identity(root, current=Path("/opt/vantaline/current"),
-                                       configuration_revision=lambda: configuration_validate(final_config))
+                                       configuration_revision=lambda: configuration_validate(final_config),
+                                       object_reader=observation_object)
         if final_identity != identity or time.monotonic() >= deadline:
             raise RuntimeUnavailable("Runtime observation generation changed")
         result = progress.after
@@ -96,16 +122,23 @@ def main(argv=None):
         return 0
     except Exception as error:
         # Emit only fixed classifications, never exception text or configuration.
-        reason = {"28000": "database_authentication", "28P01": "database_authentication",
-                  "3D000": "database_missing", "42501": "database_permission"}.get(
-                      getattr(error, "sqlstate", None), "unavailable")
+        reason = "unavailable"
+        try:
+            sqlstate = getattr(error, "sqlstate", None)
+            details = error.args
+        except Exception:
+            sqlstate, details = None, ()
+        if type(sqlstate) is str:
+            reason = {"28000": "database_authentication", "28P01": "database_authentication",
+                      "3D000": "database_missing", "42501": "database_permission"}.get(
+                          sqlstate, "unavailable")
         # libpq connection failures may omit SQLSTATE. Match fixed tokens only;
-        # the message itself must never reach stdout/stderr.
-        if stage == "database_connect" and error.args and isinstance(error.args[0], str):
+        # malformed exception metadata must not escape the redaction boundary.
+        if stage == "database_connect" and type(details) is tuple and details and type(details[0]) is str:
             for token, category in (("Peer authentication failed", "database_peer_authentication"),
                                     ("password authentication failed", "database_authentication"),
                                     ("no password supplied", "database_password_missing")):
-                if token in error.args[0]:
+                if token in details[0]:
                     reason = category
                     break
         print(f"Runtime database observation stage={stage} reason={reason}", file=sys.stderr)

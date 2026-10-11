@@ -28,14 +28,17 @@ class LabelRuntimeIdentity:
 
 
 def read_identity(root: Path, *, current: Path | None = None,
-                  configuration_revision: Callable[[], str] | None = None) -> LabelRuntimeIdentity | None:
+                  configuration_revision: Callable[[], str] | None = None,
+                  object_reader: Callable[[Path], dict] | None = None) -> LabelRuntimeIdentity | None:
     path = root / "RUNTIME_TOPOLOGY.json"
     if not path.exists():
         # Source checkout; managed production packages always contain the manifest.
         return None
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-        version = json.loads((root / "VERSION.json").read_text(encoding="utf-8"))
+        manifest = (object_reader(path) if object_reader is not None else
+                    json.loads(path.read_text(encoding="utf-8")))
+        version = (object_reader(root / "VERSION.json") if object_reader is not None else
+                   json.loads((root / "VERSION.json").read_text(encoding="utf-8")))
         commit = version["git_commit"]
         LabelRuntimeIdentity(commit, version["release"], "embedded")  # Validate version fields before config access.
         embedded = {"schema": 1, "git_commit": commit, "worker_mode": "embedded", "services": ["vantaline"]}

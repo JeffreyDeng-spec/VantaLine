@@ -1,0 +1,48 @@
+name: Observe installed runtime without deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vantaline-production
+  cancel-in-progress: false
+
+jobs:
+  installed-runtime-observation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_USER: ${{ secrets.PROD_SSH_USER }}
+      EXPECTED_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Configure pinned SSH identity for read-only runtime observation
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' '${{ secrets.PROD_SSH_PRIVATE_KEY }}' > ~/.ssh/vantaline_deploy
+          chmod 600 ~/.ssh/vantaline_deploy
+          printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Observe installed exact runtime without deployment
+        run: |
+          identity="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
+            | python3 -c 'import json,re,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1]; assert re.fullmatch(r"v[0-9]{4}\.[0-9]{2}\.[0-9]+", d["release"]); print(d["release"], d["git_commit"])' "$EXPECTED_COMMIT")"
+          read -r observed_release observed_commit <<< "$identity"
+          executing_installer_sha="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" sha256sum /usr/local/sbin/vantaline-install-release | awk '{print $1}')"
+          [[ "$executing_installer_sha" =~ ^[0-9a-f]{64}$ ]]
+          printf 'executing_installer_sha256=%s\n' "$executing_installer_sha"
+          printf 'observed_release=%s\nobserved_commit=%s\n' "$observed_release" "$observed_commit"
+          timeout 120 ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            sudo /usr/local/sbin/vantaline-install-release \
+              --observe-runtime --release "$observed_release" --commit "$observed_commit"
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]; print(json.dumps({"observed_git_commit":d["git_commit"],"observed_release":d["release"],"consistent":True}))' "$observed_commit" "$observed_release"

@@ -97,7 +97,8 @@ def verify(manifest):
     inventory = [{'run':e['run'], 'env':e['env'], 'cwd':e['cwd']} for e in manifest['checks']+manifest['performance']]
     # PyYAML is part of the unchanged production lock, not needed by the gate.
     import yaml
-    for name in ('ci.yml', 'backend-performance.yml', 'release-production.yml'):
+    for name in ('ci.yml', 'backend-performance.yml', 'release-production.yml',
+                 'ci-dependencies.yml', 'observe-runtime.yml'):
         validate_workflow_trigger((ROOT/'.github/workflows'/name).read_text())
     workflow = yaml.safe_load((ROOT/'.github/workflows/ci.yml').read_text())
     validate_reuse_bootstrap(workflow)
@@ -105,8 +106,7 @@ def verify(manifest):
     assert shards['strategy']['matrix']['shard'] == list(range(12))
     assert shards['strategy']['fail-fast'] is False
     assert shards['strategy']['max-parallel'] == 12
-    pr_trigger = workflow.get('on', workflow.get(True, {})).get('pull_request')
-    assert pr_trigger is None or isinstance(pr_trigger, dict) and 'paths' not in pr_trigger
+    validate_manual_triggers(workflow)
     for name in ['artifact-storage','doc-image-runtime','source-safety','release-package',
                  'documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance']:
         assert workflow['jobs'][name]['needs'] == ['ci-mode']
@@ -115,14 +115,15 @@ def verify(manifest):
     gate_job = workflow['jobs']['backend-plc']
     assert gate_job['needs'] == ['ci-mode','backend-shards','artifact-storage','doc-image-runtime','source-safety','release-package','documentation','frontend','codex-comparison','frontend-build','backend-performance','manual-history-performance'] and gate_job['if'] == 'always()'
     performance = yaml.safe_load((ROOT/'.github/workflows/backend-performance.yml').read_text())
-    triggers = performance.get('on', performance.get(True))
-    assert triggers['schedule'] == [{'cron': '0 19 * * *'}]
+    validate_manual_triggers(performance)
+    dependencies = yaml.safe_load((ROOT/'.github/workflows/ci-dependencies.yml').read_text())
+    validate_manual_triggers(dependencies)
+    assert dependencies['jobs']['prepare']['if'] == "github.ref == 'refs/heads/main'"
+    observation = yaml.safe_load((ROOT/'.github/workflows/observe-runtime.yml').read_text())
+    validate_manual_triggers(observation)
+    assert observation['jobs']['installed-runtime-observation']['if'] == "github.event_name == 'workflow_dispatch'"
     release = yaml.safe_load((ROOT/'.github/workflows/release-production.yml').read_text())
-    release_triggers = release.get('on', release.get(True))
-    assert release_triggers['workflow_run']['workflows'] == ['CI']
-    for predicate in ("conclusion == 'success'","head_branch == 'main'","event == 'push'",'head_sha == github.sha'):
-        assert predicate in release['jobs']['release']['if']
-    assert release['concurrency']['cancel-in-progress'] is False
+    validate_release_policy(release)
     for item in inventory:
         subprocess.run(['bash', '-n', '-c', item['run']], check=True)
     print(f"Coverage: {len(manifest['checks'])} ordinary commands + 6 unchanged benchmark protocols; 12 isolated shards.")
@@ -132,6 +133,35 @@ def validate_workflow_trigger(source):
     import yaml
     keys = yaml.load(source, Loader=yaml.BaseLoader)
     assert 'on' in keys and 'true' not in keys, 'workflow trigger must be literal on key'
+
+
+def validate_manual_triggers(workflow):
+    triggers = workflow.get('on', workflow.get(True))
+    assert isinstance(triggers, dict) and set(triggers) == {'workflow_dispatch'}, 'automatic triggers remain paused'
+
+
+def validate_release_policy(release):
+    triggers = release.get('on', release.get(True))
+    assert set(triggers) == {'push', 'workflow_dispatch'}
+    assert triggers['push'] == {'branches': ['main']} and triggers['workflow_dispatch'] is None
+    job = release['jobs']['release']
+    assert job['if'] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert job['env']['RELEASE_SHA'] == '${{ github.sha }}'
+    assert release['concurrency']['cancel-in-progress'] is False
+    assert release['jobs']['observer-environment-diagnostics']['if'] == "github.event_name == 'workflow_dispatch'"
+    names = [step.get('name') for step in job['steps']]
+    assert names.count('Reject a superseded main commit before packaging') == 1
+    guard_index = names.index('Reject a superseded main commit before packaging')
+    guard = job['steps'][guard_index]
+    assert guard['env'] == {'GH_TOKEN': '${{ github.token }}'}
+    assert guard['run'] == ('current_main=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)\n'
+                            'test "$current_main" = "$RELEASE_SHA"\n')
+    assert 'if' not in guard and 'continue-on-error' not in guard
+    for name in ('Verify and package immutable release', 'Upload and deploy exact release',
+                 'Publish successful GitHub Release'):
+        assert names.count(name) == 1 and guard_index < names.index(name)
+    assert 'Check read-only observer environment before deployment' not in names
+    assert 'Observe accepted runtime database heartbeats' not in names
 
 
 def validate_reuse_bootstrap(workflow):

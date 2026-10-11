@@ -1130,6 +1130,191 @@ class RuntimeTransition:
         self.data['phase'] = 'rolled_back'
         self.save()
 
+# Source: scripts/observer_bundle_contract.py
+"""Stdlib-only trust contract for the immutable observer dependency bundle."""
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import platform
+import re
+import stat
+import sys
+
+
+class ObserverBundleError(RuntimeError):
+    pass
+
+
+def observer_json(path):
+    def unique(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ObserverBundleError('Duplicate observer metadata key')
+            result[key] = value
+        return result
+    try:
+        with Path(path).open('rb') as handle:
+            raw = handle.read(1024*1024 + 1)
+        if len(raw) > 1024*1024:
+            raise ObserverBundleError('Observer metadata too large')
+        value = json.loads(raw, object_pairs_hook=unique)
+        if not isinstance(value, dict):
+            raise ObserverBundleError('Invalid observer metadata')
+        return value
+    except (ValueError, UnicodeError, TypeError):
+        raise ObserverBundleError('Invalid observer metadata') from None
+
+
+def observer_runtime_compatible():
+    try:
+        libc = os.confstr('CS_GNU_LIBC_VERSION').split()
+        version = tuple(int(v) for v in libc[1].split('.'))
+        return (sys.platform == 'linux' and platform.machine() == 'x86_64'
+                and sys.implementation.name == 'cpython'
+                and sys.implementation.cache_tag == 'cpython-310'
+                and sys.version_info[:2] == (3, 10)
+                and libc[0] == 'glibc' and version >= (2, 17))
+    except (AttributeError, OSError, TypeError, ValueError, IndexError):
+        return False
+
+
+def observer_bundle_lock(path):
+    value = observer_json(path)
+    if (set(value) != {'schema', 'python', 'implementation', 'architecture', 'platform', 'wheels'}
+            or type(value['schema']) is not int or value['schema'] != 1
+            or value['python'] != [3, 10] or value['implementation'] != 'cpython'
+            or value['architecture'] != 'x86_64' or value['platform'] != 'linux'
+            or not isinstance(value['wheels'], list) or len(value['wheels']) != 3):
+        raise ObserverBundleError('Invalid observer dependency lock')
+    expected = {'psycopg': '3.3.4', 'psycopg-binary': '3.3.4', 'typing_extensions': '4.15.0'}
+    seen = set()
+    for wheel in value['wheels']:
+        if (not isinstance(wheel, dict) or set(wheel) != {'name', 'version', 'filename', 'sha256', 'url'}
+                or not isinstance(wheel['name'], str) or not isinstance(wheel['version'], str)
+                or wheel['name'] in seen or expected.get(wheel['name']) != wheel['version']
+                or not isinstance(wheel['filename'], str)
+                or not re.fullmatch('[A-Za-z0-9_.-]+\\.whl', wheel['filename'])
+                or not isinstance(wheel['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', wheel['sha256'])
+                or not isinstance(wheel['url'], str)
+                or not wheel['url'].startswith('https://files.pythonhosted.org/packages/')
+                or not wheel['url'].endswith('/' + wheel['filename'])):
+            raise ObserverBundleError('Invalid observer dependency wheel')
+        seen.add(wheel['name'])
+    return value
+
+
+def observer_member_name(name):
+    if not isinstance(name, str):
+        raise ObserverBundleError('Invalid observer bundle member')
+    path = PurePosixPath(name)
+    if (not name or not path.parts or '\\' in name or path.is_absolute()
+            or '..' in path.parts or str(path) != name
+            or name.endswith(('.pth', '.pyc')) or path.name in {'sitecustomize.py', 'usercustomize.py'}):
+        raise ObserverBundleError('Invalid observer bundle member')
+    return path
+
+
+def observer_dependency_member(name):
+    path = observer_member_name(name)
+    allowed = {'psycopg', 'psycopg_binary', 'psycopg_binary.libs', 'typing_extensions.py',
+               'psycopg-3.3.4.dist-info', 'psycopg_binary-3.3.4.dist-info',
+               'typing_extensions-4.15.0.dist-info'}
+    if path.parts[0] not in allowed:
+        raise ObserverBundleError('Unexpected observer dependency')
+    return path
+
+
+def verify_observer_bundle(directory, lock_path, *, require_root=True, require_runtime=True):
+    directory = Path(directory)
+    if require_runtime and not observer_runtime_compatible():
+        raise ObserverBundleError('Unsupported observer runtime')
+    def check(path):
+        info = path.lstat()
+        if (not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode))
+                or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1)
+                or (require_root and (info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022))):
+            raise ObserverBundleError('Untrusted observer dependency code')
+    check(directory)
+    manifest_path = directory/'manifest.json'
+    check(manifest_path)
+    lock = observer_bundle_lock(lock_path)
+    value = observer_json(manifest_path)
+    if (set(value) != {'schema', 'lock_sha256', 'files'} or type(value['schema']) is not int
+            or value['schema'] != 1 or value['lock_sha256'] != hashlib.sha256(Path(lock_path).read_bytes()).hexdigest()
+            or not isinstance(value['files'], dict) or not 1 <= len(value['files']) <= 1000):
+        raise ObserverBundleError('Invalid observer bundle manifest')
+    actual = set()
+    def scan_error(error):
+        raise ObserverBundleError('Observer dependency inventory unavailable') from None
+    for folder, directories, files in os.walk(directory, followlinks=False, onerror=scan_error):
+        for entry in directories + files:
+            path = Path(folder)/entry
+            check(path)
+            if path.is_file():
+                name = path.relative_to(directory).as_posix()
+                if name == 'manifest.json':
+                    continue
+                observer_dependency_member(name)
+                actual.add(name)
+    if actual != set(value['files']):
+        raise ObserverBundleError('Observer bundle members differ')
+    for name, digest in value['files'].items():
+        observer_dependency_member(name)
+        if (not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)
+                or hashlib.sha256((directory/name).read_bytes()).hexdigest() != digest):
+            raise ObserverBundleError('Observer bundle checksum differs')
+    required = {'psycopg/__init__.py', 'psycopg_binary/__init__.py', 'typing_extensions.py'}
+    if not required <= actual:
+        raise ObserverBundleError('Observer dependency missing')
+    return lock
+
+# Source: scripts/release_observer_snapshot.py
+"""Copy only controller-authorized bytes before any privileged observer import."""
+from contextlib import contextmanager
+import hashlib
+import os
+from pathlib import Path
+import stat
+import tempfile
+
+
+
+OBSERVER_EXECUTION_FILES = {'local_inspection_service/runtime/__init__.py': '164ea76c467f692d429c3f730aafe5dfbf1924ba6b75f9da793446e0f7c4a3c4', 'local_inspection_service/runtime/observe_label_runtime.py': 'aef16d78a8d33568571302ca35ada113f3dde70d70422586312d2305f551b529', 'local_inspection_service/runtime/configuration.py': '5a437a320a25e901742e5e612bd266295143465260234de4ee5df3a5bdd78c16', 'local_inspection_service/runtime/configuration_contract.py': 'cfcf617043149e5b22bdf06e7ac323b1a35724d9365213f7dbe0f92a2dd3b6d0', 'local_inspection_service/runtime/label_identity.py': '02da7c6813e5d6d84ec3b0f88deaf4548b2b7c7def988acc0ea1b46e5a1ab9a2', 'local_inspection_service/runtime/label_observation.py': '7b159e7704617970e207ff13a8f95eb88be4e52a3aa3e9c876ea6024523db2b4', 'local_inspection_service/runtime/label_metrics.py': 'c67fe67f6d9c0e3aba4b092d90c1b83109f98173b8733b62c80b65204a173bb8', 'local_inspection_service/storage/__init__.py': 'bada2836cf33eaa3731cdccadbb04caa3103b7eee8b96a3acef9c9f0f63865d9', 'local_inspection_service/storage/label_runtime.py': 'ed4240862c1da69244942adb73e211c581dbf5765ca7771999dc216873f2fd97', 'local_inspection_service/storage/postgres_runtime_repository.py': '2c6b1a53e4d28d3be74c36bb2c8790b1153d28a30d3f1ed400be5a4c3ebca4b3', 'local_inspection_service/storage/schema.py': '0559db07b3f028291664c26db34d89de9453238b792fd96460ac12cd107c7775', 'release/observer-dependencies.json': '07db483237ed752367a6207a215b02dc973ef1f7360857491dcc09a95001a074', 'release/observer_bundle/psycopg-3.3.4.dist-info/METADATA': 'daef30765d48b6c646bffb62457da8e1e969f0ff3bacf563c14da60f185c253d', 'release/observer_bundle/psycopg-3.3.4.dist-info/RECORD': 'e567393f2eca63d6cb810f50a264d1c1a04afdfc838d31a0175cd2f87842be5e', 'release/observer_bundle/psycopg-3.3.4.dist-info/WHEEL': '69e6228a0d35958183cc1812f07c565ce837b95eb51bd8a33acba9fa4f68d6c9', 'release/observer_bundle/psycopg-3.3.4.dist-info/licenses/LICENSE.txt': 'e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118', 'release/observer_bundle/psycopg-3.3.4.dist-info/top_level.txt': '9e9b612b1dbf384a1a86db58a9db083e54548234bf6d00667e90c257141c3c6a', 'release/observer_bundle/psycopg/__init__.py': '5f1607a193cb63e60a0c5687209d2bd0e3029760b9559e9968f31d6b5d82c778', 'release/observer_bundle/psycopg/_acompat.py': '68e10b300b9182d2ee8cb9634e249efd0555c7784e2daafb4151b214ca38951e', 'release/observer_bundle/psycopg/_adapters_map.py': 'd0e206962da1729e95c21b152222a6525b7e309cc35245ce5a7a99248e4f6ed4', 'release/observer_bundle/psycopg/_capabilities.py': '00dc9a63cc9ac76a20494f95f478b69c6aa775728b195574358bc634b7cb70c5', 'release/observer_bundle/psycopg/_cmodule.py': 'd7bb5516799ff9ace28653ae3b4ff51dd3c3b578d435fedbf56a27cda7b40011', 'release/observer_bundle/psycopg/_column.py': '9ba6a71e0b2bc220a1b7cc594b136d3d65a8024f03687839337632ca26c71571', 'release/observer_bundle/psycopg/_compat.py': '69dd27b744a96c908a50e23934c0d3f6737c4f50ac7ec8c1a37a11cb2d3dedca', 'release/observer_bundle/psycopg/_connection_base.py': '7add2044e037e5042f582c2a1436fbb5d00d41db2cea20980d6f270e5469d5e0', 'release/observer_bundle/psycopg/_connection_info.py': '40bfda115d97ffaff560c8a0ce5426447f8b525f9bd241459c93cc2797546b83', 'release/observer_bundle/psycopg/_conninfo_attempts.py': '9e081d1fe49a639f4cf0f2d54bce359ac6b7524acc2ed9b170cc0dd004fec7d3', 'release/observer_bundle/psycopg/_conninfo_attempts_async.py': '7fe10d9b648df37f6f89689c7389cda6abac077eac5cfc58e5320c0c8002eb54', 'release/observer_bundle/psycopg/_conninfo_utils.py': '008bda02cdd0a7c7b029fcfced01ba9fdbbd67da0e862f1089306c799b013575', 'release/observer_bundle/psycopg/_copy.py': '63d3768d0b84fcc2b933e9ee9c9ed9ad1dc6a4b7ce9d49ff2d10b2637e2f70e2', 'release/observer_bundle/psycopg/_copy_async.py': '8cbdbf6f70a00eacefd1691695db72a087be0241b0a1c00f335f179b502b34ae', 'release/observer_bundle/psycopg/_copy_base.py': '20b3dec8f11cb98fb29f388874f1a6440c4ddbeac0e321de28e45895e11bc7fb', 'release/observer_bundle/psycopg/_cursor_base.py': '6aa7e17b57fe37f343809ead45ebba3764666afebfee1517fe930a9ea74186e7', 'release/observer_bundle/psycopg/_dns.py': 'cb875217ac94b534ce620630150cae25872851f0625d94a419e691ab07464625', 'release/observer_bundle/psycopg/_encodings.py': '3078ce9bfef5b9b06f50cf00a78585d5d4d37383ca46f85014874806e260c449', 'release/observer_bundle/psycopg/_enums.py': 'e6009e7ffb187bd51d684e27fd198359e1784df40ec1015e8a48eb933f588af2', 'release/observer_bundle/psycopg/_oids.py': '98923c1db46b4ec6cad0b2209e71b9c4f1fede1c4d51c968b6a52eae6ca8dacd', 'release/observer_bundle/psycopg/_pipeline.py': '1448864658cefa7aee20a61bb7255f6fc49b832c1c377b520789e46cb70e9f1a', 'release/observer_bundle/psycopg/_pipeline_async.py': 'af9c9a8670382419329b1f5352ac1af75994959ca7c0b32a5385fdfa5037c25f', 'release/observer_bundle/psycopg/_pipeline_base.py': '29130f212fd29dbe20271f9f5aab031c21c0af3cb3d82c93e54d8dc86e1e4d48', 'release/observer_bundle/psycopg/_preparing.py': 'd71fba3416f3b95fc1d35a3e6cab454be6e98067c2f16801d91dd06b441c404a', 'release/observer_bundle/psycopg/_py_transformer.py': '1c4c15a30262578fd6ebfbee782d08089103a79d73359d1e1e27d7c719772b78', 'release/observer_bundle/psycopg/_queries.py': 'c217b09decc0c1ca1e6577847f029e8b96a99a5ac4315a81ba026121d4886410', 'release/observer_bundle/psycopg/_server_cursor.py': 'd755e04f921482e123a25012c49df4d5d3ba3581d0b7f85307b6ea51aacfb82b', 'release/observer_bundle/psycopg/_server_cursor_async.py': '00aa44fa3b06443373730acefa3a43311babdd5c0858f36db11691fd864e3c24', 'release/observer_bundle/psycopg/_server_cursor_base.py': '6514d1e38e8899aaf52353949c8db2a43dccb0445d885986433d5ba0dce19cde', 'release/observer_bundle/psycopg/_struct.py': 'c9adfa9064ebd2e1e55f2b53a3b427ff4732d0f951d89f8157ed27a8c51732b7', 'release/observer_bundle/psycopg/_tpc.py': '34b89f229756a6121bc1a04fbcb3d2699ffe0e8b5eebbc94ebb7bd53402891e4', 'release/observer_bundle/psycopg/_transformer.py': '9839012ee4b16d70c6d537243e0232649c74d329f951753c0e5b8e1a61d68c06', 'release/observer_bundle/psycopg/_tstrings.py': '006deaea53336af81fee9d11a090b54b51c277c3d9c8085a57d55f51e9bd6402', 'release/observer_bundle/psycopg/_typeinfo.py': '561535866953c59f90f809054dbf427f5a8f127231e74867b2b83e76e40e076c', 'release/observer_bundle/psycopg/_typemod.py': '519c0715f9d66d7ab167d508541ac9877eb9f7da686406998fae6ff04b1b209b', 'release/observer_bundle/psycopg/_tz.py': 'ffe5b4233b3ce1462b6c06372350a2706524d2783e6e808c668e47e61d23f6e8', 'release/observer_bundle/psycopg/_wrappers.py': 'c0a66dfdaafc42e46010a0bab6ec1a9985c2c01d4fec8650b268187553a50215', 'release/observer_bundle/psycopg/abc.py': 'f12a65c660a801eac16d39c0d9d7ef8a94f0ea68add91b4361636a7e78d77e66', 'release/observer_bundle/psycopg/adapt.py': '7d957b9c6a6a57650ac22c4bbb9d24d5f6ffb20d2e9ba4ae575ac21959f5dfa3', 'release/observer_bundle/psycopg/client_cursor.py': '9d1a376dc91c2a3de764601c5f3aec3cfe3984431f6b195e8159def7031d6b3f', 'release/observer_bundle/psycopg/connection.py': '5dfacd2ef35f748c5a60c07c8bf5d6e6a2fa25438ee1794591b4a4e4e70afd7e', 'release/observer_bundle/psycopg/connection_async.py': '24c8119d6f1b1dce6cfdf24d304760d3d798d9faffade3f379a2ba88ed44ae5d', 'release/observer_bundle/psycopg/conninfo.py': 'bcaab336f7f44e19efe3bdbbf875032a0a771358c34dd8bee9209262ee7f12ec', 'release/observer_bundle/psycopg/copy.py': 'fd5ef68e9d835ebd931ecaa8f52e9c6a1bde328d10b819777e78a0b74ac699b7', 'release/observer_bundle/psycopg/crdb/__init__.py': '674c11bec482fc2a5a38159f5828a5c0fd2c37a037f88561403e5c95d826fdd1', 'release/observer_bundle/psycopg/crdb/_types.py': '113a0c8556624f6e8ade6d46552e6bd0510c3bcf2d0cb8c0ad94421b2382577a', 'release/observer_bundle/psycopg/crdb/connection.py': '32cfafe6e10e7d23962af75c671edddd54d75df8b9a13cbf1a14c22350a0d704', 'release/observer_bundle/psycopg/cursor.py': '9fedba5e8322628df838d749a7f48a7b9082601ab3b4d552ce594c5487f13e0f', 'release/observer_bundle/psycopg/cursor_async.py': '871ee328c590531f6247031d5db0aa6080b0778c76bfe0665ee4816eebf9a300', 'release/observer_bundle/psycopg/dbapi20.py': '650c28c7130ee0e1eeb8b674ea9d7d556809b6615b2d7e58b8b1dbca3345d982', 'release/observer_bundle/psycopg/errors.py': '1ffb960395cc66eb6e5f4702fbaf8f58f48db8c6a84b810c6577a8de1489f2bb', 'release/observer_bundle/psycopg/generators.py': '6edac492cd964b7ffa01220d78ede036b9f2b7715935857b0b06f2602da31c75', 'release/observer_bundle/psycopg/postgres.py': '133982b2b02c0dfc6e0b28f6d28f870d8c39d6de7707fcce96439ca46c0a9137', 'release/observer_bundle/psycopg/pq/__init__.py': '6d3f05b1b5a02896fb0a4fb690c8ae810928f459c355d70426ec1be7448f50e5', 'release/observer_bundle/psycopg/pq/_debug.py': '348ac8fbb809d8efba4a2b71518d07ab5c6ea63c8f248b2a1946e5ce1581586c', 'release/observer_bundle/psycopg/pq/_enums.py': 'fa1a16d893690911b3dfc89a2fd0f44eb740b541c869fb96170252b264722216', 'release/observer_bundle/psycopg/pq/_pq_ctypes.py': '4d69fb3e81431671a930e8193522b32c22fd8ea597da83961e577dbb7701f12f', 'release/observer_bundle/psycopg/pq/_pq_ctypes.pyi': '491623e63ab6804dedc2baabda09ec38bce0a1e92e0349a848a68356395e3baf', 'release/observer_bundle/psycopg/pq/abc.py': '55d9619e21dbc7d550f352290326633c38a6cd278f5c68c35022a2f2e979939b', 'release/observer_bundle/psycopg/pq/misc.py': '429e8247e5b9400b203373b926052b6580cd82fa596c5ca582e94d4a58a365e9', 'release/observer_bundle/psycopg/pq/pq_ctypes.py': 'c0698c4e9298fb8a5bc5eb340d6a061457d01fe657a63b1be4b67eb52de3ea72', 'release/observer_bundle/psycopg/py.typed': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'release/observer_bundle/psycopg/raw_cursor.py': 'b647435931002abf5374de517078483dd01d62c9e0b39a199a642dfb6850c264', 'release/observer_bundle/psycopg/rows.py': '17169a44f5064eacbdebbb528161850f30cac9a7d13b3efb6618eccbed188222', 'release/observer_bundle/psycopg/sql.py': 'bc8899d917741f75680957f87091a7bbbbbd31688c9e4451bc346ca5c0794486', 'release/observer_bundle/psycopg/transaction.py': 'f89cce45506110593f930bc6d5111bced43b122b70266b6b4eb279bba014c8b4', 'release/observer_bundle/psycopg/types/__init__.py': '24f02457811f917c1db2befafd4d43b10575f5cf1a40d481ea482e7786e15de3', 'release/observer_bundle/psycopg/types/array.py': '782f02632086aaf86fdb8b4344a8e4d00a415b896fcb33c564e0526707a13acd', 'release/observer_bundle/psycopg/types/bool.py': 'd062501be0a6e4fe4d807f137cb363f67fdee5c930e365e7b110629d7d24e39c', 'release/observer_bundle/psycopg/types/composite.py': '30baa7be61267ef6999efb70bb33a894bfc3cc3b205225de7a95583a37d3a496', 'release/observer_bundle/psycopg/types/datetime.py': '995763ea19337c146a6260d83317f1b91cedd250e8357b4a657fa5fde101c78b', 'release/observer_bundle/psycopg/types/enum.py': '8886f50774cc27175ba6da9a46fcdbf764b9214e5247463c76f54e922c2ca2e4', 'release/observer_bundle/psycopg/types/hstore.py': '0ad1386aafc27396d5ce3411387ecd1d5e433b12bcf675d3559a253e646b2fb1', 'release/observer_bundle/psycopg/types/json.py': 'c7d429e702d634ba472246f9e510364276e940d7b9579d4ce641dafe82a78daa', 'release/observer_bundle/psycopg/types/multirange.py': '68f454985649bcd358ad6a3c425976403aa7461c729634816e8c451f86a15cdf', 'release/observer_bundle/psycopg/types/net.py': '5e47c666650afd023a9f9afe2b7c9bc5bd4305d78b08a29248b99cf04272f8e4', 'release/observer_bundle/psycopg/types/none.py': '832fce26a13562c949d91222c7412adf1d01f083dfa07f8671cdac40c20ed12c', 'release/observer_bundle/psycopg/types/numeric.py': '7c22180b0eda4b6cc1e6b64e757a9d85126d5472b20eeb18179b5a61787df9fe', 'release/observer_bundle/psycopg/types/numpy.py': '34f2d46c31723632af3533fa761a14bb5abcd2ddde41d1ebae77ad28083c95b8', 'release/observer_bundle/psycopg/types/range.py': '9f393c0e2e8b61340594134fa2cb6cad9707ecc5ab6440dd2379031b35e47bdd', 'release/observer_bundle/psycopg/types/shapely.py': '9efde4ecd69211befd6937417d788d55195bae0a65721ba1b2100bd270a59d29', 'release/observer_bundle/psycopg/types/string.py': '911acad422939a9e2574720ca638e897fda4b1801bfa9c0cbdc6fafd9677fc00', 'release/observer_bundle/psycopg/types/uuid.py': '64e5e3d1bfe2ef25e9f90121dc324b058cd124db2ee33866513064ba551024c2', 'release/observer_bundle/psycopg/version.py': '24b5a8a6b22c0b91d5725ca19fb2f355f56936d65853e5282d0c0018c1019587', 'release/observer_bundle/psycopg/waiting.py': 'a674db1c59f05f48f3865b7dfb51a34ee9e5f595e3011fba1ba1ed4063bbe748', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/METADATA': 'aa15ed5714933c326b24ccf796938f174968e2cb1d35d59656adee697657d437', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/RECORD': 'aa8b16c596a2c0ad50e7ed12e3fad92e5189f313f79f71d10f683c3408b430dc', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/WHEEL': '32b5858b8f01dce1c9d3624e14620a1b01cbb9ee0487f6571dc6a2d522456f1e', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/licenses/LICENSE.txt': 'e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/sboms/auditwheel.cdx.json': '0ef11a2c9fff485348b03b220411b4e7a862cb4e7eda8cd4ffa8fe9e44f2513e', 'release/observer_bundle/psycopg_binary-3.3.4.dist-info/top_level.txt': 'f0e33f3ec01ae682a4cd5bd1bbc9031128a1050a3f2d7ab01bf9eb95e72e6c89', 'release/observer_bundle/psycopg_binary.libs/libcom_err-2abe824b.so.2.1': '5426dcb54dd01c9eedda05e2179f0e47114e8b48a534ffe9e94916e79471b257', 'release/observer_bundle/psycopg_binary.libs/libcrypt-13f4f5d0.so.1': 'a74d1e8438d224e0fff14da0001f5e50129b0d666a103bf981b976770158d106', 'release/observer_bundle/psycopg_binary.libs/libcrypto-e7530dde.so.3': '3761d43a07bc3a119cfce159a0ae50b5fd526bd9db8bf9e87626487d12fc89cd', 'release/observer_bundle/psycopg_binary.libs/libgssapi_krb5-497db0c6.so.2.2': '2a74b0330ee973281b26f8ebe4acef0ebf9ee99c6b68497cf9151fff6c4c34e1', 'release/observer_bundle/psycopg_binary.libs/libk5crypto-b1f99d5c.so.3.1': '9844e5009e70a6ad2fb22b587306810fe2a7b1b9f6b9922daa1c78ba3466de27', 'release/observer_bundle/psycopg_binary.libs/libkeyutils-dfe70bd6.so.1.5': 'c29e41b03cf4b2dffbfb4960946e2b42f82c0ca5d53d231d3f0fc597ba274488', 'release/observer_bundle/psycopg_binary.libs/libkrb5-fcafa220.so.3.3': 'b2aab528ff4cab2144e5ce01b246ac09f574a072a53ff63ea81d6bb29b26b8f1', 'release/observer_bundle/psycopg_binary.libs/libkrb5support-d0bcff84.so.0.1': '6a71f57d748fef79b4e736d5348875545d0a224fa8928b5d62a3cf2647fc109f', 'release/observer_bundle/psycopg_binary.libs/liblber-9320a7df.so.2.0.200': '39df9a3a7d6fb2f3dec38d4892bae83ceb5f4c45fea50ce838f68f23cb0b7eaf', 'release/observer_bundle/psycopg_binary.libs/libldap-fa0f4823.so.2.0.200': '09cd64a08d8ebb3cb3e3f2313f6d6e5ba737e7603c6bb8c3266cd4f4f69689cb', 'release/observer_bundle/psycopg_binary.libs/libpcre-9513aab5.so.1.2.0': '02eda850e04931656d8af81f5171bff74d8bec1553d3d85c3d32d7fc5efe8864', 'release/observer_bundle/psycopg_binary.libs/libpq-2be5f14a.so.5.18': '3918e961944c87346958a1fd8f6618f386af647c080bdda53cea03cb74327e88', 'release/observer_bundle/psycopg_binary.libs/libsasl2-84219a89.so.3.0.0': 'ae3f8967d5fa191dac7c6ae5f9130f659cf2f5cb66b2f7e5c5a1a5a47369fe5a', 'release/observer_bundle/psycopg_binary.libs/libselinux-0922c95c.so.1': 'd4fa8e7fb3add960a68325a59c9694244aea3213fd739a50815cb067c4965654', 'release/observer_bundle/psycopg_binary.libs/libssl-4a840876.so.3': '461301beff504e1f2eb844dcb70de2d986de76cc89e7b6e15b3a68b97187e1ac', 'release/observer_bundle/psycopg_binary/__init__.py': 'e64c70f50767f2e6c88b88a4f769b164eb23af950ed2fc2ae53e52d018425868', 'release/observer_bundle/psycopg_binary/_psycopg.c': 'b97af11e8bf41a283259f61bc5f5735df901d9de9e6b9911e292976eb4f1c928', 'release/observer_bundle/psycopg_binary/_psycopg.cpython-310-x86_64-linux-gnu.so': '811fd85824b333519aa91796c6b13fc0785b0c2b5b3a850aaab0bcf27091315a', 'release/observer_bundle/psycopg_binary/_psycopg.pyi': 'a73de7979c9a0df2221adfd7d678e146faa497bb6b5f9b8256a08517e23c2b97', 'release/observer_bundle/psycopg_binary/_uuid.py': '617c42f49d21719156bc163962925fffb5a9b2d326950db574a320c065bdd5b5', 'release/observer_bundle/psycopg_binary/pq.c': 'b7021f89f02deed2e3b77b226233f57fc2c31f8df5fd1cdab96d5e6ba34f9dd8', 'release/observer_bundle/psycopg_binary/pq.cpython-310-x86_64-linux-gnu.so': 'edf5175081e52a47b4800d713825e73c5430234881e541e1949ce917aeb004b1', 'release/observer_bundle/psycopg_binary/py.typed': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'release/observer_bundle/psycopg_binary/types/numutils.c': '29649e3489fd46dd585e1d1bd36b394211385f34e000c1b1f991b1f4012d43e2', 'release/observer_bundle/psycopg_binary/version.py': '01c85c2d67e86b2f74da6acfde3d50cb79d0d85e503b3348bfc632d0d77016b7', 'release/observer_bundle/typing_extensions-4.15.0.dist-info/METADATA': 'c138378fe8f18934ac99de060535c53ec6c13aeed65e94c32641da7ee3192a72', 'release/observer_bundle/typing_extensions-4.15.0.dist-info/RECORD': 'd115b31bd342e1ffe5c3e13291f1b633969390e029b9f64f8ddbcc9883feef3a', 'release/observer_bundle/typing_extensions-4.15.0.dist-info/WHEEL': '1b68144734c4b66791f27add5d425f3620775585718a03d0f9b110ba3a4d88db', 'release/observer_bundle/typing_extensions-4.15.0.dist-info/licenses/LICENSE': '3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf', 'release/observer_bundle/typing_extensions.py': '433d11d170d3a24d2eb065ebc1bfe848cea7e3d7ce68567ab52bea2d4c2f7ed8', 'release/observer_bundle/manifest.json': '5fa361506956ecebb918c002a21095043e27c51c462ecc838ad046657cb65802'}
+
+
+@contextmanager
+def observer_snapshot(target, storage, expected):
+    if not isinstance(expected, dict) or not expected or len(expected) > 1000:
+        raise ContractError('Missing observation source authorization')
+    # The caller verifies storage and every ancestor; no application-owned code
+    # is imported while reading the candidate files as untrusted data.
+    with tempfile.TemporaryDirectory(prefix='.observer-', dir=storage) as folder:
+        snapshot = Path(folder)
+        for name, digest in expected.items():
+            parts = Path(name).parts
+            if (not parts or Path(name).is_absolute() or '..' in parts
+                    or Path(name).as_posix() != name or '\\' in name
+                    or not isinstance(digest, str) or len(digest) != 64):
+                raise ContractError('Invalid observation source authorization')
+            source = target / name
+            descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(descriptor, 'rb') as handle:
+                info = os.fstat(handle.fileno())
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0
+                        or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o022):
+                    raise ContractError('Untrusted observation source data')
+                data = handle.read(20 * 1024 * 1024 + 1)
+            if len(data) > 20 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
+                raise ContractError('Observation source authorization mismatch')
+            destination = snapshot / name
+            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with destination.open('xb') as handle:
+                os.fchmod(handle.fileno(), 0o600)
+                handle.write(data)
+        yield snapshot
+
 # Source: scripts/release_runtime_main.py
 """Private dispatch embedded into the standalone installer; never imported by Web."""
 import sys
@@ -1200,8 +1385,6 @@ def observe_runtime(release, commit):
         raise ContractError('Invalid runtime observation request')
     base = Path('/opt/vantaline')
     target = base / 'releases' / release
-    for path in reversed(target.parents):
-        trusted_directory(path)
     current = base / 'current'
     if (not current.is_symlink() or current.lstat().st_uid != 0
             or current.resolve(strict=True) != target):
@@ -1210,48 +1393,41 @@ def observe_runtime(release, commit):
     identity = RuntimeTransition.identity(target)
     if identity['topology']['commit'] != commit or not identity['topology']['runtime_protocol']:
         raise ContractError('Runtime observation identity mismatch')
-    venv = base / 'venv'
-    executable = venv / 'bin/python'
+    executable = Path('/usr/bin/python3')
     interpreter = executable.resolve(strict=True)
-    if interpreter != Path('/usr/bin/python3').resolve(strict=True):
-        raise ContractError('Untrusted observation base interpreter')
     for path in reversed(interpreter.parents):
         trusted_directory(path)
     info = interpreter.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
         raise ContractError('Untrusted observation interpreter')
-    configuration = venv / 'pyvenv.cfg'
-    info = configuration.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
-        raise ContractError('Untrusted observation interpreter configuration')
-    if info.st_size > 4096:
-        raise ContractError('Invalid observation interpreter configuration')
-    fields = {}
-    for line in configuration.read_text(encoding='utf-8').splitlines():
-        if '=' in line:
-            key, value = line.split('=', 1)
-            key = key.strip()
-            if key in fields:
-                raise ContractError('Invalid observation interpreter configuration')
-            fields[key] = value.strip()
-    home = fields.get('home')
-    if not home or not Path(home).is_absolute() or Path(home).resolve(strict=True) != interpreter.parent:
-        raise ContractError('Untrusted observation interpreter home')
-    interpreter_links = {path: Path(os.readlink(path)) for path in (venv / 'bin').iterdir()
-                         if path.is_symlink() and path.resolve(strict=True) == interpreter}
-    trusted_observation_tree(venv, links=interpreter_links)
-    trusted_observation_tree(target, links={
-        target / '.venv': venv,
-        target / 'models': base / 'shared/models',
-        target / 'local_inspection_service/data': base / 'shared/data',
-    })
+    # Existing service-owned ancestors are only metadata/data sources. Privileged
+    # imports use an authenticated copy under independently trusted root storage.
+    runtime_storage()
+    trusted_directory(target / 'release/observer_bundle')
     # -I -S ignores Python environment, user site, .pth and sitecustomize.
-    # Only verified fixed site-packages and the immutable package are added. No caller-selected path/module/code is run.
-    code = "import sys,runpy; sys.path.insert(0,'/opt/vantaline/venv/lib/python%d.%d/site-packages'%sys.version_info[:2]); sys.path.insert(0,sys.argv.pop(1)); runpy.run_module('local_inspection_service.runtime.observe_label_runtime',run_name='__main__')"
-    result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(target),
-                             '--release', release, '--commit', commit], cwd=target,
-                            env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'},
-                            capture_output=True, text=True, timeout=45, check=True)
+    # Only the hash-locked immutable bundle and release are added. Service venv code is never imported.
+    code = ("import sys,runpy,pathlib; root=sys.argv.pop(1); "
+            "bundle=pathlib.Path(root)/'release/observer_bundle'; "
+            "sys.path[:0]=[str(bundle),root]; import psycopg,psycopg_binary,typing_extensions; "
+            "assert pathlib.Path(psycopg.__file__).resolve()==bundle/'psycopg/__init__.py'; "
+            "assert pathlib.Path(psycopg_binary.__file__).resolve()==bundle/'psycopg_binary/__init__.py'; "
+            "assert pathlib.Path(typing_extensions.__file__).resolve()==bundle/'typing_extensions.py'; "
+            "assert psycopg.pq.__impl__ == 'binary'; "
+            "runpy.run_module('local_inspection_service.runtime.observe_label_runtime',run_name='__main__')")
+    with observer_snapshot(target, RUNTIME_STORAGE, OBSERVER_EXECUTION_FILES) as snapshot:
+        trusted_observation_tree(snapshot, links={})
+        bundle = snapshot / 'release/observer_bundle'
+        try:
+            verify_observer_bundle(bundle, snapshot / 'release/observer-dependencies.json')
+        except (ObserverBundleError, OSError, ValueError, KeyError, TypeError):
+            raise ContractError('Untrusted observation dependency bundle') from None
+        result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(snapshot),
+                                 '--release', release, '--commit', commit, '--active-root', str(target)], cwd=snapshot,
+                                env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PSYCOPG_IMPL': 'binary'},
+                                capture_output=True, text=True, timeout=45, check=True)
+    if (not current.is_symlink() or current.lstat().st_uid != 0
+            or current.resolve(strict=True) != target or RuntimeTransition.identity(target) != identity):
+        raise ContractError('Runtime observation generation changed')
     if len(result.stdout) > 65536:
         raise ContractError('Invalid runtime observation response')
     value = json.loads(result.stdout)

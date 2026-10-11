@@ -1,6 +1,7 @@
 name: Release and deploy production
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -12,6 +13,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  observer-environment-diagnostics:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
+      PROD_USER: ${{ secrets.PROD_SSH_USER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned SSH identity for read-only diagnostics
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' '${{ secrets.PROD_SSH_PRIVATE_KEY }}' > ~/.ssh/vantaline_deploy
+          chmod 600 ~/.ssh/vantaline_deploy
+          printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Diagnose fixed observer environment without deployment
+        run: |
+          timeout 60 ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            /usr/bin/python3 -I -S -B - < scripts/diagnose_observer_environment.py
+      - name: Read live runtime status without deployment
+        run: |
+          timeout 40 ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            /usr/bin/python3 -I -S -B - < scripts/diagnose_live_runtime.py
   release:
     if: >-
       github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -94,6 +122,14 @@ jobs:
           chmod 600 ~/.ssh/vantaline_deploy
           printf '%s\n' '${{ secrets.PROD_SSH_KNOWN_HOSTS }}' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+      - name: Record current release and installer provenance
+        run: |
+          executing_installer_sha="$(ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" sha256sum /usr/local/sbin/vantaline-install-release | awk '{print $1}')"
+          [[ "$executing_installer_sha" =~ ^[0-9a-f]{64}$ ]]
+          printf 'executing_installer_sha256=%s\n' "$executing_installer_sha"
+          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
+            curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True; print(json.dumps({"prior_git_commit":d["git_commit"],"prior_release":d["release"],"consistent":True}))'
       - name: Upload and deploy exact release
         run: |
           artifact="release-output/$RELEASE_ID.tar.gz"
