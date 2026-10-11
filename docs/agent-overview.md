@@ -1,17 +1,4 @@
-> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
-> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
-> GitHub Actions. Automated correctness, safety, migration, compatibility and
-> performance tests are not being executed; no test-evidence reuse or CI-success
-> claim applies. After the release-trigger PR is merged, main pushes directly
-> trigger immutable production packaging/deployment. Package integrity, installer
-> health and exact `/api/version` remain required. The owner explicitly removed
-> both the workflow observer-environment preflight and separate post-install
-> heartbeat observation. Neither observation success nor environment repair is
-> claimed. This temporary exception supersedes CI-required rollout descriptions
-> below; it does not authorize disabling deployment acceptance. Main's three CI
-> status requirements must be explicitly paused separately before untested PRs can
-> merge; other branch protection remains in place. Restore the workflows, trigger
-> and status requirements together before claiming normal CI has resumed.
+> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger immutable production packaging/deployment. Record available focused local checks and state that CI was skipped. Package integrity, installer acceptance, exact `/api/version` and whole-release rollback remain required. Preserve the separately owner-authorized omission of workflow observer preflight and post-install heartbeat observation; do not claim either observation or environment repair succeeded. This policy supersedes older CI-required or temporary-pause descriptions below.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
@@ -32,7 +19,7 @@ Edge/Chrome React UI ──HTTPS──> FastAPI ──> PostgreSQL/runtime stora
        │ camera                         │ detection/model workers
        └─ Web Serial v4 ──> local PLC  └─ immutable audit/dispatch plan
 
-GitHub PR → required CI → main → immutable release → production → /api/version
+GitHub PR → main (owner-authorized CI bypass) → immutable release → production → /api/version
 ```
 
 The browser owns camera capture and physical serial I/O. FastAPI authenticates, authorizes, generates immutable PLC frames/plans, and records browser evidence. PostgreSQL owns shared records and workstation identity/configuration. Production source is never edited in place.

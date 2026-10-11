@@ -1,18 +1,4 @@
-> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
-> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
-> GitHub Actions. Their push, PR and schedule triggers are also removed; only
-> manually dispatched recovery remains in source. Automated correctness, safety, migration, compatibility and
-> performance tests are not being executed; no test-evidence reuse or CI-success
-> claim applies. After the release-trigger PR is merged, main pushes directly
-> trigger immutable production packaging/deployment. Package integrity, installer
-> health and exact `/api/version` remain required. The owner explicitly removed
-> both the workflow observer-environment preflight and separate post-install
-> heartbeat observation. Neither observation success nor environment repair is
-> claimed. This temporary exception supersedes CI-required rollout descriptions
-> below; it does not authorize disabling deployment acceptance. Main's three CI
-> status requirements must be explicitly paused separately before untested PRs can
-> merge; other branch protection remains in place. Restore the workflows, trigger
-> and status requirements together before claiming normal CI has resumed.
+> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger immutable production packaging/deployment. Record available focused local checks and state that CI was skipped. Package integrity, installer acceptance, exact `/api/version` and whole-release rollback remain required. Preserve the separately owner-authorized omission of workflow observer preflight and post-install heartbeat observation; do not claim either observation or environment repair succeeded. This policy supersedes older CI-required or temporary-pause descriptions below.
 
 The owner-authorized release workflow omits the observer-environment preflight
 before deployment. It uploads one immutable main-SHA package, verifies the archive
@@ -2053,3 +2039,5 @@ Manual artifacts use an attempt-specific name, and their creation time must fall
 Zero-byte logs are valid only for fixed silent Git preparation checks `check-298` and `check-299`, with the empty-content SHA-256. They do not waive numeric performance, actual artifact provenance or production runtime observation. Invalid evidence still falls back to complete CI.
 
 The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.
+
+When rolling out a real-photo localization prompt refinement, preserve prior boxes and screening evidence. The changed prompt hash requires a new prefix only when a new annotation is requested. Explicitly reannotate affected photos from the frontend, then complete whole-image screening; do not reuse old approval for the new version or lower the 20-real-image gate. Roll back the complete immutable release while retaining all versions; never replay uncertain paid calls.
