@@ -3222,3 +3222,7 @@ stages and SQLSTATE classification do not expose driver/configuration secrets.
 The real PostgreSQL observer smoke retains read-only, snapshot and progress gates.
 
 Review workflow PostgreSQL fixtures assert four five-image chunks covering the frozen twenty originals exactly once, retained arrival/version boundaries and no training after an incomplete chunk. Reviewer tests verify private tool content is discarded by progress classification and failure elapsed time is receipted after expiry without a second invocation or invented usage. Fixtures do not replace an actual released frontend recovery and completed private-image CLI screening.
+
+Actual PostgreSQL regressions in tests/test_real_photo_workflow.py cover completed rechecks being pruned while changed versions are still reviewed, explicit frontend-service recovery retaining one exact frozen queued train, no duplicate screening/assessment/training, restored next increment and successful train claim. Cancelled or mismatched fingerprints remain blocked. These orchestration tests do not certify visual accuracy; real CLI screening and GPU closure remain separate evidence.
+
+The strict integration source replay binds the completed-review recovery workflow to one exact descendant hash while preserving the immutable #302 workflow/worker checkpoint and all earlier source assertions. Unknown workflow changes still fail; focused scheduling tests establish the new behavior independently.

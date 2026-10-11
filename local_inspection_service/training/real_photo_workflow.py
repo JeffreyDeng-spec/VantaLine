@@ -28,7 +28,12 @@ def schedule(repo, owner, task):
         current = state.get('round')
         if not current:
             trigger=state.get('review_trigger',20)
-            rechecks=set(state.get('recheck_sample_ids',[]))
+            # Successful chunks survive explicit recovery of an incomplete round.
+            # Their old recheck flags must not create another paid review or pause.
+            rechecks={s['sample_id'] for s in state['samples']
+                      if s['sample_id'] in state.get('recheck_sample_ids',[])
+                      and s.get('review',{}).get('key')!=review_key(s,state['classes'])}
+            state['recheck_sample_ids']=[sid for sid in state.get('recheck_sample_ids',[]) if sid in rechecks]
             if len(state['samples']) < trigger and not rechecks:return
             # Freeze at the cumulative trigger, before labels settle. Later arrivals
             # cannot enlarge this cohort or keep it waiting indefinitely.
@@ -39,6 +44,17 @@ def schedule(repo, owner, task):
             new=[s for s in state['samples'] if s['sample_id'] in scope|rechecks
                  and s.get('review',{}).get('key')!=review_key(s,state['classes'])]
             if not new:
+                # Frontend restart resets the trigger to today's candidate count.
+                # Retain an already frozen, still pending training job; do not
+                # replace its membership or repeat its completed assessment.
+                if state.get('assessment',{}).get('action')=='train' and state.get('last_dataset_fingerprint'):
+                    c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='train' AND status IN ('queued','running')",
+                              (owner,task))
+                    if any(j['fingerprint']==state['last_dataset_fingerprint'] and j['epoch']==state['epoch']
+                           for j in repo.rows(c)):
+                        state['review_trigger']=max(trigger,state.get('reviewed_candidate_count',trigger)
+                                                    +state['assessment']['next_increment'])
+                        return
                 state['pause_reason']='没有新增有效标注可审核；请处理标注失败或补充实拍'
                 return
             current={'id':uuid.uuid4().hex,'candidate_count':cutoff,'review_jobs':[],
