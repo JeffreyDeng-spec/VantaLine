@@ -46,6 +46,7 @@ release_script_diff = subprocess.run(
      "scripts/build_release_artifact.py", "scripts/install_release.sh",
      "scripts/render_release_installer.py", "scripts/"+TEMPLATE,
      "scripts/build_observer_bundle.py", "scripts/observer_bundle_contract.py", "release/observer-dependencies.json",
+     "release/observer-bundle-files.json",
      CONFIGURATION_SOURCE, *OBSERVATION_SOURCES, *("scripts/"+name for name in SOURCES)],
     cwd=root, check=False,
 )

@@ -48,7 +48,10 @@ def build_observer_bundle(output, lock_path):
                 destination.write_bytes(data)
                 files[name] = hashlib.sha256(data).hexdigest()
     manifest = {'schema': 1, 'lock_sha256': hashlib.sha256(lock_path.read_bytes()).hexdigest(), 'files': files}
-    (output/'manifest.json').write_text(json.dumps(manifest, sort_keys=True, indent=2)+'\n', encoding='utf8')
+    authorization = json.loads(lock_path.with_name('observer-bundle-files.json').read_bytes())
+    if manifest != authorization:
+        raise RuntimeError('Observer wheel bytes differ from authorized inventory')
+    (output/'manifest.json').write_bytes((json.dumps(manifest, sort_keys=True, indent=2)+'\n').encode('utf8'))
     verify_observer_bundle(output, lock_path, require_root=False, require_runtime=False)
     return manifest
 

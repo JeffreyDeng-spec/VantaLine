@@ -154,8 +154,11 @@ class ObservationEntryTests(unittest.TestCase):
         regular = SimpleNamespace(st_uid=0, st_mode=stat.S_IFREG | 0o755, st_size=32)
         output = io.StringIO()
         target = Path('/opt/vantaline/releases') / self.release
+        snapshot = Path('/var/lib/vantaline-release/.observer-synthetic')
         with patch.object(cli.os, 'geteuid', return_value=0, create=True), \
                 patch.object(cli, 'trusted_directory'), patch.object(cli, 'trusted_observation_tree') as tree, \
+                patch.object(cli, 'runtime_storage'), \
+                patch.object(cli, 'observer_snapshot', return_value=contextlib.nullcontext(snapshot)) as snapshot_copy, \
                 patch.object(cli, 'verify_observer_bundle', side_effect=bundle_failure) as bundle, \
                 patch.object(Path, 'is_symlink', return_value=True), \
                 patch.object(Path, 'resolve', side_effect=lambda item, **kwargs: target if item.as_posix() == '/opt/vantaline/current' else Path('/usr/bin') if item.as_posix() == '/usr/bin' else Path('/usr/bin/python3'), autospec=True), \
@@ -171,7 +174,8 @@ class ObservationEntryTests(unittest.TestCase):
                 if bundle_failure is not None:
                     run.assert_not_called()
                 raise
-            bundle.assert_called_once_with(target/'release/observer_bundle', target/'release/observer-dependencies.json')
+            bundle.assert_called_once_with(snapshot/'release/observer_bundle', snapshot/'release/observer-dependencies.json')
+            snapshot_copy.assert_called_once_with(target, cli.RUNTIME_STORAGE, cli.OBSERVER_EXECUTION_FILES)
         return json.loads(output.getvalue()), run.call_args, tree.call_args_list
 
     def test_fixed_child_isolated_imports_environment_timeout_and_trees(self):
@@ -184,13 +188,15 @@ class ObservationEntryTests(unittest.TestCase):
         self.assertTrue(call.kwargs['check'])
         self.assertEqual(call.args[0][:5], ['/usr/bin/python3', '-I', '-S', '-B', '-c'])
         self.assertEqual([row.args[0].as_posix() for row in trees],
-                         ['/opt/vantaline/releases/v2026.10.1'])
+                         ['/var/lib/vantaline-release/.observer-synthetic'])
         self.assertIn('observe_label_runtime', call.args[0][5])
         self.assertIn("sys.path[:0]=[str(bundle),root]", call.args[0][5])
         self.assertIn("psycopg.pq.__impl__ == 'binary'", call.args[0][5])
         self.assertIn("psycopg_binary.__file__", call.args[0][5])
         self.assertNotIn('/opt/vantaline/venv', call.args[0][5])
-        self.assertEqual(call.args[0][-4:], ['--release', self.release, '--commit', self.commit])
+        self.assertEqual(call.args[0][-6:], ['--release', self.release, '--commit', self.commit,
+                                           '--active-root', '/opt/vantaline/releases/' + self.release])
+        self.assertEqual(call.kwargs['cwd'], Path('/var/lib/vantaline-release/.observer-synthetic'))
 
     def test_invalid_bundle_fails_before_child(self):
         for error in (cli.ObserverBundleError('synthetic-secret'), TypeError('synthetic-secret'), OSError('synthetic-secret')):

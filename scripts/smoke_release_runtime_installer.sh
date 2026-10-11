@@ -35,7 +35,9 @@ if [[ "$scenario" == managed_observe_* ]]; then
 fi
 mount -t tmpfs -o size=3G,mode=0755 tmpfs /opt
 mount -t tmpfs -o size=16M tmpfs /usr/local/sbin
-mount -t tmpfs -o size=16M,mode=0755 tmpfs /var/lib
+# The authenticated observation snapshot contains about 20 MiB of actual
+# binary-driver files; reserve room for it alongside the unchanged journals.
+mount -t tmpfs -o size=64M,mode=0755 tmpfs /var/lib
 base=/opt/vantaline
 mkdir -p "$base"/{incoming,releases,backups,shared/data,shared/models,testbin,venv/bin}
 # Configuration publication is confined to the same private namespace.
@@ -369,8 +371,8 @@ if [[ "$scenario" == managed_observe_* ]]; then
   touch "$work/local_inspection_service/__init__.py" "$work/local_inspection_service/runtime/__init__.py"
   cat > "$work/local_inspection_service/runtime/observe_label_runtime.py" <<'PY_OBSERVE'
 import argparse,json,os,pathlib,signal
-parser=argparse.ArgumentParser();parser.add_argument('--commit');parser.add_argument('--release');args=parser.parse_args()
-base=pathlib.Path('/opt/vantaline');root=pathlib.Path.cwd()
+parser=argparse.ArgumentParser();parser.add_argument('--commit');parser.add_argument('--release');parser.add_argument('--active-root');args=parser.parse_args()
+base=pathlib.Path('/opt/vantaline');root=pathlib.Path(args.active_root) if args.active_root else pathlib.Path.cwd()
 assert root==base/'releases/v2026.10.1'
 assert root==(base/'current').resolve()
 version=json.loads((root/'VERSION.json').read_text())
@@ -392,6 +394,28 @@ if scenario=='managed_observe_failure' or os.environ.get('TEST_OBSERVATION_FAIL'
 before=[{'role':role,'instance':instance*32,'pid':pid,'sampled_at':10.0} for role,instance,pid in [('web','b',123),('label','c',456)]]
 print(json.dumps({'schema':1,'git_commit':args.commit,'release':args.release,'worker_mode':'external','config_revision':'d'*64,'maintenance':False,'paused':False,'queued_runs':0,'active_runs':0,'samples_before':before,'roles':[dict(row,sampled_at=12.0) for row in before],'periodic_progress':True}))
 PY_OBSERVE
+  # This namespace package uses a synthetic observer for fault injection. Bind
+  # its exact source bytes into the PRIVATE fixture installer; production always
+  # uses the renderer's real reviewed source hashes, with no runtime override.
+  python3 - "$source_root" "$work" <<'PY_OBSERVER_FIXTURE_AUTHORIZATION'
+import ast,hashlib,pathlib,sys
+source,work=map(pathlib.Path,sys.argv[1:])
+sys.path.insert(0,str(source/'scripts'))
+from render_release_installer import OBSERVER_SOURCES
+for name in OBSERVER_SOURCES:
+    target=work/name
+    if name!='local_inspection_service/runtime/observe_label_runtime.py':
+        target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_bytes((source/name).read_bytes().replace(b'\r\n',b'\n'))
+(work/'local_inspection_service/__init__.py').unlink(missing_ok=True)
+installer=work/'scripts/install_release.sh';lines=installer.read_text().splitlines(keepends=True)
+matches=[i for i,line in enumerate(lines) if line.startswith('OBSERVER_EXECUTION_FILES = ')]
+assert len(matches)==1
+index=matches[0];expected=ast.literal_eval(lines[index].split(' = ',1)[1])
+for name in OBSERVER_SOURCES:expected[name]=hashlib.sha256((work/name).read_bytes()).hexdigest()
+lines[index]='OBSERVER_EXECUTION_FILES = '+repr(expected)+'\n'
+installer.write_text(''.join(lines))
+PY_OBSERVER_FIXTURE_AUTHORIZATION
 fi
 systemctl start vantaline
 if [[ "$scenario" == managed_root_journal_handoff || "$scenario" == managed_root_journal_promotion_failure || "$scenario" == managed_root_budget_handoff ]]; then
@@ -462,7 +486,7 @@ PY_FRESH_BRIDGE
   fi
   bash /usr/local/sbin/vantaline-install-release --archive "$bridge_archive" --archive-sha256 "$bridge_sha" \
     --release "$bridge_release" --commit "$bridge_commit" --apply
-  cmp "$source_root/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
+  cmp "$work/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
   if [[ "$scenario" == managed_root_budget_handoff ]]; then
     test "$(sha256sum "$bridge_admin")" = "$bridge_admin_digest"
     test "$(stat -c '%a' "$bridge_admin")" = 640
@@ -667,7 +691,7 @@ if [[ "$scenario" == managed_observe_success || "$scenario" == managed_embedded_
     test -e "$base/worker-enabled"
   fi
   test ! -e "$base/maintenance"
-  cmp "$source_root/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
+  cmp "$work/scripts/install_release.sh" /usr/local/sbin/vantaline-install-release
 else
   if [[ "$result" == 0 ]]; then cat "$base/result.log"; exit 1; fi
   test "$(readlink -f "$base/current")" = "$previous"
@@ -735,10 +759,14 @@ if [[ "$scenario" == managed_observe_success ]]; then
   # Service-owned and even malformed shared environments are outside the
   # observer trust boundary. Never repair or execute them as root.
   /usr/bin/chown 998:998 "$base/venv"
+  /usr/bin/chown 998:998 "$base" "$base/backups"
   printf 'home = /tmp\n' > "$base/venv/pyvenv.cfg"
   rm "$base/venv/bin/python"; ln -s /bin/sh "$base/venv/bin/python"
   bash /usr/local/sbin/vantaline-install-release --observe-runtime --release v2026.10.1 --commit "$commit" > "$base/service-owned-observation.json"
   test "$(/usr/bin/stat -c '%u' "$base/venv")" = 998
+  test "$(/usr/bin/stat -c '%u' "$base")" = 998
+  test "$(/usr/bin/stat -c '%u' "$base/backups")" = 998
+  test -z "$(find /var/lib/vantaline-release -maxdepth 1 -name '.observer-*' -print -quit)"
   test ! -e "$base/unsafe-site-hook"
   python3 - "$base/postaccept.json" <<'PY_POSTACCEPT'
 import json,sys

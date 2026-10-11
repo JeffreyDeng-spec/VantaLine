@@ -87,6 +87,8 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(observe_label_runtime.main(["--commit", "a"*40, "--release", "v2026.10.1"]), 1)
         self.assertEqual(config_read.call_count, 2)
         self.assertEqual(identity_read.call_count, 2)
+        for call in identity_read.call_args_list:
+            self.assertIs(call.kwargs['object_reader'], observe_label_runtime.observation_object)
         self.assertEqual(output.call_args.args, ("Runtime database observation failed",))
 
     def test_cli_redacts_configuration_failure(self):
@@ -98,7 +100,8 @@ class ProgressTests(unittest.TestCase):
 
     def run_cli_with_snapshots(self, configs):
         driver = SimpleNamespace(connect=Mock(return_value=nullcontext(Mock())))
-        def identity(root, *, current, configuration_revision):
+        def identity(root, *, current, configuration_revision, object_reader):
+            self.assertIs(object_reader, observe_label_runtime.observation_object)
             return LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", configuration_revision())
         final = replace(self.first, roles=(("web", "b"*32, 11, 105), ("label", "c"*32, 12, 105)))
         with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \

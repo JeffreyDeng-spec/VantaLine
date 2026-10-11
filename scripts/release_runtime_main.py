@@ -13,6 +13,7 @@ from pathlib import Path
 from release_runtime_contract import ContractError, Topology, WEB, LABEL, read_object, sync_directory
 from release_runtime_transition import RuntimeTransition
 from observer_bundle_contract import verify_observer_bundle, ObserverBundleError
+from release_observer_snapshot import observer_snapshot, OBSERVER_EXECUTION_FILES
 
 
 RUNTIME_STORAGE = Path('/var/lib/vantaline-release')
@@ -70,8 +71,6 @@ def observe_runtime(release, commit):
         raise ContractError('Invalid runtime observation request')
     base = Path('/opt/vantaline')
     target = base / 'releases' / release
-    for path in reversed(target.parents):
-        trusted_directory(path)
     current = base / 'current'
     if (not current.is_symlink() or current.lstat().st_uid != 0
             or current.resolve(strict=True) != target):
@@ -87,16 +86,10 @@ def observe_runtime(release, commit):
     info = interpreter.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
         raise ContractError('Untrusted observation interpreter')
-    trusted_observation_tree(target, links={
-        target / '.venv': base / 'venv',
-        target / 'models': base / 'shared/models',
-        target / 'local_inspection_service/data': base / 'shared/data',
-    })
-    bundle = target / 'release/observer_bundle'
-    try:
-        verify_observer_bundle(bundle, target / 'release/observer-dependencies.json')
-    except (ObserverBundleError, OSError, ValueError, KeyError, TypeError):
-        raise ContractError('Untrusted observation dependency bundle') from None
+    # Existing service-owned ancestors are only metadata/data sources. Privileged
+    # imports use an authenticated copy under independently trusted root storage.
+    runtime_storage()
+    trusted_directory(target / 'release/observer_bundle')
     # -I -S ignores Python environment, user site, .pth and sitecustomize.
     # Only the hash-locked immutable bundle and release are added. Service venv code is never imported.
     code = ("import sys,runpy,pathlib; root=sys.argv.pop(1); "
@@ -107,10 +100,20 @@ def observe_runtime(release, commit):
             "assert pathlib.Path(typing_extensions.__file__).resolve()==bundle/'typing_extensions.py'; "
             "assert psycopg.pq.__impl__ == 'binary'; "
             "runpy.run_module('local_inspection_service.runtime.observe_label_runtime',run_name='__main__')")
-    result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(target),
-                             '--release', release, '--commit', commit], cwd=target,
-                            env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PSYCOPG_IMPL': 'binary'},
-                            capture_output=True, text=True, timeout=45, check=True)
+    with observer_snapshot(target, RUNTIME_STORAGE, OBSERVER_EXECUTION_FILES) as snapshot:
+        trusted_observation_tree(snapshot, links={})
+        bundle = snapshot / 'release/observer_bundle'
+        try:
+            verify_observer_bundle(bundle, snapshot / 'release/observer-dependencies.json')
+        except (ObserverBundleError, OSError, ValueError, KeyError, TypeError):
+            raise ContractError('Untrusted observation dependency bundle') from None
+        result = subprocess.run([str(executable), '-I', '-S', '-B', '-c', code, str(snapshot),
+                                 '--release', release, '--commit', commit, '--active-root', str(target)], cwd=snapshot,
+                                env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PSYCOPG_IMPL': 'binary'},
+                                capture_output=True, text=True, timeout=45, check=True)
+    if (not current.is_symlink() or current.lstat().st_uid != 0
+            or current.resolve(strict=True) != target or RuntimeTransition.identity(target) != identity):
+        raise ContractError('Runtime observation generation changed')
     if len(result.stdout) > 65536:
         raise ContractError('Invalid runtime observation response')
     value = json.loads(result.stdout)

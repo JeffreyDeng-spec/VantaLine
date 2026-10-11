@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import stat
 import time
 
 from .configuration import private_bytes
@@ -13,21 +14,43 @@ from .label_observation import read_observation, observe_progress
 from ..storage.postgres_runtime_repository import PostgresRuntimeRepository
 
 
+def observation_object(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as handle:
+        info = os.fstat(handle.fileno())
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) & 0o022):
+            raise RuntimeUnavailable('Runtime observation identity unavailable')
+        data = handle.read(16384 + 1)
+    if len(data) > 16384:
+        raise RuntimeUnavailable('Runtime observation identity unavailable')
+    value = json.loads(data)
+    if not isinstance(value, dict):
+        raise RuntimeUnavailable('Runtime observation identity unavailable')
+    return value
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--commit", required=True)
     parser.add_argument("--release", required=True)
+    parser.add_argument("--active-root")
     args = parser.parse_args(argv)
     try:
         deadline = time.monotonic() + 30
         if os.geteuid() != 0:
             raise RuntimeUnavailable("Root observation required")
         root = Path(__file__).resolve().parents[2]
+        if args.active_root is not None:
+            active = Path('/opt/vantaline/releases') / args.release
+            if args.active_root != str(active):
+                raise RuntimeUnavailable("Runtime observation identity mismatch")
+            root = active  # Identity data only; imported code remains in the root-private snapshot.
         config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                            owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
         revision = configuration_validate(config)
         identity = read_identity(root, current=Path("/opt/vantaline/current"),
-                                 configuration_revision=lambda: revision)
+                                 configuration_revision=lambda: revision, object_reader=observation_object)
         if identity is None or identity.commit != args.commit or identity.release != args.release:
             raise RuntimeUnavailable("Runtime observation identity mismatch")
         # This short-lived process consumes captured libpq defaults, never Web globals.
@@ -46,7 +69,8 @@ def main(argv=None):
         final_config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                                  owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
         final_identity = read_identity(root, current=Path("/opt/vantaline/current"),
-                                       configuration_revision=lambda: configuration_validate(final_config))
+                                       configuration_revision=lambda: configuration_validate(final_config),
+                                       object_reader=observation_object)
         if final_identity != identity or time.monotonic() >= deadline:
             raise RuntimeUnavailable("Runtime observation generation changed")
         result = progress.after

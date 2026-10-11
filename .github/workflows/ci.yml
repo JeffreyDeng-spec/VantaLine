@@ -109,6 +109,7 @@ jobs:
       run: |
         /usr/bin/python3 -I -S -B -c 'import sys; sys.path.insert(0, "scripts"); from observer_bundle_contract import observer_runtime_compatible; assert observer_runtime_compatible()'
         python scripts/smoke_observer_bundle.py
+        python scripts/smoke_observer_snapshot.py
     - name: Reject tracked runtime and secret files
       shell: bash
       run: "set -euo pipefail\nforbidden='(^|/)(\\.env($|\\.)|uploads|outputs|logs|backups|node_modules|dist-production|__pycache__)(/|$)|\\\
