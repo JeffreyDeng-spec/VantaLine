@@ -138,6 +138,7 @@ class ProgressTests(unittest.TestCase):
         identity = LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", "b"*64)
         driver = SimpleNamespace(connect=Mock(side_effect=AuthenticationFailure("customer-password-secret")))
         with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \
+                patch.object(observe_label_runtime, "database_identity", return_value=nullcontext()), \
                 patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
                 patch.object(observe_label_runtime, "private_bytes", return_value=json.dumps(config).encode()), \
                 patch.object(observe_label_runtime, "read_identity", return_value=identity), \
