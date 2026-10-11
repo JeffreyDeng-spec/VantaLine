@@ -1,3 +1,16 @@
+> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
+> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
+> GitHub Actions. Automated correctness, safety, migration, compatibility and
+> performance tests are not being executed; no test-evidence reuse or CI-success
+> claim applies. After the release-trigger PR is merged, main pushes directly
+> trigger immutable production packaging/deployment. Package integrity, installer
+> health, exact `/api/version`, and existing runtime-observer acceptance remain
+> required. This temporary exception supersedes CI-required rollout descriptions
+> below; it does not authorize disabling deployment acceptance. Main's three CI
+> status requirements must be explicitly paused separately before untested PRs can
+> merge; other branch protection remains in place. Restore the workflows, trigger
+> and status requirements together before claiming normal CI has resumed.
+
 The release workflow now invokes the promoted installer with fixed `--observe-runtime --release ID --commit SHA` arguments before publishing success. Before installation, an unprivileged read-only SSH preflight checks that the existing virtual environment uses the system interpreter and contains only root-owned code without group/world write access. Custom/copy interpreters and unsafe environments are rejected without changing ownership or permissions. The observer disables Python site hooks and caller environment. This read-only post-acceptance check uses the existing installer sudo rule; it verifies the immutable current package, root-owned code/interpreter, captured configuration and advancing database heartbeats for the declared Web/label roles. Caller-selected Python paths, modules and environment are not accepted. It is required on the first deployment even when the previously installed controller has no pre-acceptance observer. A failed post-acceptance check leaves the GitHub Release draft; installation has already committed and its transition journal is finished. Recover through a complete revert/release, preserving task/call evidence, secrets and incremental tables. Do not claim automatic installer rollback for this later gate or reapply an already installed non-current release ID.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
@@ -1754,3 +1767,18 @@ Manual artifacts use an attempt-specific name, and their creation time must fall
 The fixed silent Git preparation checks `check-298` and `check-299` may have zero-byte logs only with the empty-content SHA-256. No benchmark or storage protocol receives that exception; complete current-attempt evidence and all deployment gates remain required.
 
 The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.
+
+## Restoring the temporary CI pause
+
+Revert the release-trigger pause PR to restore the successful `CI` / main / push
+workflow-run deployment trigger. Re-enable `ci.yml`, `backend-performance.yml` and
+`ci-dependencies.yml` with GitHub Actions workflow enable. Restore main required
+status checks with strict=true and contexts `backend-plc`, `frontend`, `source-safety`
+(all GitHub Actions app_id 15368), retaining every other branch-protection field.
+Run a complete CI on current main; policy-changing merges must not reuse old evidence.
+The test workflows and assertions remain in Git; disabling workflows does not delete
+or weaken their tests. During the pause, release IDs use the production workflow's
+unique run ID instead of a CI run number. Reruns reuse the same immutable release ID.
+The known observer-preflight failure still requires its separate reviewed repair;
+pausing CI does not establish that production environment acceptance is repaired.
+Rollback of production still installs an entire previous immutable release.
