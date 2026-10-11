@@ -2043,3 +2043,8 @@ The upstream #290 ordinary-only shard rebalance does not replace this refactor's
 When rolling out a real-photo localization prompt refinement, preserve prior boxes and screening evidence. The changed prompt hash requires a new prefix only when a new annotation is requested. Explicitly reannotate affected photos from the frontend, then complete whole-image screening; do not reuse old approval for the new version or lower the 20-real-image gate. Roll back the complete immutable release while retaining all versions; never replay uncertain paid calls.
 
 The root-only runtime observer validates private configuration and immutable identity as root, temporarily uses the fixed vantaline effective uid/gid (no supplementary groups) only for bounded read-only/repeatable-read SQL and heartbeat progress, closes the connection, and restores root for the final configuration/generation check. This supports existing Unix-socket peer authentication without pg_hba/pg_ident or role grants. Missing/non-service/root identities fail closed; query failures restore identity and retain redacted failure output. No application worker is started or database record written. Verify identity restoration success/failure with smoke_label_runtime_observation.py, actual PostgreSQL heartbeat smoke, and a released installer acceptance; CI remains skipped under owner policy.
+
+Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
+SQLSTATE category before its generic failure message. It never logs exception
+text, configuration, connection strings or database records. All acceptance and
+whole-release rollback gates remain required.
