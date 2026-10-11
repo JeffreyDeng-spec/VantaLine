@@ -1784,3 +1784,10 @@ The separate workflow post-install runtime observation is also removed with
 explicit owner authorization. Its environment repair remains separate; removal
 does not establish environment correctness or heartbeat-observation success.
 Rollback of production still installs an entire previous immutable release.
+
+The root-only runtime observer validates private configuration and immutable identity as root, temporarily uses the fixed vantaline effective uid/gid (no supplementary groups) only for bounded read-only/repeatable-read SQL and heartbeat progress, closes the connection, and restores root for the final configuration/generation check. This supports existing Unix-socket peer authentication without pg_hba/pg_ident or role grants. Missing/non-service/root identities fail closed; query failures restore identity and retain redacted failure output. No application worker is started or database record written. Verify identity restoration success/failure with smoke_label_runtime_observation.py, actual PostgreSQL heartbeat smoke, and a released installer acceptance; CI remains skipped under owner policy.
+
+Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
+SQLSTATE category before its generic failure message. It never logs exception
+text, configuration, connection strings or database records. All acceptance and
+whole-release rollback gates remain required.
