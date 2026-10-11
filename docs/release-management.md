@@ -1782,3 +1782,11 @@ The separate workflow post-install runtime observation is also removed with
 explicit owner authorization. Its environment repair remains separate; removal
 does not establish environment correctness or heartbeat-observation success.
 Rollback of production still installs an entire previous immutable release.
+
+## Read-only installer authentication diagnostic
+
+Manual dispatch of the production workflow runs only a bounded authentication
+probe, never the push-only release job. It compares root and `vantaline` using
+the captured libpq configuration with a read-only `SELECT 1`. Only fixed stage
+and result codes are logged; connection strings, exception text, runtime records
+and customer data are never logged. It does not modify services or database state.
