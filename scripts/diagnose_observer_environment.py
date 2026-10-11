@@ -12,7 +12,12 @@ import sys
 
 def diagnose():
     report = {'schema': 1, 'system_python': list(sys.version_info[:2]),
-              'read_only': True, 'preflight_passed': False}
+              'read_only': True, 'preflight_passed': False,
+              'system_interpreter_trusted': False, 'system_architecture': 'unknown'}
+    if sys.platform == 'linux':
+        machine = os.uname().machine
+        if machine in {'x86_64', 'aarch64'}:
+            report['system_architecture'] = machine
     stage = 'base'
     visited = 0
     def check(path):
@@ -23,6 +28,15 @@ def diagnose():
             raise ValueError('mode')
         if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
             raise ValueError('type')
+    try:
+        system_interpreter = pathlib.Path('/usr/bin/python3').resolve(strict=True)
+        for path in [system_interpreter, *system_interpreter.parents]:
+            check(path)
+        if not stat.S_ISREG(system_interpreter.lstat().st_mode):
+            raise ValueError('type')
+        report['system_interpreter_trusted'] = True
+    except Exception:
+        pass  # This independent premise remains false; no exception text is emitted.
     try:
         root = pathlib.Path('/opt/vantaline/venv')
         interpreter = pathlib.Path('/usr/bin/python3').resolve(strict=True)
