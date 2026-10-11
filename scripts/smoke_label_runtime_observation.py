@@ -1,6 +1,6 @@
 """Snapshot, real sampling progress and fixed-error contracts; no paid or device I/O."""
 from dataclasses import replace
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import json
 import os
 from pathlib import Path
@@ -105,6 +105,50 @@ class ProgressTests(unittest.TestCase):
             return self.first
         with self.assertRaisesRegex(RuntimeUnavailable, "did not progress"):
             observe_progress(read, timeout=5, clock=lambda: self.elapsed, sleep=self.sleep)
+
+    def test_cli_queries_inside_peer_identity_and_rechecks_after_restore(self):
+        config = configuration_capture({"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "synthetic"}, "/synthetic")
+        identity = LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", "b"*64)
+        events = []
+        active = False
+
+        @contextmanager
+        def peer():
+            nonlocal active
+            events.append("peer_enter")
+            active = True
+            try:
+                yield
+            finally:
+                active = False
+                events.append("peer_exit")
+
+        def connect(*args, **kwargs):
+            self.assertTrue(active)
+            events.append("connect")
+            return nullcontext(Mock())
+
+        def progress(*args, **kwargs):
+            self.assertTrue(active)
+            events.append("progress")
+            return RuntimeProgress(self.first, self.first)
+
+        def configuration(*args, **kwargs):
+            self.assertFalse(active)
+            events.append("configuration")
+            return json.dumps(config).encode()
+
+        driver = SimpleNamespace(connect=Mock(side_effect=connect))
+        with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \
+                patch.object(observe_label_runtime, "database_identity", side_effect=peer) as peer_call, \
+                patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
+                patch.object(observe_label_runtime, "private_bytes", side_effect=configuration), \
+                patch.object(observe_label_runtime, "read_identity", return_value=identity), \
+                patch.object(observe_label_runtime, "observe_progress", side_effect=progress), \
+                patch.object(observe_label_runtime, "print"):
+            self.assertEqual(observe_label_runtime.main(["--commit", "a"*40, "--release", "v2026.10.1"]), 0)
+        peer_call.assert_called_once_with()
+        self.assertEqual(events, ["configuration", "peer_enter", "connect", "progress", "peer_exit", "configuration"])
 
     def test_cli_rechecks_active_generation_and_configuration(self):
         config = configuration_capture({"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "synthetic"}, "/synthetic")
