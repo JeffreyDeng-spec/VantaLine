@@ -5,9 +5,36 @@ Print only stage codes and booleans. Never import application or venv code.
 import json
 import os
 import pathlib
+import re
 import signal
 import stat
 import sys
+
+
+def deployment_trust():
+    roots = [pathlib.Path('/'), pathlib.Path('/opt'), pathlib.Path('/opt/vantaline'),
+             pathlib.Path('/opt/vantaline/releases')]
+    def directory(path):
+        info = path.lstat()
+        return (stat.S_ISDIR(info.st_mode) and info.st_uid == 0
+                and not stat.S_IMODE(info.st_mode) & 0o022)
+    roots_trusted = False
+    current_trusted = False
+    try:
+        roots_trusted = all(directory(path) for path in roots)
+    except Exception:
+        pass
+    try:
+        current = pathlib.Path('/opt/vantaline/current')
+        info = current.lstat()
+        target = current.resolve(strict=True)
+        current_trusted = (stat.S_ISLNK(info.st_mode) and info.st_uid == 0
+                           and target.parent == roots[-1]
+                           and re.fullmatch(r'v[0-9]{4}\.[0-9]{2}\.[0-9]+', target.name) is not None
+                           and directory(target))
+    except Exception:
+        pass
+    return roots_trusted, current_trusted
 
 
 def diagnose():
@@ -18,6 +45,7 @@ def diagnose():
         machine = os.uname().machine
         if machine in {'x86_64', 'aarch64'}:
             report['system_architecture'] = machine
+    report['deployment_roots_trusted'], report['current_release_trusted'] = deployment_trust()
     stage = 'base'
     visited = 0
     def check(path):
