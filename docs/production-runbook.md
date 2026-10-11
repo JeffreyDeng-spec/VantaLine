@@ -1,13 +1,14 @@
-> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger the existing immutable production packaging/deployment. Record available focused local checks and explicitly state that CI was skipped. Package integrity, installer acceptance, exact `/api/version`, post-install runtime observation and whole-release rollback remain required. This policy supersedes older CI-required or temporary-pause descriptions below and does not disable deployment acceptance.
+> **Owner release policy (2026-10-11):** CI is no longer a merge or release gate until the owner explicitly changes this policy. Keep automatic `CI`, `Backend performance` and `Prepare CI dependencies` disabled; do not restore them or their required status contexts for ordinary releases. Main pushes directly trigger immutable production packaging/deployment. Record available focused local checks and state that CI was skipped. Package integrity, installer acceptance, exact `/api/version` and whole-release rollback remain required. Preserve the separately owner-authorized omission of workflow observer preflight and post-install heartbeat observation; do not claim either observation or environment repair succeeded. This policy supersedes older CI-required or temporary-pause descriptions below.
 
 The owner-authorized release workflow omits the observer-environment preflight
 before deployment. It uploads one immutable main-SHA package, verifies the archive
 and promoted installer, runs existing installer acceptance/rollback, and checks the
-exact live `/api/version`. The separate post-install `--observe-runtime` check remains
-required before publishing the GitHub Release. A failed post-install check leaves
-the release draft after installation has committed; it does not automatically roll
-back that installed version. The removed environment check is not claimed repaired;
-restore it only after validating the separate observation-environment repair.
+exact live `/api/version`. At the owner's separate explicit authorization, the
+workflow also omits its post-install `--observe-runtime` invocation and publishes
+after successful install/version verification. The installer's own acceptance and
+rollback logic remains unchanged. No separate post-install heartbeat observation
+is claimed. Restore workflow observation gates only after validating their
+observation environment through a reviewed change.
 
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 

@@ -116,11 +116,6 @@ jobs:
           ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
             curl --max-time 5 -fsS http://127.0.0.1:8765/api/version \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["consistent"] is True and d["git_commit"]==sys.argv[1] and d["release"]==sys.argv[2]' "$RELEASE_SHA" "$RELEASE_ID"
-      - name: Observe accepted runtime database heartbeats
-        run: |
-          ssh -i ~/.ssh/vantaline_deploy -o BatchMode=yes -o ConnectTimeout=10 "$PROD_USER@$PROD_HOST" \
-            sudo /usr/local/sbin/vantaline-install-release \
-              --observe-runtime --release "$RELEASE_ID" --commit "$RELEASE_SHA"
       - name: Publish successful GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
