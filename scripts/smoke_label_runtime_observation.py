@@ -194,6 +194,25 @@ class ProgressTests(unittest.TestCase):
                          ("Runtime database observation stage=database_connect reason=database_authentication",))
         self.assertNotIn("customer-password-secret", str(output.call_args_list))
 
+    def test_malformed_exception_metadata_retains_fixed_redacted_failure(self):
+        class UnreadableState(Exception):
+            @property
+            def sqlstate(self):
+                raise ValueError("customer-password-secret")
+
+        for error in (UnreadableState("customer-password-secret"), ValueError("customer-password-secret")):
+            if type(error) is ValueError:
+                error.sqlstate = []
+            with self.subTest(error=type(error).__name__), \
+                    patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
+                    patch.object(observe_label_runtime, "private_bytes", side_effect=error), \
+                    patch.object(observe_label_runtime, "print") as output:
+                self.assertEqual(observe_label_runtime.main(["--commit", "a"*40, "--release", "v2026.10.1"]), 1)
+            self.assertEqual([call.args for call in output.call_args_list], [
+                ("Runtime database observation stage=configuration_read reason=unavailable",),
+                ("Runtime database observation failed",)])
+            self.assertNotIn("customer-password-secret", str(output.call_args_list))
+
     def run_cli_with_snapshots(self, configs):
         driver = SimpleNamespace(connect=Mock(return_value=nullcontext(Mock())))
         def identity(root, *, current, configuration_revision, object_reader):

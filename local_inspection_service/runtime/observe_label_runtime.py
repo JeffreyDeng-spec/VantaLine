@@ -122,16 +122,23 @@ def main(argv=None):
         return 0
     except Exception as error:
         # Emit only fixed classifications, never exception text or configuration.
-        reason = {"28000": "database_authentication", "28P01": "database_authentication",
-                  "3D000": "database_missing", "42501": "database_permission"}.get(
-                      getattr(error, "sqlstate", None), "unavailable")
+        reason = "unavailable"
+        try:
+            sqlstate = getattr(error, "sqlstate", None)
+            details = error.args
+        except Exception:
+            sqlstate, details = None, ()
+        if type(sqlstate) is str:
+            reason = {"28000": "database_authentication", "28P01": "database_authentication",
+                      "3D000": "database_missing", "42501": "database_permission"}.get(
+                          sqlstate, "unavailable")
         # libpq connection failures may omit SQLSTATE. Match fixed tokens only;
-        # the message itself must never reach stdout/stderr.
-        if stage == "database_connect" and error.args and isinstance(error.args[0], str):
+        # malformed exception metadata must not escape the redaction boundary.
+        if stage == "database_connect" and type(details) is tuple and details and type(details[0]) is str:
             for token, category in (("Peer authentication failed", "database_peer_authentication"),
                                     ("password authentication failed", "database_authentication"),
                                     ("no password supplied", "database_password_missing")):
-                if token in error.args[0]:
+                if token in details[0]:
                     reason = category
                     break
         print(f"Runtime database observation stage={stage} reason={reason}", file=sys.stderr)
