@@ -1,9 +1,8 @@
 name: Release and deploy production
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -15,20 +14,23 @@ concurrency:
 jobs:
   release:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_sha == github.sha
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      RELEASE_SHA: ${{ github.sha }}
       PROD_HOST: ${{ secrets.PROD_SSH_HOST }}
       PROD_USER: ${{ secrets.PROD_SSH_USER }}
     steps:
+      - name: Reject a superseded main commit before packaging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_main=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          test "$current_main" = "$RELEASE_SHA"
       - name: Select immutable release id
-        run: echo "RELEASE_ID=v$(date -u +%Y.%m).${{ github.event.workflow_run.run_number }}" >> "$GITHUB_ENV"
+        run: echo "RELEASE_ID=v$(date -u +%Y.%m).${{ github.run_id }}" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_SHA }}

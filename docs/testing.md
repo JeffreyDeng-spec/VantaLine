@@ -1,3 +1,16 @@
+> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
+> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
+> GitHub Actions. Automated correctness, safety, migration, compatibility and
+> performance tests are not being executed; no test-evidence reuse or CI-success
+> claim applies. After the release-trigger PR is merged, main pushes directly
+> trigger immutable production packaging/deployment. Package integrity, installer
+> health, exact `/api/version`, and existing runtime-observer acceptance remain
+> required. This temporary exception supersedes CI-required rollout descriptions
+> below; it does not authorize disabling deployment acceptance. Main's three CI
+> status requirements must be explicitly paused separately before untested PRs can
+> merge; other branch protection remains in place. Restore the workflows, trigger
+> and status requirements together before claiming normal CI has resumed.
+
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
 The retained legacy PLC deadline fixture explicitly orders its second scenario's real synthetic `write_started` event before invoking the unchanged native deadline snapshot. The 0.5-second total deadline and all snapshot, finalization, version, single-audit and single-write assertions remain; the separate two-second event bound diagnoses a missing synthetic write. This test scheduling does not claim a 0.5-second HTTP response bound. Failure releases the write barrier, drains the actual queued worker with a bounded check and restores both callbacks. Production PLC, persistence and projection code are unchanged; source review must not claim this amended fixture method is byte/AST-identical to its historical baseline.

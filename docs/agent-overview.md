@@ -1,3 +1,16 @@
+> **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
+> `Backend performance` and `Prepare CI dependencies` workflows are disabled in
+> GitHub Actions. Automated correctness, safety, migration, compatibility and
+> performance tests are not being executed; no test-evidence reuse or CI-success
+> claim applies. After the release-trigger PR is merged, main pushes directly
+> trigger immutable production packaging/deployment. Package integrity, installer
+> health, exact `/api/version`, and existing runtime-observer acceptance remain
+> required. This temporary exception supersedes CI-required rollout descriptions
+> below; it does not authorize disabling deployment acceptance. Main's three CI
+> status requirements must be explicitly paused separately before untested PRs can
+> merge; other branch protection remains in place. Restore the workflows, trigger
+> and status requirements together before claiming normal CI has resumed.
+
 > **Current backend composition:** The Web application is assembled by `runtime/application.py`; `server:app` retains the stable ASGI entry and compatibility exports. Earlier migration checkpoint statements about unfinished domain/application assembly describe their historical checkpoint and are superseded by [canonical application construction](architecture.md#canonical-web-application-construction). They do not establish current CI, performance or production acceptance; those remain separate release gates.
 
 Account visibility now composes through `auth/visibility_composition.py`. Keep its public-network and account-projection self-calls on named graph forwarders; do not eagerly capture receiver methods or reorder selected-model/configuration reads. Authentication HTTP registration and complete application factory/lifecycle work remain separate.
