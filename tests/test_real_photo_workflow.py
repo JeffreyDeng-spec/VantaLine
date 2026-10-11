@@ -53,6 +53,58 @@ def test_failed_chunk_blocks_round_admission_and_never_replayed(database):
     assert not any(j['kind']=='train' for j in repo.jobs('a','task'))
 
 
+@pytest.mark.parametrize('pending_status',['queued','cancelled','mismatched'])
+def test_explicit_recovery_preserves_only_exact_pending_training(database,pending_status):
+    from contextlib import contextmanager
+    from local_inspection_service.training.real_photo_api import FeedbackService
+    repo=ready(database);schedule(repo,'a','task')
+    for _ in range(4):
+        finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
+            'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
+    schedule(repo,'a','task')
+    finish(repo,'assess',lambda j:{'action':'train','approved_real_target':20,'next_increment':5,
+                                 'reason':'completed baseline','gaps':[]})
+    train=next(j for j in repo.jobs('a','task') if j['kind']=='train')
+    before=copy.deepcopy(train);job_ids={j['id'] for j in repo.jobs('a','task')}
+    # An interrupted former round left successful chunks' recheck flags behind.
+    def legacy_residue(state,c):
+        state.update(recheck_sample_ids=['0','1'],pause_reason='legacy empty recheck pause')
+        if pending_status=='cancelled':
+            train['status']='cancelled';repo.save_job(c,train)
+        elif pending_status=='mismatched':state['last_dataset_fingerprint']='different-snapshot'
+    repo.mutate('a','task',legacy_residue)
+    service=FeedbackService.__new__(FeedbackService)
+    @contextmanager
+    def repository():yield repo
+    service.repo=repository;service.task=lambda *a,**kw:({'id':'a'}, {})
+    service.status=lambda identifier:repo.get('a',identifier)
+    service.restart('task');schedule(repo,'a','task');schedule(repo,'a','task')
+    state=repo.get('a','task')
+    assert not state['recheck_sample_ids'] and 'round' not in state
+    assert {j['id'] for j in repo.jobs('a','task')}==job_ids
+    saved=next(j for j in repo.jobs('a','task') if j['kind']=='train')
+    assert saved['inputs']==before['inputs'] and saved['fingerprint']==before['fingerprint']
+    if pending_status=='queued':
+        assert not state.get('pause_reason') and state['review_trigger']==25
+        assert saved==before
+        assert repo.claim({'a'},{'train'},'fixture','fixture')[0]['id']==train['id']
+    else:
+        assert state['pause_reason'] and repo.claim({'a'},{'train'},'fixture','fixture') is None
+
+
+def test_completed_rechecks_pruned_but_changed_version_is_reviewed(database):
+    repo=ready(database)
+    def recover(state,c):
+        for sample in state['samples']:
+            sample['review']={'key':review_key(sample,state['classes']), 'decision':'accept_positive'}
+        state['samples'][1]['annotation']['version']=2
+        state.update(review_trigger=25,recheck_sample_ids=['0','1'])
+    repo.mutate('a','task',recover);schedule(repo,'a','task')
+    state=repo.get('a','task')
+    assert state['recheck_sample_ids']==['1'] and state['round']['sample_ids']==['1']
+    assert len(state['round']['review_jobs'])==1
+
+
 def test_pause_archives_round_and_revokes_late_review_before_source_edit(database):
     repo=ready(database);schedule(repo,'a','task')
     before=repo.get('a','task');current=copy.deepcopy(before['round'])
