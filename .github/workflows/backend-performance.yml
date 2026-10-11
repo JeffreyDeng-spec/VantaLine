@@ -1,7 +1,5 @@
 name: Backend performance
 'on':
-  schedule:
-  - cron: 0 19 * * *
   workflow_dispatch: null
 permissions:
   contents: read

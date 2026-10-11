@@ -1,6 +1,7 @@
 > **Temporary CI pause (2026-10-11, owner authorized):** Automatic `CI`,
 > `Backend performance` and `Prepare CI dependencies` workflows are disabled in
-> GitHub Actions. Automated correctness, safety, migration, compatibility and
+> GitHub Actions. Their push, PR and schedule triggers are also removed; only
+> manually dispatched recovery remains in source. Automated correctness, safety, migration, compatibility and
 > performance tests are not being executed; no test-evidence reuse or CI-success
 > claim applies. After the release-trigger PR is merged, main pushes directly
 > trigger immutable production packaging/deployment. Package integrity, installer
