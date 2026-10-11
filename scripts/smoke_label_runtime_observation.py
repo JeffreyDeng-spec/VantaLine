@@ -16,6 +16,38 @@ from local_inspection_service.runtime.label_observation import RuntimeObservatio
 from local_inspection_service.runtime import observe_label_runtime
 
 
+class DatabaseIdentityTests(unittest.TestCase):
+    def test_peer_identity_restored_after_success_and_query_failure(self):
+        import pwd
+        for fail in (False, True):
+            calls=[]
+            with patch.object(os, 'geteuid', return_value=0), \
+                 patch.object(os, 'getegid', return_value=0), \
+                 patch.object(os, 'getgroups', return_value=[0, 12]), \
+                 patch.object(pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=1001,pw_gid=1002)) as lookup, \
+                 patch.object(os, 'setgroups', side_effect=lambda value:calls.append(('groups',value))), \
+                 patch.object(os, 'setegid', side_effect=lambda value:calls.append(('gid',value))), \
+                 patch.object(os, 'seteuid', side_effect=lambda value:calls.append(('uid',value))):
+                try:
+                    with observe_label_runtime.database_identity():
+                        calls.append(('query', None))
+                        if fail:raise RuntimeUnavailable('synthetic query failure')
+                except RuntimeUnavailable:
+                    self.assertTrue(fail)
+            lookup.assert_called_once_with('vantaline')
+            self.assertEqual(calls,[('groups',[]),('gid',1002),('uid',1001),('query',None),('uid',0),('gid',0),('groups',[0,12])])
+
+    def test_nonroot_or_root_service_account_never_connects(self):
+        import pwd
+        with patch.object(os,'geteuid',return_value=1001):
+            with self.assertRaises(RuntimeUnavailable):
+                with observe_label_runtime.database_identity():self.fail('identity accepted')
+        with patch.object(os,'geteuid',return_value=0), patch.object(pwd,'getpwnam',return_value=SimpleNamespace(pw_uid=0,pw_gid=0)), patch.object(os,'seteuid') as switch:
+            with self.assertRaises(RuntimeUnavailable):
+                with observe_label_runtime.database_identity():self.fail('root peer accepted')
+            switch.assert_not_called()
+
+
 class ProgressTests(unittest.TestCase):
     def setUp(self):
         self.first = RuntimeObservation("a" * 32, True, True, 3, 0,
@@ -79,6 +111,7 @@ class ProgressTests(unittest.TestCase):
         identity = LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", "b"*64)
         driver = SimpleNamespace(connect=Mock(return_value=nullcontext(Mock())))
         with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \
+                patch.object(observe_label_runtime, "database_identity", return_value=nullcontext()), \
                 patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
                 patch.object(observe_label_runtime, "private_bytes", return_value=json.dumps(config).encode()) as config_read, \
                 patch.object(observe_label_runtime, "read_identity", side_effect=[identity, replace(identity, commit="e"*40)]) as identity_read, \
@@ -120,6 +153,7 @@ class ProgressTests(unittest.TestCase):
             return LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", configuration_revision())
         final = replace(self.first, roles=(("web", "b"*32, 11, 105), ("label", "c"*32, 12, 105)))
         with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \
+                patch.object(observe_label_runtime, "database_identity", return_value=nullcontext()), \
                 patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
                 patch.object(observe_label_runtime, "private_bytes", side_effect=[json.dumps(x).encode() for x in configs]), \
                 patch.object(observe_label_runtime, "read_identity", side_effect=identity), \

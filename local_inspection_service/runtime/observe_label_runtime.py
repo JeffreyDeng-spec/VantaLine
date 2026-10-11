@@ -1,5 +1,6 @@
 """Root-only immutable-release observer. Output contains no configuration or media."""
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,29 @@ from .configuration_contract import CONFIGURATION_LIMIT, CONFIGURATION_ENVIRONME
 from .label_identity import read_identity, RuntimeUnavailable
 from .label_observation import read_observation, observe_progress
 from ..storage.postgres_runtime_repository import PostgresRuntimeRepository
+
+
+@contextmanager
+def database_identity():
+    """Use the fixed service peer for SQL; root still validates private files."""
+    import pwd
+    if os.geteuid() != 0:
+        raise RuntimeUnavailable("Root observation required")
+    account = pwd.getpwnam("vantaline")
+    if account.pw_uid <= 0 or account.pw_gid <= 0:
+        raise RuntimeUnavailable("Application database identity unavailable")
+    original_gid, original_groups = os.getegid(), os.getgroups()
+    try:
+        os.setgroups([])
+        os.setegid(account.pw_gid)
+        os.seteuid(account.pw_uid)
+        yield
+    finally:
+        # This single-threaded root-only process retains its real uid solely to
+        # restore identity for the final immutable configuration/generation read.
+        os.seteuid(0)
+        os.setegid(original_gid)
+        os.setgroups(original_groups)
 
 
 def main(argv=None):
@@ -43,13 +67,15 @@ def main(argv=None):
                 os.environ[key] = value
         stage = "database_driver"
         import psycopg
-        stage = "database_connect"
-        with psycopg.connect(config["environment"]["DATABASE_URL"], connect_timeout=2,
-                options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read -c statement_timeout=2000") as connection:
-            stage = "database_progress"
-            repository = PostgresRuntimeRepository(connection, "redacted")
-            progress = observe_progress(lambda: read_observation(repository, identity),
-                                      timeout=deadline - time.monotonic())
+        stage = "database_identity"
+        with database_identity():
+            stage = "database_connect"
+            with psycopg.connect(config["environment"]["DATABASE_URL"], connect_timeout=2,
+                    options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read -c statement_timeout=2000") as connection:
+                stage = "database_progress"
+                repository = PostgresRuntimeRepository(connection, "redacted")
+                progress = observe_progress(lambda: read_observation(repository, identity),
+                                          timeout=deadline - time.monotonic())
         stage = "final_configuration_read"
         final_config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                                  owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
