@@ -429,7 +429,6 @@ export interface AiAutoOptimizeStatus {
   settings?: Record<string, unknown>;
   training_requirements?: Record<string, unknown>;
   training_parameters?: Record<string, unknown>;
-  expected_production_count?: number;
   initialization?: Record<string, unknown>;
   latest_dataset?: Record<string, unknown>;
   latest_candidate_model?: Record<string, unknown>;
@@ -508,7 +507,6 @@ export interface PipelineTask {
   status?: string;
   progress?: number;
   params?: Record<string, string | number | boolean | null | undefined>;
-  expected_production_count?: number;
   auto_optimize_initialization?: Record<string, unknown>;
   auto_optimize_task_id?: string;
   ai_baseline_task_id?: string;
@@ -601,7 +599,6 @@ export interface PipelineTaskPayload {
   accessory_counts?: Record<string, number>;
   detection_method?: PipelineDetectionMethod;
   auto_advance?: boolean;
-  expected_production_count?: number;
   params?: Record<string, string | number | boolean | null | undefined>;
   task_kind?: "product_inspection" | "incoming_material_text" | string;
   material_code?: string;

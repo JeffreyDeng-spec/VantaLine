@@ -34,14 +34,11 @@ class PipelineTaskCreator:
         if task_kind == "incoming_material_text":
             if request.detection_method not in {None, "", "label_text_compare"}:
                 raise self.access.http_error()(status_code=400, detail="包材文字任务只能使用 label_text_compare")
-            if request.accessory_ids or request.accessory_counts or request.expected_production_count not in {None, 0} or request.auto_advance:
-                raise self.access.http_error()(status_code=400, detail="包材文字任务不接受配件、预计产量或自动训练参数")
+            if request.accessory_ids or request.accessory_counts or request.auto_advance:
+                raise self.access.http_error()(status_code=400, detail="包材文字任务不接受配件或自动训练参数")
             detection_method = "label_text_compare"
         else:
             detection_method = self.policy.normalize_detection_method()(request.detection_method)
-        expected_production_count = self.policy.normalize_expected_count()(request.expected_production_count)
-        if detection_method == "ai" and expected_production_count <= 0:
-            raise self.access.http_error()(status_code=400, detail="创建 AI 任务需要填写预计产量")
         material_code = str(request.material_code or "").strip()
         material_name = str(request.material_name or "").strip()
         if task_kind == "incoming_material_text" and not material_code:
@@ -49,8 +46,6 @@ class PipelineTaskCreator:
         task_name = (request.name or "").strip() or (material_name if task_kind == "incoming_material_text" else (" + ".join(names) if names else "新流水线任务"))
         inspection_user_ids: list[str] = []
         params = {"train_mode": detection_method} if self.policy.method_uses_training()(detection_method) else {"route": detection_method}
-        if expected_production_count:
-            params["expected_production_count"] = expected_production_count
         task = {
             "id": f"pipe_{self.runtime.uuid4()().hex[:10]}",
             "name": task_name,
@@ -66,7 +61,6 @@ class PipelineTaskCreator:
             "status": "setup_required" if task_kind == "incoming_material_text" else "ready",
             "progress": 0,
             "params": params,
-            "expected_production_count": expected_production_count,
             "auto_advance": False if task_kind == "incoming_material_text" else bool(request.auto_advance if request.auto_advance is not None else agent_config.get("auto_advance_default", True)),
             "created_at": int(self.runtime.now()()),
             "updated_at": int(self.runtime.now()()),

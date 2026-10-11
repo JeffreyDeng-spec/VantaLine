@@ -30,7 +30,9 @@ vite.stderr.on("data",b=>{if(!String(b).includes("[console."))process.stderr.wri
       if(p==='/api/auth/status')return reply({authenticated:true,setup_required:false,user:{id:'operator',username:'operator',role:'admin',permissions:['inspection','ai_detection','training']}});
       if(p==='/api/user/preferences/tasks')return reply({exists:true,pinned_task_ids:[],archived_task_ids:[]});
       if(p==='/api/version')return reply({consistent:true});
-      const task={id:'fixture',name:'Isolated task',selected_accessory_ids:[],created_at:1};
+      const task={id:'fixture',name:'Isolated task',selected_accessory_ids:[],created_at:1,expected_production_count:10000};
+      if(p==='/api/accessories')return reply({items:[{id:'a',name:'Fixture accessory',material_type:'object'}]});
+      if(p==='/api/pipeline/tasks' && req.method()==='POST')return reply({id:'created',name:'No production estimate',detection_method:'ai',stage:'draft'});
       if(p==='/api/training/resources')return reply({ai_detection_tasks:[task],models:[],datasets:[],tasks:[]});
       if(p.endsWith('/real-photo')){
         if(mode==='loading'){await new Promise(r=>setTimeout(r,1500));}
@@ -50,6 +52,36 @@ vite.stderr.on("data",b=>{if(!String(b).includes("[console."))process.stderr.wri
     });
     await page.goto(base+'/workspace/tasks/ai%3Afixture');
     try {await page.getByRole('heading',{name:'任务过程数据'}).waitFor({timeout:10000});} catch(e) {console.error(mode,page.url(),await page.locator("body").innerText(),errors);throw e;}
+    assert.equal(await page.getByText('预计产量',{exact:true}).count(),0);
+    if(mode==='running'){
+      await page.getByRole('button',{name:'添加任务',exact:true}).click();
+      const dialog=page.getByRole('dialog',{name:'添加任务'});
+      await dialog.waitFor();
+      assert.equal(await dialog.locator('input[type=number]').count(),0);
+      await dialog.getByPlaceholder('例如：数据分析测试').fill('No production estimate');
+      await dialog.getByRole('button',{name:'添加配件',exact:true}).click();
+      const picker=page.getByRole('dialog',{name:'选择配件'});
+      await picker.getByRole('button',{name:/Fixture accessory/}).click();
+      await picker.getByRole('button',{name:'完成选择',exact:true}).click();
+      await dialog.getByRole('button',{name:'创建并 Pin',exact:true}).click();
+      await dialog.waitFor({state:'hidden'});
+      const request=writes.find(w=>w.p==='/api/pipeline/tasks');
+      assert.ok(request);assert.equal('expected_production_count' in JSON.parse(request.body),false);
+      await page.goto(base+'/workspace/pipeline');
+      await page.getByRole('button',{name:'新建任务',exact:true}).first().click();
+      const pipelineDialog=page.getByRole('dialog',{name:'新建任务'});
+      await pipelineDialog.getByLabel('检测方法').selectOption('ai');
+      assert.equal(await pipelineDialog.locator('input[type=number]').count(),0);
+      await pipelineDialog.getByPlaceholder('例如：说明书齐套训练').fill('Pipeline without estimate');
+      await pipelineDialog.getByRole('button',{name:'创建任务',exact:true}).click();
+      await pipelineDialog.waitFor({state:'hidden'});
+      const requests=writes.filter(w=>w.p==='/api/pipeline/tasks');
+      assert.equal(requests.length,2);
+      for(const r of requests)assert.equal('expected_production_count' in JSON.parse(r.body),false);
+      writes.length=0;
+      await page.goto(base+'/workspace/tasks/ai%3Afixture');
+      await page.getByRole('heading',{name:'任务过程数据'}).waitFor();
+    }
     if(mode==='loading'||mode==='error'){
       assert.equal(await page.getByRole('button',{name:/需要人工处理|合成训练图|正式训练集/}).count(),0);
       if(mode==='error'){await page.getByText('回流状态加载失败').waitFor({timeout:20000});await context.close();console.log('PASS',mode);continue;}

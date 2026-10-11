@@ -128,7 +128,6 @@ function SidebarCreateTaskModal({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [expectedProductionCount, setExpectedProductionCount] = useState("");
 
   function addAccessory(accessoryId: string) {
     setSelectedIds((current) => current.includes(accessoryId) ? current : [...current, accessoryId]);
@@ -153,16 +152,10 @@ function SidebarCreateTaskModal({
       setFormError(`已经存在名为「${taskName}」的任务，请换一个名称。`);
       return;
     }
-    const expectedCount = Math.max(0, Math.round(Number(expectedProductionCount || 0)));
-    if (!Number.isFinite(expectedCount) || expectedCount <= 0) {
-      setFormError("请填写这个任务的预计产量。");
-      return;
-    }
     await onCreate({
       name: taskName,
       detection_method: "ai",
       auto_advance: false,
-      expected_production_count: expectedCount,
       accessory_ids: selectedIds,
       accessory_counts: Object.fromEntries(selectedIds.map((id) => [id, Math.max(1, Number(counts[id] || 1))]))
     }).then(onClose).catch((error: Error) => {
@@ -196,22 +189,7 @@ function SidebarCreateTaskModal({
               />
             </label>
             {formError ? <div className="form-error compact-form-error">{formError}</div> : null}
-            <label className="field">
-              预计产量
-              <input
-                type="number"
-                min="1"
-                max="1000000"
-                step="1"
-                value={expectedProductionCount}
-                placeholder="例如：3000"
-                onChange={(event) => {
-                  setExpectedProductionCount(event.currentTarget.value);
-                  setFormError("");
-                }}
-                required
-              />
-            </label>
+
             <section className="sidebar-task-accessory-picker">
               <div className="sidebar-task-picker-head">
                 <strong>检测配件与数量</strong>

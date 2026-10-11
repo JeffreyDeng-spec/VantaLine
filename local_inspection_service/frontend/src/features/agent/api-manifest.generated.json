@@ -1906,13 +1906,6 @@
                 }
               ]
             },
-            "expected_production_count": {
-              "anyOf": [
-                {
-                  "type": "number"
-                }
-              ]
-            },
             "params": {
               "anyOf": [
                 {
@@ -2064,13 +2057,6 @@
                   "enum": [
                     true
                   ]
-                }
-              ]
-            },
-            "expected_production_count": {
-              "anyOf": [
-                {
-                  "type": "number"
                 }
               ]
             },

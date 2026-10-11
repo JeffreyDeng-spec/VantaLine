@@ -176,11 +176,9 @@ function autoOptimizeDetailText(status?: AiAutoOptimizeStatus) {
     return `模型 ${status.active_model_id || "-"} 已上线，自动优化采集已停止，后续检测不会继续保存新的训练图片。`;
   }
   const threshold = Number(status.settings?.min_trainable_samples || 0);
-  const expected = Number(status.expected_production_count || 0);
   const init = status.initialization || {};
   const reason = typeof init.reason === "string" ? init.reason : "";
   const parts = [
-    expected ? `预计产量 ${expected}` : "",
     threshold ? `训练阈值 ${threshold}` : "",
     `真实样本 ${Number(status.captured_samples || 0)}`,
     `预计训练图 ${Number(status.projected_training_samples || 0)}`,
@@ -990,7 +988,6 @@ export function TaskDetailPage() {
         <div className="task-detail-grid">
           <p><strong>当前阶段</strong><span>{displayStage}</span></p>
           <p><strong>状态指标</strong><span>{task.lastError || displayStatus}</span></p>
-          {task.expectedProductionCount ? <p><strong>预计产量</strong><span>{task.expectedProductionCount}</span></p> : null}
           <p><strong>检测台方式</strong><span>{detectionModes.length ? detectionModes.join(" / ") : "-"}</span></p>
           {showPipelineAutoAdvance ? <p><strong>自动推进</strong><span>{task.autoAdvance === false ? "已关闭" : "开启"}</span></p> : null}
           <p><strong>任务 ID</strong><span>{task.sourceId}</span></p>

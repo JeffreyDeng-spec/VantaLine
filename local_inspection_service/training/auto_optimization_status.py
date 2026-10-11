@@ -102,7 +102,6 @@ class AutoOptimizationStatus:
             "environment_background": self.policy.public_path_sanitized()(environment_background),
             "background_set": self.policy.public_path_sanitized()(background_set) if background_set else {},
             "phase": self.policy.auto_optimize_phase_name()(state),
-            "expected_production_count": self.policy.normalize_expected_production_count()(state.get("expected_production_count")),
             "initialization": self.policy.public_auto_optimize_initialization_payload()(state, settings),
             "samples": [self.policy.public_path_sanitized()(sample) for sample in samples[:80]],
         }

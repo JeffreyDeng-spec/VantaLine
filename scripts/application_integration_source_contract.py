@@ -83,6 +83,25 @@ def _restore_delta_cached(source, fixture_json):
     return ast.unparse(tree)
 
 
+def reviewed_business_bytes(path):
+    """Reverse only the reviewed quota-removal delta for historical source oracles."""
+    actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+    raw = (ROOT / "tests/backend_contract/production_quota_removal_delta.json").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == "0cb0e3da54b1872ad52915452becb1295c147c48c6e7d1f0213c6f2a86312eb8", "Unreviewed quota-removal fixture"
+    fixture = json.loads(raw)
+    change = fixture["files"].get(path)
+    if change is None:
+        return actual
+    assert hashlib.sha256(actual).hexdigest() == change["current_sha256"], "Quota-removal descendant changed: " + path
+    lines = actual.decode().splitlines(keepends=True)
+    for region in reversed(change["regions"]):
+        assert "".join(lines[region["start"]:region["end"]]) == region["expected"]
+        lines[region["start"]:region["end"]] = region["original"].splitlines(keepends=True)
+    restored = "".join(lines).encode()
+    assert hashlib.sha256(restored).hexdigest() == change["parent_sha256"], "Quota-removal inverse changed: " + path
+    return restored
+
+
 def verify_actual_compositions():
     assert MAIN283_PLC["schema"] == 1, "Unknown PLC integration schema"
     assert MAIN283_PLC["upstream_sha"] == "8195c96970c1e41582d4796fe2b23508ea9f837a", "Unreviewed PLC upstream"
@@ -100,7 +119,7 @@ def verify_actual_compositions():
         assert MAIN283_PLC["business_sources"][path]["actual_sha256"] == actual_expected, "Unreviewed PLC integration source: " + path
     assert source_digest((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text()) == PATH_CONFIGURATION["actual_owner_ast_sha256"], "Actual path/configuration composition changed"
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     """Validate real owned constructor edges before using an old-location oracle."""
     assert source_digest((ROOT / "local_inspection_service/agent/state_composition.py").read_text()) == AGENT_STATE["actual_owner_ast_sha256"], "Actual Agent state composition changed"
     assert source_digest((ROOT / "local_inspection_service/agent/planning_composition.py").read_text()) == POSE_PLANNING["actual_owner_ast_sha256"], "Actual Pose planning composition changed"
@@ -123,7 +142,7 @@ def verify_actual_compositions():
             accepted = MAIN283_PLC["business_sources"][path]
             assert expected == accepted["previous_sha256"], "Historical PLC baseline changed: " + path
             expected = accepted["actual_sha256"]
-        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        actual = reviewed_business_bytes(path)
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
         assert source_digest((ROOT / path).read_text(encoding="utf-8")) == expected, \
@@ -253,7 +272,7 @@ def verify_main289_real_photo_sources():
                                                         'main_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86',
                                                         'actual_sha256': 'ef835fd264675af32ed8ed55402c07e47740dae0b4730b595483cdf261ebce86'}}, "Unreviewed confirmed-source integration source"
     for path, accepted in MAIN289_REAL_PHOTO["business_sources"].items():
-        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        actual = reviewed_business_bytes(path)
         if path == "local_inspection_service/training/real_photo_api.py":
             actual = pagination_checkpoint_bytes(actual)
         assert hashlib.sha256(actual).hexdigest() == COMPLETED_REVIEW_RECOVERY_SOURCE_SHA256.get(path, MAIN302_REAL_PHOTO_SOURCE_SHA256.get(path, accepted["actual_sha256"])), "Confirmed-source business changed: " + path
@@ -282,7 +301,7 @@ def restore_real_photo_workflows_root(source):
             accepted = MAIN289_REAL_PHOTO["business_sources"][path]
             assert expected == accepted["previous_sha256"], "Historical main288 source changed: " + path
             expected = accepted["actual_sha256"]
-        actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+        actual = reviewed_business_bytes(path)
         if path == "local_inspection_service/training/real_photo_api.py":
             actual = pagination_checkpoint_bytes(actual)
         assert hashlib.sha256(actual).hexdigest() == expected, path
@@ -298,7 +317,7 @@ def restore_provider_transports_root(source):
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
@@ -311,7 +330,7 @@ def restore_account_visibility_root(source):
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
@@ -324,7 +343,7 @@ def restore_training_persistence_graph_root(source):
     for path, expected in fixture["actual_owner_ast_sha256"].items():
         assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in fixture["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     if source_digest(source) == fixture["integrated_ast_sha256"]:
         return restore_delta(source, fixture)
     return source
@@ -336,7 +355,7 @@ def restore_infrastructure_root(source):
     for path, expected in INFRASTRUCTURE["actual_owner_ast_sha256"].items():
         assert source_digest((ROOT / path).read_text()) == expected, path
     for path, expected in INFRASTRUCTURE["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     actual = source_digest(source)
     if actual == INFRASTRUCTURE["integrated_ast_sha256"]:
         return restore_delta(source, INFRASTRUCTURE)
@@ -355,7 +374,7 @@ def restore_path_configuration_root(source):
     source = restore_infrastructure_root(source)
     assert source_digest((ROOT / "local_inspection_service/runtime/path_configuration_composition.py").read_text()) == PATH_CONFIGURATION["actual_owner_ast_sha256"]
     for path, expected in PATH_CONFIGURATION["unchanged_business_sha256"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes().replace(b"\r\n", b"\n")).hexdigest() == expected, path
+        assert hashlib.sha256(reviewed_business_bytes(path)).hexdigest() == expected, path
     actual = source_digest(source)
     if actual == PATH_CONFIGURATION["integrated_ast_sha256"]:
         return restore_delta(source, PATH_CONFIGURATION)

@@ -1,0 +1,204 @@
+{
+  "schema": 1,
+  "parent_commit": "d123cf3b63dea4e63fb3c4198dfdf7bea1cb9b13",
+  "files": {
+    "local_inspection_service/pipeline/task_create.py": {
+      "parent_sha256": "f40024be92843e31041592f857ce421344bfa51569431fd06ead300ae8e18365",
+      "current_sha256": "bc60534a59022f00eabafe8ed345044f3082a9033fe78a60ecd6612c91c6639b",
+      "regions": [
+        {
+          "start": 36,
+          "end": 38,
+          "original": "            if request.accessory_ids or request.accessory_counts or request.expected_production_count not in {None, 0} or request.auto_advance:\n                raise self.access.http_error()(status_code=400, detail=\"包材文字任务不接受配件、预计产量或自动训练参数\")\n",
+          "expected": "            if request.accessory_ids or request.accessory_counts or request.auto_advance:\n                raise self.access.http_error()(status_code=400, detail=\"包材文字任务不接受配件或自动训练参数\")\n"
+        },
+        {
+          "start": 41,
+          "end": 41,
+          "original": "        expected_production_count = self.policy.normalize_expected_count()(request.expected_production_count)\n        if detection_method == \"ai\" and expected_production_count <= 0:\n            raise self.access.http_error()(status_code=400, detail=\"创建 AI 任务需要填写预计产量\")\n",
+          "expected": ""
+        },
+        {
+          "start": 48,
+          "end": 48,
+          "original": "        if expected_production_count:\n            params[\"expected_production_count\"] = expected_production_count\n",
+          "expected": ""
+        },
+        {
+          "start": 63,
+          "end": 63,
+          "original": "            \"expected_production_count\": expected_production_count,\n",
+          "expected": ""
+        }
+      ]
+    },
+    "local_inspection_service/pipeline/task_update.py": {
+      "parent_sha256": "efbf0c5c64442fae02ce3aa5be3c64b1712e3a26b6427e0220e6cf4c72292f25",
+      "current_sha256": "f90b51103a9fdcaa3376668b4c07edbd16fdcb82509c55c2004842abfc8f5e46",
+      "regions": [
+        {
+          "start": 28,
+          "end": 28,
+          "original": "                    or request.expected_production_count is not None\n",
+          "expected": ""
+        },
+        {
+          "start": 82,
+          "end": 83,
+          "original": "                for key in (\"sample_count\", \"epochs\", \"image_size\", \"expected_production_count\"):\n",
+          "expected": "                for key in (\"sample_count\", \"epochs\", \"image_size\"):\n"
+        },
+        {
+          "start": 105,
+          "end": 105,
+          "original": "                if \"expected_production_count\" in params:\n                    params[\"expected_production_count\"] = self.policy.normalize_expected_count()(params[\"expected_production_count\"])\n                    task[\"expected_production_count\"] = params[\"expected_production_count\"]\n                task[\"params\"] = params\n            if request.expected_production_count is not None:\n                expected_production_count = self.policy.normalize_expected_count()(request.expected_production_count)\n                task[\"expected_production_count\"] = expected_production_count\n                params = dict(task.get(\"params\") or {})\n                params[\"expected_production_count\"] = expected_production_count\n",
+          "expected": ""
+        }
+      ]
+    },
+    "local_inspection_service/training/auto_optimization_initialization.py": {
+      "parent_sha256": "3b431782d6aefd53b33bf76caff19eb50cb44c05f7ac6b13930a12f9315ea34a",
+      "current_sha256": "e8b83ef95da84dc211739ac9c1ff4397e303a474fd074adc1d5969c9bd136725",
+      "regions": [
+        {
+          "start": 6,
+          "end": 6,
+          "original": "from .auto_optimization_settings import normalize_expected_production_count\n",
+          "expected": ""
+        },
+        {
+          "start": 45,
+          "end": 46,
+          "original": "            \"根据任务预计产量、配件数量、图片/画像复杂度，判断是否值得在当前生产任务内开启自动优化训练。\"\n",
+          "expected": "            \"根据配件数量、图片/画像复杂度，建议自动优化训练的样本阈值和参数。\"\n"
+        },
+        {
+          "start": 54,
+          "end": 55,
+          "original": "            \"如果所需样本超过总产量，或超过前 30% 产量能采集到的样本量，enabled 必须为 false。\"\n",
+          "expected": "            \"训练准入由实际可用样本和质量门槛决定；不得根据预计产量或生产进度限制训练。\"\n"
+        },
+        {
+          "start": 57,
+          "end": 57,
+          "original": "            \"expected_production_count\": expected_production_count,\n            \"front_30_percent_quota\": int(expected_production_count * 0.3) if expected_production_count else 0,\n",
+          "expected": ""
+        },
+        {
+          "start": 96,
+          "end": 98,
+          "original": "        expected_count = normalize_expected_production_count(\n            task.get(\"expected_production_count\") or (task.get(\"params\") or {}).get(\"expected_production_count\")\n        )\n",
+          "expected": "        # Compatibility argument is inert; historical production estimates are ignored.\n        expected_count = 0\n"
+        },
+        {
+          "start": 139,
+          "end": 139,
+          "original": "                    \"expected_production_count\": expected_count,\n",
+          "expected": ""
+        },
+        {
+          "start": 145,
+          "end": 145,
+          "original": "        task[\"expected_production_count\"] = expected_count\n        if isinstance(task.get(\"params\"), dict):\n            task[\"params\"][\"expected_production_count\"] = expected_count\n",
+          "expected": ""
+        }
+      ]
+    },
+    "local_inspection_service/training/auto_optimization_recommendations.py": {
+      "parent_sha256": "ad994f1e83498924b6e4b7ced01b25c4f7c5a8ea4f284aea18745d896e89c329",
+      "current_sha256": "c0efcdd7a3c4537bfaa0b7d0a473dcd5949f8a7c027a9bf8b6a5400b29890dfc",
+      "regions": [
+        {
+          "start": 3,
+          "end": 4,
+          "original": "from .auto_optimization_settings import AutoOptimizationSettings, normalize_expected_production_count\n",
+          "expected": "from .auto_optimization_settings import AutoOptimizationSettings\n"
+        },
+        {
+          "start": 40,
+          "end": 41,
+          "original": "        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0\n        feasible = bool(expected_production_count and min_samples <= expected_production_count and min_samples <= early_quota)\n        if not expected_production_count:\n            reason = \"未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。\"\n        elif min_samples > expected_production_count:\n            reason = f\"预计至少需要 {min_samples} 张可训练样本，已超过预计产量 {expected_production_count}，不适合开启自动优化。\"\n        elif min_samples > early_quota:\n            reason = f\"预计至少需要 {min_samples} 张可训练样本，但前 30% 产量约 {early_quota} 张，训练上线可能赶不上当前产线。\"\n        else:\n            reason = f\"任务复杂度 {complexity}，预计产量 {expected_production_count}，建议以 {min_samples} 张可训练样本作为训练阈值。\"\n",
+          "expected": "        reason = f\"任务复杂度 {complexity}，建议以 {min_samples} 张可训练样本作为训练阈值。\"\n"
+        },
+        {
+          "start": 42,
+          "end": 43,
+          "original": "            \"enabled\": feasible,\n",
+          "expected": "            \"enabled\": True,\n"
+        },
+        {
+          "start": 51,
+          "end": 52,
+          "original": "            \"max_label_jobs_per_cycle\": 5 if feasible and expected_production_count >= 3000 else 3,\n",
+          "expected": "            \"max_label_jobs_per_cycle\": 3,\n"
+        },
+        {
+          "start": 54,
+          "end": 55,
+          "original": "            \"auto_promote\": bool(feasible and expected_production_count >= min_samples * 3),\n            \"expected_production_count\": expected_production_count,\n            \"early_training_quota\": early_quota,\n",
+          "expected": "            \"auto_promote\": False,\n"
+        },
+        {
+          "start": 90,
+          "end": 90,
+          "original": "        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0\n        required_samples = max(min_samples, min_positive + min_negative)\n        feasible = bool(expected_production_count and required_samples <= expected_production_count and required_samples <= early_quota)\n",
+          "expected": ""
+        },
+        {
+          "start": 92,
+          "end": 93,
+          "original": "                \"enabled\": feasible and bool(raw.get(\"enabled\", fallback.get(\"enabled\"))),\n",
+          "expected": "                \"enabled\": bool(raw.get(\"enabled\", fallback.get(\"enabled\"))),\n"
+        },
+        {
+          "start": 104,
+          "end": 105,
+          "original": "                \"auto_promote\": bool(raw.get(\"auto_promote\", fallback.get(\"auto_promote\", True))) and feasible,\n                \"expected_production_count\": expected_production_count,\n                \"early_training_quota\": early_quota,\n",
+          "expected": "                \"auto_promote\": bool(raw.get(\"auto_promote\", fallback.get(\"auto_promote\", False))),\n"
+        },
+        {
+          "start": 109,
+          "end": 109,
+          "original": "        if expected_production_count and not feasible:\n            result[\"enabled\"] = False\n            if required_samples > expected_production_count:\n                result[\"reason\"] = f\"Agent 估算需要 {required_samples} 张可用训练样本，超过预计产量 {expected_production_count}，自动优化关闭。\"\n            elif required_samples > early_quota:\n                result[\"reason\"] = f\"Agent 估算需要 {required_samples} 张可用训练样本，超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。\"\n",
+          "expected": ""
+        },
+        {
+          "start": 114,
+          "end": 116,
+          "original": "        expected_production_count = normalize_expected_production_count(\n            state.get(\"expected_production_count\") or payload.get(\"expected_production_count\")\n        )\n",
+          "expected": "        payload.pop(\"expected_production_count\", None)\n        payload.pop(\"early_training_quota\", None)\n"
+        },
+        {
+          "start": 121,
+          "end": 121,
+          "original": "        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0\n",
+          "expected": ""
+        },
+        {
+          "start": 123,
+          "end": 123,
+          "original": "                \"expected_production_count\": expected_production_count,\n                \"early_training_quota\": early_quota,\n",
+          "expected": ""
+        },
+        {
+          "start": 131,
+          "end": 136,
+          "original": "        if not expected_production_count:\n            payload[\"reason\"] = \"未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。\"\n        elif required_samples > expected_production_count:\n            payload[\"reason\"] = (\n                f\"Agent 估算需要 {required_samples} 张可用训练样本\"\n                f\"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），\"\n                f\"超过预计产量 {expected_production_count}，自动优化关闭。\"\n            )\n        elif required_samples > early_quota:\n            payload[\"reason\"] = (\n                f\"Agent 估算需要 {required_samples} 张可用训练样本\"\n                f\"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），\"\n                f\"超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。\"\n            )\n        elif payload.get(\"enabled\"):\n            payload[\"reason\"] = (\n                f\"预计产量 {expected_production_count}，训练阈值 {required_samples}，\"\n                f\"派生负样本计入单图派生预算，可开启自动优化。\"\n            )\n        else:\n            payload[\"reason\"] = (\n                f\"按当前配置需要 {required_samples} 张可用训练样本\"\n                f\"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），\"\n                f\"未超过前 30% 产量 {early_quota}；自动优化当前未由初始化建议开启。\"\n            )\n",
+          "expected": "        payload[\"reason\"] = (\n            f\"按当前配置需要 {required_samples} 张可用训练样本\"\n            f\"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算）。\"\n            + (\"自动优化已启用。\" if settings.get(\"enabled\") else \"自动优化当前未启用。\")\n        )\n"
+        }
+      ]
+    },
+    "local_inspection_service/training/auto_optimization_status.py": {
+      "parent_sha256": "4bc58286d94747ba8fe13e8e2e00927622cc6e2b71d940c501936bacb98af924",
+      "current_sha256": "629a76e9597a979fd2ccfa4a57068fd26b392eb977861361c0e6675bd4d11fea",
+      "regions": [
+        {
+          "start": 104,
+          "end": 104,
+          "original": "            \"expected_production_count\": self.policy.normalize_expected_production_count()(state.get(\"expected_production_count\")),\n",
+          "expected": ""
+        }
+      ]
+    }
+  }
+}

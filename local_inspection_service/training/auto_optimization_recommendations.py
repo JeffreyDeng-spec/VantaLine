@@ -1,7 +1,7 @@
 """Auto-optimization recommendation rules and public projection, without model calls."""
 from dataclasses import dataclass
 from typing import Any, Callable
-from .auto_optimization_settings import AutoOptimizationSettings, normalize_expected_production_count
+from .auto_optimization_settings import AutoOptimizationSettings
 
 
 @dataclass(frozen=True)
@@ -38,18 +38,9 @@ class AutoOptimizationRecommendations:
         if low_reference_count:
             min_samples += 150
         min_samples = max(150, min(3000, min_samples))
-        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
-        feasible = bool(expected_production_count and min_samples <= expected_production_count and min_samples <= early_quota)
-        if not expected_production_count:
-            reason = "未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。"
-        elif min_samples > expected_production_count:
-            reason = f"预计至少需要 {min_samples} 张可训练样本，已超过预计产量 {expected_production_count}，不适合开启自动优化。"
-        elif min_samples > early_quota:
-            reason = f"预计至少需要 {min_samples} 张可训练样本，但前 30% 产量约 {early_quota} 张，训练上线可能赶不上当前产线。"
-        else:
-            reason = f"任务复杂度 {complexity}，预计产量 {expected_production_count}，建议以 {min_samples} 张可训练样本作为训练阈值。"
+        reason = f"任务复杂度 {complexity}，建议以 {min_samples} 张可训练样本作为训练阈值。"
         return {
-            "enabled": feasible,
+            "enabled": True,
             "complexity": complexity,
             "samples_per_real_image": 12 if class_count <= 6 else 16,
             "training_epochs": 80 if has_text or class_count > 2 else 60,
@@ -58,12 +49,10 @@ class AutoOptimizationRecommendations:
             "min_positive_samples": min_samples,
             "min_negative_samples": 0,
             "negative_samples_per_real_image": self.settings.negative_samples_default,
-            "max_label_jobs_per_cycle": 5 if feasible and expected_production_count >= 3000 else 3,
+            "max_label_jobs_per_cycle": 3,
             "shadow_min_samples": max(20, min(120, int(min_samples * 0.25))),
             "shadow_min_agreement": 0.98,
-            "auto_promote": bool(feasible and expected_production_count >= min_samples * 3),
-            "expected_production_count": expected_production_count,
-            "early_training_quota": early_quota,
+            "auto_promote": False,
             "reason": reason,
             "source": "rules",
         }
@@ -99,12 +88,9 @@ class AutoOptimizationRecommendations:
             negative_per_real = max(0, min(20, int(raw_negative_ratio)))
         except (TypeError, ValueError):
             negative_per_real = int(fallback.get("negative_samples_per_real_image") or self.settings.negative_samples_default)
-        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
-        required_samples = max(min_samples, min_positive + min_negative)
-        feasible = bool(expected_production_count and required_samples <= expected_production_count and required_samples <= early_quota)
         result.update(
             {
-                "enabled": feasible and bool(raw.get("enabled", fallback.get("enabled"))),
+                "enabled": bool(raw.get("enabled", fallback.get("enabled"))),
                 "complexity": self.bounded_text()(raw.get("complexity") or fallback.get("complexity") or "unknown", 80),
                 "min_trainable_samples": min_samples,
                 "min_positive_samples": min_positive,
@@ -116,37 +102,25 @@ class AutoOptimizationRecommendations:
                 "max_label_jobs_per_cycle": max(1, min(20, int(raw.get("max_label_jobs_per_cycle") or fallback.get("max_label_jobs_per_cycle") or 3))),
                 "shadow_min_samples": max(10, min(500, int(raw.get("shadow_min_samples") or fallback.get("shadow_min_samples") or 80))),
                 "shadow_min_agreement": max(0.8, min(1.0, float(raw.get("shadow_min_agreement") or fallback.get("shadow_min_agreement") or 0.98))),
-                "auto_promote": bool(raw.get("auto_promote", fallback.get("auto_promote", True))) and feasible,
-                "expected_production_count": expected_production_count,
-                "early_training_quota": early_quota,
+                "auto_promote": bool(raw.get("auto_promote", fallback.get("auto_promote", False))),
                 "source": "gemini",
                 "reason": self.bounded_text()(raw.get("reason") or fallback.get("reason") or "", 240),
             }
         )
-        if expected_production_count and not feasible:
-            result["enabled"] = False
-            if required_samples > expected_production_count:
-                result["reason"] = f"Agent 估算需要 {required_samples} 张可用训练样本，超过预计产量 {expected_production_count}，自动优化关闭。"
-            elif required_samples > early_quota:
-                result["reason"] = f"Agent 估算需要 {required_samples} 张可用训练样本，超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。"
         return result
 
     def public_auto_optimize_initialization_payload(self, state: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
         raw = state.get("auto_optimize_initialization")
         payload = dict(raw) if isinstance(raw, dict) else {}
-        expected_production_count = normalize_expected_production_count(
-            state.get("expected_production_count") or payload.get("expected_production_count")
-        )
+        payload.pop("expected_production_count", None)
+        payload.pop("early_training_quota", None)
         requirements = self.settings.auto_optimize_training_requirements(settings)
         min_trainable = int(requirements.get("min_trainable_samples") or 0)
         min_positive = int(requirements.get("min_positive_samples") or min_trainable)
         min_negative = int(requirements.get("min_negative_samples") or 0)
         required_samples = max(min_trainable, min_positive + min_negative)
-        early_quota = int(expected_production_count * 0.3) if expected_production_count else 0
         payload.update(
             {
-                "expected_production_count": expected_production_count,
-                "early_training_quota": early_quota,
                 "min_trainable_samples": min_trainable,
                 "min_positive_samples": min_positive,
                 "min_negative_samples": min_negative,
@@ -155,29 +129,9 @@ class AutoOptimizationRecommendations:
                 "positive_derivatives_per_real_image": self.settings.auto_optimize_positive_derivatives_per_real_image(settings),
             }
         )
-        if not expected_production_count:
-            payload["reason"] = "未填写预计产量，无法判断当前生产流程能否覆盖训练样本，默认关闭自动优化。"
-        elif required_samples > expected_production_count:
-            payload["reason"] = (
-                f"Agent 估算需要 {required_samples} 张可用训练样本"
-                f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-                f"超过预计产量 {expected_production_count}，自动优化关闭。"
-            )
-        elif required_samples > early_quota:
-            payload["reason"] = (
-                f"Agent 估算需要 {required_samples} 张可用训练样本"
-                f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-                f"超过前 30% 产量 {early_quota}，当前产线不适合自动训练切换。"
-            )
-        elif payload.get("enabled"):
-            payload["reason"] = (
-                f"预计产量 {expected_production_count}，训练阈值 {required_samples}，"
-                f"派生负样本计入单图派生预算，可开启自动优化。"
-            )
-        else:
-            payload["reason"] = (
-                f"按当前配置需要 {required_samples} 张可用训练样本"
-                f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算），"
-                f"未超过前 30% 产量 {early_quota}；自动优化当前未由初始化建议开启。"
-            )
+        payload["reason"] = (
+            f"按当前配置需要 {required_samples} 张可用训练样本"
+            f"（正样本 {min_positive}、额外必需负样本 {min_negative}；派生负样本计入单图派生预算）。"
+            + ("自动优化已启用。" if settings.get("enabled") else "自动优化当前未启用。")
+        )
         return payload

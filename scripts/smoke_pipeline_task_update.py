@@ -179,7 +179,19 @@ def main():
         assert task["accessory_counts"] == {"a": 3} and "agent_mcp" not in task
         assert task["detection_method"] == "label_text_compare" and task["params"]["route"] == "label_text_compare"
         assert "train_mode" not in task["params"] and task["params"]["sample_count"] == 50
-        assert task["params"]["expected_production_count"] == 8 and task["auto_advance"] is True
+        assert task["auto_advance"] is True
+        if baseline_source:
+            assert task["params"]["expected_production_count"] == 8
+        else:
+            assert "expected_production_count" not in task["params"]
+            assert "expected_production_count" not in task
+
+        if not baseline_source:
+            legacy={"id":"task-1","name":"Old","stage":"draft","task_kind":"normal",
+                    "expected_production_count":10000,"params":{"expected_production_count":10000}}
+            result,error,_,saved,task=exercise(legacy,{"expected_production_count":1,"params":{"expected_production_count":2}})
+            assert error is None and saved
+            assert task["expected_production_count"] == 10000 and task["params"]["expected_production_count"] == 10000
 
         draft = {"id": "task-1", "name": "Old", "stage": "draft", "task_kind": "normal"}
         _, error, events, saved, task = exercise(draft, {"accessory_ids": ["a"]}, broken_names=True)

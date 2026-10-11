@@ -50,19 +50,34 @@ class RecommendationContract(unittest.TestCase):
             config={str(i):dict(source_files=['a','b','c']) for i in range(count)}
             result=self.rule(config,list(config),10000)
             self.assertEqual((result['complexity'],result['min_trainable_samples'],result['training_epochs'],result['training_image_size']),(kind,threshold,epochs,size))
-            self.assertTrue(result['enabled']);self.assertTrue(result['auto_promote']);self.assertEqual(result['source'],'rules')
+            self.assertTrue(result['enabled']);self.assertEqual(result['auto_promote'],bool(BASELINE));self.assertEqual(result['source'],'rules')
         config={'one':dict(material_type='text',source_files=[])}
         result=self.rule(config,['one'],2000)
         self.assertEqual(result['min_trainable_samples'],550);self.assertEqual(result['training_image_size'],768)
-        self.assertFalse(self.rule(config,['one'],1833)['enabled']);self.assertTrue(self.rule(config,['one'],1834)['enabled'])
+        self.assertEqual(self.rule(config,['one'],1833)['enabled'],not bool(BASELINE));self.assertTrue(self.rule(config,['one'],1834)['enabled'])
 
     def test_missing_and_duplicate_ids_keep_selection_semantics(self):
         config={'one':dict(source_files=['a','b','c'])}
         result=self.rule(config,['one','one','missing'],0)
         self.assertEqual(result['complexity'],'medium');self.assertEqual(result['min_trainable_samples'],800)
-        self.assertFalse(result['enabled']);self.assertIn('未填写',result['reason'])
+        self.assertEqual(result['enabled'],not bool(BASELINE));self.assertIn('未填写' if BASELINE else '训练阈值',result['reason'])
         self.assertEqual([x[0] for x in self.calls],['lookup','material','material'])
         with self.assertRaises(TypeError):self.rule({'bad':{'source_files':1}},['bad'],2000)
+
+    @unittest.skipIf(BASELINE, 'quota removal is current behavior')
+    def test_historical_estimates_do_not_change_decisions_or_pause_state(self):
+        config={'a':{'source_files':['a','b','c']}}
+        expected=self.rule(config,['a'],0)
+        for count in (0,1,999,1000000):
+            self.assertEqual(self.rule(config,['a'],count),expected)
+            self.assertEqual(self.policy.clamp_auto_optimize_initialization_recommendation({'enabled':False},expected,count)['enabled'],False)
+            state={'expected_production_count':count,'auto_optimize_initialization':{'enabled':True,'expected_production_count':count,'early_training_quota':count*.3}}
+            saved=copy.deepcopy(state)
+            result=self.policy.public_auto_optimize_initialization_payload(state,{'enabled':False})
+            self.assertNotIn('expected_production_count',result)
+            self.assertNotIn('early_training_quota',result)
+            self.assertIn('当前未启用',result['reason'])
+            self.assertEqual(state,saved)
 
     def fallback(self):return self.rule({'a':{'source_files':['a','b','c']}},['a'],10000)
 
@@ -80,9 +95,9 @@ class RecommendationContract(unittest.TestCase):
     def test_clamp_failure_precedence_and_infeasible_reason(self):
         fallback=self.fallback()
         result=self.policy.clamp_auto_optimize_initialization_recommendation({'enabled':True,'min_trainable_samples':'bad'},fallback,100)
-        self.assertFalse(result['enabled']);self.assertIn('超过预计产量',result['reason'])
+        self.assertEqual(result['enabled'],not bool(BASELINE));self.assertIn('超过预计产量' if BASELINE else '训练阈值',result['reason'])
         result=self.policy.clamp_auto_optimize_initialization_recommendation({'enabled':True},fallback,500)
-        self.assertIn('前 30%',result['reason'])
+        self.assertIn('前 30%' if BASELINE else '训练阈值',result['reason'])
         with self.assertRaises(ValueError):self.policy.clamp_auto_optimize_initialization_recommendation({'samples_per_real_image':'bad'},fallback,10000)
         with self.assertRaises(KeyError):self.policy.clamp_auto_optimize_initialization_recommendation({}, {}, 10000)
 
@@ -92,10 +107,10 @@ class RecommendationContract(unittest.TestCase):
             saved=copy.deepcopy(state)
             result=self.policy.public_auto_optimize_initialization_payload(state,{})
             self.assertEqual(result['min_trainable_samples'],200);self.assertEqual(result['samples_per_real_image'],12)
-            self.assertEqual(result['positive_derivatives_per_real_image'],9);self.assertIn(fragment,result['reason'])
+            self.assertEqual(result['positive_derivatives_per_real_image'],9);self.assertIn(fragment if BASELINE else '按当前配置需要',result['reason'])
             self.assertEqual(state,saved);self.assertIs(result['nested'],nested)
         result=self.policy.public_auto_optimize_initialization_payload({'expected_production_count':0,'auto_optimize_initialization':{'expected_production_count':1000}}, {})
-        self.assertEqual(result['expected_production_count'],1000)
+        self.assertEqual(result['expected_production_count'],1000) if BASELINE else self.assertNotIn('expected_production_count',result)
 
     def test_public_payload_preserves_dynamic_settings_error(self):
         os.environ['VANTALINE_AUTO_OPT_EPOCHS']='bad'
