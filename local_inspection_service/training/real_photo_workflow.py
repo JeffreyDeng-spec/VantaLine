@@ -60,8 +60,8 @@ def schedule(repo, owner, task):
                     current['status']='annotation_incomplete'
                     state['rounds'].append(current);state.pop('round')
                 return
-            for i in range(0,len(new),10):
-                samples=[{**copy.deepcopy(s),'review_key':review_key(s,state['classes'])} for s in new[i:i+10]]
+            for i in range(0,len(new),5):
+                samples=[{**copy.deepcopy(s),'review_key':review_key(s,state['classes'])} for s in new[i:i+5]]
                 job=repo.enqueue(c,state,'review','review:'+current['id']+':'+str(i),
                                  {'samples':samples,'classes':state['classes'],'round_id':current['id']})
                 current['review_jobs'].append(job['id'])

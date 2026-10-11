@@ -2048,3 +2048,5 @@ Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
 SQLSTATE category before its generic failure message. It never logs exception
 text, configuration, connection strings or database records. All acceptance and
 whole-release rollback gates remain required.
+
+After a real-photo CLI timeout, preserve the interrupted attempt and any completed current-version decisions. Pause the owned queue from the frontend before releasing a repair; verify no paid session is active before syncing the separate review service. New rounds use five-image chunks; explicitly restore from the frontend only after diagnosis. Do not increase the 600-second bound, waive quality/source gates or automatically replay paid sessions.

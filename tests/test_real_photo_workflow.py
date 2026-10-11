@@ -27,10 +27,13 @@ def ready(database,approved_target=20):
 
 def test_complete_round_missing_class_train_and_frozen_new_arrival(database):
     repo=ready(database);schedule(repo,'a','task')
-    current=repo.get('a','task')['round'];assert len(current['review_jobs'])==2
+    current=repo.get('a','task')['round'];assert len(current['review_jobs'])==4
+    chunks=[repo.read_job(repo.repository._cursor(),jid)['inputs']['samples'] for jid in current['review_jobs']]
+    assert [len(chunk) for chunk in chunks]==[5,5,5,5]
+    assert len({sample['sample_id'] for chunk in chunks for sample in chunk})==20
     extra=copy.deepcopy(state_fixture()['samples'][0]);extra.update(sample_id='next',image_sha256='new');extra.pop('review')
     repo.capture('a','task',extra)
-    for _ in range(2):
+    for _ in range(4):
         finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
             'decision':'accept_positive' if s['annotation']['objects'] else 'accept_negative','reason':'fixture correct'} for s in j['inputs']['samples']]})
     schedule(repo,'a','task')
@@ -187,7 +190,7 @@ def test_old_terminal_annotation_does_not_block_explicit_new_version(database,ol
     assert not state['round']['review_jobs']
     finish(repo,'annotate',lambda j:{'status':'completed','objects':[{'class_id':'a','bbox':[0,0,10,10]}],'receipt':{}})
     schedule(repo,'a','task');state=repo.get('a','task')
-    assert not state.get('pause_reason') and len(state['round']['review_jobs'])==2
+    assert not state.get('pause_reason') and len(state['round']['review_jobs'])==4
     jobs=repo.jobs('a','task')
     assert next(j for j in jobs if j['id']==old['id'])['status']==old_status
     assert len([j for j in jobs if j['kind']=='annotate'])==2
@@ -196,7 +199,7 @@ def test_old_terminal_annotation_does_not_block_explicit_new_version(database,ol
 
 def test_failed_assessment_blocks_future_paid_annotation(database):
     repo=ready(database);schedule(repo,'a','task')
-    for _ in range(2):
+    for _ in range(4):
         finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
             'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
     extra=copy.deepcopy(state_fixture()['samples'][0]);extra.update(sample_id='late',image_sha256='late')
@@ -211,7 +214,7 @@ def test_failed_assessment_blocks_future_paid_annotation(database):
 
 def test_explicit_annotation_version_rechecks_without_new_photo_or_duplicate_wakeup(database):
     repo=ready(database);schedule(repo,'a','task')
-    for _ in range(2):
+    for _ in range(4):
         finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
             'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
     schedule(repo,'a','task')
@@ -238,7 +241,7 @@ def test_explicit_annotation_version_rechecks_without_new_photo_or_duplicate_wak
 
 def test_assessment_receives_initial_and_current_thresholds_before_lowering(database):
     repo=ready(database,approved_target=30);schedule(repo,'a','task')
-    for _ in range(2):
+    for _ in range(4):
         finish(repo,'review',lambda j:{'decisions':[{'sample_id':s['sample_id'],'review_key':s['review_key'],
             'decision':'accept_positive','reason':'fixture correct'} for s in j['inputs']['samples']]})
     schedule(repo,'a','task')
