@@ -40,6 +40,35 @@ class GateContract(unittest.TestCase):
                        'on:\n  workflow_dispatch:\ntrue: duplicate\n'):
             with self.subTest(source=source),self.assertRaises(AssertionError):backend_ci.validate_workflow_trigger(source)
 
+    def test_current_manual_and_main_push_policy_rejects_automatic_or_widened_events(self):
+        import yaml
+        root=backend_ci.ROOT/'.github/workflows'
+        for name in ('ci.yml','backend-performance.yml','ci-dependencies.yml','observe-runtime.yml'):
+            workflow=yaml.safe_load((root/name).read_text())
+            backend_ci.validate_manual_triggers(workflow)
+            triggers=workflow.get('on',workflow.get(True))
+            for event in ('push','pull_request','schedule','workflow_run'):
+                changed=copy.deepcopy(workflow)
+                changed.get('on',changed.get(True))[event]=None
+                with self.subTest(name=name,event=event),self.assertRaises(AssertionError):
+                    backend_ci.validate_manual_triggers(changed)
+            self.assertEqual(set(triggers),{'workflow_dispatch'})
+        release=yaml.safe_load((root/'release-production.yml').read_text())
+        backend_ci.validate_release_policy(release)
+        mutations=(lambda w:w['jobs']['release'].update({'if':"github.event_name == 'workflow_dispatch'"}),
+                   lambda w:w.get('on',w.get(True))['push'].update(branches=['main','other']),
+                   lambda w:w['jobs']['release']['env'].update(RELEASE_SHA='unbound'),
+                   lambda w:w['concurrency'].update({'cancel-in-progress':True}),
+                   lambda w:w['jobs']['observer-environment-diagnostics'].update({'if':"github.event_name == 'push'"}),
+                   lambda w:w['jobs']['release']['steps'].append({'name':'Observe accepted runtime database heartbeats'}),
+                   lambda w:w['jobs']['release']['steps'][0].update(run='true'),
+                   lambda w:w['jobs']['release']['steps'][0].update({'if':'false'}),
+                   lambda w:w['jobs']['release']['steps'][0].update({'continue-on-error':True}),
+                   lambda w:w['jobs']['release']['steps'].append(w['jobs']['release']['steps'].pop(0)))
+        for mutate in mutations:
+            changed=copy.deepcopy(release);mutate(changed)
+            with self.assertRaises(AssertionError):backend_ci.validate_release_policy(changed)
+
     def test_reuse_jobs_require_checkout_and_python_before_validator(self):
         import yaml
         workflow=yaml.safe_load((backend_ci.ROOT/'.github/workflows/ci.yml').read_text())

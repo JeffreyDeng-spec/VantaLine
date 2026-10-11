@@ -73,6 +73,8 @@ With `VANTALINE_PLC_LEASE_API_BASELINE_SOURCE`, `python scripts/smoke_plc_connec
 
 # Testing
 
+The backend CI coverage verifier follows the current owner-authorized trigger policy: correctness, performance, dependency preparation and runtime observation are manual-only; immutable releases run on main pushes. It verifies the exact main SHA binding and that the effective superseded-main rejection runs before packaging, deployment and publication. These trigger checks do not reduce the frozen 461 ordinary commands, 11 ordered performance-plan commands, numeric acceptance thresholds or required evidence archives.
+
 `python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.
 
 `python scripts/smoke_pipeline_training_status.py` replays the accepted-main lookup and synchronization functions when `VANTALINE_TRAINING_STATUS_BASELINE_SOURCE` points to its `server.py`; otherwise it tests the extracted candidate. Synthetic cases cover loader selection, late projection, state mapping, epoch reads and exception partial effects. No real PLC or paid model is used.
