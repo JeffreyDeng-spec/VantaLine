@@ -43,11 +43,11 @@ jobs:
             sudo -n /usr/bin/python3 -I -S -B - < scripts/diagnose_observer_database.py \
             > "$task_dir/result" 2> "$task_dir/error"; then
             python3 - "$task_dir/error" <<'PY_ERROR'
-            import sys
-            raw = open(sys.argv[1], 'rb').read(16384)
-            categories = [(b'a password is required', 'sudo_password_required'), (b'not allowed', 'sudo_not_allowed'), (b'Permission denied', 'ssh_permission_denied'), (b'command not found', 'command_unavailable'), (b'Traceback', 'script_error')]
-            print('Read-only probe failed: ' + next((code for token, code in categories if token in raw), 'transport_or_privilege_error'))
-            PY_ERROR
+          import sys
+          raw = open(sys.argv[1], 'rb').read(16384)
+          categories = [(b'a password is required', 'sudo_password_required'), (b'not allowed', 'sudo_not_allowed'), (b'Permission denied', 'ssh_permission_denied'), (b'command not found', 'command_unavailable'), (b'Traceback', 'script_error')]
+          print('Read-only probe failed: ' + next((code for token, code in categories if token in raw), 'transport_or_privilege_error'))
+          PY_ERROR
             exit 1
           fi
           python3 - "$task_dir/result" <<'PY_VALIDATE'
