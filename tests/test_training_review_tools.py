@@ -126,3 +126,34 @@ def test_report_refusal_is_distinct_from_missing_or_abnormal_cli_exit():
     assert completion_failure(0,False,False,[{}],'session',{})=='cli_turn_incomplete'
     assert completion_failure(0,True,False,[{}],None,{})=='cli_session_missing'
     assert completion_failure(0,True,False,[{}],'session',{}) is None
+
+
+def test_progress_observation_discards_private_tool_contents():
+    from local_inspection_service.training_review.worker import progress_event
+    event={'type':'item.completed','item':{'type':'command_execution','command':'customer-secret',
+                                         'aggregated_output':'private image path'}}
+    assert progress_event(event)=={'event_type':'item.completed','item_type':'command_execution'}
+    assert progress_event({'type':'item.started','item':{'type':'private-type'}})['item_type']=='other'
+    assert progress_event({'type':'turn.completed','usage':{'input_tokens':123}}) is None
+    assert progress_event('private log') is None
+    assert progress_event({'type':'item.started','item':{'type':['private']}})['item_type']=='other'
+
+
+@pytest.mark.parametrize('code',['review_interrupted','cli_exit_failed'])
+def test_failed_attempt_retains_elapsed_after_expiry_without_replay(code):
+    from local_inspection_service.training_review import worker
+    receipts=[];finished=[]
+    def fail_finish(*args,**kwargs):
+        finished.append((args,kwargs))
+        raise ValueError('expired attempt')
+    repo=SimpleNamespace(receipt=lambda *args:receipts.append(args),finish=fail_finish)
+    job={'id':'job','kind':'review','attempt_id':'attempt','started_at':100}
+    with patch.object(worker,'with_repo',lambda fn:fn(repo)), \
+         patch.object(worker.time,'time',return_value=701), \
+         patch.object(worker,'review',side_effect=worker.ReviewFailure(code,{'diagnostics':{'progress_event_count':2}})) as invoke:
+        worker.run(job,'token',{})
+    invoke.assert_called_once()
+    assert len(receipts)==1 and receipts[0][2]['elapsed_seconds']==601
+    assert len(finished)==1 and finished[0][1]['success'] is False
+    assert finished[0][0][2]['error_code']==code
+    assert 'usage' not in receipts[0][2]  # Unknown usage is not zero.

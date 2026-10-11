@@ -39,6 +39,16 @@ class ReviewFailure(RuntimeError):
         self.metadata = metadata
 
 
+def progress_event(event):
+    """Keep only bounded event classifications, never tool text or image data."""
+    if not isinstance(event,dict) or event.get('type') not in {'item.started', 'item.completed'}:
+        return None
+    item=event.get('item')
+    kind=item.get('type') if isinstance(item,dict) else None
+    permitted = {'command_execution', 'image_view', 'mcp_tool_call', 'reasoning', 'agent_message'}
+    return {'event_type': event['type'], 'item_type': kind if isinstance(kind,str) and kind in permitted else 'other'}
+
+
 def completion_failure(exit_code, complete, failed, report, session_id, refusals):
     if exit_code != 0:return 'cli_exit_failed'
     if failed:return 'cli_turn_failed'
@@ -189,7 +199,7 @@ def broker(job, token, path, report, auth_file, diagnostics=None):
 
 
 def review(job,token,config):
-    report=[];metadata={};events=queue.Queue(maxsize=32);process=None;server=None;reader=None
+    report=[];metadata={};events=queue.Queue(maxsize=32);progress=queue.Queue(maxsize=32);process=None;server=None;reader=None
     diagnostics={'prompt_sha256':digest((SKILL/'SKILL.md').read_bytes())}
     with workspace(config) as directory, tempfile.TemporaryDirectory(prefix='rp-sock-') as socket_dir:
         for name in ('input','work','auth','bin','tmp'):(directory/name).mkdir(mode=0o700)
@@ -219,6 +229,8 @@ def review(job,token,config):
                     try:
                         event=json.loads(line)
                         if event.get('type') in {'thread.started','turn.completed','turn.failed'}:events.put_nowait(event)
+                        observation=progress_event(event)
+                        if observation:progress.put_nowait(observation)
                     except (ValueError,queue.Full):pass
             reader=threading.Thread(target=read,daemon=True);reader.start()
             complete=False;failed=False
@@ -233,6 +245,10 @@ def review(job,token,config):
                         complete=True
                         metadata['usage']={k:v for k,v in (event.get('usage') or {}).items()
                                            if k in {'input_tokens','output_tokens','cached_input_tokens','reasoning_output_tokens'} and type(v)is int and v>=0}
+                while not progress.empty():
+                    diagnostics.update(progress.get_nowait())
+                    diagnostics['progress_event_count']=min(diagnostics.get('progress_event_count',0)+1,10000)
+                    diagnostics['last_progress_seconds']=max(0,time.time()-job['started_at'])
                 if not with_repo(lambda r:r.pulse(job['id'],token)) or time.time()>=job['deadline']:
                     raise ReviewFailure('review_interrupted',{**metadata,'diagnostics':diagnostics})
                 last_pulse[0]=time.monotonic()
@@ -316,6 +332,7 @@ def run(job,token,config):
             else:
                 if isinstance(exc,ReviewFailure):
                     metadata.update(exc.metadata)
+                    metadata['elapsed_seconds']=max(0,time.time()-job['started_at'])
                     with_repo(lambda r:r.receipt(job['id'],job['attempt_id'],metadata))
                 result={'error_type':type(exc).__name__,**metadata}
                 if isinstance(exc,ReviewFailure):result['error_code']=exc.code
