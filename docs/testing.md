@@ -3207,3 +3207,5 @@ The root-only runtime observer validates private configuration and immutable ide
 `python scripts/smoke_label_runtime_observation.py` verifies observer failure
 stages and SQLSTATE classification do not expose driver/configuration secrets.
 The real PostgreSQL observer smoke retains read-only, snapshot and progress gates.
+
+Review workflow PostgreSQL fixtures assert four five-image chunks covering the frozen twenty originals exactly once, retained arrival/version boundaries and no training after an incomplete chunk. Reviewer tests verify private tool content is discarded by progress classification and failure elapsed time is receipted after expiry without a second invocation or invented usage. Fixtures do not replace an actual released frontend recovery and completed private-image CLI screening.
