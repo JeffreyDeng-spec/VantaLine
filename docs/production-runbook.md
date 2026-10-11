@@ -2041,3 +2041,8 @@ Zero-byte logs are valid only for fixed silent Git preparation checks `check-298
 The upstream #290 ordinary-only shard rebalance does not replace this refactor's frozen baseline and complete 461-command schedule. Cache-first dependency verification is adopted; its miss or failed preparation must run the full lock fallback. Historical 170-second/22-job measurements do not accept the expanded 24-job suite or required performance protocols.
 
 When rolling out a real-photo localization prompt refinement, preserve prior boxes and screening evidence. The changed prompt hash requires a new prefix only when a new annotation is requested. Explicitly reannotate affected photos from the frontend, then complete whole-image screening; do not reuse old approval for the new version or lower the 20-real-image gate. Roll back the complete immutable release while retaining all versions; never replay uncertain paid calls.
+
+Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
+SQLSTATE category before its generic failure message. It never logs exception
+text, configuration, connection strings or database records. All acceptance and
+whole-release rollback gates remain required.

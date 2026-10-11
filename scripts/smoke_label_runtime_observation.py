@@ -95,6 +95,24 @@ class ProgressTests(unittest.TestCase):
                 patch.object(observe_label_runtime, "print") as output:
             self.assertEqual(observe_label_runtime.main(["--commit", "a"*40, "--release", "v2026.10.1"]), 1)
         self.assertEqual(output.call_args.args, ("Runtime database observation failed",))
+        self.assertEqual(output.call_args_list[0].args,
+                         ("Runtime database observation stage=configuration_read reason=unavailable",))
+
+    def test_cli_classifies_authentication_without_driver_details(self):
+        class AuthenticationFailure(Exception):
+            sqlstate = "28000"
+        config = configuration_capture({"VANTALINE_DATA_STORE": "postgres", "DATABASE_URL": "synthetic"}, "/synthetic")
+        identity = LabelRuntimeIdentity("a"*40, "v2026.10.1", "external", "b"*64)
+        driver = SimpleNamespace(connect=Mock(side_effect=AuthenticationFailure("customer-password-secret")))
+        with patch.dict(os.environ), patch.dict(sys.modules, psycopg=driver), \
+                patch.object(observe_label_runtime.os, "geteuid", create=True, return_value=0), \
+                patch.object(observe_label_runtime, "private_bytes", return_value=json.dumps(config).encode()), \
+                patch.object(observe_label_runtime, "read_identity", return_value=identity), \
+                patch.object(observe_label_runtime, "print") as output:
+            self.assertEqual(observe_label_runtime.main(["--commit", "a"*40, "--release", "v2026.10.1"]), 1)
+        self.assertEqual(output.call_args_list[0].args,
+                         ("Runtime database observation stage=database_connect reason=database_authentication",))
+        self.assertNotIn("customer-password-secret", str(output.call_args_list))
 
     def run_cli_with_snapshots(self, configs):
         driver = SimpleNamespace(connect=Mock(return_value=nullcontext(Mock())))

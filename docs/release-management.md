@@ -1782,3 +1782,8 @@ The separate workflow post-install runtime observation is also removed with
 explicit owner authorization. Its environment repair remains separate; removal
 does not establish environment correctness or heartbeat-observation success.
 Rollback of production still installs an entire previous immutable release.
+
+Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
+SQLSTATE category before its generic failure message. It never logs exception
+text, configuration, connection strings or database records. All acceptance and
+whole-release rollback gates remain required.
