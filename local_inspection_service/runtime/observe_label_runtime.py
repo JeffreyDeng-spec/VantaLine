@@ -18,14 +18,18 @@ def main(argv=None):
     parser.add_argument("--commit", required=True)
     parser.add_argument("--release", required=True)
     args = parser.parse_args(argv)
+    stage = "root"
     try:
         deadline = time.monotonic() + 30
         if os.geteuid() != 0:
             raise RuntimeUnavailable("Root observation required")
         root = Path(__file__).resolve().parents[2]
+        stage = "configuration_read"
         config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                            owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
+        stage = "configuration_validate"
         revision = configuration_validate(config)
+        stage = "identity"
         identity = read_identity(root, current=Path("/opt/vantaline/current"),
                                  configuration_revision=lambda: revision)
         if identity is None or identity.commit != args.commit or identity.release != args.release:
@@ -37,14 +41,19 @@ def main(argv=None):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+        stage = "database_driver"
         import psycopg
+        stage = "database_connect"
         with psycopg.connect(config["environment"]["DATABASE_URL"], connect_timeout=2,
                 options="-c default_transaction_read_only=on -c default_transaction_isolation=repeatable\\ read -c statement_timeout=2000") as connection:
+            stage = "database_progress"
             repository = PostgresRuntimeRepository(connection, "redacted")
             progress = observe_progress(lambda: read_observation(repository, identity),
                                       timeout=deadline - time.monotonic())
+        stage = "final_configuration_read"
         final_config = json.loads(private_bytes(Path("/etc/vantaline/runtime/current/config.json"),
                                  owner=0, maximum=CONFIGURATION_LIMIT, group_read=True))
+        stage = "final_identity"
         final_identity = read_identity(root, current=Path("/opt/vantaline/current"),
                                        configuration_revision=lambda: configuration_validate(final_config))
         if final_identity != identity or time.monotonic() >= deadline:
@@ -59,7 +68,12 @@ def main(argv=None):
             "samples_before": [{"role": role, "instance": instance, "pid": pid, "sampled_at": sampled}
                       for role, instance, pid, sampled in progress.before.roles], "periodic_progress": True}))
         return 0
-    except Exception:
+    except Exception as error:
+        # Emit only fixed classifications, never exception text or configuration.
+        reason = {"28000": "database_authentication", "28P01": "database_authentication",
+                  "3D000": "database_missing", "42501": "database_permission"}.get(
+                      getattr(error, "sqlstate", None), "unavailable")
+        print(f"Runtime database observation stage={stage} reason={reason}", file=sys.stderr)
         # Driver/configuration exceptions can contain passwords and private paths.
         print("Runtime database observation failed", file=sys.stderr)
         return 1
