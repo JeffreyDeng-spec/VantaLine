@@ -17,7 +17,7 @@ export function PlcConnectionStatusBar(props: Props) {
   return <section className={`plc-connection-bar plc-connection-bar--${props.state}`} aria-label="PLC 连接状态">
     <div className="plc-connection-bar-copy" role="status" aria-live="polite" aria-atomic="true">
       <strong><i aria-hidden="true" />{labels[props.state]}</strong>
-      <span>{props.detail}</span>
+      <span title={props.detail}>{props.detail}</span>
       {props.disconnectedAt && <time dateTime={new Date(props.disconnectedAt).toISOString()}>
         断开时间：{new Date(props.disconnectedAt).toLocaleTimeString("zh-CN", { hour12: false })}
       </time>}
