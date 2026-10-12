@@ -5,6 +5,7 @@ Every current module is checked on each call; only parsing of identical source
 text is cached. Altering an entry, owner, callback or manifest cannot be hidden
 by replay of the old source.
 """
+from admin_user_data_source_contract import checkpoint_bytes
 import ast
 from functools import lru_cache
 import hashlib
@@ -37,7 +38,7 @@ def verify_actual_sources():
     assert hashlib.sha256(parent.encode()).hexdigest() == FIXTURE['parent_source_sha256'] == '086d17593596f2da642de215a115604e8e4891599c040a1528fa1768993d2204'
     assert source_digest(parent) == FIXTURE['parent_ast_sha256']
     for path, expected in FIXTURE['actual_source_ast_sha256'].items():
-        source = (ROOT / path).read_text(encoding='utf-8')
+        source = checkpoint_bytes(path, (ROOT / path).read_text(encoding='utf-8').encode()).decode()
         if path == 'local_inspection_service/runtime/wiring/http_registration.py':
             from plc_diagnostic_extension_source_contract import diagnostic_parent_source
             source = diagnostic_parent_source(source)

@@ -186,3 +186,5 @@ The strict integration source replay binds the completed-review recovery workflo
 ## XD5 serial compatibility
 
 The Web Serial v4 envelope supports the existing default FX ASCII profile and a fixed unit-1 19200/8E1 RTU profile through `plc_modbus_rtu.py`. Only a zero-response read timeout may select the bounded alternate; connection verification is read-only and server validated. Successful alternate selection persists profile/generation, clears business verification and disables capture. Modbus does not reveal device identity or register meaning. Customer mapping commissioning remains mandatory before production output. See [PLC compatibility](plc-web-serial-v4.md#xd5-serial-compatibility) and [testing](testing.md#xd5-compatibility-validation).
+
+User-management account and cross-owner data work routes through auth/data_workbench.py. Administrator identity is never replaced by selected owner identity. Read views must not use reconciling pipeline lists or refreshing training views. Read architecture, configuration-reference, real-photo-feedback and testing before changing these boundaries.

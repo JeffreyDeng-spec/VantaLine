@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 import time
+from functools import wraps
 from typing import Any
 from fastapi import HTTPException
 from .accounts import AccountService
@@ -13,11 +14,37 @@ from .ports import UserStore
 from .sessions import revoke_user_sessions
 from ..schemas.auth import TaskNavigationPreferencesRequest, UserCreateRequest, UserUpdateRequest, UserPasswordResetRequest
 
+def serialized_account_change(method):
+    @wraps(method)
+    def perform(self, *args, **kwargs):
+        actor = self.access.require_admin_role()
+        with self.write_lock():
+            owner = args[0] if args and isinstance(args[0], str) else actor['id']
+            payload = next((a for a in args if hasattr(a, 'reason')), None)
+            reason = getattr(payload, 'reason', None) or kwargs.get('reason') or '管理员账号操作'
+            action = method.__name__
+            if self.on_audit:
+                self.on_audit(actor, owner, action, str(owner), reason, result='requested')
+            try:
+                return method(self, *args, **kwargs)
+            except HTTPException as exc:
+                if self.on_audit:
+                    self.on_audit(actor, owner, action, str(owner), reason, result='failed', change={'status_code': exc.status_code})
+                raise
+            except Exception:
+                if self.on_audit:
+                    self.on_audit(actor, owner, action, str(owner), reason, result='uncertain')
+                raise
+    return perform
+
+
 class UserService:
     def __init__(self, store: UserStore, accounts: AccountService, access: AccessControl,
                  postgres: Callable[[], bool], write_lock: Callable[[], AbstractContextManager]):
         self.store, self.accounts, self.access = store, accounts, access
         self.postgres, self.write_lock = postgres, write_lock
+        self.on_disable = None
+        self.on_audit = None
 
     def get_task_navigation_preferences(self) -> dict[str, Any]:
         current_user = self.access.current_auth_user()
@@ -53,8 +80,9 @@ class UserService:
             "default_user_permissions": DEFAULT_USER_PERMISSIONS,
         }
 
+    @serialized_account_change
     def create_user(self, payload: UserCreateRequest) -> dict[str, Any]:
-        self.access.require_admin_role()
+        actor = self.access.require_admin_role()
         store = self.store.load_auth_store()
         user = self.accounts.create_auth_user(
             store,
@@ -67,8 +95,11 @@ class UserService:
         )
         if not self.store.save_auth_user(user):
             self.store.save_auth_store(store)
+        if self.on_audit:
+            self.on_audit(actor, user['id'], 'account_create', user['username'], payload.reason or '管理员创建账号', change=public_user(user))
         return {"status": "created", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
 
+    @serialized_account_change
     def update_user(self, user_id: str, payload: UserUpdateRequest, session_id: str) -> dict[str, Any]:
         actor = self.access.require_admin_role()
         store = self.store.load_auth_store()
@@ -95,10 +126,19 @@ class UserService:
         user["updated_at"] = int(time.time())
         if not any(normalize_role(item.get("role")) == "admin" and bool(item.get("active", True)) for item in store.get("users", []) if isinstance(item, dict)):
             raise HTTPException(status_code=400, detail="At least one active admin is required")
+        if payload.active is False and self.on_disable:
+            self.on_disable(user_id)
+            if self.postgres():
+                self.store.delete_auth_sessions_for_user(user_id)
+            else:
+                revoke_user_sessions(store, user_id)
         if not self.store.save_auth_user(user):
             self.store.save_auth_store(store)
+        if self.on_audit:
+            self.on_audit(actor, user_id, 'account_update', user['username'], payload.reason or '管理员更新账号', change=public_user(user))
         return {"status": "updated", "user": public_user(user), "users": [public_user(item) for item in store.get("users", [])]}
 
+    @serialized_account_change
     def reset_user_password(self, user_id: str, payload: UserPasswordResetRequest, session_id: str) -> dict[str, Any]:
         actor = self.access.require_admin_role()
         store = self.store.load_auth_store()
@@ -130,11 +170,14 @@ class UserService:
             "users": [public_user(item) for item in store.get("users", []) if isinstance(item, dict)],
             "revoked_sessions": revoked_sessions,
         }
+        if self.on_audit:
+            self.on_audit(actor, user_id, 'password_reset', user['username'], payload.reason or '管理员重置密码', change={'revoked_sessions': revoked_sessions, 'generated': bool(generated_password)})
         if generated_password:
             response["temporary_password"] = generated_password
         return response
 
-    def delete_user(self, user_id: str) -> dict[str, Any]:
+    @serialized_account_change
+    def delete_user(self, user_id: str, reason: str = "管理员确认删除登录身份；业务证据保留") -> dict[str, Any]:
         actor = self.access.require_admin_role()
         if user_id == actor["id"]:
             raise HTTPException(status_code=400, detail="Cannot delete the current session user")
@@ -146,6 +189,8 @@ class UserService:
         remaining = [user for user in users if user.get("id") != user_id]
         if not any(normalize_role(user.get("role")) == "admin" and bool(user.get("active", True)) for user in remaining):
             raise HTTPException(status_code=400, detail="At least one active admin is required")
+        if self.on_disable:
+            self.on_disable(user_id)
         store["users"] = remaining
         if self.postgres():
             with self.write_lock():
@@ -160,4 +205,6 @@ class UserService:
             self.store.save_auth_store(store)
         else:
             self.store.save_auth_store(store)
+        if self.on_audit:
+            self.on_audit(actor, user_id, 'account_delete', target['username'], reason)
         return {"status": "deleted", "deleted_user_id": user_id, "users": [public_user(item) for item in remaining]}

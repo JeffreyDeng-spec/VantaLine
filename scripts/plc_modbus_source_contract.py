@@ -4,6 +4,7 @@ Every changed and added product source is checked before restoring historical
 source locations. Product code never imports this test helper. Unknown source
 or fixture edits fail; actual protocol/state behavior has independent tests.
 """
+from admin_user_data_source_contract import checkpoint_bytes
 import hashlib
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ def checked_fixture():
     fixture = json.loads(raw)
     assert fixture["schema"] == 1 and fixture["parent"] == "25c96812dfaaa14144432850455b6d1d708a44af"
     for path, change in fixture["files"].items():
-        assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == change["current_sha256"], "Modbus descendant changed: " + path
+        assert hashlib.sha256(checkpoint_bytes(path, (ROOT / path).read_bytes())).hexdigest() == change["current_sha256"], "Modbus descendant changed: " + path
     for path, expected in fixture["added_sources"].items():
         assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == expected, "Modbus adapter changed: " + path
     return fixture

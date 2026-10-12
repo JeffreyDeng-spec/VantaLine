@@ -28,7 +28,7 @@ export type RealPhotoDrawerKind = "collection" | "manual" | "dataset";
 const labels: Record<string, string> = {
   pending_annotation: "等待自动标注", pending_review: "等待 Agent 审核", annotation_failed: "标注失败",
   unconfirmed_source: "来源待核实", accept_positive: "合格正样本", accept_negative: "合格负样本",
-  exclude: "Agent 排除", uncertain: "Agent 不确定"
+  exclude: "Agent 排除", uncertain: "Agent 不确定", usage_disabled: "训练用途已禁用"
 };
 export function useRealPhotoFeedback(taskId: string) {
   const auth = useAuth();

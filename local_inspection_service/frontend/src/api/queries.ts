@@ -663,6 +663,7 @@ export function deleteAiTask(taskId: string) {
 }
 
 export function createUser(payload: {
+  reason?: string;
   username: string;
   display_name?: string;
   password: string;
@@ -675,6 +676,7 @@ export function createUser(payload: {
 export function updateUser(
   userId: string,
   payload: {
+    reason?: string;
     display_name?: string;
     role?: string;
     permissions?: string[];
@@ -687,6 +689,7 @@ export function updateUser(
 export function resetUserPassword(
   userId: string,
   payload: {
+    reason?: string;
     password?: string;
     generate?: boolean;
     revoke_sessions?: boolean;
@@ -698,6 +701,6 @@ export function resetUserPassword(
   );
 }
 
-export function deleteUser(userId: string) {
-  return apiClient.delete<UserMutationResponse>(`/api/auth/users/${encodeURIComponent(userId)}`);
+export function deleteUser(userId: string, reason?: string) {
+  return apiClient.delete<UserMutationResponse>(`/api/auth/users/${encodeURIComponent(userId)}${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`);
 }

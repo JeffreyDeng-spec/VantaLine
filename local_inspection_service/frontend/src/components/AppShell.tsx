@@ -300,6 +300,7 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const [assetsExpanded, setAssetsExpanded] = useState(() => [workspacePath("/training-library"), workspacePath("/pipeline")].includes(location.pathname));
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const userManagementActive = location.pathname === workspacePath("/users");
   const canReadTaskResources = ["ai_detection", "model_library", "training_pipeline"].some((permission) => hasPermission(auth.user, permission));
   const canReadPipelineTasks = ["training_pipeline", "incoming_material_config", "inspection"].some((permission) => hasPermission(auth.user, permission));
   const { pinnedTaskIds, archivedTaskIds, preferencesExist, persistTaskPreferences } = useTaskNavigationPreferences(auth.user.id, (error) => {
@@ -308,19 +309,19 @@ export function AppShell() {
   const trainingResourcesQuery = useQuery({
     queryKey: queryKeys.trainingResources(auth.dataUserId),
     queryFn: () => getTrainingResources(auth),
-    enabled: canReadTaskResources,
+    enabled: canReadTaskResources && !userManagementActive,
     refetchInterval: 60_000
   });
   const pipelineQuery = useQuery({
     queryKey: queryKeys.pipeline(auth.dataUserId),
     queryFn: () => getPipeline(auth),
-    enabled: canReadPipelineTasks,
+    enabled: canReadPipelineTasks && !userManagementActive,
     refetchInterval: 60_000
   });
   const accessoriesQuery = useQuery({
     queryKey: queryKeys.accessories(auth.dataUserId),
     queryFn: () => getAccessories(auth),
-    enabled: hasPermission(auth.user, "accessory_library"),
+    enabled: hasPermission(auth.user, "accessory_library") && (!userManagementActive || createTaskOpen),
     // Accessory data is only shown inside the create-task modal, so it does not
     // need background polling while the modal is closed.
     refetchInterval: createTaskOpen ? 60_000 : false
@@ -632,7 +633,7 @@ export function AppShell() {
       ) : null}
 
       <main className="workspace">
-        {auth.user.role === "admin" ? (
+        {auth.user.role === "admin" && !userManagementActive ? (
           <div className="top-scope-bar">
             <label>
               数据范围

@@ -1,5 +1,5 @@
 """Auth request shapes; defaults and coercion match the existing API."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AuthBootstrapRequest(BaseModel):
@@ -14,6 +14,7 @@ class AuthLoginRequest(BaseModel):
 
 
 class UserCreateRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)
     username: str
     password: str
     display_name: str | None = None
@@ -23,6 +24,7 @@ class UserCreateRequest(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)
     display_name: str | None = None
     password: str | None = None
     role: str | None = None
@@ -31,6 +33,7 @@ class UserUpdateRequest(BaseModel):
 
 
 class UserPasswordResetRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=300)
     password: str | None = None
     generate: bool = False
     revoke_sessions: bool = True

@@ -1,4 +1,5 @@
 """Exact additive diagnostic registration; preserve the canonical parent oracle."""
+from admin_user_data_source_contract import checkpoint_bytes
 import ast
 import hashlib
 import json
@@ -11,7 +12,8 @@ def diagnostic_parent_source(source):
     assert digest(source)==FIXTURE[HTTP], 'Unknown diagnostic HTTP extension'
     for path,expected in FIXTURE.items():
         from plc_modbus_source_contract import restore_modbus_business
-        assert digest(restore_modbus_business(path, (ROOT/path).read_bytes()).decode())==expected, 'Diagnostic owner changed: '+path
+        actual = checkpoint_bytes(path, (ROOT/path).read_text(encoding='utf-8').encode())
+        assert digest(restore_modbus_business(path, actual).decode())==expected, 'Diagnostic owner changed: '+path
     tree=ast.parse(source);removed_import=0;removed_call=0
     for node in list(tree.body):
         if isinstance(node,ast.ImportFrom) and node.module=='local_inspection_service.plc.diagnostic_events_api':

@@ -928,3 +928,11 @@ Retention is 30 days by server receipt time. `scripts/cleanup_plc_diagnostics.py
 ## XD5 compatibility persistence
 
 **Status: Authoritative.** No new table or column is required. Selected RTU profile is persisted in existing workstation raw_json using the station/lease mutation transaction. The profile change increments both station and active lease configuration generation, clears profile verification and disables automatic capture. Physical I/O occurs only in the browser; diagnostic logging remains independent. Retain RTU configuration on whole-release rollback; old FX-only application code can reject it and must not guess or reinterpret it as FX. The schema-5 alternate profile is explicitly reviewed; previous application versions may reject this new profile on rollback.
+
+## Administrator data metadata and audit
+
+The user-data workbench reuses current PostgreSQL tables and adds no schema migration. `users.raw_json` retains account-owned archive metadata; real-photo state JSON retains sample usage history; accessory JSON retains reference-use exclusions. Each admin operation appends a requested intent and outcome to `agent_operation_audit` with `kind=admin_user_data`, actual actor ID and selected owner ID. The administrator read path scopes every object to the selected owner and returns explicit safe fields. It does not refresh training tasks, reconcile pipelines or submit worker jobs. Historical rows lacking new flags retain their prior behavior.
+
+Account deletion removes identity/sessions and pauses new work, preserving business records. Ownership reassignment and permanent cleanup of orphaned data remain separate operations and are not implemented by this workbench. Restore of an archived resource does not revive an account or restart training.
+
+Legacy sample reads reuse their existing owner-scoped optimization storage without public-status hydration; no migration or new authoritative store is introduced. Frozen real-photo datasets and candidate versions share the administrator resource list, while their immutable history remains visible after archive.

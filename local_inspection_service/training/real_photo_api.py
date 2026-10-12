@@ -54,8 +54,15 @@ class HistoryImportRequest(BaseModel):
 
 
 class FeedbackService:
-    def __init__(self, ports):
+    def __init__(self, ports, *, managed_owner=None):
         self.ports = ports
+        self.managed_owner = managed_owner
+
+    def owner_id(self, actor):
+        return str((getattr(self, "managed_owner", None) or actor)["id"])
+
+    def owner_user(self, actor):
+        return getattr(self, "managed_owner", None) or actor
 
     @contextmanager
     def repo(self):
@@ -73,13 +80,17 @@ class FeedbackService:
         if task is None:
             raise HTTPException(404, '任务不存在')
         self.ports.authorize(task, user, write=write)
+        if getattr(self, "managed_owner", None) is not None:
+            from ..auth.policy import user_is_admin
+            if not user_is_admin(user):
+                raise HTTPException(403, '管理员权限不足')
         owner = str(task.get('owner_user_id') or '')
-        if not owner or owner != user['id']:
+        if not owner or owner != self.owner_id(user):
             raise HTTPException(403, '仅任务所属账户可操作实拍回流')
         return user, task
 
     def class_metadata(self, task, user):
-        config = self.ports.config(user)
+        config = self.ports.config(self.owner_user(user))
         ids = task.get('selected_accessory_ids') or task.get('accessory_ids') or []
         items = {i['id']:i for i in config.get('accessories', []) if i.get('id')}
         result = []
@@ -108,23 +119,23 @@ class FeedbackService:
             previous=[{k:v for k,v in item.items() if k!='reference_sha256'} for item in state['classes']]
             if current!=previous:
                 # Full image hashes are read only on a definition/reference identity change.
-                return repo.enable(user['id'],state['task_id'],self.classes(task,user),state['profiles'],True,state.get('business_context'))
+                return repo.enable(self.owner_id(user),state['task_id'],self.classes(task,user),state['profiles'],True,state.get('business_context'))
         except (HTTPException,ValueError,OSError):
-            repo.enable(user['id'],state['task_id'],state['classes'],state['profiles'],False)
-            repo.mutate(user['id'],state['task_id'],lambda s,c:s.update(pause_reason='当前任务类别或参考图不完整；修复后重新启用实拍回流'))
-            return repo.get(user['id'],state['task_id'])
+            repo.enable(self.owner_id(user),state['task_id'],state['classes'],state['profiles'],False)
+            repo.mutate(self.owner_id(user),state['task_id'],lambda s,c:s.update(pause_reason='当前任务类别或参考图不完整；修复后重新启用实拍回流'))
+            return repo.get(self.owner_id(user),state['task_id'])
         return state
 
     def enable(self, identifier, request):
         user, task = self.task(identifier, True)
-        if user['id'] not in accounts():
+        if self.owner_id(user) not in accounts() and (request.enabled or getattr(self, 'managed_owner', None) is None):
             raise HTTPException(403, '实拍回流尚未为此账户启用')
         if not request.enabled:
             with self.repo() as repo:
-                state = repo.get(user['id'], identifier)
+                state = repo.get(self.owner_id(user), identifier)
                 if state:
-                    repo.enable(user['id'], identifier, state['classes'], state['profiles'], False)
-            return self.status(identifier)
+                    repo.enable(self.owner_id(user), identifier, state['classes'], state['profiles'], False)
+            return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
         classes = self.classes(task, user)
         profiles = self.ports.profiles().snapshot()
         reference = profiles.get('bbox_annotation')
@@ -138,26 +149,28 @@ class FeedbackService:
                  'historical_material_count':len(legacy.get('samples',[])),
                  'historical_material_policy':'preserved drafts; geometry and source groups require explicit confirmation'}
         with self.repo() as repo:
-            repo.enable(user['id'], identifier, classes, {'bbox_annotation':reference}, request.enabled,context)
-        return self.status(identifier)
+            repo.enable(self.owner_id(user), identifier, classes, {'bbox_annotation':reference}, request.enabled,context)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
-    def status(self, identifier):
+    def status(self, identifier, *, read_only=False):
         user, task = self.task(identifier)
-        if user['id'] not in accounts():
+        available = self.owner_id(user) in accounts()
+        if not available and getattr(self, 'managed_owner', None) is None:
             return {'available':False,'strategy':STRATEGY}
         with self.repo() as repo:
-            state = repo.get(user['id'], identifier)
-            state = self.sync_definitions(repo,state,task,user)
-            jobs = repo.jobs(user['id'], identifier) if state else []
-            stats = repo.statistics(user['id'], identifier) if state else {}
+            state = repo.get(self.owner_id(user), identifier)
+            if not read_only:
+                state = self.sync_definitions(repo,state,task,user)
+            jobs = repo.jobs(self.owner_id(user), identifier) if state else []
+            stats = repo.statistics(self.owner_id(user), identifier) if state else {}
         if state is None:
-            return {'available':True,'selected':False,'enabled':False,'strategy':STRATEGY,'samples':[],'jobs':[]}
+            return {'available':available,'selected':False,'enabled':False,'strategy':STRATEGY,'samples':[],'jobs':[]}
         samples = []
         for s in state['samples'][-80:]:
             annotation=s.get('annotation')
             if annotation:
                 annotation={**annotation,'receipt':{k:v for k,v in annotation.get('receipt',{}).items() if k!='response'}}
-            samples.append({k:s.get(k) for k in ('sample_id','image_sha256','source_group','source_group_version','source_kind','review','created_at','geometry')}|{'annotation':annotation,'source_group_confirmed':source_confirmed(s)})
+            samples.append({k:s.get(k) for k in ('sample_id','image_sha256','source_group','source_group_version','source_kind','review','created_at','geometry')}|{'annotation':annotation,'source_group_confirmed':source_confirmed(s), 'usage_enabled':s.get('usage_enabled', True)})
         public_jobs = [{k:j.get(k) for k in ('id','kind','status','created_at','elapsed_seconds','model','runner_version','usage','result')}
                        for j in jobs]
         for j in public_jobs:
@@ -175,7 +188,7 @@ class FeedbackService:
                 'excluded_count':sum(s.get('review',{}).get('decision') in {'exclude','uncertain'} for s in state['samples']),
                 'failed_annotation_count':sum(s.get('annotation',{}).get('status')=='failed' for s in state['samples']),
                 'pending_review_count':sum(s.get('annotation',{}).get('status')=='completed' and s.get('review',{}).get('key')!=review_key(s,state['classes']) for s in state['samples'])}
-        return {'available':True,'selected':True,'strategy':STRATEGY,'enabled':state['enabled'],
+        return {'available':available,'selected':True,'strategy':STRATEGY,'enabled':state['enabled'],
                 'candidate_count':len(state['samples']), 'samples':samples,'jobs':public_jobs,**counts,
                 'agent_filtered_count':sum(s.get('review',{}).get('decision') in {'exclude','uncertain'} and s['review'].get('key') == review_key(s,state['classes']) for s in state['samples']),
                 **{k:state.get(k) for k in ('initialization','review_trigger','approved_real_target','assessment','pause_reason','candidate_models')},
@@ -187,7 +200,7 @@ class FeedbackService:
     def sample_page(self, identifier, category='all', decision=None, cursor=None, limit=24, sample_id=None):
         """Read-only projection. The initial anchor excludes later arrivals across pages."""
         user, task = self.task(identifier)
-        if user['id'] not in accounts():
+        if self.owner_id(user) not in accounts() and getattr(self, 'managed_owner', None) is None:
             raise HTTPException(403, '实拍回流尚未为此账户启用')
         if category not in {'all', 'agent_filtered', 'approved'} or decision not in {None, 'exclude', 'uncertain'}:
             raise HTTPException(422, '无效样本筛选')
@@ -196,7 +209,7 @@ class FeedbackService:
         if not 1 <= limit <= 100:
             raise HTTPException(422, '每页需要1至100张')
         with self.repo() as repo:
-            state = repo.get(user['id'], identifier)
+            state = repo.get(self.owner_id(user), identifier)
         if not state:
             return {'samples': [], 'total': 0, 'next_cursor': None}
         # Never call sync_definitions here: browsing cannot enqueue paid work.
@@ -207,7 +220,7 @@ class FeedbackService:
             definitions_current = False
         accepted_ids = {s['sample_id'] for s in approved(state)} if definitions_current else set()
         entries = state['samples']
-        scope = digest([user['id'], identifier, category, decision, sample_id])
+        scope = digest([self.owner_id(user), identifier, category, decision, sample_id])
         anchor = len(entries) - 1
         before = len(entries)
         if cursor:
@@ -234,7 +247,9 @@ class FeedbackService:
                 continue
             if category == 'agent_filtered' and (current_decision not in {'exclude', 'uncertain'} or (decision and current_decision != decision)):
                 continue
-            if current_decision in {'exclude', 'uncertain'}:
+            if sample.get('usage_enabled', True) is False:
+                status = 'usage_disabled'
+            elif current_decision in {'exclude', 'uncertain'}:
                 status = current_decision
             elif sample['sample_id'] in accepted_ids:
                 status = current_decision
@@ -248,6 +263,8 @@ class FeedbackService:
                 status = 'pending_review'
             public = {k:sample.get(k) for k in ('sample_id', 'source_group', 'source_group_version', 'source_kind', 'created_at', 'geometry')}
             public.update(source_group_confirmed=source_confirmed(sample), current_status=status,
+                          usage_enabled=sample.get("usage_enabled", True),
+                          frozen=sample.get("source_group") in state.get("split_assignments", {}),
                           annotation={k:annotation.get(k) for k in ('status', 'version', 'objects', 'error_code', 'error_type')} if annotation else None,
                           review={'decision':current_decision, 'reason':str(review.get('reason') or '')[:4000]} if valid_review else None)
             matches.append((index, public))
@@ -265,7 +282,7 @@ class FeedbackService:
             if not state['enabled'] or state.get('round'):raise HTTPException(409,'请启用回流且等待当前审核结束')
             sample=next((s for s in state['samples'] if s['sample_id']==sample_id),None)
             if sample is None:raise HTTPException(404,'样本不存在')
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running')",(user['id'],identifier))
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('queued','running')",(self.owner_id(user),identifier))
             if any(j['kind']=='annotate' and j['inputs']['sample']['sample_id']==sample_id for j in repo.rows(c)):
                 raise HTTPException(409,'此图标注尚未结束')
             version=max([int(a.get('version',0)) for a in sample.get('annotation_history',[])]+[int(sample.get('annotation',{}).get('version',0)),int(sample.get('annotation_version',0))])+1
@@ -273,16 +290,16 @@ class FeedbackService:
             if sample.get('annotation'):sample.setdefault('annotation_history',[]).append(sample.pop('annotation'))
             repo.enqueue(c,state,'annotate',f'annotation:{sample_id}:{version}',
                          {'sample':sample,'classes':state['classes'],'profiles':state['profiles'],'version':version,'explicit':True})
-        with self.repo() as repo:repo.mutate(user['id'],identifier,update)
-        return self.status(identifier)
+        with self.repo() as repo:repo.mutate(self.owner_id(user),identifier,update)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
     def restart(self, identifier):
         user,_=self.task(identifier,True)
         def update(state,c):
             if not state['enabled']:raise HTTPException(409,'请先启用回流')
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('running','cancel_requested')",(user['id'],identifier))
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND status IN ('running','cancel_requested')",(self.owner_id(user),identifier))
             if repo.rows(c):raise HTTPException(409,'请先等待所有当前任务结算')
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind IN ('initialize','review','assess') AND status='queued'",(user['id'],identifier))
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind IN ('initialize','review','assess') AND status='queued'",(self.owner_id(user),identifier))
             for job in repo.rows(c):
                 job['status']='cancelled';repo.save_job(c,job)
             state.pop('round',None);state.pop('pause_reason',None)
@@ -293,8 +310,8 @@ class FeedbackService:
                 repo.enqueue(c,state,'initialize','initialize:'+state['epoch']+':explicit:'+uuid.uuid4().hex,
                              {'classes':state['classes'],'history_count':len(state['samples']),'business_context':state.get('business_context',{})})
             else:state['review_trigger']=len(state['samples'])
-        with self.repo() as repo:repo.mutate(user['id'],identifier,update)
-        return self.status(identifier)
+        with self.repo() as repo:repo.mutate(self.owner_id(user),identifier,update)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
     def capture(self, record, result, request_id, image_path):
         if not accounts():return False
@@ -312,17 +329,17 @@ class FeedbackService:
         model = result.get('model') or {}
         task_id = model.get('task_id') or model.get('feedback_task_id')
         with self.repo() as repo:
-            if self.ports.model_task and not repo.get(user['id'],str(task_id or '')):
+            if self.ports.model_task and not repo.get(self.owner_id(user),str(task_id or '')):
                 task_id=self.ports.model_task(str(model.get('id') or model.get('model_id') or ''),user)
             if not task_id:
                 # Only candidate IDs belonging to this owner may map a YOLO result.
                 for task in self.ports.tasks():
-                    state = repo.get(user['id'], task['id'])
+                    state = repo.get(self.owner_id(user), task['id'])
                     if state and any(c.get('model_id') == (model.get('id') or model.get('model_id')) for c in state['candidate_models']):
                         task_id = task['id']; break
             if not task_id:
                 return False
-            state = repo.get(user['id'], task_id)
+            state = repo.get(self.owner_id(user), task_id)
             if state is None:
                 return False
             # Once explicitly selected, do not fall back into legacy synthetic feedback, even paused.
@@ -349,12 +366,12 @@ class FeedbackService:
                     if value:
                         group = key+':'+str(value); break
             if self.ports.freeze:
-                path=self.ports.freeze(user,data,meta['source_sha256'])
+                path=self.ports.freeze(self.owner_user(user),data,meta['source_sha256'])
             sample = {'sample_id':'real_'+uuid.uuid4().hex,'source_path':str(path),
                       'source_kind':'real_photo','image_sha256':meta['source_sha256'],'geometry':meta,
                       'source_group':group,'created_at':time.time(),'record_id':record.get('record_id'),
                       'request_id':request_id, 'lineage_hashes':[]}
-            repo.capture(user['id'], task_id, sample)
+            repo.capture(self.owner_id(user), task_id, sample)
         return True
 
     def capture_local(self,result,request_id,image_path,pixels,encode_pixels):
@@ -370,7 +387,7 @@ class FeedbackService:
         model=result.get('model') or {}
         if image_path and model.get('task_id'):return  # existing AI publication already admitted this original.
         with self.repo() as repo:
-            states=repo.states({user['id']})
+            states=repo.states({self.owner_id(user)})
             matched=any(state['task_id']==model.get('task_id') or any(c.get('model_id')==model.get('id') for c in state['candidate_models']) for state in states)
             if not matched and self.ports.model_task:
                 linked=self.ports.model_task(str(model.get('id') or ''),user)
@@ -379,7 +396,7 @@ class FeedbackService:
         if not image_path:
             if not self.ports.freeze:return
             raw=encode_pixels(pixels)
-            image_path=self.ports.freeze(user,raw,digest(raw))
+            image_path=self.ports.freeze(self.owner_user(user),raw,digest(raw))
         self.capture({'source_image':{'path':str(image_path)}},result,request_id,image_path)
 
     def group(self, identifier, sample_id, request):
@@ -409,16 +426,16 @@ class FeedbackService:
                 'modified_by':sample.get('source_group_modified_by'),'modified_at':sample.get('source_group_modified_at')})
             sample.update(source_group=group, source_group_confirmed=confirmed,
                           source_group_version=sample.get('source_group_version',0)+1,
-                          source_group_modified_by=user['id'], source_group_modified_at=time.time())
+                          source_group_modified_by=user["id"], source_group_modified_at=time.time())
             if sample.get('review'):
                 rechecks=state.setdefault('recheck_sample_ids',[])
                 if sample_id not in rechecks:rechecks.append(sample_id)
-        with self.repo() as repo:repo.mutate(user['id'],identifier,update)
-        return self.status(identifier)
+        with self.repo() as repo:repo.mutate(self.owner_id(user),identifier,update)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
     def image(self, identifier, sample_id):
         user, _ = self.task(identifier)
-        with self.repo() as repo:state=repo.get(user['id'],identifier)
+        with self.repo() as repo:state=repo.get(self.owner_id(user),identifier)
         sample=next((s for s in (state or {}).get('samples',[]) if s['sample_id']==sample_id),None)
         if sample is None:raise HTTPException(404,'样本不存在')
         data=self.ports.read(sample['source_path'])
@@ -429,7 +446,7 @@ class FeedbackService:
     def historical(self,identifier,sample_id=None):
         user,_=self.task(identifier)
         state=self.ports.legacy_state(identifier)
-        if state.get('owner_user_id') not in (None,'',user['id']):raise HTTPException(403,'历史样本账户不匹配')
+        if state.get('owner_user_id') not in (None,'',self.owner_id(user)):raise HTTPException(403,'历史样本账户不匹配')
         samples=state.get('samples',[])
         if sample_id is None:
             return [{'sample_id':s['sample_id'],'label_status':s.get('label_status'),
@@ -452,16 +469,16 @@ class FeedbackService:
             if not state['enabled']:raise HTTPException(409,'请先启用实拍回流')
             sample=next((s for s in state['samples'] if s['sample_id']==sample_id),None)
             if sample is None:raise HTTPException(404,'样本不存在')
-            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='mask' AND status IN ('queued','running')",(user['id'],identifier))
+            c.execute(f"SELECT raw_json FROM {repo.table('jobs')} WHERE owner_user_id=%s AND task_id=%s AND kind='mask' AND status IN ('queued','running')",(self.owner_id(user),identifier))
             if any(j['inputs']['sample']['sample_id']==sample_id for j in repo.rows(c)):raise HTTPException(409,'此图已有按需 mask 任务')
             repo.enqueue(c,state,'mask','mask:'+uuid.uuid4().hex,
                          {'sample':sample,'classes':state['classes'],'image_profile':reference})
-        with self.repo() as repo:repo.mutate(user['id'],identifier,update)
-        return self.status(identifier)
+        with self.repo() as repo:repo.mutate(self.owner_id(user),identifier,update)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
     def versions(self,identifier,sample_id):
         user,_=self.task(identifier)
-        with self.repo() as repo:state=repo.get(user['id'],identifier)
+        with self.repo() as repo:state=repo.get(self.owner_id(user),identifier)
         sample=next((s for s in (state or {}).get('samples',[]) if s['sample_id']==sample_id),None)
         if sample is None:raise HTTPException(404,'样本不存在')
         return {'annotations':sample.get('annotation_history',[])+([sample['annotation']] if sample.get('annotation') else []),
@@ -473,7 +490,7 @@ class FeedbackService:
 
     def mask_image(self,identifier,sample_id,mask_id):
         user,_=self.task(identifier)
-        with self.repo() as repo:state=repo.get(user['id'],identifier)
+        with self.repo() as repo:state=repo.get(self.owner_id(user),identifier)
         sample=next((s for s in (state or {}).get('samples',[]) if s['sample_id']==sample_id),None)
         mask=next((m for m in (sample or {}).get('masks',[]) if m['job_id']==mask_id),None)
         if mask is None:raise HTTPException(404,'Mask 附件不存在')
@@ -488,19 +505,19 @@ class FeedbackService:
             raise HTTPException(409,'必须明确核实历史框的原图身份及坐标映射，不能静默重解释')
         if not request.source_group.strip() or len(request.source_group)>200:raise HTTPException(422,'请补充历史拍摄分组')
         with self.repo() as repo:
-            state=repo.get(user['id'],identifier)
+            state=repo.get(self.owner_id(user),identifier)
             if not state or not state['enabled']:raise HTTPException(409,'请先启用实拍回流')
             if any(s['image_sha256']==meta['source_sha256'] for s in state['samples']):raise HTTPException(409,'原图已进入实拍池，请查看其现有版本')
             try:valid=objects(boxes,{c['class_id'] for c in state['classes']},meta['width'],meta['height'])
             except ValueError:raise HTTPException(409,'历史框不符合当前类别或原图坐标，需要主动重标')
             if not valid:raise HTTPException(409,'历史样本没有可复用的完整框')
-            path=self.ports.freeze(user,data,meta['source_sha256']) if self.ports.freeze else sample['source_image']['path']
-            repo.capture(user['id'],identifier,{'sample_id':'real_'+uuid.uuid4().hex,'source_path':str(path),
+            path=self.ports.freeze(self.owner_user(user),data,meta['source_sha256']) if self.ports.freeze else sample['source_image']['path']
+            repo.capture(self.owner_id(user),identifier,{'sample_id':'real_'+uuid.uuid4().hex,'source_path':str(path),
                 'source_kind':'real_photo','image_sha256':meta['source_sha256'],'geometry':meta,
                 'source_group':request.source_group.strip(),'created_at':time.time(),'legacy_sample_id':sample_id,
                 'annotation':{'status':'completed','version':1,'objects':valid,'source':'historical_draft',
                               'mapping_confirmation':request.model_dump(),'confirmed_by':user['id']},'lineage_hashes':[]})
-        return self.status(identifier)
+        return self.status(identifier, read_only=True) if getattr(self, "managed_owner", None) is not None else self.status(identifier)
 
 
 def compose(app, service):
@@ -543,9 +560,9 @@ def compose(app, service):
 
 
 def associated_task(model_id,user,models,pipelines):
-    spec=next((m for m in models if m.get('id')==model_id and m.get('owner_user_id')==user['id']),None)
+    spec=next((m for m in models if m.get('id')==model_id and m.get('owner_user_id')==self.owner_id(user)),None)
     if not spec:return ''
     pid=str(spec.get('pipeline_task_id') or '')
-    task=next((p for p in pipelines if p.get('id')==pid and p.get('owner_user_id')==user['id']),None)
+    task=next((p for p in pipelines if p.get('id')==pid and p.get('owner_user_id')==self.owner_id(user)),None)
     if task:return str(task.get('ai_task_id') or (pid[len('pipe_ai_'):] if pid.startswith('pipe_ai_') else ''))
     return pid[len('pipe_ai_'):] if pid.startswith('pipe_ai_') else ''

@@ -1954,3 +1954,13 @@ No new configuration or permission is introduced. Existing allowlisting, task ow
 ## XD5 compatibility settings
 
 **Status: Authoritative.** Supported RTU candidate is fixed unit 1, 19200 baud, even parity, 8 data bits, one stop bit, CRC16, 500 ms host timeout and zero retries. D0-D255 is the initial register range; result values remain PASS=1/FAIL=0 and Y is unsupported/blank. These business defaults are not discovered device configuration. The administrator settings form preserves the identified protocol and serial parameters when saving business addresses; unsupported optional Y remains disabled for RTU. A successful alternate selection retains D choices but clears profile verification and disables automatic capture; output commissioning requires the customer's address/value agreement. Existing explicit disabled configurations remain disabled. USB IDs describe the adapter, not the PLC model. New task fingerprints append `plc_modbus_rtu.py` to manifest v288 without rewriting historical snapshots.
+
+## Administrator workbench configuration
+
+Existing feature grants and Admin/user roles remain authoritative; `user_management` gates the new account-data routes and endpoint-local Admin checks enforce cross-owner access. Ordinary users cannot receive `user_management`, `ai_config`, `agent_config` or `system_settings`. No environment variable or database migration is added. The workbench requires PostgreSQL for data projections and durable audits; legacy JSON account/password functions remain usable, with administrator data/audit unavailable there.
+
+Account-owned `admin_data.archived` stores administrator list archive keys. Sample `usage_enabled` defaults true; accessory `disabled_ai_profile_reference_files` defaults empty. Neither is a deletion instruction. Account disable pauses new pipeline and real-photo work and revokes sessions; enable does not resume work. Real-photo configuration, thresholds, retry rules and manual model selection are unchanged. Demo-only budget and parallelism fields are not exposed as operational settings because no enforcing backend exists.
+
+New task provenance uses source manifest v289, including the actual administrator data service. Historical task/model snapshots are not rewritten.
+
+Legacy mode uses its existing enabled flag and bounded training epochs/image-size fields. The workbench does not change legacy thresholds, auto-promote settings or paid retry policy. Real-photo mode remains selected while paused; the administrator cannot resume the legacy loop for a selected real-photo task. Reference exclusions compare resolved canonical paths so equivalent stored path forms cannot bypass the reference-use switch.
