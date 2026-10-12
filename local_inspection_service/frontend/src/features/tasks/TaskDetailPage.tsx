@@ -1,3 +1,4 @@
+import { runVersionAction } from "../version/runtime";
 import { TaskProcessDrawer } from "./TaskProcessDrawer";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { RealPhotoControls, RealPhotoDrawer, useRealPhotoFeedback } from './RealPhotoFeedback';
@@ -1017,7 +1018,7 @@ export function TaskDetailPage() {
                 className="secondary compact-action"
                 type="button"
                 disabled={pipelineActionMutation.isPending || task.status === "completed" || task.status === "已上线"}
-                onClick={() => pipelineActionMutation.mutate({ action: "advance" })}
+                onClick={() => { void runVersionAction(() => pipelineActionMutation.mutateAsync({ action: "advance" })); }}
               >
                 {pipelineActionMutation.isPending ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
                 推进下一步

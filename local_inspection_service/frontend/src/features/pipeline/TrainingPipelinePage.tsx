@@ -1,3 +1,4 @@
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
 import {
@@ -1728,22 +1729,27 @@ function ParamsModal({
   }
 
   async function save(advance: boolean) {
-    setBusy(true);
+    if (advance || target.advanceAfter && !await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      await updatePipelineTask(target.taskId, { params: payloadForStage() });
-      if (advance || target.advanceAfter) {
-        await advancePipelineTask(target.taskId);
-        notify({ title: "参数已确认，任务开始执行", tone: "success" });
-      } else {
-        notify({ title: "参数已保存", tone: "success" });
+      setBusy(true);
+      try {
+        await updatePipelineTask(target.taskId, { params: payloadForStage() });
+        if (advance || target.advanceAfter) {
+          await advancePipelineTask(target.taskId);
+          notify({ title: "参数已确认，任务开始执行", tone: "success" });
+        } else {
+          notify({ title: "参数已保存", tone: "success" });
+        }
+        await onSaved(advance || target.advanceAfter);
+        onClose();
+      } catch (error) {
+        notify({ title: "保存参数失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+      } finally {
+        setBusy(false);
       }
-      await onSaved(advance || target.advanceAfter);
-      onClose();
-    } catch (error) {
-      notify({ title: "保存参数失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
-    } finally {
-      setBusy(false);
-    }
+
+    } finally { finishVersionOperation(); }
   }
 
   return (
@@ -2127,6 +2133,7 @@ export function TrainingPipelinePage() {
   }
 
   async function createAccessoryInFlow(form: FormData) {
+    if (!await guardVersionAction()) return;
     setBusy("create-accessory");
     try {
       const result = await createAccessory(form);
@@ -2183,44 +2190,49 @@ export function TrainingPipelinePage() {
   }
 
   async function runAdvance(task: PipelineTask) {
-    if (task.stage === "draft" && !(task.accessory_ids || []).length) {
-      notify({ title: "先拖入至少一个配件", tone: "error" });
-      return;
-    }
-    const usesTraining = pipelineTaskUsesTraining(task);
-    const stageKey = task.stage === "samples" ? "training" : "samples";
-    const missing = stageKey === "samples" ? !task.params?.sample_count : !task.params?.epochs;
-    if (usesTraining && missing && task.stage !== "training") {
-      openParams(task, true);
-      return;
-    }
-    setBusy(`advance:${task.id}`);
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const advanced = await advancePipelineTask(task.id);
-      const method = pipelineTaskMethod(task);
-      notify({
-        title: advanced.advancing
-          ? "已开始推进"
-          : advanced.status === "pending"
-            ? "参考图生成中"
-          : !usesTraining && task.stage === "draft"
-              ? "AI 检测任务已创建"
-              : task.stage === "training"
-                ? "模型已入库"
-                : "已进入下一阶段",
-        description: advanced.advancing
-          ? advanced.job_note || "正在后台推进，进度会实时更新。"
-          : advanced.status === "pending"
-            ? advanced.job_note || advanced.last_error || "生成完成后可再次生成样本。"
-            : undefined,
-        tone: "success"
-      });
-      await refreshAdjacent();
-    } catch (error) {
-      notify({ title: "推进失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
-    } finally {
-      setBusy("");
-    }
+      if (task.stage === "draft" && !(task.accessory_ids || []).length) {
+        notify({ title: "先拖入至少一个配件", tone: "error" });
+        return;
+      }
+      const usesTraining = pipelineTaskUsesTraining(task);
+      const stageKey = task.stage === "samples" ? "training" : "samples";
+      const missing = stageKey === "samples" ? !task.params?.sample_count : !task.params?.epochs;
+      if (usesTraining && missing && task.stage !== "training") {
+        openParams(task, true);
+        return;
+      }
+      setBusy(`advance:${task.id}`);
+      try {
+        const advanced = await advancePipelineTask(task.id);
+        const method = pipelineTaskMethod(task);
+        notify({
+          title: advanced.advancing
+            ? "已开始推进"
+            : advanced.status === "pending"
+              ? "参考图生成中"
+            : !usesTraining && task.stage === "draft"
+                ? "AI 检测任务已创建"
+                : task.stage === "training"
+                  ? "模型已入库"
+                  : "已进入下一阶段",
+          description: advanced.advancing
+            ? advanced.job_note || "正在后台推进，进度会实时更新。"
+            : advanced.status === "pending"
+              ? advanced.job_note || advanced.last_error || "生成完成后可再次生成样本。"
+              : undefined,
+          tone: "success"
+        });
+        await refreshAdjacent();
+      } catch (error) {
+        notify({ title: "推进失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+      } finally {
+        setBusy("");
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function removeTask(task: PipelineTask) {

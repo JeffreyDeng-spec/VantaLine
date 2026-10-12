@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, FileImage, Play, RefreshCw, Save, Search, Square, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -273,6 +275,7 @@ export function LocateAnythingPage() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
+  useVersionParticipant({ busy: () => Boolean(busy), pause: stopLoop, cleanup: stopCamera });
   useEffect(() => () => stopCamera(), []);
 
   function updateRule(id: string, updates: Partial<LocateRule>) {
@@ -330,21 +333,26 @@ export function LocateAnythingPage() {
   }
 
   async function startRuntime() {
-    if (!canConfigure) return;
-    setBusy("runtime");
-    setManualStatus({ status: "starting", message: "正在启动本地模型...", configured: true });
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const payload = await startLocateRuntime();
-      setManualStatus(payload);
-      toast.notify({ title: payload.ok ? "本地模型已就绪" : "本地模型启动中", description: payload.message || statusText(payload), tone: payload.ok ? "success" : "info" });
-      window.setTimeout(() => checkStatus(true), 2200);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "请求失败";
-      setManualStatus({ status: "failed", message, configured: true });
-      toast.notify({ title: "启动本地模型失败", description: message, tone: "error" });
-    } finally {
-      setBusy(null);
-    }
+      if (!canConfigure) return;
+      setBusy("runtime");
+      setManualStatus({ status: "starting", message: "正在启动本地模型...", configured: true });
+      try {
+        const payload = await startLocateRuntime();
+        setManualStatus(payload);
+        toast.notify({ title: payload.ok ? "本地模型已就绪" : "本地模型启动中", description: payload.message || statusText(payload), tone: payload.ok ? "success" : "info" });
+        window.setTimeout(() => checkStatus(true), 2200);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "请求失败";
+        setManualStatus({ status: "failed", message, configured: true });
+        toast.notify({ title: "启动本地模型失败", description: message, tone: "error" });
+      } finally {
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   function appendConfigFields(form: FormData) {
@@ -355,75 +363,85 @@ export function LocateAnythingPage() {
   }
 
   async function runInspectWithFile(file: File | null, quiet = false) {
-    if (!file) {
-      if (!quiet) toast.notify({ title: "请先选择图片或打开摄像头", tone: "error" });
-      return null;
-    }
-    const payloadRules = selectedPayload(rules);
-    if (!payloadRules.length) {
-      if (!quiet) toast.notify({ title: "请至少选择一个检测项", tone: "error" });
-      return null;
-    }
-    if (inFlightRef.current) {
-      if (!quiet) toast.notify({ title: "检测正在进行", description: "请等待当前帧完成。", tone: "info" });
-      return null;
-    }
-    inFlightRef.current = true;
-    setBusy("inspect");
+    if (!quiet && !await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("rules", JSON.stringify(payloadRules));
-      appendConfigFields(form);
-      const nextResult = await inspectLocateAnything(form);
-      setResult(nextResult);
-      if (!quiet) toast.notify({ title: nextResult.overall_pass ? "检测通过" : "检测不通过", description: nextResult.error || `${locateBoxCount(nextResult)} 框`, tone: nextResult.overall_pass ? "success" : "info" });
-      return nextResult;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "请求失败";
-      const nextResult = { ok: false, configured: status?.configured, overall_pass: false, error: message, items: [], latency_ms: 0 };
-      setResult(nextResult);
-      if (!quiet) toast.notify({ title: "检测失败", description: message, tone: "error" });
-      return nextResult;
-    } finally {
-      inFlightRef.current = false;
-      setBusy(null);
-    }
+      if (!file) {
+        if (!quiet) toast.notify({ title: "请先选择图片或打开摄像头", tone: "error" });
+        return null;
+      }
+      const payloadRules = selectedPayload(rules);
+      if (!payloadRules.length) {
+        if (!quiet) toast.notify({ title: "请至少选择一个检测项", tone: "error" });
+        return null;
+      }
+      if (inFlightRef.current) {
+        if (!quiet) toast.notify({ title: "检测正在进行", description: "请等待当前帧完成。", tone: "info" });
+        return null;
+      }
+      inFlightRef.current = true;
+      setBusy("inspect");
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("rules", JSON.stringify(payloadRules));
+        appendConfigFields(form);
+        const nextResult = await inspectLocateAnything(form);
+        setResult(nextResult);
+        if (!quiet) toast.notify({ title: nextResult.overall_pass ? "检测通过" : "检测不通过", description: nextResult.error || `${locateBoxCount(nextResult)} 框`, tone: nextResult.overall_pass ? "success" : "info" });
+        return nextResult;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "请求失败";
+        const nextResult = { ok: false, configured: status?.configured, overall_pass: false, error: message, items: [], latency_ms: 0 };
+        setResult(nextResult);
+        if (!quiet) toast.notify({ title: "检测失败", description: message, tone: "error" });
+        return nextResult;
+      } finally {
+        inFlightRef.current = false;
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function runPromptWithFile(file: File | null) {
-    const prompt = freePrompt.trim();
-    if (!file) {
-      toast.notify({ title: "请先选择图片或打开摄像头", tone: "error" });
-      return null;
-    }
-    if (!prompt) {
-      toast.notify({ title: "请填写提示词", tone: "error" });
-      return null;
-    }
-    if (inFlightRef.current) return null;
-    inFlightRef.current = true;
-    setBusy("inspect");
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("prompt", prompt);
-      form.append("generation_mode", "fast");
-      appendConfigFields(form);
-      const nextResult = await locateAnythingPrompt(form);
-      setResult(nextResult);
-      toast.notify({ title: nextResult.ok ? "定位完成" : "定位失败", description: nextResult.error || `${nextResult.boxes?.length || 0} 框`, tone: nextResult.ok ? "success" : "info" });
-      return nextResult;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "请求失败";
-      const nextResult = { ok: false, configured: status?.configured, overall_pass: false, error: message, items: [], latency_ms: 0 };
-      setResult(nextResult);
-      toast.notify({ title: "定位失败", description: message, tone: "error" });
-      return nextResult;
-    } finally {
-      inFlightRef.current = false;
-      setBusy(null);
-    }
+      const prompt = freePrompt.trim();
+      if (!file) {
+        toast.notify({ title: "请先选择图片或打开摄像头", tone: "error" });
+        return null;
+      }
+      if (!prompt) {
+        toast.notify({ title: "请填写提示词", tone: "error" });
+        return null;
+      }
+      if (inFlightRef.current) return null;
+      inFlightRef.current = true;
+      setBusy("inspect");
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("prompt", prompt);
+        form.append("generation_mode", "fast");
+        appendConfigFields(form);
+        const nextResult = await locateAnythingPrompt(form);
+        setResult(nextResult);
+        toast.notify({ title: nextResult.ok ? "定位完成" : "定位失败", description: nextResult.error || `${nextResult.boxes?.length || 0} 框`, tone: nextResult.ok ? "success" : "info" });
+        return nextResult;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "请求失败";
+        const nextResult = { ok: false, configured: status?.configured, overall_pass: false, error: message, items: [], latency_ms: 0 };
+        setResult(nextResult);
+        toast.notify({ title: "定位失败", description: message, tone: "error" });
+        return nextResult;
+      } finally {
+        inFlightRef.current = false;
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function refreshCameras() {
@@ -474,11 +492,16 @@ export function LocateAnythingPage() {
   }
 
   async function runCameraOnce(quiet = false) {
-    if (!streamRef.current) await startCamera();
-    const file = await captureVideoFrame(videoRef.current);
-    setImageFile(file);
-    setFrameCount((current) => current + 1);
-    return runInspectWithFile(file, quiet);
+    if (versionCoordinator.snapshot().preparing) return;
+    if (!quiet && !await guardVersionAction()) return;
+    const finishVersionCapture = versionCoordinator.beginOperation();
+    try {
+      if (!streamRef.current) await startCamera();
+      const file = await captureVideoFrame(videoRef.current);
+      setImageFile(file);
+      setFrameCount((current) => current + 1);
+      return await runInspectWithFile(file, true);
+    } finally { finishVersionCapture(); }
   }
 
   function stopLoop() {
@@ -502,15 +525,20 @@ export function LocateAnythingPage() {
   }
 
   async function startLoop() {
-    if (!enabledRules.length) {
-      toast.notify({ title: "请至少选择一个检测项", tone: "error" });
-      return;
-    }
-    if (!streamRef.current) await startCamera();
-    if (!streamRef.current) return;
-    loopActiveRef.current = true;
-    setLoopActive(true);
-    loopOnce();
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {
+      if (!enabledRules.length) {
+        toast.notify({ title: "请至少选择一个检测项", tone: "error" });
+        return;
+      }
+      if (!streamRef.current) await startCamera();
+      if (!streamRef.current) return;
+      loopActiveRef.current = true;
+      setLoopActive(true);
+      loopOnce();
+
+    } finally { finishVersionOperation(); }
   }
 
   if (accessoriesQuery.isLoading || statusQuery.isLoading || (canConfigure && configQuery.isLoading)) {

@@ -101,6 +101,13 @@ export class PlcWebSerialClient {
   private pendingReadResolved = false;
   private priorityOperations = 0;
 
+  async drainForReload() {
+    if (this.heartbeatTimer) window.clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
+    await this.queue;
+    await this.disconnect(true);
+  }
+
   static supported() {
     return typeof navigator !== "undefined" && Boolean(navigator.serial) && Boolean(navigator.locks) && window.isSecureContext;
   }

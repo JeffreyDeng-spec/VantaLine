@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../features/version/hooks";
+import { hasUnuploadedVersionFiles } from "../features/version/files";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { getFile, rememberFile } from "../features/agent/files";
 import { useAgentActions } from "../features/agent/useAgentActions";
@@ -36,6 +38,8 @@ export function FileDropZone({
   onFiles: (files: File[]) => void;
   children: ReactNode;
 }) {
+  const versionFiles = useRef<File[]>([]);
+  useVersionParticipant({ dirty: () => hasUnuploadedVersionFiles(versionFiles.current) });
   const inputRef = useRef<HTMLInputElement>(null);
   const toolId = useId().replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   const [requested, setRequested] = useState(false);
@@ -49,6 +53,7 @@ export function FileDropZone({
     setRejection(rejected.length ? `不支持：${rejected.map((file) => file.name).join("、")}` : "");
     if (accepted.length) {
       const selected = multiple ? accepted : accepted.slice(0, 1);
+      versionFiles.current = selected;
       selected.forEach(rememberFile);
       onFiles(selected);
       setRequested(false);

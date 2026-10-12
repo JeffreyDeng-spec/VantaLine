@@ -986,3 +986,7 @@ provider and media authorization, remote integrity, hybrid fallback and failure
 ordering cases remain; the composition refactor changes no media API behavior.
 
 Text/Codex/label owners now assemble in `runtime/wiring/text.py` and register through the original ordered HTTP schedule. Existing standard/extraction/inspection interleaving, request permissions, native lifetimes and thread repository scopes remain. The standalone label worker still uses its lightweight bootstrap and existing external topology; it never imports the Web factory or historical compatibility exports. No manual-history cursor, 15-minute snapshot, model binding, paid-call, queue-concurrency or pagination behavior changes in this structural batch.
+
+## Browser updates at new-work boundaries
+
+The shared version guard covers new label task imports, comparisons and extraction starts; save, review, confirmation and cancellation remain available without initiating refresh. Route/query task transitions retain their intended URL when updating. Current submissions finish before refresh; persisted server jobs and request identities remain recoverable and are not resubmitted. Unuploaded actual images, file selections and manual polygon/guide edits require discard confirmation. Retaining drafts keeps the current page. Camera tracks are stopped only during final update cleanup. Existing tabs without the guard require one manual refresh after its first deployment.

@@ -1,3 +1,4 @@
+import { useVersionParticipant } from "../version/hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { Crop, Loader2, Trash2, X } from "lucide-react";
@@ -120,6 +121,7 @@ export function AccessoryTextCropModal({
   const [completedPaths, setCompletedPaths] = useState<Set<string>>(new Set());
   const [completeResult, setCompleteResult] = useState<AccessoryMutationResponse | null>(null);
   const [busy, setBusy] = useState<"save" | "cancel" | "finish" | "">("");
+  useVersionParticipant({ busy: () => Boolean(busy), dirty: () => JSON.stringify(points) !== JSON.stringify(DEFAULT_POINTS) });
   const detailQuery = useQuery({
     queryKey: queryKeys.accessoryDetail(accessory.id),
     queryFn: () => getAccessoryDetail(accessory.id)

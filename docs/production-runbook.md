@@ -2088,3 +2088,9 @@ Release the account-records backend, UI, additive dispatch owner evidence and so
 ## Independent account record loading
 
 **Status: Authoritative.** PLC and business record tabs query their paginated read service independently of the general user-data snapshot. A snapshot error does not block record browsing. Historical business JSON that is null or not an object is omitted from the legacy metadata projection; the new list retains its native owner-scoped ID/time and marks missing structured metadata explicitly. Original rows and evidence are never rewritten or deleted. Source manifest v292 records this compatibility correction. Acceptance includes null/string/scalar legacy metadata and record browsing while the unrelated snapshot fails; the complete immutable release and existing zero-PLC-activity installer gates remain required.
+
+## Browser update acceptance and rollback
+
+After installing this feature, verify `/api/version` matches the deployed whole release and commit. With a tab opened on the prior guarded release, background discovery must leave the page in place; navigating must load the selected target URL on the current release. A new business action must refresh without submitting or replaying it. Retain/discard must protect unsaved inputs/files/annotations; a current PLC operation and receipt must finish before disconnect/reload, and reconnection must be manual.
+
+If the refreshed page still has the prior identity, the browser stops automatic retries for that target and offers an explicit retry. Inspect release consistency and HTML/proxy caching before retrying. Offline/unhealthy version checks cannot force reload. A tab opened before the first guarded release needs one manual refresh. Roll back the complete previous immutable artifact, never copy a frontend file or alter workstation/dispatch evidence. Physical PLC acceptance remains distinct from synthetic browser fixtures.

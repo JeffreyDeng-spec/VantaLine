@@ -1,3 +1,6 @@
+import { markVersionFilesUploaded } from "../features/version/files";
+import { versionCoordinator } from "../features/version/runtime";
+import { savedEditorsAcknowledgement } from "../features/version/drafts";
 import type { ApiRequestOptions, AuthUser } from "./types";
 
 export class ApiError extends Error {
@@ -63,6 +66,10 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+  const mutating = !["GET", "HEAD"].includes(options.method || "GET");
+  const finish = mutating ? versionCoordinator.beginOperation() : () => {};
+  const acknowledge = mutating ? savedEditorsAcknowledgement() : () => {};
+  try {
   const response = await fetch(path, {
     credentials: "same-origin",
     ...options,
@@ -73,9 +80,12 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   if (!response.ok) {
     throw new ApiError(apiErrorMessage(response, raw, path), response.status, path, raw);
   }
+  acknowledge();
+  if (body instanceof FormData) markVersionFilesUploaded([...body.values()].filter((item): item is File => item instanceof File));
   if (parseAs === "void") return undefined as T;
   if (parseAs === "text") return raw as T;
   return (raw ? JSON.parse(raw) : null) as T;
+  } finally { finish(); }
 }
 
 function jsonBody(value: unknown) {

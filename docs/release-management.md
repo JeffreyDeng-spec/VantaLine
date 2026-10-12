@@ -1808,3 +1808,7 @@ The administrator user-data release adds dedicated isolated PostgreSQL and brows
 ## Global protocol recognition acceptance
 
 The owner explicitly approved the corresponding source-contract update and normal PR release on 2026-10-12. `plc_global_protocol_source_contract.py` binds exact changes to immutable parent #312 (`b7f3c96137c08ed7326e2f86d0bc0c617aa00376`) before the unchanged accepted-main Modbus/history inverses; unknown changes are rejected. Focused protocol, browser, new-account/computer ASGI, permission, source, frontend/build, application/API and docs/diff checks are required. CI remains skipped by current owner policy. Publish one immutable frontend/backend package; record actual installer/version acceptance in the PR. Do not claim field PLC or physical-output acceptance.
+
+## Browser version identity packaging
+
+The production workflow supplies `VITE_RELEASE_ID=$RELEASE_ID` and `VITE_GIT_COMMIT=$RELEASE_SHA` during the frontend build. Packaging verifies the entry bundle contains that exact identity before generating `VERSION.json`; frontend identity may not be learned from the running backend. The browser accepts only healthy `/api/version` identity changes and applies them at navigation/new-work boundaries, including rollback to a previous complete immutable release. Automatic CI remains disabled under the owner release policy; record focused local checks and skipped CI explicitly. First deployment cannot update already-open bundles lacking this feature.

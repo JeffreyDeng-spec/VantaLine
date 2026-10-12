@@ -73,7 +73,7 @@ jobs:
           python-version: '3.10'
       - name: Build production frontend
         working-directory: local_inspection_service/frontend
-        run: npm ci && VITE_PLC_BUNDLE_VERSION="$RELEASE_ID" npm run build:production-cutover
+        run: npm ci && VITE_PLC_BUNDLE_VERSION="$RELEASE_ID" VITE_RELEASE_ID="$RELEASE_ID" VITE_GIT_COMMIT="$RELEASE_SHA" npm run build:production-cutover
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
