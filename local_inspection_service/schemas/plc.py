@@ -88,7 +88,7 @@ class PlcConnectionReadEvidence(BaseModel):
         extra = "forbid"
 
     target: StrictStr = Field(max_length=4)
-    response_hex: StrictStr = Field(min_length=16, max_length=16, pattern=r"^[0-9A-Fa-f]{16}$")
+    response_hex: StrictStr = Field(min_length=14, max_length=16, pattern=r"^(?:[0-9A-Fa-f]{14}|[0-9A-Fa-f]{16})$")
 
 
 class PlcWorkstationVerifyRequest(BaseModel):

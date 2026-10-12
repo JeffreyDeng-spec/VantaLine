@@ -77,9 +77,18 @@ class LeaseAcquisition:
             if int(lease.get("config_generation") or -1) != int(station.get("config_generation") or 0):
                 raise self.ports.config_error()("plc_workstation_generation_changed")
             try:
-                validate_connection_check(lease, request.connection_check_id, request.connection_reads, now)
+                selected_config = validate_connection_check(lease, request.connection_check_id, request.connection_reads, now)
             except ValueError as exc:
                 raise self.ports.config_error()(str(exc)) from exc
+            if selected_config["protocol"] != (station.get("config") or {}).get("protocol", "fx_programming_port_ascii"):
+                station["config"] = selected_config
+                station["config_generation"] = int(station.get("config_generation") or 0) + 1
+                station["profile_verified"] = False
+                station["profile_verified_fingerprint"] = ""
+                # The repository accepts record rows with raw_json through the station mapper.
+                state["station"] = {**state["station"], "config_generation": station["config_generation"],
+                                    "profile_verified": False, "raw_json": station}
+                lease["config_generation"] = station["config_generation"]
             lease["communication_verified"] = True
             lease["communication_verified_at"] = now
             lease["state"] = "active"

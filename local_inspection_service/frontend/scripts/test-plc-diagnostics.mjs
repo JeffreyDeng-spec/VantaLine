@@ -78,10 +78,10 @@ async function scenario(mode, paired = false) {
     requests.push(path);
     await req.frame().page().evaluate(path=>window.serialEvidence.calls.push(path),path);
     const payload=req.method()==='POST'?req.postDataJSON():null;
-    const ws=()=>({paired:Boolean(station),station,config:station?config:null,config_generation:1,lease:null,release_consistent:true});
+    const ws=()=>({paired:Boolean(station),station,config:station?config:null,config_generation:config.enabled?1:0,lease:null,release_consistent:true});
     if(path.endsWith('/diagnostic-events/config')) return route.fulfill({json:{enabled:true,account_id:'operator'}});
     if(path.endsWith('/diagnostic-events/batch')) { logged.push(...payload.events);return route.fulfill({json:{enabled:true,accepted:payload.events.map(e=>e.event_id)}}); }
-    if(path.endsWith('/self-pair')) { station ||= {id:'line1',name:payload.name||'产线电脑'}; return route.fulfill({json:ws()}); }
+    if(path.endsWith('/self-pair')) { if(!station){station={id:'line1',name:payload.name||'产线电脑'};config={...defaults,enabled:false,capture_trigger_enabled:false};} return route.fulfill({json:ws()}); }
     if(path.endsWith('/self-config')) {config=payload;return route.fulfill({json:ws()});}
     if(path.endsWith('/connect')) return route.fulfill({json:{station_id:'line1',session_id:'session',lease_epoch:1,config_generation:1,state:'connecting',connection_check:{id:'check',deadline_at:Math.floor(Date.now()/1000)+60,timeout_ms:500,frames:[{target:'D205',frame_hex:'0230313139413032033731'},{target:'D206',frame_hex:'0230313139433032033733'}]}}});
     if(path.endsWith('/activate')) {
@@ -97,16 +97,13 @@ async function scenario(mode, paired = false) {
   await page.getByRole('button',{name:'连接 PLC',exact:true}).click();
   if(mode==='duplicate') await page.getByRole('button',{name:'连接中…',exact:true}).dispatchEvent('click');
   if(!paired) {
-    await page.getByRole('dialog',{name:'本机 PLC 配置'}).waitFor();
-    assert.equal(await page.locator('input[name=input]').inputValue(),'D205');
-    assert.equal(await page.locator('input[name=result]').inputValue(),'D206');
-    assert.equal(await page.locator('input[name=auto]').isChecked(),true);
-    if(process.env.PLC_UI_OUTPUT) {mkdirSync(process.env.PLC_UI_OUTPUT,{recursive:true});await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'first-use.png')});}
-    await page.getByRole('button',{name:'确认并连接'}).click();
+    await page.getByRole('button',{name:'断开 PLC'}).waitFor();
+    assert.equal(await page.getByRole('dialog',{name:'本机 PLC 配置'}).count(),0);
+    assert.equal(config.capture_trigger_enabled,false);
   }
   if(['success','unplug','edit','refresh','duplicate','tabs'].includes(mode)) {
     await page.getByRole('button',{name:'断开 PLC'}).waitFor();
-    assert.match(await page.getByRole('status').innerText(),/通信正常.*等待相机/);
+    assert.match(await page.getByRole('status').innerText(),paired?/通信正常.*等待相机/:/通信正常.*已关闭到位自动拍照/);
     if(mode==='success'&&process.env.PLC_UI_OUTPUT) await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'connected.png')});
     if(mode==='tabs') {
       const other=await context.newPage();await other.goto(`${base}/__plc_test`);

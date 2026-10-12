@@ -14,7 +14,8 @@
     "build": "npm run build:preview",
     "preview": "vite preview --host 0.0.0.0",
     "test:plc-connection": "node scripts/test-plc-connection.mjs",
-    "test:plc-diagnostics": "node scripts/test-plc-diagnostics.mjs"
+    "test:plc-diagnostics": "node scripts/test-plc-diagnostics.mjs",
+    "test:plc-modbus": "node scripts/test-plc-modbus.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

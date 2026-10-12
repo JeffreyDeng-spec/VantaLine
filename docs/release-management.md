@@ -1796,3 +1796,7 @@ whole-release rollback gates remain required.
 ## Lightweight diagnostic release
 
 PLC diagnostics ship with their strict API, browser collector/viewer, additive migration and independent expiry units in one immutable frontend/backend package. The frontend embeds the release ID through `VITE_PLC_BUNDLE_VERSION`. Follow the current owner CI policy, report focused local evidence and never claim skipped CI passed. Package integrity, installer acceptance, exact production version and whole-release rollback remain required. Start collection only for JHC001; broader collection requires an explicit allowlist change. Diagnostic expiry installation follows acceptance and does not issue PLC traffic or act as a release gate.
+
+## XD5 compatibility candidate release status
+
+**Proposal — blocked, not deployed.** Candidate supports bounded read-only FX/RTU negotiation and RTU result receipts. Focused synthetic evidence is recorded in testing.md; it is not field acceptance. Automatic approval review rejected the proposed inverse source-contract update as potentially masking physical-I/O changes; that update was not executed. Preserve current source fixtures and leave the PR draft until the contract update is approved and checks pass. Customer business mappings remain unconfirmed; new RTU output stays disabled pending commissioning. Owner policy still skips CI. Publish only one complete immutable frontend/backend release after acceptance, verify exact `/api/version`, and roll back the whole release if necessary.

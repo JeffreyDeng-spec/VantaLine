@@ -193,6 +193,22 @@ def _normalize_web_serial_config(
 
 
 def normalize_web_serial_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
+    from .plc_modbus_rtu import PROFILE, PROTOCOL
+    if (raw or {}).get("profile_id") == PROFILE:
+        source = dict(raw or {})
+        expected = {"protocol": PROTOCOL, "checksum_mode": "crc16", "baudrate": 19200, "data_bits": 8}
+        if any(source.get(key) != value for key, value in expected.items()):
+            raise PlcConfigError("XD5 requires Modbus RTU station 1, 19200/8E1")
+        # Reuse logical D range, interlock, timeout and no-retry validation.
+        translated = {**source, "profile_id": WEB_SERIAL_PROFILE_ID,
+                      "protocol": PROTOCOL_ID, "checksum_mode": CHECKSUM_INCLUDE_ETX,
+                      "baudrate": 9600, "data_bits": 7}
+        validated = _normalize_web_serial_config(translated, defaults=DEFAULT_WEB_SERIAL_CONFIG,
+            schema_version=WEB_SERIAL_SCHEMA_VERSION, profile_id=WEB_SERIAL_PROFILE_ID,
+            checksum_modes=frozenset({CHECKSUM_INCLUDE_ETX}))
+        if validated["output_control_point"]:
+            raise PlcConfigError("XD5 initial adapter requires blank optional output")
+        return {**validated, "profile_id": PROFILE, **expected}
     return _normalize_web_serial_config(
         raw,
         defaults=DEFAULT_WEB_SERIAL_CONFIG,
@@ -257,6 +273,10 @@ def migrate_web_serial_config(raw: Mapping[str, Any] | None) -> dict[str, Any]:
 
 def web_serial_resolved_addresses(config: Mapping[str, Any]) -> dict[str, str]:
     normalized = normalize_web_serial_config(config)
+    if normalized["protocol"] == "modbus_rtu":
+        return {"result_register": f'{int(normalized["result_register"][1:]):04X}',
+                "capture_input_register": f'{int(normalized["capture_input_register"][1:]):04X}',
+                "output_control_point": ""}
     return {
         "result_register": logical_device_address(normalized["result_register"]),
         "capture_input_register": logical_device_address(normalized["capture_input_register"]),
@@ -271,13 +291,17 @@ def web_serial_resolved_addresses(config: Mapping[str, Any]) -> dict[str, str]:
 def build_web_serial_capture_read_plan(config: Mapping[str, Any], config_generation: int) -> dict[str, Any]:
     normalized = normalize_web_serial_config(config)
     register = normalized["capture_input_register"]
-    frame = build_d_register_read_frame(logical_device_address(register), normalized["checksum_mode"])
+    if normalized["protocol"] == "modbus_rtu":
+        from .plc_modbus_rtu import read_word
+        frame = read_word(int(register[1:]))
+    else:
+        frame = build_d_register_read_frame(logical_device_address(register), normalized["checksum_mode"])
     return {
         "target": register,
         "operation": "read_capture_input",
         "frame_hex": frame.hex().upper(),
         "frame_sha256": hashlib.sha256(frame).hexdigest(),
-        "expected_response_bytes": 8,
+        "expected_response_bytes": 7 if normalized["protocol"] == "modbus_rtu" else 8,
         "read_timeout_ms": normalized["ack_timeout_ms"],
         "poll_interval_ms": normalized["capture_poll_interval_ms"],
         "trigger_value": normalized["capture_trigger_value"],
@@ -299,6 +323,11 @@ def _frame_item(target: str, frame: bytes, operation: str) -> dict[str, Any]:
 
 def build_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[str, Any]]:
     normalized = normalize_web_serial_config(config)
+    if normalized["protocol"] == "modbus_rtu":
+        from .plc_modbus_rtu import write_word
+        frame = write_word(int(normalized["result_register"][1:]), 1 if passed else 0)
+        return [{**_frame_item(normalized["result_register"], frame, "write_result"),
+                 "expected_response_hex": frame.hex().upper()}]
     checksum_mode = normalized["checksum_mode"]
     result_register = normalized["result_register"]
     frames = [
@@ -347,6 +376,11 @@ def build_web_serial_diagnostic_plan() -> list[dict[str, Any]]:
 def build_legacy_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[str, Any]]:
     """Rebuild v3 frames solely for immutable historical verification."""
     normalized = normalize_legacy_web_serial_config(config)
+    if normalized["protocol"] == "modbus_rtu":
+        from .plc_modbus_rtu import write_word
+        frame = write_word(int(normalized["result_register"][1:]), 1 if passed else 0)
+        return [{**_frame_item(normalized["result_register"], frame, "write_result"),
+                 "expected_response_hex": frame.hex().upper()}]
     checksum_mode = normalized["checksum_mode"]
     result_register = normalized["result_register"]
     frames = [
@@ -387,22 +421,44 @@ def web_serial_profile_fingerprint(config: Mapping[str, Any]) -> str:
     return hashlib.sha256(material.encode("ascii")).hexdigest()
 
 
-def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:
-    """A bounded, read-only check tied to this connecting lease; never a D/Y write."""
+def _connection_candidate(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:
     normalized = normalize_web_serial_config(config)
     frames = []
     for target in (normalized["capture_input_register"], normalized["result_register"]):
-        frame = build_d_register_read_frame(logical_device_address(target), normalized["checksum_mode"])
+        if normalized["protocol"] == "modbus_rtu":
+            from .plc_modbus_rtu import read_word
+            frame = read_word(int(target[1:]))
+        else:
+            frame = build_d_register_read_frame(logical_device_address(target), normalized["checksum_mode"])
         frames.append({"target": target, "frame_hex": frame.hex().upper()})
     return {"id": check_id, "station_id": lease["station_id"], "session_id": lease["session_id"],
             "lease_epoch": lease["lease_epoch"], "config_generation": lease["config_generation"],
-            "deadline_at": lease["expires_at"], "timeout_ms": WEB_SERIAL_ACK_TIMEOUT_MS, "frames": frames}
+            "deadline_at": lease["expires_at"], "timeout_ms": WEB_SERIAL_ACK_TIMEOUT_MS,
+            "frames": frames, "config": normalized,
+            "serial_options": {"baudRate": normalized["baudrate"], "dataBits": normalized["data_bits"],
+                               "stopBits": 1, "parity": "even", "flowControl": "none"}}
 
 
-def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> None:
+def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:
+    """Exactly two bounded profiles, no address/baud scan, no physical writes."""
+    from .plc_modbus_rtu import PROFILE, PROTOCOL
+    normalized = normalize_web_serial_config(config)
+    primary = _connection_candidate(lease, normalized, check_id)
+    if normalized["protocol"] != PROTOCOL and not normalized["output_control_point"]:
+        alternate = {**normalized, "profile_id": PROFILE, "protocol": PROTOCOL,
+                     "checksum_mode": "crc16", "baudrate": 19200, "data_bits": 8,
+                     "capture_trigger_enabled": False}
+        primary["alternatives"] = [_connection_candidate(lease, alternate, check_id + "_rtu")]
+    return primary
+
+
+def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> dict[str, Any]:
     from .plc_fx_ascii import parse_d_register_read_response
-    plan = lease.get("connection_check") or {}
-    if not check_id or plan.get("id") != check_id:
+    from .plc_modbus_rtu import parse_word
+    root = lease.get("connection_check") or {}
+    plans = [root, *root.get("alternatives", [])]
+    plan = next((item for item in plans if check_id and item.get("id") == check_id), {})
+    if not plan:
         raise ValueError("plc_connection_verification_required_reload_page")
     if any(plan.get(key) != lease.get(key) for key in ("station_id", "session_id", "lease_epoch", "config_generation")):
         raise ValueError("plc_connection_check_fenced")
@@ -410,11 +466,14 @@ def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, re
         raise ValueError("plc_connection_check_expired")
     if len(reads) != 2 or len(plan.get("frames", [])) != 2:
         raise ValueError("plc_connection_check_invalid_response")
+    config = plan.get("config") or DEFAULT_WEB_SERIAL_CONFIG
+    modbus = config.get("protocol") == "modbus_rtu"
     for frame, evidence in zip(plan["frames"], reads):
         evidence = evidence.model_dump() if hasattr(evidence, "model_dump") else evidence
         try:
-            if evidence["target"] != frame["target"] or not re.fullmatch(r"[0-9A-Fa-f]{16}", evidence["response_hex"]):
+            if evidence["target"] != frame["target"] or not re.fullmatch(r"[0-9A-Fa-f]{14}" if modbus else r"[0-9A-Fa-f]{16}", evidence["response_hex"]):
                 raise ValueError("invalid response")
-            parse_d_register_read_response(bytes.fromhex(evidence["response_hex"]))
+            (parse_word if modbus else parse_d_register_read_response)(bytes.fromhex(evidence["response_hex"]))
         except Exception as exc:
             raise ValueError("plc_connection_check_invalid_response") from exc
+    return normalize_web_serial_config(config)

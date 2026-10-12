@@ -949,13 +949,13 @@ export interface PlcCaptureEvent {
 export interface PlcWebSerialConfig {
   schema_version: 5;
   transport_mode: "web_serial";
-  profile_id: "mitsubishi_fx3ga_40mr";
+  profile_id: "mitsubishi_fx3ga_40mr" | "xinje_xd5_modbus_rtu";
   enabled: boolean;
-  protocol: "fx_programming_port_ascii";
-  checksum_mode: "include_etx";
-  baudrate: 9600;
+  protocol: "fx_programming_port_ascii" | "modbus_rtu";
+  checksum_mode: "include_etx" | "crc16";
+  baudrate: 9600 | 19200;
   parity: "E";
-  data_bits: 7;
+  data_bits: 7 | 8;
   stop_bits: 1;
   result_register: string;
   output_control_point: string;
@@ -965,6 +965,15 @@ export interface PlcWebSerialConfig {
   capture_poll_interval_ms: 200;
   ack_timeout_ms: 500;
   retries: 0;
+}
+
+export interface PlcConnectionCheck {
+  id: string; station_id: string; session_id: string; lease_epoch: number;
+  config_generation: number; deadline_at: number; timeout_ms: number;
+  frames: Array<{target: string; frame_hex: string}>;
+  config?: PlcWebSerialConfig;
+  serial_options?: SerialOptions;
+  alternatives?: PlcConnectionCheck[];
 }
 
 export interface PlcWorkstationLease {
@@ -978,11 +987,7 @@ export interface PlcWorkstationLease {
   heartbeat_at: number;
   serial_info?: { usb_vendor_id?: number; usb_product_id?: number };
   communication_verified?: boolean;
-  connection_check?: {
-    id: string; station_id: string; session_id: string; lease_epoch: number;
-    config_generation: number; deadline_at: number; timeout_ms: number;
-    frames: Array<{ target: string; frame_hex: string }>;
-  };
+  connection_check?: PlcConnectionCheck;
 }
 
 export interface PlcWorkstationResponse {

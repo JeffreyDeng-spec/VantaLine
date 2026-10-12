@@ -24,6 +24,22 @@ export function LocalPlcControls(props: Props) {
   const ownClient = useRef(new PlcWebSerialClient());
   const mounted = useRef(true);
   const dialogRef = useRef<HTMLElement>(null);
+  const grantedPorts = useRef<SerialPort[]>([]);
+  useEffect(() => {
+    if (!navigator.serial?.getPorts) return;
+    let active = true;
+    const refreshPorts = () => { void navigator.serial!.getPorts().then(ports => {
+      if (active) grantedPorts.current = ports;
+    }).catch(() => { if (active) grantedPorts.current = []; }); };
+    refreshPorts();
+    navigator.serial.addEventListener("connect", refreshPorts);
+    navigator.serial.addEventListener("disconnect", refreshPorts);
+    return () => {
+      active = false;
+      navigator.serial?.removeEventListener("connect", refreshPorts);
+      navigator.serial?.removeEventListener("disconnect", refreshPorts);
+    };
+  }, []);
   const client = props.client || ownClient.current;
   const cache = useQueryClient();
   const workstation = useQuery({ queryKey: queryKeys.plcWorkstation, queryFn: getPlcWorkstation, refetchOnWindowFocus: false });
@@ -92,7 +108,9 @@ export function LocalPlcControls(props: Props) {
       if (connect) {
         setPhase("请选择本机 PLC 串口");
         if (!PlcWebSerialClient.supported() || !navigator.serial) throw new Error("请通过 HTTPS 使用桌面 Edge 或 Chrome 连接 PLC。");
-        port = await navigator.serial.requestPort();
+        // Reuse a sole already-authorized port. Multiple ports still require
+        // explicit selection; USB adapter IDs cannot identify the PLC model.
+        port = grantedPorts.current.length === 1 ? grantedPorts.current[0] : await navigator.serial.requestPort();
         client.diagnostics.record("selection","ok");
       }
       if (!mounted.current) return;
@@ -108,11 +126,15 @@ export function LocalPlcControls(props: Props) {
         setPhase("正在打开本机串口…");
         diagnosticStep="workstation";
         client.diagnostics.record("workstation","started");
-        const station = await selfPairPlcWorkstation();
+        const beforePair = await getPlcWorkstation();
+        let station = await selfPairPlcWorkstation();
+        if (!beforePair.paired && station.config_generation === 0 && !station.config?.enabled) {
+          station = await selfSavePlcWorkstationConfig({...DEFAULTS,capture_trigger_enabled:false});
+        }
         if (!station.station || !station.config?.enabled) throw new Error("请先确认本机 PLC 配置并启用联动。");
         if (!mounted.current) return;
         client.diagnostics.bind(station.station.id,station.config_generation);
-        client.diagnostics.record("workstation","ok",{config:{baudrate:9600,data_bits:7,parity:"E",stop_bits:1,input_register:station.config.capture_input_register,result_register:station.config.result_register,output_control_point:station.config.output_control_point,timeout_ms:500,capture_enabled:station.config.capture_trigger_enabled,trigger_value:station.config.capture_trigger_value}});
+        client.diagnostics.record("workstation","ok",{config:{baudrate:station.config.baudrate,data_bits:station.config.data_bits,parity:"E",stop_bits:1,input_register:station.config.capture_input_register,result_register:station.config.result_register,output_control_point:station.config.output_control_point,timeout_ms:500,capture_enabled:station.config.capture_trigger_enabled,trigger_value:station.config.capture_trigger_value}});
         await client.connect(station.station.id, props.modelId || "", (message) => {
           report(false);
           setError(`${message}。诊断编号：${client.diagnostics.attemptId}`);
@@ -120,7 +142,9 @@ export function LocalPlcControls(props: Props) {
           void refresh();
         }, port, setPhase);
         report(true);
-        setPhase("PLC 通信正常");
+        const current = await getPlcWorkstation();
+        setPhase(current.config?.protocol === "modbus_rtu" && !current.station?.profile_verified
+          ? "已识别 Modbus RTU，等待确认生产寄存器约定（输出禁用）" : "PLC 通信正常");
       } else {
         setPhase("本机配置已保存，当前 PLC 未连接");
       }
@@ -158,7 +182,7 @@ export function LocalPlcControls(props: Props) {
   }
 
   function requestConnection() {
-    if (!data?.paired || !data.config?.enabled) {
+    if (data?.paired && !data.config?.enabled) {
       setConnectAfterSave(true);
       setEditing(true);
     } else {

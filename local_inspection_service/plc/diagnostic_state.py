@@ -18,6 +18,8 @@ class DiagnosticState:
             station, lease, now = self.ports.active_lease()(
                 state, request.session_id, request.lease_epoch
             )
+            if (station.get("config") or {}).get("protocol") == "modbus_rtu":
+                raise self.ports.config_error()("plc_modbus_write_diagnostic_not_supported")
             if int(station.get("config_generation") or 0) != int(request.config_generation):
                 raise self.ports.config_error()("plc_workstation_generation_changed")
             in_flight_id = str(lease.get("in_flight_dispatch_id") or "")
