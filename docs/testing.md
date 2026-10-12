@@ -3353,3 +3353,7 @@ The background-free inspection browser fixture moves its initial pointer out of
 the hover-expanding navigation rail and waits for the rail to collapse before
 clicking business actions. It retains Playwright's normal visibility and pointer
 interception checks; no forced click or product CSS override is used.
+
+The record-recovery source replay composes both independent dataset-photo and PLC
+result-value checkpoints before its unchanged historical oracle. Each checkpoint
+validates its own exact descendant bytes; neither permits unknown source edits.
