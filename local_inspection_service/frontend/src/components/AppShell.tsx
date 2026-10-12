@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { InspectionScopeTarget } from "./InspectionScopeTarget";
 import { LegacyManualRedirect } from "../features/label-inspection/LegacyManualRedirect";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -300,6 +302,7 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const [assetsExpanded, setAssetsExpanded] = useState(() => [workspacePath("/training-library"), workspacePath("/pipeline")].includes(location.pathname));
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [inspectionScopeTarget, setInspectionScopeTarget] = useState<HTMLElement | null>(null);
   const userManagementActive = location.pathname === workspacePath("/users");
   const canReadTaskResources = ["ai_detection", "model_library", "training_pipeline"].some((permission) => hasPermission(auth.user, permission));
   const canReadPipelineTasks = ["training_pipeline", "incoming_material_config", "inspection"].some((permission) => hasPermission(auth.user, permission));
@@ -497,8 +500,23 @@ export function AppShell() {
   );
   const visibleTrainingChildren = assetsExpanded ? visibleTrainingAssetItems : [];
   const accountDisplayName = auth.user.display_name || auth.user.username;
+  const dataScopeControl = (
+    <label>
+      数据范围
+      <select value={auth.dataUserId} onChange={(event) => auth.setDataUserId(event.currentTarget.value)}>
+        <option value="">全部用户与历史数据</option>
+        <option value="legacy_admin">历史数据</option>
+        {(usersQuery.data?.users || []).map((user) => (
+          <option value={user.id} key={user.id}>
+            {user.display_name || user.username}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 
   return (
+    <InspectionScopeTarget.Provider value={setInspectionScopeTarget}>
     <div className="app-shell">
       <aside className="sidebar">
         <Link className="brand-block" to={workspacePath()} aria-label="VantaLine 工作台总览">
@@ -634,20 +652,9 @@ export function AppShell() {
 
       <main className="workspace">
         {auth.user.role === "admin" && !userManagementActive ? (
-          <div className="top-scope-bar">
-            <label>
-              数据范围
-              <select value={auth.dataUserId} onChange={(event) => auth.setDataUserId(event.currentTarget.value)}>
-                <option value="">全部用户与历史数据</option>
-                <option value="legacy_admin">历史数据</option>
-                {(usersQuery.data?.users || []).map((user) => (
-                  <option value={user.id} key={user.id}>
-                    {user.display_name || user.username}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          inspectionScopeTarget
+            ? createPortal(<div className="normal-data-scope">{dataScopeControl}</div>, inspectionScopeTarget)
+            : <div className="top-scope-bar">{dataScopeControl}</div>
         ) : null}
 
         <Routes>
@@ -752,5 +759,6 @@ export function AppShell() {
         </Routes>
       </main>
     </div>
+    </InspectionScopeTarget.Provider>
   );
 }

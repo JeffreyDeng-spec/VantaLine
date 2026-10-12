@@ -1,12 +1,13 @@
 import { useVersionParticipant } from "../version/hooks";
 import { markVersionFilesUploaded } from "../version/files";
 import { guardVersionAction, versionCoordinator } from "../version/runtime";
+import { InspectionScopeTarget } from "../../components/InspectionScopeTarget";
 import "./normalInspection.css";
 import { apiClient, withAuthScope } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { getFile } from "../agent/files";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { workspacePath } from "../../app/paths";
 import { Camera, ChevronRight, FileImage, Maximize2, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -619,6 +620,7 @@ function TaskDetectionEntryPage({
 
 export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const auth = useAuth();
+  const setInspectionScopeTarget = useContext(InspectionScopeTarget);
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const { taskId: routeTaskId = "" } = useParams();
@@ -661,6 +663,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     PlcWebSerialClient.supported() ? "当前 PLC 未连接，PLC 联动未生效。" : "当前浏览器不支持 Web Serial。"
   );
   const [busy, setBusy] = useState("");
+  const [lastDetectionAt, setLastDetectionAt] = useState<number | null>(null);
   const [result, setResult] = useState<DetectionResult | null>(null);
   useVersionParticipant({
     busy: () => Boolean(busyRef.current || cameraCaptureLockRef.current || busy || plcDiagnosticBusy),
@@ -1484,6 +1487,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         }
         markVersionFilesUploaded([file]);
         setResult(next);
+        setLastDetectionAt(Date.now());
         setSource(kind);
         playDetectionSound(Boolean(next.passed));
         notify({ title: kind === "video" ? "视频分析完成" : `${activeDetectionLabel}完成`, tone: "success" });
@@ -1688,6 +1692,13 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
             当前页面已绑定任务，只能切换这个任务下的可用模型；上传图片、视频或使用摄像头输出通过 / 不通过。
           </p>
         </div>
+        <div className="normal-runtime-status" role="status" aria-live="polite">
+          <span className={stream ? "is-ready" : ""}>相机 {stream ? "就绪" : "未开启"}</span>
+          <span title={error || aiMetaText(result)}>{busy ? "检测中…" : error ? "检测异常" : result ? `响应 ${aiMetaText(result)}` : "等待检测"}</span>
+          <span>最近检测 {lastDetectionAt ? new Date(lastDetectionAt).toLocaleTimeString("zh-CN", { hour12: false }) : "—"}</span>
+          {result && <span className="normal-write-status" title={plcSyncLabel(result)}>{plcSyncLabel(result)}</span>}
+        </div>
+        <div ref={auth.user.role === "admin" ? setInspectionScopeTarget : undefined} className="normal-scope-slot" />
         <div className="page-head-actions detection-head-actions">
           <strong className={`pill ${statusBadge.includes("就绪") || statusBadge.includes("加载") ? "ok" : "neutral"}`}>{statusBadge}</strong>
           <button className="normal-fullscreen-guide compact-action" type="button" disabled={Boolean(busy)} onClick={openFullscreenCamera}>
@@ -1736,12 +1747,17 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
             </span>
           ) : null}
         </label>
+        {source === "camera" && <div className="normal-plc-row">
+          <div ref={setPlcStatusTarget} className="plc-status-slot" />
+          <span className="normal-plc-read" title={plcCapturePoll.message}>
+            {plcWorkstationQuery.data?.config?.capture_input_register || "—"} = {plcCapturePoll.value ?? "—"}
+            <span> · 自动拍照{plcWorkstationQuery.data?.config?.capture_trigger_enabled ? "开" : "关"}</span>
+          </span>
+          <button type="button" className="normal-plc-detail-button" onClick={() => setPlcDetailsOpen(true)}>PLC 详情</button>
+        </div>}
       </section>
 
-      {source === "camera" && <div className="normal-plc-row">
-        <div ref={setPlcStatusTarget} className="plc-status-slot" />
-        <button type="button" className="normal-plc-detail-button" onClick={() => setPlcDetailsOpen(true)}>PLC 详情</button>
-      </div>}
+
 
       <div className="inspect-grid">
         <section className="panel page-panel input-panel">
