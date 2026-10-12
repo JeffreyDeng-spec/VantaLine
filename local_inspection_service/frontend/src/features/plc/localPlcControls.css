@@ -16,3 +16,16 @@
 .plc-diagnostic-table table { width: 100%; border-collapse: collapse; }
 .plc-diagnostic-table td, .plc-diagnostic-table th { padding: 8px; text-align: left; border-bottom: 1px solid var(--border, #ddd); }
 .plc-diagnostic-panel li { padding: 8px 0; overflow-wrap: anywhere; }
+
+.plc-status-slot { position: sticky; top: 0; z-index: 5; margin-bottom: 12px; }
+.plc-connection-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 14px; border: 1px solid #cbd5e1; border-left: 5px solid #64748b; border-radius: 10px; background: #f8fafc; color: #334155; }
+.plc-connection-bar-copy { flex: 1 1 240px; min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.plc-connection-bar-copy strong { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.plc-connection-bar-copy i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.plc-connection-bar-copy span, .plc-connection-bar-copy time { font-size: 13px; line-height: 1.5; }
+.plc-connection-bar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.plc-connection-bar--connected { border-color: #86efac; border-left-color: #15803d; background: #f0fdf4; color: #166534; }
+.plc-connection-bar--connecting { border-color: #fcd34d; border-left-color: #b45309; background: #fffbeb; color: #92400e; }
+.plc-connection-bar--fault { border-color: #fca5a5; border-left-color: #dc2626; background: #fef2f2; color: #991b1b; }
+.plc-status-slot--fullscreen { flex: 0 0 auto; position: relative; margin: 0 4px 12px; }
+@media (max-width: 600px) { .plc-connection-bar { padding: 10px; gap: 8px; } .plc-connection-bar-actions { width: 100%; } }

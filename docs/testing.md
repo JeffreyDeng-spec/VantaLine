@@ -3271,6 +3271,10 @@ Administrator archive checks include explicit AI links on non-prefixed pipeline 
 
 **Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.
 
+## PLC visible status acceptance
+
+Run `PLC_TEST_BROWSER=msedge node local_inspection_service/frontend/scripts/test-plc-connection.mjs`. Its real React/controller portal harness checks fullscreen entry without serial reopen, unplug reason/time visible in both layouts, matching fault text after exit, successful manual reconnect clearing the fault, and intentional disconnect staying neutral. Existing connection failures, lease activation and duplicate-connection checks remain. Synthetic serial/API tests do not prove physical field connectivity.
+
 ## Global protocol recognition tests
 
 Run backend `scripts/smoke_plc_modbus_auto.py` (eleven tests) and actual ASGI `scripts/smoke_plc_modbus_http.py`. Cover opposite-profile plans, FX Y retention/RTU omission, saved-RTU reverse activation, prior configuration preservation, generation fencing, new account/computer defaults and connection-based readiness with unset/stale manual flags. Both exact source checkpoints must reject mutations and preserve the immutable #312 and historical assertions. Frontend `test:plc-modbus` has fourteen serial scenarios plus real administrator-payload parameter preservation. Retain seventeen connection cases, diagnostic production trajectories, trigger-state tests, backend v4/self-service/request-model/lease tests, canonical/application/API contracts, typecheck/build, migration/release/boundary/docs and diff checks. Tests use synthetic serial and isolated API/storage, never field PLC instructions.
