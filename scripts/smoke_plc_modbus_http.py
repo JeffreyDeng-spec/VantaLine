@@ -43,5 +43,21 @@ check(operator.post('/api/plc/workstation/lease/disconnect',json=identity),200,'
 again=operator.post('/api/plc/workstation/connect',json={'client_instance_id':'modbus-browser','model_id':'','bundle_version':'plc-web-serial-v4'})
 check(again,200,'saved RTU claim')
 assert again.json()['connection_check']['config']['protocol']=='modbus_rtu'
-assert not again.json()['connection_check'].get('alternatives')
-print('smoke_plc_modbus_http: PASS (actual auth, CRC fencing, atomic profile/generation persistence, saved RTU and connection-based readiness)')
+assert again.json()['connection_check']['alternatives'][0]['config']['protocol']=='fx_programming_port_ascii'
+reverse=again.json();fx=reverse['connection_check']['alternatives'][0]
+back=dict(session_id=reverse['session_id'],lease_epoch=reverse['lease_epoch'],connection_check_id=fx['id'],connection_reads=[dict(target=f['target'],response_hex='0230303030034333') for f in fx['frames']])
+check(operator.post('/api/plc/workstation/connect/activate',json=back),200,'reverse FX activates')
+changed=operator.get('/api/plc/workstation').json()
+assert changed['config']['protocol']=='fx_programming_port_ascii' and changed['production_ready']
+assert not changed['config']['capture_trigger_enabled']
+check(admin.post('/api/auth/users',json={'username':'aioperator','password':'operator-password-123','role':'user','permissions':['ai_detection'],'active':True}),200,'AI account')
+other=Client(server.app,base_url='https://testserver')
+check(other.post('/api/auth/login',json={'username':'aioperator','password':'operator-password-123'}),200,'AI login')
+paired=other.post('/api/plc/workstation/self-pair',json={});check(paired,200,'fresh computer pairs without admin')
+assert paired.json()['station']['id']!=current['station']['id']
+check(other.post('/api/plc/workstation/self-config',json={**fixture.DEFAULT_WEB_SERIAL_CONFIG,'enabled':True,'capture_trigger_enabled':False}),200,'safe automatic defaults')
+new=other.post('/api/plc/workstation/connect',json={'client_instance_id':'other-browser','model_id':'','bundle_version':'plc-web-serial-v4'})
+check(new,200,'new account/computer claim')
+assert new.json()['connection_check']['config']['protocol']=='fx_programming_port_ascii'
+assert new.json()['connection_check']['alternatives'][0]['config']['protocol']=='modbus_rtu'
+print('smoke_plc_modbus_http: PASS (auth, fresh account/computer candidates, both directions and connection-based readiness)')

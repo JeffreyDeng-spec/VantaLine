@@ -2458,3 +2458,7 @@ The workbench also reads owner-scoped legacy optimization state directly, withou
 ## PLC connection readiness without manual confirmation
 
 **Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.
+
+## Global two-profile connection behavior
+
+Protocol compatibility is account independent for authorized inspection users, including self-paired new browsers. The saved profile and its opposite form two bounded read-only candidates. Opposite-profile success persists configuration and generation, preserves `previous_serial_profile`, clears the legacy verification marker/capture and retains #312 connection-based production readiness. There is no new manual commissioning gate. No global production-verification override, permission widening or account-data sharing is introduced.
