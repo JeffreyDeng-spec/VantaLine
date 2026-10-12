@@ -142,9 +142,7 @@ export function LocalPlcControls(props: Props) {
           void refresh();
         }, port, setPhase);
         report(true);
-        const current = await getPlcWorkstation();
-        setPhase(current.config?.protocol === "modbus_rtu" && !current.station?.profile_verified
-          ? "已识别 Modbus RTU，等待确认生产寄存器约定（输出禁用）" : "PLC 通信正常");
+        setPhase("PLC 通信正常");
       } else {
         setPhase("本机配置已保存，当前 PLC 未连接");
       }

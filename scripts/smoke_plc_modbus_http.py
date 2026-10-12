@@ -29,7 +29,7 @@ assert current['config']['protocol']=='modbus_rtu'
 assert current['config']['baudrate']==19200 and current['config']['data_bits']==8
 assert current['config_generation']==lease['config_generation']+1
 assert activated.json()['config_generation']==current['config_generation']
-assert current['lease']['communication_verified'] and not current['production_ready']
+assert current['lease']['communication_verified'] and current['production_ready']
 assert not current['config']['capture_trigger_enabled'] and not current['station']['profile_verified']
 assert current['capture_read_plan']['expected_response_bytes']==7
 check(operator.post('/api/plc/workstation/connect/activate',json=activation),409,'no repeated activation')
@@ -44,4 +44,4 @@ again=operator.post('/api/plc/workstation/connect',json={'client_instance_id':'m
 check(again,200,'saved RTU claim')
 assert again.json()['connection_check']['config']['protocol']=='modbus_rtu'
 assert not again.json()['connection_check'].get('alternatives')
-print('smoke_plc_modbus_http: PASS (actual auth, CRC fencing, atomic profile/generation persistence, saved RTU and disabled production)')
+print('smoke_plc_modbus_http: PASS (actual auth, CRC fencing, atomic profile/generation persistence, saved RTU and connection-based readiness)')

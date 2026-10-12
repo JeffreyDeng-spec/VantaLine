@@ -4,29 +4,17 @@
   "files": {
     "local_inspection_service/plc/browser_dispatch.py": {
       "parent_sha256": "b11db4a85d2e13f6ef1a4933dbadba539ad632dea7d46d3d4a73e81baa6e3a29",
-      "current_sha256": "bde040d1062e5a728e5a1226e6e4b3c0bab1ad472e52d3685bfb9a7b49aa28ae",
+      "current_sha256": "d1efdacdc6b1283686a6dc356b45d0e06b2e3a199b3b6b059355966e4e3ca712",
       "regions": [
         {
-          "start": 11,
-          "end": 12,
-          "expected": "from ..plc_web_serial import web_serial_profile_fingerprint\n",
-          "original": ""
-        },
-        {
-          "start": 55,
-          "end": 60,
-          "expected": "            if config_snapshot.get(\"protocol\") == \"modbus_rtu\" and not (\n                station.get(\"profile_verified\") and hmac.compare_digest(\n                    str(station.get(\"profile_verified_fingerprint\") or \"\"),\n                    web_serial_profile_fingerprint(config_snapshot))):\n                raise self.policy.PlcConfigError()(\"plc_modbus_business_mapping_not_verified\")\n",
-          "original": ""
-        },
-        {
-          "start": 285,
-          "end": 286,
+          "start": 279,
+          "end": 280,
           "expected": "            if status == \"acknowledged\" and response_hex != expected.get(\"expected_response_hex\", \"06\"):\n",
           "original": "            if status == \"acknowledged\" and response_hex != \"06\":\n"
         },
         {
-          "start": 287,
-          "end": 288,
+          "start": 281,
+          "end": 282,
           "expected": "            if status == \"nak\" and (expected.get(\"expected_response_hex\", \"06\") != \"06\" or response_hex != \"15\"):\n",
           "original": "            if status == \"nak\" and response_hex != \"15\":\n"
         }
@@ -173,6 +161,18 @@
           "end": 12,
           "expected": "    baudrate: Literal[9600, 19200] = 9600\n    data_bits: Literal[7, 8] = 7\n",
           "original": "    baudrate: Literal[9600] = 9600\n    data_bits: Literal[7] = 7\n"
+        }
+      ]
+    },
+    "local_inspection_service/plc/station_service.py": {
+      "parent_sha256": "a4b8e046f355e9a310bf46507da9f65a18146ee5af9d91f957723fcae4c4ac4c",
+      "current_sha256": "ae1887d1447475ac6c5d3216d007e7bfc728c740cf2174317efed08a3c08b332",
+      "regions": [
+        {
+          "start": 175,
+          "end": 176,
+          "expected": "            \"production_ready\": bool(config[\"enabled\"] and lease_active and release_consistent),\n",
+          "original": "            \"production_ready\": bool(config[\"enabled\"] and lease_active and profile_verified and release_consistent),\n"
         }
       ]
     }

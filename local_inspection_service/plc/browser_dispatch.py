@@ -9,7 +9,6 @@ import hmac
 import secrets
 import time
 from typing import Any
-from ..plc_web_serial import web_serial_profile_fingerprint
 from .browser_dispatch_ports import BrowserDispatchStorage, BrowserDispatchIdentity, BrowserDispatchPolicy, BrowserDispatchProjection, PlcWebSerialAttemptRequest, PlcWebSerialReceiptRequest
 
 @dataclass(frozen=True)
@@ -53,11 +52,6 @@ class PlcBrowserDispatchService:
                     raise self.policy.PlcConfigError()("plc_camera_request_payload_conflict")
                 return
             config_snapshot = self.policy.migrate_web_serial_config()(station.get("config") or {})
-            if config_snapshot.get("protocol") == "modbus_rtu" and not (
-                station.get("profile_verified") and hmac.compare_digest(
-                    str(station.get("profile_verified_fingerprint") or ""),
-                    web_serial_profile_fingerprint(config_snapshot))):
-                raise self.policy.PlcConfigError()("plc_modbus_business_mapping_not_verified")
             record = {
                 "dispatch_id": dispatch_id,
                 "protocol_version": self.policy.WEB_SERIAL_PROTOCOL_VERSION(),

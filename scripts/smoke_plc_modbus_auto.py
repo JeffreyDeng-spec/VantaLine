@@ -91,20 +91,26 @@ class ModbusContract(unittest.TestCase):
             with self.assertRaises(PlcConfigError): service._plc_web_serial_receipt_outcome(frames,[{**evidence,"status":status,"response_hex":response}])
         self.assertEqual(service._plc_web_serial_receipt_outcome(frames,[{**evidence,"status":"timeout","response_hex":""}]),"uncertain")
 
-    def test_unverified_mapping_cannot_plan_physical_output(self):
+    def test_connected_station_does_not_require_manual_mapping_confirmation(self):
         from types import SimpleNamespace as NS
         from local_inspection_service.plc.browser_dispatch import PlcBrowserDispatchService
         for verified, fingerprint in ((False,""),(True,"stale")):
             station={"config":self.config,"profile_verified":verified,"profile_verified_fingerprint":fingerprint}
-            lease={"model_id":"model"}
+            lease={"model_id":"model","lease_epoch":1,"expires_at":200}
             state={"station":station,"lease":lease,"dispatch":None}
             service=PlcBrowserDispatchService(
-                NS(_plc_web_serial_mutate=lambda:lambda sid,did,callback:callback(state),_plc_web_serial_record=lambda:lambda row:row),
+                NS(_plc_web_serial_mutate=lambda:lambda sid,did,callback:(callback(state),state)[1],_plc_web_serial_record=lambda:lambda row:row,
+                   _plc_web_serial_dispatch_row=lambda:lambda row:row,
+                   _plc_workstation_lease_row=lambda:lambda row:row),
                 NS(_plc_web_serial_require_active_lease=lambda:lambda state,session:(station,lease,100)),
-                NS(migrate_web_serial_config=lambda:normalize_web_serial_config,PlcConfigError=lambda:PlcConfigError),None)
-            with self.assertRaisesRegex(PlcConfigError,"mapping_not_verified"):
-                service.plc_web_serial_begin_camera_detection("station","session","request-123","model","fingerprint")
-            self.assertIsNone(state["dispatch"])
+                NS(migrate_web_serial_config=lambda:normalize_web_serial_config,PlcConfigError=lambda:PlcConfigError,
+                   WEB_SERIAL_PROTOCOL_VERSION=lambda:"plc-web-serial-v4",
+                   web_serial_config_fingerprint=lambda:lambda config:"config-fingerprint"),None)
+            record, created = service.plc_web_serial_begin_camera_detection("station","session","request-123","model","fingerprint")
+            self.assertTrue(created)
+            self.assertEqual(record["status"], "detecting")
+            self.assertEqual(record["frames"], [])
+            self.assertEqual(lease["in_flight_dispatch_id"], record["dispatch_id"])
 
     def test_source_contract_rejects_mutations_and_preserves_parent(self):
         import hashlib
