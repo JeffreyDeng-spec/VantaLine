@@ -11,12 +11,22 @@ const server = await createServer({ root, configFile: false, optimizeDeps: { inc
   name: 'plc-test-harness', enforce: 'pre',
   resolveId(id) { if(id.endsWith('/__plc_entry.tsx')) return id; },
   load(id) { if(id.endsWith('/__plc_entry.tsx')) return `
-    import React from 'react';
+    import React, {useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
     import '/src/styles/global.css';
     import {LocalPlcControls} from '/src/features/plc/LocalPlcControls.tsx';
-    createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><LocalPlcControls /></QueryClientProvider>);
+    function Harness() {
+      const [full,setFull]=useState(false);
+      const [normalTarget,setNormalTarget]=useState(null);
+      const [fullTarget,setFullTarget]=useState(null);
+      return <><button style={{position:"relative",zIndex:100}} onClick={()=>setFull(v=>!v)}>切换全屏</button>
+        <div style={{display:full?'none':'block'}}><div ref={setNormalTarget} data-testid="normal-status" /></div>
+        {full && <div className="inspection-fullscreen"><header className="inspection-fullscreen-head">全屏检测</header><div ref={setFullTarget} className="plc-status-slot plc-status-slot--fullscreen" data-testid="fullscreen-status" /><main data-testid="fullscreen-stage" style={{background:"#172337",minHeight:0}}>摄像头与检测结果</main></div>}
+        <LocalPlcControls statusTarget={normalTarget} fullscreenStatusTarget={fullTarget} />
+      </>;
+    }
+    createRoot(document.getElementById('root')).render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><Harness /></QueryClientProvider>);
   `; },
   configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
@@ -96,15 +106,15 @@ async function scenario(mode, paired = false) {
     assert.equal(config.capture_trigger_enabled,false,'first use must not enable capture');
     assert(requests.includes('/api/plc/workstation/self-config'),'first use saves safe communication defaults');
   }
-  if(['success','authorized','unplug','edit','refresh','duplicate','tabs'].includes(mode)) {
+  if(['success','authorized','unplug','edit','refresh','duplicate','tabs','statusbar'].includes(mode)) {
     await page.getByRole('button',{name:'断开 PLC'}).waitFor();
-    assert.match(await page.getByRole('status').innerText(),paired?/通信正常.*等待相机/:/通信正常.*已关闭到位自动拍照/);
+    assert.match(await page.getByRole('status').innerText(),paired?/PLC 已连接.*等待相机/s:/PLC 已连接.*自动拍照未启用/s);
     if(mode==='success'&&process.env.PLC_UI_OUTPUT) await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'connected.png')});
     if(mode==='tabs') {
       const other=await context.newPage();await other.goto(`${base}/__plc_test`);
       await other.getByRole('button',{name:'连接 PLC',exact:true}).click();
       await other.waitForFunction(()=>document.querySelector('[role=status]')?.textContent.includes('另一个标签页'));
-      assert.match(await page.getByRole('status').innerText(),/通信正常/);await other.close();
+      assert.match(await page.getByRole('status').innerText(),/PLC 已连接/);await other.close();
     }
     if(mode==='edit') {
       await page.getByRole('button',{name:'本机 PLC 设置'}).click();
@@ -113,18 +123,48 @@ async function scenario(mode, paired = false) {
       await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
       assert(requests.indexOf('/api/plc/workstation/lease/disconnect')<requests.indexOf('/api/plc/workstation/self-config'));
     }
+    if(mode==='statusbar') {
+      const before=await page.evaluate(()=>window.serialEvidence.calls.filter(x=>x==='open').length);
+      await page.getByRole('button',{name:'切换全屏'}).click();
+      const full=page.getByTestId('fullscreen-status');
+      await full.getByText('PLC 已连接',{exact:true}).waitFor();
+      assert.equal(await page.evaluate(()=>window.serialEvidence.calls.filter(x=>x==='open').length),before,'fullscreen cannot reopen serial');
+      await page.evaluate(()=>window.unplug());
+      await full.getByRole('button',{name:'重新连接 PLC'}).waitFor();
+      const faultText=await full.getByRole('status').innerText();
+      assert.match(faultText,/PLC 已断开.*拔出.*断开时间/s);
+      if(process.env.PLC_UI_OUTPUT) {
+        mkdirSync(process.env.PLC_UI_OUTPUT,{recursive:true});
+        await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'fullscreen-fault.png')});
+      }
+      await page.setViewportSize({width:560,height:600});
+      const barRect=await full.boundingBox();const stageRect=await page.getByTestId('fullscreen-stage').boundingBox();
+      assert(barRect.x>=0 && barRect.x+barRect.width<=560,'status bar fits narrow viewport');
+      assert(stageRect.y>=barRect.y+barRect.height,'fullscreen stage stays below status bar');
+      if(process.env.PLC_UI_OUTPUT) await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'fullscreen-fault-narrow.png')});
+      await page.setViewportSize({width:1280,height:720});
+
+      await page.getByRole('button',{name:'切换全屏'}).click();
+      assert.equal(await page.getByTestId('normal-status').getByRole('status').innerText(),faultText,'same reason/time after leaving fullscreen');
+      await page.getByRole('button',{name:'重新连接 PLC'}).click();
+      await page.getByRole('button',{name:'断开 PLC'}).waitFor();
+      assert.equal(await page.locator('.plc-connection-bar time').count(),0,'successful reconnect clears fault time');
+      await page.getByRole('button',{name:'断开 PLC'}).click();
+      await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
+      assert.equal(await page.locator('.plc-connection-bar--fault').count(),0,'intentional disconnect is neutral');
+    }
     if(mode==='refresh') {
       await page.reload();await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
       assert.match(await page.getByRole('status').innerText(),/未连接/);
     }
-    if(mode==='unplug') {await page.evaluate(()=>window.unplug());await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();assert.match(await page.getByRole('status').innerText(),/未连接/);}
+    if(mode==='unplug') {await page.evaluate(()=>window.unplug());await page.getByRole('button',{name:'重新连接 PLC',exact:true}).waitFor();assert.match(await page.getByRole('status').innerText(),/PLC 已断开.*拔出.*断开时间/s);}
   } else if(mode==='navigate') {
     await page.waitForFunction(()=>window.serialEvidence.writes.length===1);
     await page.reload();await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
     await new Promise(resolve=>setTimeout(resolve,650));
     assert(!requests.some(x=>x.endsWith('/activate')),'unload must not activate');
   } else {
-    await page.waitForFunction(()=>document.querySelector('[role=status]')?.textContent.includes('未连接')&&!document.querySelector('[role=status]')?.textContent.includes('请选择'));
+    await page.waitForFunction(()=>(/未连接|已断开/).test(document.querySelector('[role=status]')?.textContent||'')&&!document.querySelector('[role=status]')?.textContent.includes('请选择'));
     assert(!requests.some(x=>x.endsWith('/activate')),mode+' must never activate');
   }
   const evidence=await page.evaluate(()=>window.serialEvidence);
@@ -132,13 +172,15 @@ async function scenario(mode, paired = false) {
   if(mode==='authorized') assert.equal(choose,-1);
   else if(mode!=='refresh'&&mode!=='navigate') assert(choose>=0);
   if(mode!=='authorized') assert(!evidence.calls.slice(0,choose).some(x=>x!=='/api/plc/workstation'),'chooser must precede registration/network writes');
-  assert(evidence.writes.length<=2);
+  assert(evidence.writes.length<=(mode==='statusbar'?4:2));
   if(mode==='success') assert.equal(evidence.writes.length,2);
   if(mode==='duplicate') assert.equal(evidence.calls.filter(x=>x==='choose').length,1);
   assert.deepEqual(errors,[]);
   await context.close(); console.log(`PLC browser ${mode} ${paired?'saved':'first-use'}: PASS`);
 }
 try {
-  await scenario('success'); await scenario('success',true); await scenario('authorized',true);
+  if(process.env.PLC_STATUS_ONLY) { await scenario('statusbar',true); } else {
+  await scenario('success'); await scenario('success',true); await scenario('authorized',true); await scenario('statusbar',true);
   for(const mode of ['cancel','no-device','occupied','checksum','short','extra','residual','timeout','unplug','edit','refresh','duplicate','tabs','navigate']) await scenario(mode,true);
+  }
 } finally {await browser.close();await server.close();}

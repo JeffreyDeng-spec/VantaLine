@@ -273,3 +273,7 @@ The administrator workbench source-contract adapter validates its exact reviewed
 ## PLC connection readiness without manual confirmation
 
 **Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.
+
+## Visible PLC connection status
+
+**Status: Authoritative.** The camera workbench places a persistent PLC status bar above the camera controls and in the fullscreen header area. Both render from the same mounted LocalPlcControls owner through portals; fullscreen changes do not create another serial client, lease or heartbeat. Text and color distinguish disconnected, connecting, connected and abnormal disconnect; faults retain the reason/time until successful connection or intentional disconnect. Both bars expose the same manual connection actions. Capture readiness remains separate from serial connection. No automatic reconnect, physical replay, detection gating or alarm sound is introduced.

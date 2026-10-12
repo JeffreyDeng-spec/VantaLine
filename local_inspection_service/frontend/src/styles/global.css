@@ -3129,7 +3129,7 @@ textarea:disabled {
   inset: 0;
   z-index: 80;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   padding: 18px;
   color: #e5edf7;
   background: #07111e;

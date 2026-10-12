@@ -660,6 +660,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [debugOpen, setDebugOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [plcStatusTarget, setPlcStatusTarget] = useState<HTMLDivElement | null>(null);
+  const [fullscreenPlcStatusTarget, setFullscreenPlcStatusTarget] = useState<HTMLDivElement | null>(null);
   const requestedTaskId = searchParams.get("task_id") || "";
   const canViewDiagnostics = auth.user.role === "admin";
   const shouldLoadTaskEntries = Boolean(decodedRouteTaskId) || !requestedTaskId;
@@ -1293,6 +1295,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     function handleFullscreenKeydown(event: KeyboardEvent) {
       const isEnter = event.key === "Enter" || event.code === "Enter" || event.keyCode === 13;
       if (!isEnter || busy) return;
+      if (event.target instanceof Element && event.target.closest("button, input, select, textarea, a, [contenteditable=true]")) return;
       event.preventDefault();
       event.stopPropagation();
       runCamera(fullscreenVideoRef.current);
@@ -1739,6 +1742,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
           {source === "camera" ? (
             <div className="tabpane active">
+              <div ref={setPlcStatusTarget} className="plc-status-slot" />
               <label className="toolbar-field">
                 摄像头
                 <select value={selectedDeviceId} onChange={(event) => {
@@ -1774,6 +1778,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 </button>
               </div>
               <LocalPlcControls client={plcClientRef.current} modelId={activeModelId} connected={plcConnected}
+                statusTarget={plcStatusTarget} fullscreenStatusTarget={fullscreenPlcStatusTarget}
+                captureStatus={plcCapturePoll.message}
                 externalStatus={plcConnectionStatus} productionReady={Boolean(stream && activeModelId)} disabled={Boolean(busy) || plcDiagnosticBusy}
                 onConnectionChange={(connected) => {
                   plcBoundModelIdRef.current = connected ? activeModelId : "";
@@ -1993,6 +1999,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               </button>
             </div>
           </header>
+          <div ref={setFullscreenPlcStatusTarget} className="plc-status-slot plc-status-slot--fullscreen" />
           <main className="inspection-fullscreen-stage">
             <aside className="inspection-fullscreen-result">
               <div className="preview-frame compact">

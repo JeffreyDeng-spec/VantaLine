@@ -3270,3 +3270,7 @@ Administrator archive checks include explicit AI links on non-prefixed pipeline 
 ## PLC connection readiness without manual confirmation
 
 **Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.
+
+## PLC visible status acceptance
+
+Run `PLC_TEST_BROWSER=msedge node local_inspection_service/frontend/scripts/test-plc-connection.mjs`. Its real React/controller portal harness checks fullscreen entry without serial reopen, unplug reason/time visible in both layouts, matching fault text after exit, successful manual reconnect clearing the fault, and intentional disconnect staying neutral. Existing connection failures, lease activation and duplicate-connection checks remain. Synthetic serial/API tests do not prove physical field connectivity.

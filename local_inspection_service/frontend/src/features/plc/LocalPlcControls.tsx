@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { PlcConnectionStatusBar } from "./PlcConnectionStatusBar";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPlcWorkstation, queryKeys, selfPairPlcWorkstation, selfSavePlcWorkstationConfig } from "../../api/queries";
@@ -17,6 +19,7 @@ const DEFAULTS: PlcWebSerialConfig = {
 
 type Props = {
   client?: PlcWebSerialClient; modelId?: string; connected?: boolean; externalStatus?: string;
+  statusTarget?: HTMLElement | null; fullscreenStatusTarget?: HTMLElement | null; captureStatus?: string;
   productionReady?: boolean; disabled?: boolean; onConnectionChange?: (connected: boolean) => void;
 };
 
@@ -56,6 +59,16 @@ export function LocalPlcControls(props: Props) {
   const data = workstation.data;
   const config = data?.config || DEFAULTS;
   const blocked = pending || Boolean(props.disabled);
+  const lastConnected = useRef(connected);
+  const [fault, setFault] = useState<{message: string; at: number} | null>(null);
+  useEffect(() => {
+    if (connected) setFault(null);
+    else if (error || lastConnected.current) {
+      setFault(previous => previous || { message: error || props.externalStatus || "PLC 连接已中断，请重新连接", at: Date.now() });
+    }
+    lastConnected.current = connected;
+  }, [connected, error, props.externalStatus]);
+
 
   function report(value: boolean) {
     setLocalConnected(value);
@@ -116,6 +129,8 @@ export function LocalPlcControls(props: Props) {
       if (!mounted.current) return;
       if (payload) {
         await client.disconnect(true);
+        lastConnected.current = false;
+        setFault(null);
         report(false);
         await selfPairPlcWorkstation({ name: payload.name });
         if (!mounted.current) return;
@@ -188,20 +203,32 @@ export function LocalPlcControls(props: Props) {
     }
   }
 
-  const readiness = props.productionReady ? "相机与模型就绪，等待 PLC 复位后到位信号" : "等待相机／模型就绪后生产";
+  const readiness = props.productionReady ? "相机与模型就绪" : "等待相机／模型就绪";
+  const status = {
+    state: pending ? "connecting" as const : connected ? "connected" as const : fault || error ? "fault" as const : "disconnected" as const,
+    detail: pending ? phase || "正在校验连接" : connected
+      ? `${readiness}；${config.capture_trigger_enabled ? props.captureStatus || "自动拍照已启用，等待复位后触发" : "自动拍照未启用，可手动检测"}`
+      : fault?.message || error || props.externalStatus || "PLC 联动未生效",
+    disconnectedAt: !connected && !pending ? fault?.at || null : null
+  };
+  function disconnectManually() {
+    void client.disconnect(true).then(() => {
+      lastConnected.current = false;
+      setFault(null);
+      setError("");
+      report(false);
+      setPhase("");
+      void refresh();
+    });
+  }
+  const connectionDisabled = blocked || workstation.isLoading || workstation.isError || !PlcWebSerialClient.supported();
+  const bar = (fullscreen = false) => <PlcConnectionStatusBar {...status} disabled={connectionDisabled}
+    onConnect={requestConnection} onDisconnect={disconnectManually}
+    onSettings={!fullscreen ? () => { setConnectAfterSave(false); setEditing(true); } : undefined} />;
   return <section className="local-plc-controls" aria-label="本机 PLC">
-    <div className="button-row">
-      {connected ? <button type="button" className="secondary compact-action" disabled={blocked} onClick={() => {
-        void client.disconnect(true).then(() => { report(false); setPhase(""); void refresh(); });
-      }}>断开 PLC</button> : <button type="button" className="primary compact-action" disabled={blocked || workstation.isLoading || workstation.isError || !PlcWebSerialClient.supported()} onClick={requestConnection}>
-        {pending ? "连接中…" : "连接 PLC"}
-      </button>}
-      <button type="button" className="secondary compact-action" disabled={blocked || workstation.isLoading || workstation.isError} onClick={() => { setConnectAfterSave(false); setEditing(true); }}>本机 PLC 设置</button>
-      {workstation.isError && <button type="button" onClick={() => void workstation.refetch()}>重新加载</button>}
-    </div>
-    <p role="status" aria-live="polite" className={`hint-line ${error ? "danger-text" : connected ? "success-text" : ""}`}>
-      {pending ? phase : connected ? `PLC 通信正常；${config.capture_trigger_enabled ? readiness : "已关闭到位自动拍照，可手动检测"}。` : `当前 PLC 未连接，PLC 联动未生效。${error || props.externalStatus || phase}`}
-    </p>
+    {props.statusTarget ? createPortal(bar(), props.statusTarget) : bar()}
+    {props.fullscreenStatusTarget && createPortal(bar(true), props.fullscreenStatusTarget)}
+    {workstation.isError && <button type="button" onClick={() => void workstation.refetch()}>重新加载</button>}
     {client.diagnostics.attemptId && diagnosticTransport.pending(client.diagnostics.attemptId) && <p className="hint-line">诊断记录尚未上传；关页可能丢失。</p>}
     <PlcDiagnosticPanel />
     {!PlcWebSerialClient.supported() && <p className="hint-line">连接需要桌面 Edge / Chrome，并通过 HTTPS 打开网站。</p>}
