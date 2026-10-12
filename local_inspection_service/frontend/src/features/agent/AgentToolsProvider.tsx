@@ -22,7 +22,7 @@ export function AgentToolsProvider() {
   const queryClient = useQueryClient();
   const domain = useRef(domainFor(location.pathname)); domain.current = domainFor(location.pathname);
   const adapterRef = useRef<ReturnType<typeof connectWebMCP> | null>(null);
-  const [registrationError, setRegistrationError] = useState("");
+  const [, setRegistrationError] = useState("");
   const [registrationReady, setRegistrationReady] = useState(false);
   const policy = useQuery({ queryKey: ["agent", "capabilities", auth.user.id], queryFn: () => apiClient.get<{ enabled: boolean }>("/api/agent/capabilities"), retry: false, staleTime: 0, refetchInterval: 15000 });
   const enabled = policy.data?.enabled === true;
@@ -63,8 +63,6 @@ export function AgentToolsProvider() {
     {name:"cancel_operation",domain:"core",description:"Request cancellation of an owned durable operation at its current version. Running work keeps its reservation until cancellation is verified.",readOnly:false,inputSchema:{type:"object",properties:{operation_id:{type:"string",minLength:1,maxLength:128},expected_version:{type:"integer",minimum:1}},required:["operation_id","expected_version"],additionalProperties:false},execute:input=>apiClient.post(`/api/operations/${encodeURIComponent(String(input.operation_id))}/cancel`,{expected_version:input.expected_version})},
     { name: "logout", domain:"core",description:"End the current application login session and revoke its active tool access.",readOnly:false,endsSession:true,inputSchema:{type:"object",properties:{},additionalProperties:false},execute:()=>auth.logout() }
   ]);
-  if (!enabled) return null;
-  return <aside data-agent-ready={registrationReady} aria-label="Agent 工具状态" style={{padding:"4px 12px",fontSize:12}}>
-    {registrationError || (document.modelContext ? (registrationReady ? "Agent 工具已启用 · 使用当前账号权限" : "正在准备 Agent 工具") : "此浏览器未提供 WebMCP；平台功能正常可用")}
-  </aside>;
+  // Readiness metadata remains available to integration checks without visible UI.
+  return <span hidden data-agent-ready={enabled && registrationReady} />;
 }
