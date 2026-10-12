@@ -20,6 +20,8 @@ import { apiClient } from "../../api/client";
 import "./users-workbench.css";
 import { recordAuditText } from "../../utils/format";
 
+const userAuditText = (user: AuthUser) => recordAuditText(user, { owner: false, includeUpdated: true });
+
 function formPermissions(form: HTMLFormElement, fieldName: string) {
   return Array.from(
     form.querySelectorAll<HTMLInputElement>(
@@ -620,6 +622,7 @@ export function UsersPage() {
                           {u.username}
                           {u.id === auth.user.id ? " · 当前登录" : ""}
                         </small>
+                        <small>{userAuditText(u)}</small>
                       </td>
                       <td>
                         {u.role === "admin"
@@ -806,10 +809,7 @@ export function UsersPage() {
                           <strong>{user.display_name || user.username}</strong>
                           <span>{user.username}</span>
                           <span>
-                            {recordAuditText(user, {
-                              owner: false,
-                              includeUpdated: true,
-                            })}
+                            {userAuditText(user)}
                           </span>
                         </div>
                         <div className="form-grid tight">
