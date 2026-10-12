@@ -91,3 +91,10 @@ test('gesture path is synchronous only while version is current and fresh', asyn
   const f = await fixture({ ...local, consistent: true }); assert.equal(f.coordinator.gestureReady(), false);
   await f.coordinator.check(); assert.equal(f.coordinator.gestureReady(), true); f.advance(15_001); assert.equal(f.coordinator.gestureReady(), false);
 });
+
+test('fresh current identity bypasses router blocking to preserve atomic result navigation', async () => {
+  const f = await fixture({ ...local, consistent: true }); assert.equal(f.coordinator.shouldBlockNavigation(), true);
+  await f.coordinator.check(); assert.equal(f.coordinator.shouldBlockNavigation(), false);
+  f.advance(15_000); assert.equal(f.coordinator.shouldBlockNavigation(), true);
+  f.value(newer); await f.coordinator.check(true); assert.equal(f.coordinator.shouldBlockNavigation(), true);
+});

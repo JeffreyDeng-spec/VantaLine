@@ -1018,7 +1018,7 @@ export function TaskDetailPage() {
                 className="secondary compact-action"
                 type="button"
                 disabled={pipelineActionMutation.isPending || task.status === "completed" || task.status === "已上线"}
-                onClick={() => { void runVersionAction(() => pipelineActionMutation.mutateAsync({ action: "advance" })); }}
+                onClick={() => { void runVersionAction(() => pipelineActionMutation.mutateAsync({ action: "advance" }).catch(() => undefined)); }}
               >
                 {pipelineActionMutation.isPending ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
                 推进下一步

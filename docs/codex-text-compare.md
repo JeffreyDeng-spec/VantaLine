@@ -311,3 +311,7 @@ Codex API register requires explicit environment and artifact-runtime inputs. Ea
 The registered API captures the supplied mapping object: in-place updates are visible, while replacing the process os.environ object does not replace the registered dependency. The independent worker chooses its own current process mapping at each claim.
 
 Canonical text graph wiring preserves Codex task/event projections, credentials, provider selection, queue/state and existing native lifetimes. HTTP registration receives the app-owned graph at the original position. The standalone CLI/worker topology is unchanged, and business callbacks do not import default Web compatibility. This assembly adds no model call, retry or prompt change; retain comparison contracts and complete-package rollback.
+
+## Shared browser release updates
+
+The global version coordinator guards new batch order selection, document/photo uploads, single-image submissions and explicit new comparison retries. Review, cancellation and saving do not initiate updates. Whole browser workflows remain busy until their callback completes; the shared camera cleanup stops tracks before reload. Unuploaded selections require discard confirmation. Persisted Codex jobs remain recoverable and are never automatically resubmitted by version updates. This does not enable the default-disabled beta or establish real-model commissioning.

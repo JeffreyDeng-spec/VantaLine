@@ -34,6 +34,7 @@ export class VersionCoordinator {
   private waiters = new Set<() => void>();
   private state: VersionState = { pending: false, preparing: false, stalled: false, message: "" };
   constructor(private local: ReleaseIdentity, private deps: Dependencies) {}
+  shouldBlockNavigation() { return this.enabled() && (this.state.preparing || this.state.pending || this.deps.now() - this.checkedAt >= 15_000); }
   gestureReady() { return !this.state.preparing && !this.transition && (!this.enabled() || this.deps.now() - this.checkedAt < 15_000 && !this.state.pending); }
   notice(message: string) { this.publish({ message }); }
   snapshot = () => this.state;

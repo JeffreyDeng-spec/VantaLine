@@ -1,3 +1,4 @@
+import { useVersionParticipant } from "../version/hooks";
 import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, PointerEvent, ReactNode } from "react";
@@ -2033,6 +2034,7 @@ export function TrainingPipelinePage() {
   const [paramsTarget, setParamsTarget] = useState<ParamsTarget | null>(null);
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null);
   const [busy, setBusy] = useState("");
+  useVersionParticipant({ busy: () => Boolean(busy) });
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     accessories: false,
     draft: false,

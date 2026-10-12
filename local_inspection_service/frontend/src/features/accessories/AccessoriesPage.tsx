@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { markVersionFilesUploaded } from "../version/files";
 import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -129,6 +131,7 @@ export function AccessoryDetailModal({
   const [applyRoute, setApplyRoute] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState("");
+  useVersionParticipant({ busy: () => Boolean(busy) });
   const detailQuery = useQuery({
     queryKey: queryKeys.accessoryDetail(accessoryId),
     queryFn: () => getAccessoryDetail(accessoryId)
@@ -160,6 +163,7 @@ export function AccessoryDetailModal({
       setBusy("upload");
       try {
         const result = await addAccessoryFiles(accessoryId, form);
+        markVersionFilesUploaded(files);
         setFiles([]);
         notify({
           title: item?.material_type === "text" ? "素材已上传，继续裁剪" : "素材已添加",
@@ -357,6 +361,7 @@ export function AccessoriesPage() {
   const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
   const [deleteCropAccessoryOnCancel, setDeleteCropAccessoryOnCancel] = useState(true);
   const [busy, setBusy] = useState("");
+  useVersionParticipant({ busy: () => Boolean(busy) });
   const [draft, setDraft] = useState({
     name: "",
     material_type: "object",
@@ -454,6 +459,7 @@ export function AccessoriesPage() {
     setBusy("create");
     try {
       const result = await createAccessory(form);
+      markVersionFilesUploaded(draftFiles);
       if (accessoryNeedsTextCrop(result.item)) {
         setDeleteCropAccessoryOnCancel(true);
         setCropAccessory(result.item || null);

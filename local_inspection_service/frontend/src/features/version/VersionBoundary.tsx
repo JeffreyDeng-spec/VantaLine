@@ -8,7 +8,7 @@ import "./version.css";
 
 export function VersionBoundary() {
   const state = useVersionState();
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => versionCoordinator.shouldBlockNavigation() && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search));
   const handling = useRef(false);
   const [updated, setUpdated] = useState(false);
   const mutations = useIsMutating();
