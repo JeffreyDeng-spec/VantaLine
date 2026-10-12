@@ -816,30 +816,70 @@
               ]
             },
             "profile_id": {
-              "type": "string",
-              "enum": [
-                "mitsubishi_fx3ga_40mr"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "mitsubishi_fx3ga_40mr"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "xinje_xd5_modbus_rtu"
+                  ]
+                }
               ]
             },
             "enabled": {
               "type": "boolean"
             },
             "protocol": {
-              "type": "string",
-              "enum": [
-                "fx_programming_port_ascii"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "fx_programming_port_ascii"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "modbus_rtu"
+                  ]
+                }
               ]
             },
             "checksum_mode": {
-              "type": "string",
-              "enum": [
-                "include_etx"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "include_etx"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "crc16"
+                  ]
+                }
               ]
             },
             "baudrate": {
-              "type": "number",
-              "enum": [
-                9600
+              "anyOf": [
+                {
+                  "type": "number",
+                  "enum": [
+                    9600
+                  ]
+                },
+                {
+                  "type": "number",
+                  "enum": [
+                    19200
+                  ]
+                }
               ]
             },
             "parity": {
@@ -849,9 +889,19 @@
               ]
             },
             "data_bits": {
-              "type": "number",
-              "enum": [
-                7
+              "anyOf": [
+                {
+                  "type": "number",
+                  "enum": [
+                    7
+                  ]
+                },
+                {
+                  "type": "number",
+                  "enum": [
+                    8
+                  ]
+                }
               ]
             },
             "stop_bits": {

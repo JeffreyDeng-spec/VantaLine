@@ -8,7 +8,7 @@ FIXTURE=ROOT/'tests/backend_contract/admin_user_data_delta.json'
 
 def fixture():
     raw=FIXTURE.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == "36829f57b3da1976a6338c330fca5b873043b4fe69c7cebc4f73708b7dc9b1b0", 'Unreviewed admin data fixture'
+    assert hashlib.sha256(raw).hexdigest() == "eb4a6e930a7b1305a4958cc89907c8194efdf9a75074bb542eb463f031f2de37", 'Unreviewed admin data fixture'
     data=json.loads(raw)
     for path, expected in data['new_sources'].items():
         assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest() == expected, 'Admin service changed: '+path

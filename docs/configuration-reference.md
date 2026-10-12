@@ -1961,6 +1961,6 @@ Existing feature grants and Admin/user roles remain authoritative; `user_managem
 
 Account-owned `admin_data.archived` stores administrator list archive keys. Sample `usage_enabled` defaults true; accessory `disabled_ai_profile_reference_files` defaults empty. Neither is a deletion instruction. Account disable pauses new pipeline and real-photo work and revokes sessions; enable does not resume work. Real-photo configuration, thresholds, retry rules and manual model selection are unchanged. Demo-only budget and parallelism fields are not exposed as operational settings because no enforcing backend exists.
 
-New task provenance uses source manifest v288, including the actual administrator data service. Historical task/model snapshots are not rewritten.
+New task provenance uses source manifest v289, including the actual administrator data service. Historical task/model snapshots are not rewritten.
 
 Legacy mode uses its existing enabled flag and bounded training epochs/image-size fields. The workbench does not change legacy thresholds, auto-promote settings or paid retry policy. Real-photo mode remains selected while paused; the administrator cannot resume the legacy loop for a selected real-photo task. Reference exclusions compare resolved canonical paths so equivalent stored path forms cannot bypass the reference-use switch.
