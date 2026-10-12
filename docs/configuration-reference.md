@@ -1953,7 +1953,7 @@ No new configuration or permission is introduced. Existing allowlisting, task ow
 
 ## XD5 compatibility settings
 
-**Status: Authoritative.** Supported RTU candidate is fixed unit 1, 19200 baud, even parity, 8 data bits, one stop bit, CRC16, 500 ms host timeout and zero retries. D0-D255 is the initial register range; result values remain PASS=1/FAIL=0 and Y is unsupported/blank. These business defaults are not discovered device configuration. The administrator settings form preserves the identified protocol and serial parameters when saving business addresses; unsupported optional Y remains disabled for RTU. A successful alternate selection retains D choices but clears profile verification and disables automatic capture; output commissioning requires the customer's address/value agreement. Existing explicit disabled configurations remain disabled. USB IDs describe the adapter, not the PLC model. New task fingerprints append `plc_modbus_rtu.py` to manifest v288 without rewriting historical snapshots.
+**Status: Authoritative.** Supported RTU candidate is fixed unit 1, 19200 baud, even parity, 8 data bits, one stop bit, CRC16, 500 ms host timeout and zero retries. D0-D255 is the initial register range; result values remain PASS=1/FAIL=0 and Y is unsupported/blank. These business defaults are not discovered device configuration. The administrator settings form preserves the identified protocol and serial parameters when saving business addresses; unsupported optional Y remains disabled for RTU. A successful alternate selection retains D choices but clears profile verification and disables automatic capture; camera dispatch does not require a separate manual profile confirmation. Existing explicit disabled configurations remain disabled. USB IDs describe the adapter, not the PLC model. New task fingerprints append `plc_modbus_rtu.py` to manifest v288 without rewriting historical snapshots.
 
 ## Administrator workbench configuration
 
@@ -1964,3 +1964,7 @@ Account-owned `admin_data.archived` stores administrator list archive keys. Samp
 New task provenance uses source manifest v289, including the actual administrator data service. Historical task/model snapshots are not rewritten.
 
 Legacy mode uses its existing enabled flag and bounded training epochs/image-size fields. The workbench does not change legacy thresholds, auto-promote settings or paid retry policy. Real-photo mode remains selected while paused; the administrator cannot resume the legacy loop for a selected real-photo task. Reference exclusions compare resolved canonical paths so equivalent stored path forms cannot bypass the reference-use switch.
+
+## PLC connection readiness without manual confirmation
+
+**Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.

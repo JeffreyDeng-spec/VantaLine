@@ -158,6 +158,8 @@ def main() -> None:
     web_serial = (FRONTEND / "features" / "plc" / "webSerialClient.ts").read_text(encoding="utf-8")
     server = read_checked_application_source(ROOT / "local_inspection_service" / "server.py", encoding="utf-8")
 
+    assert "标记真实 ACK 已验证" not in rules
+    assert "plcVerifyMutation" not in rules
     require(
         rules,
         {
@@ -166,7 +168,7 @@ def main() -> None:
             "server-backed workstation save": "savePlcWorkstationConfig",
             "station pairing": "pairPlcWorkstation",
             "enabled toggle": 'name="enabled"',
-            "live ACK gate": "标记真实 ACK 已验证",
+            "connection-based readiness": "plcResponse.production_ready",
             "effective enabled": "effective_enabled",
             "result register": 'name="result_register"',
             "optional output point": 'name="output_control_point"',

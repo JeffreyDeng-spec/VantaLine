@@ -173,7 +173,7 @@ class PlcStationService:
             "capture_read_plan": self.projection.build_web_serial_capture_read_plan()(config, config_generation),
             "lease": lease if lease_active else None,
             "effective_enabled": bool(config["enabled"] and lease_active and release_consistent),
-            "production_ready": bool(config["enabled"] and lease_active and profile_verified and release_consistent),
+            "production_ready": bool(config["enabled"] and lease_active and release_consistent),
             "release_consistent": release_consistent,
             "heartbeat_seconds": self.policy.WEB_SERIAL_HEARTBEAT_SECONDS(),
             "lease_ttl_seconds": self.policy.WEB_SERIAL_ACTIVE_LEASE_SECONDS(),

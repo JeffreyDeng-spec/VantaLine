@@ -9,7 +9,6 @@ import {
   pairPlcWorkstation,
   queryKeys,
   savePlcWorkstationConfig,
-  verifyPlcWorkstationProfile,
   getApiCostLedger,
 } from "../../api/queries";
 import type {
@@ -281,22 +280,6 @@ export function DeviceSettings() {
       }),
   });
 
-  const plcVerifyMutation = useMutation({
-    mutationFn: verifyPlcWorkstationProfile,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.plcWorkstation,
-      });
-      notify({ title: "PLC 验证状态已更新", tone: "success" });
-    },
-    onError: (error: Error) =>
-      notify({
-        title: "验证状态更新失败",
-        description: error.message,
-        tone: "error",
-      }),
-  });
-
   function handlePlcSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!plc) return;
@@ -407,11 +390,11 @@ export function DeviceSettings() {
               </p>
             </div>
             <span
-              className={`pill ${plcResponse.station?.profile_verified ? "ok" : "neutral"}`}
+              className={`pill ${plcResponse.production_ready ? "ok" : "neutral"}`}
             >
-              {plcResponse.station?.profile_verified
-                ? "正式 PLC（已验证）"
-                : "测试 PLC（未验证）"}
+              {plcResponse.production_ready
+                ? "PLC 已连接（可联动）"
+                : "PLC 未就绪"}
             </span>
           </div>
           <form
@@ -542,28 +525,6 @@ export function DeviceSettings() {
               >
                 <PlugZap size={16} aria-hidden="true" />
                 保存 PLC 设置
-              </button>
-              <button
-                className="secondary compact-action"
-                type="button"
-                disabled={plcVerifyMutation.isPending}
-                onClick={() => {
-                  const next = !plcResponse.station?.profile_verified;
-                  if (
-                    next &&
-                    !window.confirm(
-                      plc.protocol === "fx_programming_port_ascii"
-                        ? "只应在真实 PLC 已返回 ACK、地址已由 PLC 工程师确认后标记为正式。确认继续？"
-                        : "只应在现场 Modbus 写入响应、生产地址及数值约定均已由 PLC 工程师确认后标记为正式。确认继续？",
-                    )
-                  )
-                    return;
-                  plcVerifyMutation.mutate(next);
-                }}
-              >
-                {plcResponse.station?.profile_verified
-                  ? "改回测试 PLC"
-                  : "标记真实 ACK 已验证"}
               </button>
             </div>
           </form>
