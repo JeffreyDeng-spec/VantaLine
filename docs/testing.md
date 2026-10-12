@@ -3358,3 +3358,7 @@ interception checks; no forced click or product CSS override is used.
 The record-recovery source replay composes both independent dataset-photo and PLC
 result-value checkpoints before its unchanged historical oracle. Each checkpoint
 validates its own exact descendant bytes; neither permits unknown source edits.
+
+Navigation logout fixtures open the shared hover sidebar before selecting its
+logout action, retaining normal pointer/visibility checks and logout-failure
+assertions. The collapsed rail intentionally hides that action.
