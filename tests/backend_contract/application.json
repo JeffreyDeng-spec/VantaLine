@@ -6309,6 +6309,328 @@
           "summary": "Data"
         }
       },
+      "/api/auth/users/{owner}/data/datasets/{dataset_id}/members": {
+        "get": {
+          "operationId": "members_api_auth_users__owner__data_datasets__dataset_id__members_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "dataset_id",
+              "required": true,
+              "schema": {
+                "title": "Dataset Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Members"
+        }
+      },
+      "/api/auth/users/{owner}/data/datasets/{dataset_id}/members/{index}/image": {
+        "get": {
+          "operationId": "member_image_api_auth_users__owner__data_datasets__dataset_id__members__index__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "dataset_id",
+              "required": true,
+              "schema": {
+                "title": "Dataset Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "index",
+              "required": true,
+              "schema": {
+                "title": "Index",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Member Image"
+        }
+      },
+      "/api/auth/users/{owner}/data/detection-photos": {
+        "get": {
+          "operationId": "photos_api_auth_users__owner__data_detection_photos_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "task_id",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              }
+            },
+            {
+              "in": "query",
+              "name": "status",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 32,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Status"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Photos"
+        }
+      },
+      "/api/auth/users/{owner}/data/detection-photos/{record_id}": {
+        "get": {
+          "operationId": "detail_api_auth_users__owner__data_detection_photos__record_id__get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "record_id",
+              "required": true,
+              "schema": {
+                "title": "Record Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Detail"
+        }
+      },
+      "/api/auth/users/{owner}/data/detection-photos/{record_id}/image": {
+        "get": {
+          "operationId": "photo_image_api_auth_users__owner__data_detection_photos__record_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "record_id",
+              "required": true,
+              "schema": {
+                "title": "Record Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Photo Image"
+        }
+      },
       "/api/auth/users/{owner}/data/operations": {
         "post": {
           "operationId": "operate_api_auth_users__owner__data_operations_post",
@@ -18156,6 +18478,86 @@
       "permission": {
         "POST": [
           "ai_config"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "photos",
+      "path": "/api/auth/users/{owner}/data/detection-photos",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "detail",
+      "path": "/api/auth/users/{owner}/data/detection-photos/{record_id}",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "photo_image",
+      "path": "/api/auth/users/{owner}/data/detection-photos/{record_id}/image",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "members",
+      "path": "/api/auth/users/{owner}/data/datasets/{dataset_id}/members",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "member_image",
+      "path": "/api/auth/users/{owner}/data/datasets/{dataset_id}/members/{index}/image",
+      "permission": {
+        "GET": [
+          "user_management"
         ]
       },
       "response_model_exclude_unset": false,

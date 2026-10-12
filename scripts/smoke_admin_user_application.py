@@ -100,6 +100,33 @@ def main():
             diag=page('diagnostics')['items'];assert len(diag)==1 and diag[0]['created_at']==1234.567 and diag[0]['code']=='serial_open_failed'
             for category in ['incoming_text_inspections','data_analysis_records','label_inspection_objects','codex_comparison_tasks','text_inspection_standards']:
                 assert page(category)['total']==0
+            photo_path=f'/api/auth/users/{owner}/data/detection-photos'
+            with psycopg.connect(connection) as c:
+                for i in range(105):
+                    c.execute("INSERT INTO vantaline.data_analysis_records VALUES (%s,'fixture-task',%s,'owner',%s,%s,'',%s)",(f'photo-{i:03}',owner,i+1,i+1,Jsonb({'task':{'id':'fixture-task','name':'模拟检测任务'},'secret':'must-not-return'})))
+                c.execute("INSERT INTO vantaline.data_analysis_records VALUES ('foreign-photo','fixture-task',%s,'admin',2000,2000,'',%s)",(actor,Jsonb({'secret':'foreign'})))
+                photo_before=c.execute("SELECT jsonb_agg(to_jsonb(r) ORDER BY record_id) FROM vantaline.data_analysis_records r").fetchone()[0]
+            photo_first=client.get(photo_path)
+            assert photo_first.status_code==200,photo_first.text
+            assert 'must-not-return' not in photo_first.text
+            photo_first=photo_first.json()
+            assert photo_first['total']==105 and photo_first['counts']['not_collected']==105 and len(photo_first['items'])==24
+            photo_ids=[r['record_id'] for r in photo_first['items']];photo_cursor=photo_first['next_cursor']
+            with psycopg.connect(connection) as c:
+                c.execute("INSERT INTO vantaline.data_analysis_records VALUES ('new-photo','fixture-task',%s,'owner',3000,3000,'',%s)",(owner,Jsonb({'task':{'name':'模拟检测任务'}})))
+            while photo_cursor:
+                response=client.get(photo_path,params={'cursor':photo_cursor});assert response.status_code==200,response.text
+                value=response.json();photo_ids.extend(r['record_id'] for r in value['items']);photo_cursor=value['next_cursor']
+            assert len(photo_ids)==len(set(photo_ids))==105 and 'new-photo' not in photo_ids
+            assert client.get(photo_path).json()['items'][0]['record_id']=='new-photo'
+            assert client.get(photo_path,params={'cursor':photo_first['refresh_cursor']}).json()['items'][0]['record_id']=='photo-104'
+            assert client.get(photo_path+'/foreign-photo').status_code==404
+            assert client.get(photo_path+'/foreign-photo/image').status_code==404
+            assert client.get(photo_path+'/photo-000/image').status_code==404
+            assert client.get(f'/api/auth/users/{actor}/data/detection-photos',params={'cursor':photo_first['next_cursor']}).status_code==422
+            assert client.get(f'/api/auth/users/{owner}/data/datasets/missing/members').status_code==404
+            with psycopg.connect(connection) as c:
+                assert c.execute("SELECT jsonb_agg(to_jsonb(r) ORDER BY record_id) FROM vantaline.data_analysis_records r WHERE record_id<>'new-photo'").fetchone()[0]==photo_before
             with psycopg.connect(connection) as c:
                 assert c.execute("SELECT jsonb_agg(to_jsonb(d) ORDER BY id) FROM vantaline.plc_web_serial_dispatches d").fetchone()[0]==before
                 assert c.execute("SELECT jsonb_agg(to_jsonb(l) ORDER BY station_id) FROM vantaline.plc_workstation_leases l").fetchone()[0]==lease_before
@@ -119,6 +146,8 @@ def main():
             assert outsider.get(f'/api/auth/users/{owner}/data').status_code==403
             assert outsider.get('/api/auth/users-data-summary').status_code==403
             assert outsider.get(path,params={'category':'connections'}).status_code==403
+            assert outsider.get(photo_path).status_code==403
+            assert outsider.get(photo_path+'/photo-000/image').status_code==403
             assert outsider.get('/api/auth/users/missing/data/records',params={'category':'connections'}).status_code==403
             assert outsider.post(f'/api/auth/users/{owner}/data/operations',json={'action':'pause','kind':'pipeline','resource_id':'missing','reason':'unauthorized'}).status_code==403
             assert client.get('/api/auth/users-data-summary').status_code==200

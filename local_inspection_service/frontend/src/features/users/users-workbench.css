@@ -349,3 +349,97 @@
     width: auto;
   }
 }
+.admin-dataset-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+.admin-dataset-photo-grid article {
+  border: 1px solid #dce4ef;
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.admin-data .admin-photo-preview {
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: #f4f7fb;
+}
+.admin-photo-preview img,
+.admin-photo-unavailable {
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: #f4f7fb;
+}
+.admin-photo-unavailable {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.admin-photo-status {
+  align-self: flex-start;
+  border-radius: 5px;
+  padding: 4px 8px;
+  background: #edf2f9;
+  color: #475569;
+}
+.admin-photo-status.status-eligible {
+  background: #e6f7ef;
+  color: #087f5b;
+}
+.admin-photo-status.status-excluded,
+.admin-photo-status.status-annotation_failed {
+  background: #fff0ee;
+  color: #ad3d32;
+}
+.admin-photo-status.status-uncertain {
+  background: #fff7e8;
+  color: #9c651a;
+}
+.admin-photo-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 13px;
+}
+.admin-photo-memberships {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-photo-memberships button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.admin-photo-detail > img,
+.admin-photo-detail section > img {
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  background: #f4f7fb;
+}
+.admin-photo-detail pre {
+  max-height: 300px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .admin-dataset-photo-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-photo-counts {
+    font-size: 12px;
+  }
+}

@@ -391,6 +391,9 @@ class UserDataWorkbench:
 
 
 def register(app: FastAPI, service: UserDataWorkbench):
+    from .dataset_photos import register_dataset_photos
+    register_dataset_photos(app, service)
+
     @app.get('/api/auth/users/{owner}/data/records')
     def account_records(owner: str, category: str = Query(max_length=64), cursor: str | None = Query(default=None, max_length=2048), limit: int = Query(default=24, ge=1, le=100)):
         service.target(owner)
