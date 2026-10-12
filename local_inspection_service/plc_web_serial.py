@@ -439,11 +439,17 @@ def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], 
     from .plc_modbus_rtu import PROFILE, PROTOCOL
     normalized = normalize_web_serial_config(config)
     primary = _connection_candidate(lease, normalized, check_id)
-    if normalized["protocol"] != PROTOCOL and not normalized["output_control_point"]:
+    if normalized["protocol"] == PROTOCOL:
+        alternate = {**normalized, "profile_id": WEB_SERIAL_PROFILE_ID, "protocol": PROTOCOL_ID,
+                     "checksum_mode": CHECKSUM_INCLUDE_ETX, "baudrate": 9600, "data_bits": 7,
+                     "capture_trigger_enabled": False, "output_control_point": ""}
+        suffix = "_fx"
+    else:
         alternate = {**normalized, "profile_id": PROFILE, "protocol": PROTOCOL,
                      "checksum_mode": "crc16", "baudrate": 19200, "data_bits": 8,
-                     "capture_trigger_enabled": False}
-        primary["alternatives"] = [_connection_candidate(lease, alternate, check_id + "_rtu")]
+                     "capture_trigger_enabled": False, "output_control_point": ""}
+        suffix = "_rtu"
+    primary["alternatives"] = [_connection_candidate(lease, alternate, check_id + suffix)]
     return primary
 
 

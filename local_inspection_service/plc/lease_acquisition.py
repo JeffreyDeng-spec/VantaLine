@@ -81,6 +81,10 @@ class LeaseAcquisition:
             except ValueError as exc:
                 raise self.ports.config_error()(str(exc)) from exc
             if selected_config["protocol"] != (station.get("config") or {}).get("protocol", "fx_programming_port_ascii"):
+                station["previous_serial_profile"] = {
+                    "config": station.get("config"), "config_generation": station["config_generation"],
+                    "changed_at": now,
+                }
                 station["config"] = selected_config
                 station["config_generation"] = int(station.get("config_generation") or 0) + 1
                 station["profile_verified"] = False

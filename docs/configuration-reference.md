@@ -1968,3 +1968,7 @@ Legacy mode uses its existing enabled flag and bounded training epochs/image-siz
 ## PLC connection readiness without manual confirmation
 
 **Status: Authoritative.** A communication-verified active workstation lease, enabled configuration, permissions and consistent release allow camera detection/dispatch without a separate business-mapping or ACK confirmation. Legacy `profile_verified` metadata and its API remain compatible but do not gate dispatch or `production_ready`; the administrator confirmation button is removed. Existing capture enablement, reset-before-arm, register validation, blank-Y behavior and at-most-once writes remain unchanged. Connection success does not establish physical actuation.
+
+## Global communication defaults
+
+All eligible accounts receive FX ASCII 9600/7E1 and customer RTU unit-1 19200/8E1 recognition by default, including saved-RTU to FX fallback. There is no communication account allowlist and no protocol-selection form. Existing business registers remain per workstation. An unsupported Y is blank only in the RTU alternate, with the prior complete config retained on selection. Only a valid read-verified active lease admits production; legacy manual commissioning flags are informational. Same-profile test/production settings persist. No account activation, permission grant or bulk test authorization is performed. Manifest v290 retains the same sources and fingerprints changed protocol behavior for new tasks; historical snapshots remain unchanged.

@@ -30,8 +30,8 @@ async function scenario(mode){
    const writer={releaseLock(){},write:async data=>{
      window.evidence.writes.push(Array.from(data));
      let response;
-     if(options.baudRate===9600){if(mode==='fx')response=new Uint8Array([2,48,48,48,48,3,67,51]);else if(mode==='fx-noise')response=new Uint8Array([7]);else return;}
-     else if(data[1]===3){response=wrap([mode==='wrong-unit'?2:1,3,2,0x12,0x34]);if(mode==='crc')response[6]^=1;if(mode==='partial')response=response.slice(0,3);if(mode==='extra')response=new Uint8Array([...response,6]);if(mode==='exception')response=wrap([1,0x83,2]);}
+     if(options.baudRate===9600){if(mode==='fx'||mode==='reverse')response=new Uint8Array([2,48,48,48,48,3,67,51]);else if(mode==='fx-noise')response=new Uint8Array([7]);else return;}
+     else if(data[1]===3){if(mode==='reverse')return;response=wrap([mode==='wrong-unit'?2:1,3,2,0x12,0x34]);if(mode==='crc')response[6]^=1;if(mode==='partial')response=response.slice(0,3);if(mode==='extra')response=new Uint8Array([...response,6]);if(mode==='exception')response=wrap([1,0x83,2]);}
      else {if(mode==='write-timeout')return;response=new Uint8Array(data);if(mode==='write-wrong-echo')response[3]^=1;}
      queueMicrotask(()=>{const r=pending;pending=null;r?.({done:false,value:response});});
    }};
@@ -42,21 +42,26 @@ async function scenario(mode){
   const path=new URL(route.request().url()).pathname;
   const payload=route.request().method()==='POST'?route.request().postDataJSON():null;
   const rtu={id:'rtu',deadline_at:Math.floor(Date.now()/1000)+60,timeout_ms:50,config:{protocol:'modbus_rtu'},serial_options:{baudRate:19200,dataBits:8,stopBits:1,parity:'even',flowControl:'none'},frames:readFrames};
-  if(path.endsWith('/connect')){const check=['fallback','fx','fx-noise','occupied'].includes(mode)?{...rtu,id:'fx',config:{protocol:'fx_programming_port_ascii'},serial_options:{baudRate:9600,dataBits:7,stopBits:1,parity:'even',flowControl:'none'},frames:[{target:'D205',frame_hex:'0230313139413032033731'},{target:'D206',frame_hex:'0230313139433032033733'}],alternatives:[rtu]}:rtu;return route.fulfill({json:{...active,state:'connecting',connection_check:check}});}
-  if(path.endsWith('/activate')){activated++;assert.equal(payload.connection_reads.length,2);assert.equal(payload.connection_check_id,mode==='fx'?'fx':'rtu');return route.fulfill({json:active});}
+  if(path.endsWith('/connect')){
+    const fx={...rtu,id:'fx',config:{protocol:'fx_programming_port_ascii'},serial_options:{baudRate:9600,dataBits:7,stopBits:1,parity:'even',flowControl:'none'},frames:[{target:'D205',frame_hex:'0230313139413032033731'},{target:'D206',frame_hex:'0230313139433032033733'}]};
+    const check=mode==='reverse'?{...rtu,alternatives:[fx]}:['fallback','fx','fx-noise','occupied'].includes(mode)?{...fx,alternatives:[rtu]}:rtu;
+    return route.fulfill({json:{...active,state:'connecting',connection_check:check}});
+  }
+  if(path.endsWith('/activate')){activated++;assert.equal(payload.connection_reads.length,2);assert.equal(payload.connection_check_id,['fx','reverse'].includes(mode)?'fx':'rtu');return route.fulfill({json:active});}
   if(path.endsWith('/attempt'))return route.fulfill({json:{dispatch_id:'dispatch',execution_window_ms:2000,ack_timeout_ms:50,frames:[{target:'D206',frame_hex:write,frame_sha256:'d',expected_response_hex:write}]}});
   if(path.endsWith('/receipt')){receipt=payload;return route.fulfill({json:{dispatch_id:'dispatch',status:'done'}});}
   return route.fulfill({json:active});
  });
  await page.goto(`${base}/__test`);await page.waitForFunction(()=>window.client);
  const result=await page.evaluate(async()=>{try{await window.client.connect('line','',()=>{},window.port);return {connected:!!window.client.state()};}catch(e){return {connected:false,error:e.message};}});
- const successful=['rtu','fallback','fx','write-ok','write-timeout','write-wrong-echo'].includes(mode);
+ const successful=['rtu','fallback','fx','reverse','write-ok','write-timeout','write-wrong-echo'].includes(mode);
  assert.equal(result.connected,successful,`${mode}: ${JSON.stringify(result)}`);assert.equal(activated,successful?1:0);
  if(mode.startsWith('write-')){await page.evaluate(()=>window.client.execute({dispatch_id:'dispatch'},()=>{}));assert.equal(receipt.operations.length,1);assert.equal(receipt.operations[0].status,mode==='write-ok'?'acknowledged':mode==='write-timeout'?'timeout':'unexpected_response');assert.equal(await page.evaluate(()=>!!window.client.state()),mode==='write-ok');}
  const evidence=await page.evaluate(()=>window.evidence);
- assert.equal(evidence.opens.length,mode==='fallback'?2:1);
+ assert.equal(evidence.opens.length,['fallback','reverse'].includes(mode)?2:1);
  assert(evidence.writes.length<=4);
  assert.equal(evidence.writes.filter(f=>f[0]===1&&f[1]===6).length,mode.startsWith('write-')?1:0,'no physical write during identification or retry');
+ if(mode==='reverse')assert.deepEqual(evidence.opens.map(o=>[o.baudRate,o.dataBits]),[[19200,8],[9600,7]]);
  if(mode==='fallback')assert.deepEqual(evidence.opens.map(o=>[o.baudRate,o.dataBits]),[[9600,7],[19200,8]]);
  assert.deepEqual(errors,[]);await context.close();console.log(`Modbus browser ${mode}: PASS`);
 }
@@ -78,4 +83,4 @@ async function settingsPreserveProtocol(){
  await page.close();console.log('Admin settings preserve identified protocol/serial parameters: PASS');
 }
 
-try{await settingsPreserveProtocol();for(const mode of ['rtu','fallback','fx','fx-noise','occupied','crc','partial','extra','exception','wrong-unit','write-ok','write-timeout','write-wrong-echo'])await scenario(mode);}finally{await browser.close();await server.close();}
+try{await settingsPreserveProtocol();for(const mode of ['rtu','fallback','reverse','fx','fx-noise','occupied','crc','partial','extra','exception','wrong-unit','write-ok','write-timeout','write-wrong-echo'])await scenario(mode);}finally{await browser.close();await server.close();}
