@@ -1,0 +1,61 @@
+/* Shared desktop overlay rail; exempt text workflows retain the original shell. */
+.app-shell:has(> aside.workspace-sidebar:not(.sidebar-exempt)) { grid-template-columns:64px minmax(0,1fr); }
+.app-shell:has(> aside.workspace-sidebar:not(.sidebar-exempt)) > main.workspace { grid-column:2; grid-row:1; min-width:0; }
+.workspace-sidebar:not(.sidebar-exempt) { display:flex; flex-direction:column; position:fixed; inset:0 auto 0 0; width:64px; height:100dvh; padding:14px 8px 10px; z-index:30; background:#192330; box-shadow:none; backdrop-filter:none; overflow:hidden; transition:width .16s ease; }
+.workspace-sidebar:not(.sidebar-exempt).sidebar-open { width:240px; box-shadow:12px 0 32px #14203424; }
+.workspace-sidebar:not(.sidebar-exempt) .brand-block { flex:0 0 auto; align-self:auto; border-right:0; border-bottom:1px solid #ffffff10; min-height:49px; padding:0 5px 12px; gap:10px; }
+.workspace-sidebar:not(.sidebar-exempt) .brand-mark { width:38px; height:38px; flex:0 0 38px; }
+.workspace-sidebar:not(.sidebar-exempt).sidebar-open .brand-copy { min-width:0; margin-right:20px; }
+.workspace-sidebar:not(.sidebar-exempt) .brand-copy h1 { font-size:19px; }
+.workspace-sidebar:not(.sidebar-exempt) .brand-copy p { font-size:11px; }
+.workspace-sidebar:not(.sidebar-exempt) .side-nav { display:flex; flex-direction:column; min-height:0; flex:1; gap:8px; margin:0; padding:0; overflow:visible; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-group { display:grid; gap:1px; flex:0 0 auto; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-item { min-height:38px; gap:12px; padding:8px 12px; border-radius:6px; font-size:13px; background:transparent; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-item:hover { background:#ffffff08; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-item.active { background:#ffffff0d; border-left-color:#50c8bd; color:#f4f7fa; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-item-child { min-height:30px; padding-left:24px; font-size:12px; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-group { display:block; min-height:36px; overflow:auto; flex:1 1 auto; margin:0; padding-top:10px; border-top:1px solid #ffffff10; scrollbar-width:thin; }
+.workspace-sidebar:not(.sidebar-exempt) .nav-group-label { display:block; font-size:10px; letter-spacing:1px; margin:0 0 8px; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-row { background:transparent; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-row:hover { background:#ffffff08; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-link { height:34px; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-link strong { display:block; font-size:12px; }
+.workspace-sidebar:not(.sidebar-exempt) .sidebar-create-task-button { width:100%; min-height:36px; height:36px; padding:6px; gap:8px; border-radius:6px; font-size:12px; background:#233855; border-color:#47628c; }
+.workspace-sidebar:not(.sidebar-exempt) .account-card { display:flex; min-width:0; padding:6px; gap:10px; flex:0 0 auto; }
+.workspace-sidebar:not(.sidebar-exempt) .account-avatar { flex:0 0 34px; width:34px; height:34px; }
+.workspace-sidebar:not(.sidebar-exempt) .account-card > div { min-width:0; }
+.workspace-sidebar:not(.sidebar-exempt) .account-card strong { font-size:12px; }
+.workspace-sidebar:not(.sidebar-exempt) .account-card > div > span { font-size:10px; }
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .brand-copy,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .nav-item > span,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .nav-chevron,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .nav-item-child,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .pinned-task-group,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .sidebar-create-task-button > span,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .account-card > div,
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .account-logout { display:none; }
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .nav-item { justify-content:center; padding:8px; }
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .sidebar-task-create { margin-top:auto; }
+.workspace-sidebar:not(.sidebar-exempt):not(.sidebar-open) .account-card { justify-content:center; padding:5px 0; }
+.workspace-sidebar-pin { position:absolute; top:19px; right:12px; min-height:26px; padding:3px; border:0; border-radius:4px; background:transparent; color:#a8b7c9; }
+.workspace-sidebar-pin[aria-pressed=true] { color:#5de1d2; background:#ffffff12; }
+.workspace-sidebar:not(.sidebar-open) .workspace-sidebar-pin { display:none; }
+.workspace-navigation-toggle,.workspace-sidebar-close { display:none; }
+.app-shell:has(.inspection-fullscreen) > .workspace-sidebar,
+.app-shell:has(.inspection-fullscreen) > .workspace-navigation-toggle { visibility:hidden; }
+@media (max-height:720px) { .workspace-sidebar:not(.sidebar-exempt) { padding-top:8px; gap:5px; } .workspace-sidebar:not(.sidebar-exempt) .side-nav { gap:5px; } .workspace-sidebar:not(.sidebar-exempt) .nav-item { min-height:32px; padding-block:5px; } .workspace-sidebar:not(.sidebar-exempt) .nav-item-child { min-height:26px; } .workspace-sidebar:not(.sidebar-exempt) .brand-block { min-height:44px; padding-bottom:8px; } .workspace-sidebar-pin { top:13px; } }
+@media (max-width:900px),(hover:none) {
+ .app-shell:has(> aside.workspace-sidebar:not(.sidebar-exempt)) { grid-template-columns:minmax(0,1fr); overflow-x:clip; }
+ .app-shell:has(> aside.workspace-sidebar:not(.sidebar-exempt)) > main.workspace { grid-column:1; padding-top:44px; }
+ .workspace-sidebar:not(.sidebar-exempt) { width:240px; transform:translateX(-100%); transition:transform .16s ease; }
+ .workspace-sidebar:not(.sidebar-exempt).sidebar-drawer { transform:translateX(0); box-shadow:12px 0 32px #14203424; }
+ .workspace-sidebar:not(.sidebar-exempt).sidebar-drawer .brand-copy { margin-right:20px; }
+ .workspace-sidebar-pin { display:none!important; }
+ .workspace-navigation-toggle { display:flex; position:fixed; top:6px; left:8px; z-index:29; align-items:center; gap:8px; min-height:30px; padding:4px 8px; background:#192330; color:white; border:0; border-radius:6px; font-size:12px; }
+ .workspace-sidebar-close { display:flex; position:absolute; right:12px; top:19px; border:0; background:#192330; color:#fff; padding:4px; min-height:26px; }
+ .app-shell:has(.inspection-fullscreen) > main.workspace { padding-top:0; }
+}
+@media (prefers-reduced-motion:reduce) { .workspace-sidebar:not(.sidebar-exempt) { transition:none; } }
+
+.workspace-sidebar:not(.sidebar-exempt).sidebar-open:has(.pinned-task-menu[open]) { overflow-y:auto; }
+.workspace-sidebar:not(.sidebar-exempt) .pinned-task-group:has(.pinned-task-menu[open]) { overflow:visible; flex-basis:auto; }

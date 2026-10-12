@@ -1,3 +1,4 @@
+import { WorkspaceSidebar } from "./WorkspaceSidebar";
 import { createPortal } from "react-dom";
 import { InspectionScopeTarget } from "./InspectionScopeTarget";
 import { LegacyManualRedirect } from "../features/label-inspection/LegacyManualRedirect";
@@ -499,6 +500,12 @@ export function AppShell() {
       : hasPermission(auth.user, item.permission)
   );
   const visibleTrainingChildren = assetsExpanded ? visibleTrainingAssetItems : [];
+  const textRoutes = ["/text-compare-beta", "/text-compare-codex", "/label-inspection"];
+  const routeTaskId = location.pathname.match(/\/tasks\/([^/]+)(?:\/inspect)?$/)?.[1];
+  let decodedTaskId = "";
+  try { decodedTaskId = routeTaskId ? decodeURIComponent(routeTaskId).replace(/^pipeline:/, "") : ""; } catch { /* Invalid routes use their existing not-found handling. */ }
+  const textWorkspace = textRoutes.some(path => location.pathname === workspacePath(path) || location.pathname.startsWith(`${workspacePath(path)}/`))
+    || Boolean(decodedTaskId && pipelineQuery.data?.items?.some(task => task.id === decodedTaskId && task.task_kind === "incoming_material_text"));
   const accountDisplayName = auth.user.display_name || auth.user.username;
   const dataScopeControl = (
     <label>
@@ -518,7 +525,7 @@ export function AppShell() {
   return (
     <InspectionScopeTarget.Provider value={setInspectionScopeTarget}>
     <div className="app-shell">
-      <aside className="sidebar">
+      <WorkspaceSidebar userId={auth.user.id} exempt={textWorkspace}>
         <Link className="brand-block" to={workspacePath()} aria-label="VantaLine 工作台总览">
           <div className="brand-mark" aria-hidden="true">
             <img src="/static/brand-logo.png?v=20260614-logo" alt="" width="36" height="36" decoding="async" />
@@ -540,6 +547,7 @@ export function AppShell() {
             <div className="nav-group">
               <button
                 className="nav-item nav-item-button"
+                title="训练与资产"
                 type="button"
                 onClick={() => setAssetsExpanded((value) => !value)}
                 aria-expanded={assetsExpanded}
@@ -565,7 +573,7 @@ export function AppShell() {
             {pinnedTasks.length ? (
               pinnedTasks.map((entry) => (
                 <div className="pinned-task-row" key={entry.id}>
-                  <Link className="pinned-task-link" to={entry.detailPath}>
+                  <Link className="pinned-task-link" to={entry.detailPath} title={entry.label}>
                     <Pin size={14} aria-hidden="true" />
                     <span>
                       <strong>{entry.label}</strong>
@@ -609,9 +617,9 @@ export function AppShell() {
 
           {hasPermission(auth.user, "training_pipeline") ? (
             <div className="nav-group sidebar-task-create">
-              <button className="sidebar-create-task-button" type="button" onClick={() => setCreateTaskOpen(true)}>
+              <button className="sidebar-create-task-button" title="添加任务" type="button" onClick={() => setCreateTaskOpen(true)}>
                 <Plus size={16} aria-hidden="true" />
-                添加任务
+                <span>添加任务</span>
               </button>
             </div>
           ) : null}
@@ -638,7 +646,7 @@ export function AppShell() {
             </button>
           </div>
         </nav>
-      </aside>
+      </WorkspaceSidebar>
 
       {createTaskOpen ? (
           <SidebarCreateTaskModal

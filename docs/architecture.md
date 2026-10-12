@@ -2498,3 +2498,10 @@ Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; 
 
 
 AgentToolsProvider renders only a hidden readiness marker for integration checks. No visible Agent/WebMCP status row appears for unsupported browsers, initialization, successful registration or registration errors. Existing registration, account authorization and tool execution are unchanged.
+
+
+## Shared workspace sidebar
+
+**Status: Authoritative.** All ordinary workspace pages use a 64px navigation rail and a 240px overlay sidebar, with solid dark styling. Pointer entry waits 120ms and exit waits 250ms; keyboard focus retains expansion. Pin state persists in session storage per account, including across route transitions. The main workspace is explicitly assigned to the second grid column and never moves or remounts during expansion. Text comparison/label inspection routes and incoming-material text tasks retain their existing shell. Detection fullscreen markup remains unchanged and covers navigation. At widths up to 900px or on non-hover devices, a click-controlled drawer closes on Escape, outside interaction or navigation; closed navigation is inert. Registration, permissions, camera/serial ownership and business actions remain unchanged.
+
+Acceptance: inspect the real shared component at 1920, 1366 and 1280px and verify stable main geometry during pointer, keyboard and pinned expansion. Check task tooltips, submenu/permission visibility, account-specific session pin, form/file retention across expansion, route exceptions and fullscreen entry/exit. At 390px verify drawer open/close and keyboard exclusion while closed. Run navigation route checks, frontend typecheck/production build, browser media/PLC source contracts, docs contract and diff check. Use synthetic media/APIs for preview, not physical PLC I/O.
