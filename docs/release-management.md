@@ -1819,3 +1819,9 @@ include result-word/HTTP checks; the frontend connection command also exercises
 both configuration forms. Rollback to a pre-feature complete release requires
 the stopped-service configuration preparation in production-runbook.md; never
 copy individual frontend/backend files or replay uncertain PLC writes.
+
+
+The manual CI immutable-package fixture supplies `VITE_RELEASE_ID=v2026.10.0`
+and `VITE_GIT_COMMIT=github.sha` to its frontend build, matching its packaging
+arguments. It retains the bundle identity rejection gate and the original
+synthetic release/archive checks; this is not a published production tag.

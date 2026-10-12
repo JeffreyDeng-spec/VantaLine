@@ -44,10 +44,10 @@ vite.stderr.on('data', b => {if(!String(b).includes('[console.')) process.stderr
     await page.goto(base+'/workspace/tasks/ai%3Afixture/inspect');
     try {await page.getByRole('button',{name:'开始 AI 检测',exact:true}).waitFor({timeout:10000});} catch(e) {console.error(page.url(),await page.locator('body').innerText());throw e;}
     // Allow model selection effects to settle; no missing-background check may run.
-    await page.waitForFunction(()=>Array.from(document.querySelectorAll('select')).some(select=>select.value==='ai_task_fixture')); // Wait for the selected model, not merely its options.
+    await page.locator('select').filter({has:page.locator('option[value="ai_task_fixture"]')}).first().selectOption('ai_task_fixture');
     await page.locator('input[type=file]').first().setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII=','base64')});
     const imageResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/analyze/image');
-    await page.getByRole('button',{name:'开始 AI 检测',exact:true}).click();await imageResponse;
+    await page.getByRole('button',{name:'开始 AI 检测',exact:true}).click();await imageResponse.catch(async error=>{console.error('Inspection fixture failure:',await page.locator('body').innerText(),'page errors:',errors,'submissions:',submissions);throw error;});
     await page.getByRole('tab',{name:'视频',exact:true}).click();
     await page.locator('input[type=file]').first().setInputFiles({name:'fixture.mp4',mimeType:'video/mp4',buffer:Buffer.from('isolated video upload fixture')});
     const videoResponse=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/analyze/video');

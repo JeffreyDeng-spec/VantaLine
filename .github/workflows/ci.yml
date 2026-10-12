@@ -234,6 +234,9 @@ jobs:
         java-version: '17'
       if: ${{ needs.ci-mode.outputs.mode == 'full' }}
     - name: Build and inspect immutable embedded package
+      env:
+        VITE_RELEASE_ID: v2026.10.0
+        VITE_GIT_COMMIT: ${{ github.sha }}
       run: "(cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)\npython scripts/build_doc_image_extractor.py\
         \ --output \"$RUNNER_TEMP/doc-image-bundle\"\npython scripts/build_release_artifact.py \\\n  --release v2026.10.0\
         \ --git-commit \"$(git rev-parse HEAD)\" \\\n  --built-at 2026-10-03T00:00:00Z \\\n  --doc-image-bundle \"$RUNNER_TEMP/doc-image-bundle\"\
