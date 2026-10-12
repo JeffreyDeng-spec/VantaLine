@@ -1800,7 +1800,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   </span>
                 </div>
                 <div className="plc-diagnostic-labels" aria-live="polite">
-                  <label>PLC 型号<output>三菱 FX3GA-40MR</output></label>
                   <label>输入寄存器<output>{plcWorkstationQuery.data?.config?.capture_input_register || "—"}</output></label>
                   <label>当前读取值<output>{plcCapturePoll.value ?? "—"}</output></label>
                   <label>状态说明<output>{plcCapturePoll.message}</output></label>

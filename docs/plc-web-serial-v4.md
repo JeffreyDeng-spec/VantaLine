@@ -62,7 +62,7 @@ contracts validate the actual new owner before replaying the original PLC oracle
 
 Physical PLC communication runs in a foreground desktop Edge/Chrome page through feature-detected `navigator.serial`; the production server performs zero serial I/O. Configuration is workstation-scoped, survives account logout, and is not a user preference.
 
-The current workstation schema is v5 while the physical protocol remains `plc-web-serial-v4`. Its preset profile is Mitsubishi FX3GA-40MR and uses logical D/Y names, 9600 baud, even parity, 7 data bits, 1 stop bit, checksum including ETX, a 500 ms timeout, and zero automatic retries. D is decimal; Y is octal and rejects digits 8/9. Derived hexadecimal protocol addresses are read-only diagnostics.
+The current workstation schema is v5 while the physical protocol remains `plc-web-serial-v4`. Its preset profile is Mitsubishi FX3GA-40MR and uses logical D/Y names, 9600 baud, even parity, 7 data bits, 1 stop bit, checksum including ETX, a 500 ms timeout, and zero automatic retries. D is decimal; Y is octal and rejects digits 8/9. Derived hexadecimal protocol addresses are read-only diagnostics. The arrival-capture status panel omits the preset model label because the protocol preset does not identify the connected physical device.
 
 Safe defaults are automatic capture disabled, input `D205`, trigger value `1`, result `D206`, a blank optional Y point, and a fixed 200 ms browser poll interval. Input and result registers must be different and inside D0-D255. A v4 workstation configuration migrates to v5 without enabling automatic capture or changing its existing D/Y choices.
 
