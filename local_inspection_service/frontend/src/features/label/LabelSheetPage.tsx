@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, FileImage, Play, RefreshCw, Save, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -175,78 +177,94 @@ export function LabelSheetPage() {
   }
 
   async function addReference() {
-    const files = referenceFiles;
-    const cleanAnnotation = annotation.trim();
-    if (!cleanAnnotation) {
-      toast.notify({ title: "请填写左列标注", tone: "error" });
-      return;
-    }
-    if (!files.length) {
-      toast.notify({ title: "请选择标签参考图", tone: "error" });
-      return;
-    }
-    setBusy("reference");
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const form = new FormData();
-      form.append("annotation", cleanAnnotation);
-      for (const file of files) form.append("files", file);
-      await addLabelSheetReferences(form);
-      setAnnotation("");
-      setReferenceFiles([]);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.labelSheetReferences(auth.dataUserId) });
-      toast.notify({ title: "标签参考已保存", tone: "success" });
-    } catch (error) {
-      toast.notify({
-        title: "保存标签参考失败",
-        description: error instanceof Error ? error.message : "请求失败",
-        tone: "error"
-      });
-    } finally {
-      setBusy(null);
-    }
+      const files = referenceFiles;
+      const cleanAnnotation = annotation.trim();
+      if (!cleanAnnotation) {
+        toast.notify({ title: "请填写左列标注", tone: "error" });
+        return;
+      }
+      if (!files.length) {
+        toast.notify({ title: "请选择标签参考图", tone: "error" });
+        return;
+      }
+      setBusy("reference");
+      try {
+        const form = new FormData();
+        form.append("annotation", cleanAnnotation);
+        for (const file of files) form.append("files", file);
+        await addLabelSheetReferences(form);
+        setAnnotation("");
+        setReferenceFiles([]);
+        await queryClient.invalidateQueries({ queryKey: queryKeys.labelSheetReferences(auth.dataUserId) });
+        toast.notify({ title: "标签参考已保存", tone: "success" });
+      } catch (error) {
+        toast.notify({
+          title: "保存标签参考失败",
+          description: error instanceof Error ? error.message : "请求失败",
+          tone: "error"
+        });
+      } finally {
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
-  async function runMatch(file: File | null) {
-    if (!file) {
-      toast.notify({ title: "请先选择标签纸图片", tone: "error" });
-      return;
-    }
-    setBusy("match");
+  async function runMatch(file: File | null, alreadyGuarded = false) {
+    if (!alreadyGuarded && !await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const nextResult = await matchLabelSheet(form);
-      setResult(nextResult);
-      toast.notify({
-        title: nextResult.status === "matched" ? "标签纸匹配完成" : "标签纸需要复核",
-        description: statusText(nextResult.status),
-        tone: nextResult.status === "matched" ? "success" : "info"
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "请求失败";
-      setResult({ status: "error", passed: false, error: message });
-      toast.notify({ title: "标签纸匹配失败", description: message, tone: "error" });
-    } finally {
-      setBusy(null);
-    }
+      if (!file) {
+        toast.notify({ title: "请先选择标签纸图片", tone: "error" });
+        return;
+      }
+      setBusy("match");
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const nextResult = await matchLabelSheet(form);
+        setResult(nextResult);
+        toast.notify({
+          title: nextResult.status === "matched" ? "标签纸匹配完成" : "标签纸需要复核",
+          description: statusText(nextResult.status),
+          tone: nextResult.status === "matched" ? "success" : "info"
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "请求失败";
+        setResult({ status: "error", passed: false, error: message });
+        toast.notify({ title: "标签纸匹配失败", description: message, tone: "error" });
+      } finally {
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
+  useVersionParticipant({ busy: () => Boolean(busy), cleanup: stopCamera });
   async function runCameraMatch() {
-    setBusy("camera");
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      if (!streamRef.current) await startCamera();
-      const file = await captureVideoFrame(videoRef.current);
-      setImageFile(file);
-      await runMatch(file);
-    } catch (error) {
-      toast.notify({
-        title: "摄像头标签匹配失败",
-        description: error instanceof Error ? error.message : "请求失败",
-        tone: "error"
-      });
-    } finally {
-      setBusy(null);
-    }
+      setBusy("camera");
+      try {
+        if (!streamRef.current) await startCamera();
+        const file = await captureVideoFrame(videoRef.current);
+        setImageFile(file);
+        await runMatch(file, true);
+      } catch (error) {
+        toast.notify({
+          title: "摄像头标签匹配失败",
+          description: error instanceof Error ? error.message : "请求失败",
+          tone: "error"
+        });
+      } finally {
+        setBusy(null);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   if (referencesQuery.isLoading) return <LoadingState label="读取标签参考库" />;

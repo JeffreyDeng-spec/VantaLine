@@ -1,3 +1,6 @@
+import { useVersionParticipant } from "../version/hooks";
+import { hasUnuploadedVersionFiles } from "../version/files";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -20,6 +23,7 @@ export function Capture({ onCapture }: { onCapture: (file: File) => void }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [device, setDevice] = useState('');
   const [active, setActive] = useState(false);
+  useVersionParticipant({ cleanup: () => { ++generation.current; stream.current?.getTracks().forEach(track => track.stop()); } });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -92,13 +96,18 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
   const value = inaccessible ? undefined : task.data;
   const selectedItem = value?.items?.find(x => x.id === selected);
   async function action(name: string, body = {}) {
-    setBusy(true); setError('');
+    if (name === "retry" && !await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const result = await post<Task>(id, name, body);
-      await queryClient.invalidateQueries({ queryKey: ['codex-compare', owner] });
-      if (name === 'retry') setParams({task: result.id});
-      if (name === 'review') reviewKey.current = crypto.randomUUID();
-    } catch (e) { setError(message(e)); } finally { setBusy(false); }
+      setBusy(true); setError('');
+      try {
+        const result = await post<Task>(id, name, body);
+        await queryClient.invalidateQueries({ queryKey: ['codex-compare', owner] });
+        if (name === 'retry') setParams({task: result.id});
+        if (name === 'review') reviewKey.current = crypto.randomUUID();
+      } catch (e) { setError(message(e)); } finally { setBusy(false); }
+
+    } finally { finishVersionOperation(); }
   }
   return <section className="cc-detail">
     <Link to={workspacePath('/text-compare-codex')}>← 返回任务列表</Link>
@@ -145,13 +154,19 @@ function Workspace({ owner }: { owner: string }) {
   const standards = useQuery({queryKey: ['codex-standards',owner], queryFn: listTextInspectionStandards, enabled: cap.data?.enabled});
   const standard = useQuery({queryKey: ['codex-standard',owner,standardId], queryFn: () => getTextInspectionStandard(standardId), enabled: !!standardId && cap.data?.enabled});
   useEffect(() => { if (!file) { setUrl(''); return; } const u = URL.createObjectURL(file); setUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
+  useVersionParticipant({ busy: () => busy, dirty: () => Boolean(file && hasUnuploadedVersionFiles([file])) });
   function selectFile(value: File) { if (busy) return; if (!value.size || value.size > 10*1024*1024) {setError('图片必须小于 10MB');return;} setFile(value);requestId.current = crypto.randomUUID();setError(''); }
   async function submit() {
-    if (!file || !assetId || !standard.data?.current_revision_id || busy) return;
-    setBusy(true);setError('');
-    const form = new FormData();form.set('reference_region',JSON.stringify(region));form.set('captured_file',file);form.set('standard_asset_id',assetId);form.set('request_id',requestId.current);form.set('expected_revision',standard.data.current_revision_id);
-    try { const result = await apiClient.upload<Task>(`${ROOT}/tasks`,form); await queryClient.invalidateQueries({queryKey:['codex-compare',owner]}); setParams({task:result.id}); }
-    catch(e) {setError(message(e));} finally {setBusy(false);}
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {
+      if (!file || !assetId || !standard.data?.current_revision_id || busy) return;
+      setBusy(true);setError('');
+      const form = new FormData();form.set('reference_region',JSON.stringify(region));form.set('captured_file',file);form.set('standard_asset_id',assetId);form.set('request_id',requestId.current);form.set('expected_revision',standard.data.current_revision_id);
+      try { const result = await apiClient.upload<Task>(`${ROOT}/tasks`,form); await queryClient.invalidateQueries({queryKey:['codex-compare',owner]}); setParams({task:result.id}); }
+      catch(e) {setError(message(e));} finally {setBusy(false);}
+
+    } finally { finishVersionOperation(); }
   }
   if (taskId) return <Detail key={taskId} id={taskId} owner={owner}/>;
   return <>

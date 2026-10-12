@@ -1,0 +1,2 @@
+.version-notice { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); padding: 12px 16px; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff; color: #1e3a8a; box-shadow: 0 4px 18px #0002; font-size: 14px; }
+.version-notice button { flex-shrink: 0; padding: 5px 10px; border: 1px solid #93c5fd; border-radius: 6px; background: white; color: inherit; cursor: pointer; }

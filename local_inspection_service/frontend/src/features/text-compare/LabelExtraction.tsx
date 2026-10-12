@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
@@ -84,6 +86,7 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
   const [expanded, setExpanded] = useState(false);
   const [method, setMethod] = useState<"ai" | "vlm_bbox">("ai");
   const generation = useRef(0);
+  useVersionParticipant({ busy: () => inFlight.current || busy, dirty: () => dirty || Boolean(file && guideKey !== JSON.stringify(DEFAULT_GUIDE) && extraction?.status !== "confirmed") });
   const currentFile = useRef(file);
   const expectedStandard = useRef(standardId + standardRevision);
   const svg = useRef<SVGSVGElement>(null);
@@ -126,27 +129,32 @@ export function LabelExtractionPanel({ file, capture, onCaptured, onSourceReady,
     return () => { stopped = true; clearTimeout(timer); };
   }, [extraction?.id, extraction?.status]);
   const start = async (method: "ai" | "manual" | "vlm_bbox") => {
-    if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError("");
-    onInvalidate?.();
-    const epoch = ++generation.current;
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const actual = file || await capture();
-      if (epoch !== generation.current) return;
-      if (!file) { currentFile.current = actual; onCaptured(actual); }
-      const frozenGuide = JSON.stringify(method === "vlm_bbox" ? [0,0,1,1] : guide);
-      let identity = requestIdentity.current;
-      if (!identity || identity.file !== actual || identity.guide !== frozenGuide || identity.method !== method) {
-        identity = { file: actual, guide: frozenGuide, method, id: crypto.randomUUID() }; requestIdentity.current = identity;
-      }
-      const form = new FormData(); form.set("file",actual); form.set("target",frozenGuide); form.set("request_id",identity.id); form.set("method",method);
-      const result = await apiClient.upload<Extraction>("/api/text-inspection/extractions",form);
-      if (epoch !== generation.current) return;
-      setExtraction(result); setPoints(result.polygon || []); setDirty(false);
-      if (result.media.source) onSourceReady?.(result.media.source);
-      if (result.status !== "attempting") requestIdentity.current = null;
-    } catch (e) { if (epoch === generation.current) setError((e as Error).message); }
-    finally { if (epoch === generation.current) { inFlight.current = false; setBusy(false); } }
+      if (inFlight.current) return;
+      inFlight.current = true; setBusy(true); setError("");
+      onInvalidate?.();
+      const epoch = ++generation.current;
+      try {
+        const actual = file || await capture();
+        if (epoch !== generation.current) return;
+        if (!file) { currentFile.current = actual; onCaptured(actual); }
+        const frozenGuide = JSON.stringify(method === "vlm_bbox" ? [0,0,1,1] : guide);
+        let identity = requestIdentity.current;
+        if (!identity || identity.file !== actual || identity.guide !== frozenGuide || identity.method !== method) {
+          identity = { file: actual, guide: frozenGuide, method, id: crypto.randomUUID() }; requestIdentity.current = identity;
+        }
+        const form = new FormData(); form.set("file",actual); form.set("target",frozenGuide); form.set("request_id",identity.id); form.set("method",method);
+        const result = await apiClient.upload<Extraction>("/api/text-inspection/extractions",form);
+        if (epoch !== generation.current) return;
+        setExtraction(result); setPoints(result.polygon || []); setDirty(false);
+        if (result.media.source) onSourceReady?.(result.media.source);
+        if (result.status !== "attempting") requestIdentity.current = null;
+      } catch (e) { if (epoch === generation.current) setError((e as Error).message); }
+      finally { if (epoch === generation.current) { inFlight.current = false; setBusy(false); } }
+
+    } finally { finishVersionOperation(); }
   };
   const revise = async (confirm: boolean) => {
     if (!extraction || inFlight.current) return;

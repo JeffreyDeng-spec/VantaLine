@@ -1,5 +1,6 @@
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter } from "react-router-dom";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { VersionBoundary } from "../features/version/VersionBoundary";
 import { SiteRoutes } from "./SiteRoutes";
 import { ApiError } from "../api/client";
 import { queryKeys } from "../api/queries";
@@ -25,13 +26,13 @@ const queryClient = new QueryClient({
 
 const routerBasename = (import.meta.env.VITE_ROUTER_BASENAME || "/react-preview").replace(/\/+$/, "") || "/";
 
+const router = createBrowserRouter([{ path: "*", element: <><VersionBoundary /><SiteRoutes /></> }], { basename: routerBasename });
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppToastProvider>
-        <BrowserRouter basename={routerBasename}>
-          <SiteRoutes />
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </AppToastProvider>
     </QueryClientProvider>
   );

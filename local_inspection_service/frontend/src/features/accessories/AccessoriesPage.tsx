@@ -1,3 +1,6 @@
+import { useVersionParticipant } from "../version/hooks";
+import { markVersionFilesUploaded } from "../version/files";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Eye, ImagePlus, RefreshCw, Route, Sparkles, Trash2, Upload, UploadCloud, X } from "lucide-react";
@@ -128,6 +131,7 @@ export function AccessoryDetailModal({
   const [applyRoute, setApplyRoute] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState("");
+  useVersionParticipant({ busy: () => Boolean(busy) });
   const detailQuery = useQuery({
     queryKey: queryKeys.accessoryDetail(accessoryId),
     queryFn: () => getAccessoryDetail(accessoryId)
@@ -146,31 +150,37 @@ export function AccessoryDetailModal({
   }
 
   async function uploadFiles() {
-    if (!files.length) {
-      notify({ title: "请选择图片", tone: "error" });
-      return;
-    }
-    if (item?.material_type === "text" && !validateTextFiles(files, textSourceCount(item), notify)) return;
-    const form = new FormData();
-    files.forEach((file) => form.append("files", file, file.name));
-    setBusy("upload");
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const result = await addAccessoryFiles(accessoryId, form);
-      setFiles([]);
-      notify({
-        title: item?.material_type === "text" ? "素材已上传，继续裁剪" : "素材已添加",
-        description: item?.material_type === "text" ? "文字类素材需要逐张手动裁剪。" : undefined,
-        tone: "success"
-      });
-      await refreshDetail();
-      if (item?.material_type === "text" && result.item) {
-        onTextCrop(result.item);
+      if (!files.length) {
+        notify({ title: "请选择图片", tone: "error" });
+        return;
       }
-    } catch (error) {
-      notify({ title: "添加素材失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
-    } finally {
-      setBusy("");
-    }
+      if (item?.material_type === "text" && !validateTextFiles(files, textSourceCount(item), notify)) return;
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file, file.name));
+      setBusy("upload");
+      try {
+        const result = await addAccessoryFiles(accessoryId, form);
+        markVersionFilesUploaded(files);
+        setFiles([]);
+        notify({
+          title: item?.material_type === "text" ? "素材已上传，继续裁剪" : "素材已添加",
+          description: item?.material_type === "text" ? "文字类素材需要逐张手动裁剪。" : undefined,
+          tone: "success"
+        });
+        await refreshDetail();
+        if (item?.material_type === "text" && result.item) {
+          onTextCrop(result.item);
+        }
+      } catch (error) {
+        notify({ title: "添加素材失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
+      } finally {
+        setBusy("");
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function updateRoute() {
@@ -351,6 +361,7 @@ export function AccessoriesPage() {
   const [cropAccessory, setCropAccessory] = useState<AccessorySummary | null>(null);
   const [deleteCropAccessoryOnCancel, setDeleteCropAccessoryOnCancel] = useState(true);
   const [busy, setBusy] = useState("");
+  useVersionParticipant({ busy: () => Boolean(busy) });
   const [draft, setDraft] = useState({
     name: "",
     material_type: "object",
@@ -435,6 +446,7 @@ export function AccessoriesPage() {
 
   async function createAccessoryDirect(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!await guardVersionAction()) return;
     if (!draft.name.trim()) {
       notify({ title: "请输入配件名称", tone: "error" });
       return;
@@ -447,6 +459,7 @@ export function AccessoriesPage() {
     setBusy("create");
     try {
       const result = await createAccessory(form);
+      markVersionFilesUploaded(draftFiles);
       if (accessoryNeedsTextCrop(result.item)) {
         setDeleteCropAccessoryOnCancel(true);
         setCropAccessory(result.item || null);

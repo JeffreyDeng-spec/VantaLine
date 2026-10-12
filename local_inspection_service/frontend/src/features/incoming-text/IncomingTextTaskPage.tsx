@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { runVersionAction } from "../version/runtime";
 import { type FormEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, BoxSelect, CheckCircle2, CopyPlus, FileText, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
@@ -85,6 +87,7 @@ export function IncomingTextTaskPage({ task }: { task: PipelineTask }) {
     }
   });
 
+  useVersionParticipant({ dirty: () => Boolean(draftRule) || JSON.stringify(rules) !== JSON.stringify(selectedReference?.rules || []) });
   function normalizedPoint(event: PointerEvent<HTMLDivElement>) {
     const image = imageRef.current;
     if (!image) return null;
@@ -147,7 +150,7 @@ export function IncomingTextTaskPage({ task }: { task: PipelineTask }) {
               <strong>{referenceFile?.name || "拖拽标准稿到这里，或点击选择"}</strong>
               <span>支持单页 PDF、PNG 或 JPG</span>
             </FileDropZone>
-            <button className="secondary" type="button" onClick={() => uploadMutation.mutate()} disabled={uploadMutation.isPending || !referenceFile || !versionLabel.trim()}><Plus size={15} /> {uploadMutation.isPending ? "上传中…" : "上传为草稿"}</button>
+            <button className="secondary" type="button" onClick={() => { void runVersionAction(() => uploadMutation.mutateAsync().catch(() => undefined)); }} disabled={uploadMutation.isPending || !referenceFile || !versionLabel.trim()}><Plus size={15} /> {uploadMutation.isPending ? "上传中…" : "上传为草稿"}</button>
             {selectedReference && selectedReference.status !== "draft" ? <button className="secondary" type="button" onClick={() => cloneMutation.mutate()} disabled={cloneMutation.isPending || !versionLabel.trim()}><CopyPlus size={15} /> 复制当前规则为新版本</button> : null}
           </div>
           <div className="incoming-task-boundary-note"><ShieldCheck size={16} /><span>此任务已自动保存到当前登录账号。</span></div>

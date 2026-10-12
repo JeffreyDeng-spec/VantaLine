@@ -1,3 +1,5 @@
+import { guardPlcConnectionGesture } from "../version/runtime";
+import { useVersionParticipant } from "../version/hooks";
 import { createPortal } from "react-dom";
 import { PlcConnectionStatusBar } from "./PlcConnectionStatusBar";
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -108,7 +110,9 @@ export function LocalPlcControls(props: Props) {
     await cache.invalidateQueries({ queryKey: queryKeys.plcWorkstation });
   }
 
+  useVersionParticipant({ busy: () => pendingRef.current, cleanup: () => client.drainForReload() });
   async function perform(connect: boolean, payload?: { name: string; config: PlcWebSerialConfig }) {
+    if (connect && !guardPlcConnectionGesture()) return;
     if (pendingRef.current) return;
     pendingRef.current = true;
     setPending(true);

@@ -1,3 +1,6 @@
+import { useVersionParticipant } from "../version/hooks";
+import { markVersionFilesUploaded } from "../version/files";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import "./normalInspection.css";
 import { apiClient, withAuthScope } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
@@ -659,6 +662,13 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   );
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<DetectionResult | null>(null);
+  useVersionParticipant({
+    busy: () => Boolean(busyRef.current || cameraCaptureLockRef.current || busy || plcDiagnosticBusy),
+    cleanup: async () => {
+      await plcClientRef.current.drainForReload();
+      stream?.getTracks().forEach(track => track.stop());
+    }
+  });
   const [error, setError] = useState("");
   const [debugOpen, setDebugOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -948,7 +958,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     modelWarmupMutation.mutate(modelId);
   }
 
-  function handleModelSelection(nextModelId: string) {
+  async function handleModelSelection(nextModelId: string) {
+    if (!await guardVersionAction()) return;
     const nextModel = modelOptions.find((model) => model.id === nextModelId) || null;
     if (!nextModel) {
       setPendingModelId("");
@@ -975,7 +986,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }, [busy]);
 
   useEffect(() => {
-    if (!plcConnected || !activeModelId || busy) return;
+    if (versionCoordinator.snapshot().preparing || !plcConnected || !activeModelId || busy) return;
     if (plcBoundModelIdRef.current === activeModelId) return;
     void plcClientRef.current.rebindModel(activeModelId, (message) => {
       plcBoundModelIdRef.current = "";
@@ -989,7 +1000,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (!plcClientRef.current.state()) return;
+      if (versionCoordinator.snapshot().preparing || !plcClientRef.current.state()) return;
       if (document.visibilityState !== "visible") {
         setPlcConnectionStatus("页面在后台，PLC 保持连接；已暂停新的写入。");
         return;
@@ -1045,7 +1056,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     };
     const poll = async () => {
       if (cancelled) return;
-      if (document.visibilityState !== "visible" || plcDiagnosticBusy) {
+      if (versionCoordinator.snapshot().preparing || document.visibilityState !== "visible" || plcDiagnosticBusy) {
         schedule();
         return;
       }
@@ -1088,7 +1099,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
             && plcBoundModelIdRef.current === activeModelId
             && Boolean(video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0)
             && Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled))
-            && !busyRef.current && !plcDiagnosticBusy;
+            && !versionCoordinator.snapshot().preparing && !busyRef.current && !plcDiagnosticBusy;
           if (!cameraReady) {
             setPlcCapturePoll((current) => ({
               ...current,
@@ -1418,106 +1429,118 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     file: File,
     options?: { requiredPlcState?: PlcBrowserConnectionState; cameraRequestId?: string }
   ) {
-    if (!activeModelId) {
-      notify({ title: "当前任务暂无可用模型", tone: "error" });
-      return false;
-    }
-    detectionAudioContext();
-    busyRef.current = kind;
-    setBusy(kind);
-    setError("");
-    const controller = new AbortController();
-    const timeoutMs = detectionTimeoutMs(kind);
-    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    if (kind !== "camera" && !await guardVersionAction()) return false;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const form = new FormData();
-      const uploadFile = kind === "video" || activeModelIsAi || realPhotoMode ? file : await optimizeImageUpload(file);
-      form.append("file", uploadFile);
-      form.append("model_id", activeModelId);
-      if (kind === "camera" && realPhotoMode) form.append("capture_session_id",realPhotoCaptureSession.current);
-      const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
-      const requiredPlcState = options?.requiredPlcState;
-      if (requiredPlcState && (
-        !currentPlcState
-        || currentPlcState.sessionId !== requiredPlcState.sessionId
-        || currentPlcState.leaseEpoch !== requiredPlcState.leaseEpoch
-        || currentPlcState.configGeneration !== requiredPlcState.configGeneration
-      )) {
-        throw new Error("PLC 自动触发连接或配置已失效，禁止降级为普通图片检测");
+      if (!activeModelId) {
+        notify({ title: "当前任务暂无可用模型", tone: "error" });
+        return false;
       }
-      const plcState = requiredPlcState || currentPlcState;
-      if (plcState) {
-        form.append("plc_session_id", plcState.sessionId);
-        form.append("camera_request_id", options?.cameraRequestId || `camera_${crypto.randomUUID()}`);
+      detectionAudioContext();
+      busyRef.current = kind;
+      setBusy(kind);
+      setError("");
+      const controller = new AbortController();
+      const timeoutMs = detectionTimeoutMs(kind);
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const form = new FormData();
+        const uploadFile = kind === "video" || activeModelIsAi || realPhotoMode ? file : await optimizeImageUpload(file);
+        form.append("file", uploadFile);
+        form.append("model_id", activeModelId);
+        if (kind === "camera" && realPhotoMode) form.append("capture_session_id",realPhotoCaptureSession.current);
+        const currentPlcState = kind === "camera" ? plcClientRef.current.state() : null;
+        const requiredPlcState = options?.requiredPlcState;
+        if (requiredPlcState && (
+          !currentPlcState
+          || currentPlcState.sessionId !== requiredPlcState.sessionId
+          || currentPlcState.leaseEpoch !== requiredPlcState.leaseEpoch
+          || currentPlcState.configGeneration !== requiredPlcState.configGeneration
+        )) {
+          throw new Error("PLC 自动触发连接或配置已失效，禁止降级为普通图片检测");
+        }
+        const plcState = requiredPlcState || currentPlcState;
+        if (plcState) {
+          form.append("plc_session_id", plcState.sessionId);
+          form.append("camera_request_id", options?.cameraRequestId || `camera_${crypto.randomUUID()}`);
+        }
+        let next = kind === "video"
+          ? await analyzeVideo(form, { signal: controller.signal })
+          : plcState
+            ? await analyzeCamera(form, { signal: controller.signal })
+            : await analyzeImage(form, { signal: controller.signal });
+        if (requiredPlcState && !next.plc_sync) {
+          throw new Error("PLC 自动触发检测未返回工作站指令计划");
+        }
+        if (plcState && next.plc_sync?.status === "planned") {
+          next = {
+            ...next,
+            plc_sync: await plcClientRef.current.execute(next.plc_sync, (message) => {
+              setPlcConnected(false);
+              setPlcConnectionStatus(message);
+            })
+          };
+          await plcWorkstationQuery.refetch();
+        }
+        markVersionFilesUploaded([file]);
+        setResult(next);
+        setSource(kind);
+        playDetectionSound(Boolean(next.passed));
+        notify({ title: kind === "video" ? "视频分析完成" : `${activeDetectionLabel}完成`, tone: "success" });
+        return true;
+      } catch (nextError) {
+        const message = isAbortError(nextError) ? detectionTimeoutText(kind, timeoutMs) : nextError instanceof Error ? nextError.message : String(nextError);
+        setError(message);
+        playDetectionSound(false);
+        notify({ title: "检测失败", description: message, tone: "error" });
+        return false;
+      } finally {
+        window.clearTimeout(timeout);
+        busyRef.current = "";
+        setBusy("");
       }
-      let next = kind === "video"
-        ? await analyzeVideo(form, { signal: controller.signal })
-        : plcState
-          ? await analyzeCamera(form, { signal: controller.signal })
-          : await analyzeImage(form, { signal: controller.signal });
-      if (requiredPlcState && !next.plc_sync) {
-        throw new Error("PLC 自动触发检测未返回工作站指令计划");
-      }
-      if (plcState && next.plc_sync?.status === "planned") {
-        next = {
-          ...next,
-          plc_sync: await plcClientRef.current.execute(next.plc_sync, (message) => {
-            setPlcConnected(false);
-            setPlcConnectionStatus(message);
-          })
-        };
-        await plcWorkstationQuery.refetch();
-      }
-      setResult(next);
-      setSource(kind);
-      playDetectionSound(Boolean(next.passed));
-      notify({ title: kind === "video" ? "视频分析完成" : `${activeDetectionLabel}完成`, tone: "success" });
-      return true;
-    } catch (nextError) {
-      const message = isAbortError(nextError) ? detectionTimeoutText(kind, timeoutMs) : nextError instanceof Error ? nextError.message : String(nextError);
-      setError(message);
-      playDetectionSound(false);
-      notify({ title: "检测失败", description: message, tone: "error" });
-      return false;
-    } finally {
-      window.clearTimeout(timeout);
-      busyRef.current = "";
-      setBusy("");
-    }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function runCamera(
     videoElement: HTMLVideoElement | null = videoRef.current,
     options?: { requiredPlcState?: PlcBrowserConnectionState; cameraRequestId?: string }
   ) {
-    if (cameraCaptureLockRef.current || busyRef.current) {
-      if (!options?.requiredPlcState) notify({ title: "已有检测正在执行", tone: "info" });
-      return false;
-    }
-    if (plcDiagnosticBusy) {
-      notify({ title: "PLC 通讯诊断正在执行", description: "请等待诊断结束后再拍照检测", tone: "info" });
-      return false;
-    }
-    cameraCaptureLockRef.current = true;
-    busyRef.current = "camera";
-    setBusy("camera");
+    if (options?.requiredPlcState && versionCoordinator.snapshot().preparing) return false;
+    if (!options?.requiredPlcState && !await guardVersionAction()) return false;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      if (!stream) {
-        if (options?.requiredPlcState) return false;
-        await startCamera();
+      if (cameraCaptureLockRef.current || busyRef.current) {
+        if (!options?.requiredPlcState) notify({ title: "已有检测正在执行", tone: "info" });
+        return false;
       }
-      const file = await captureVideoFrame(videoElement, activeModelIsAi ? "ai_camera_capture" : "camera_capture");
-      return await runAnalysis("camera", file, options);
-    } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setError(message);
-      notify({ title: "摄像头检测失败", description: message, tone: "error" });
-      return false;
-    } finally {
-      cameraCaptureLockRef.current = false;
-      if (busyRef.current === "camera") busyRef.current = "";
-      setBusy("");
-    }
+      if (plcDiagnosticBusy) {
+        notify({ title: "PLC 通讯诊断正在执行", description: "请等待诊断结束后再拍照检测", tone: "info" });
+        return false;
+      }
+      cameraCaptureLockRef.current = true;
+      busyRef.current = "camera";
+      setBusy("camera");
+      try {
+        if (!stream) {
+          if (options?.requiredPlcState) return false;
+          await startCamera();
+        }
+        const file = await captureVideoFrame(videoElement, activeModelIsAi ? "ai_camera_capture" : "camera_capture");
+        return await runAnalysis("camera", file, options);
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : String(nextError);
+        setError(message);
+        notify({ title: "摄像头检测失败", description: message, tone: "error" });
+        return false;
+      } finally {
+        cameraCaptureLockRef.current = false;
+        if (busyRef.current === "camera") busyRef.current = "";
+        setBusy("");
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function disconnectPlc(message = "PLC 已断开。") {
@@ -1529,36 +1552,41 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }
 
   async function runPlcDiagnostic() {
-    if (!plcConnected) return notify({ title: "请先连接本机 PLC", tone: "error" });
-    if (!window.confirm("该测试会把 D206 临时写成 6，并立即读取 D206。请确认 D206 当前可以安全覆盖。")) return;
-    setPlcDiagnosticBusy(true);
-    setPlcDiagnostic(null);
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     try {
-      const diagnostic = await plcClientRef.current.diagnoseD206((message) => {
-        setPlcConnected(false);
-        setPlcConnectionStatus(message);
-      });
-      setPlcDiagnostic(diagnostic);
-      notify({
-        title: diagnostic.status === "success" ? "PLC 通讯成功" : "PLC 通讯诊断未通过",
-        description: diagnostic.conclusion,
-        tone: diagnostic.status === "success" ? "success" : "error"
-      });
-    } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : String(nextError);
-      setPlcDiagnostic({
-        status: "failed",
-        conclusion: message,
-        write_frame_hex: "",
-        write_response_hex: "",
-        read_frame_hex: "",
-        read_response_hex: "",
-        read_value: null
-      });
-      notify({ title: "PLC 通讯诊断失败", description: message, tone: "error" });
-    } finally {
-      setPlcDiagnosticBusy(false);
-    }
+      if (!plcConnected) return notify({ title: "请先连接本机 PLC", tone: "error" });
+      if (!window.confirm("该测试会把 D206 临时写成 6，并立即读取 D206。请确认 D206 当前可以安全覆盖。")) return;
+      setPlcDiagnosticBusy(true);
+      setPlcDiagnostic(null);
+      try {
+        const diagnostic = await plcClientRef.current.diagnoseD206((message) => {
+          setPlcConnected(false);
+          setPlcConnectionStatus(message);
+        });
+        setPlcDiagnostic(diagnostic);
+        notify({
+          title: diagnostic.status === "success" ? "PLC 通讯成功" : "PLC 通讯诊断未通过",
+          description: diagnostic.conclusion,
+          tone: diagnostic.status === "success" ? "success" : "error"
+        });
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : String(nextError);
+        setPlcDiagnostic({
+          status: "failed",
+          conclusion: message,
+          write_frame_hex: "",
+          write_response_hex: "",
+          read_frame_hex: "",
+          read_response_hex: "",
+          read_value: null
+        });
+        notify({ title: "PLC 通讯诊断失败", description: message, tone: "error" });
+      } finally {
+        setPlcDiagnosticBusy(false);
+      }
+
+    } finally { finishVersionOperation(); }
   }
 
   async function openFullscreenCamera() {
@@ -1725,7 +1753,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 type="button"
                 role="tab"
                 aria-selected={source === value}
-                onClick={() => setSource(value)}
+                onClick={() => { void guardVersionAction().then(allowed => { if (allowed) setSource(value); }); }}
                 key={value}
               >
                 <Icon size={15} aria-hidden="true" />

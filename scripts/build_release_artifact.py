@@ -61,6 +61,9 @@ bundle = dist / "assets" / matches[0]
 payload = bundle.read_text(encoding="utf-8")
 if "plc-web-serial-v4" not in payload or "plc-web-serial-v3" in payload:
     raise SystemExit("refusing to package a non-v4 browser bundle")
+identity_marker = f"VANTALINE_RELEASE:{args.release}:{args.git_commit}"
+if identity_marker not in payload:
+    raise SystemExit("frontend release identity does not match packaged release/commit")
 version = {
     "release": args.release,
     "git_commit": args.git_commit,

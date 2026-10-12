@@ -1,3 +1,6 @@
+import { runVersionAction } from "../version/runtime";
+import { useVersionParticipant } from "../version/hooks";
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -107,6 +110,7 @@ export function BatchWorkspace() {
   const batchQuery = useQuery({queryKey:['batches',owner,bid],queryFn:()=>apiClient.get<Batch>(`${BATCHES}/${bid}`),enabled:!!bid&&cap.isSuccess,refetchInterval:q=>terminal(q.state.data?.status||'')?false:2000,retry:false});
   const standards = useQuery({queryKey:['batch-orders',owner],queryFn:listTextInspectionStandards,enabled:cap.isSuccess&&(creating||!!bid)});
   const [busy,setBusy] = useState(false), [error,setError] = useState(''), [uploadNote,setUploadNote] = useState('');
+  useVersionParticipant({ busy: () => busy });
   const [filter,setFilter] = useState('all');
   const [uploadTarget,setUploadTarget] = useState<'order'|'actual'>('actual');
   const [rename,setRename] = useState('');
@@ -138,13 +142,26 @@ export function BatchWorkspace() {
   function newBatch(){if(listing)listScroll.current=main.current?.scrollTop||0;setParams({view:'new'});setError('');setUploadNote('');setFailedUploads([]);setRename('');main.current?.scrollTo({top:0});}
   function openTask(task:InspectionTask){listScroll.current=main.current?.scrollTop||0;setParams(taskParams(task));main.current?.scrollTo({top:0});}
   function back(){setParams(lid?{batch:bid}:{});}
-  async function order(standard_id:string){if(!standard_id)return;await operation(async()=>{const target=await ensureDraft();await accept(await apiClient.post<Batch>(`${BATCHES}/${target.id}/order`,{...request(),standard_id}));});}
-  async function document(file:File){setUploadTarget('order');await operation(async()=>{
+  async function order(standard_id:string){
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {if(!standard_id)return;await operation(async()=>{const target=await ensureDraft();await accept(await apiClient.post<Batch>(`${BATCHES}/${target.id}/order`,{...request(),standard_id}));});
+    } finally { finishVersionOperation(); }
+  }
+  async function document(file:File){
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {setUploadTarget('order');await operation(async()=>{
     const target=await ensureDraft();const form=new FormData();form.set('file',file);form.set('request_id',crypto.randomUUID());
     sessionStorage.setItem('vantaline-upload:'+owner,file.name);setUploadNote('正在上传并提取 '+file.name+'…');
     await accept(await apiClient.upload<Batch>(`${BATCHES}/${target.id}/document`,form));sessionStorage.removeItem('vantaline-upload:'+owner);setUploadNote('文档及提取图片已保存');await queryClient.invalidateQueries({queryKey:['batch-orders',owner]});
-  });}
-  async function photos(files:File[], retain=false, existingKey?:string){if(!files.length)return;setUploadTarget('actual');await operation(async()=>{
+  });
+    } finally { finishVersionOperation(); }
+  }
+  async function photos(files:File[], retain=false, existingKey?:string){
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {if(!files.length)return;setUploadTarget('actual');await operation(async()=>{
     const target=await ensureDraft();
     for(let i=0;i<files.length;i++){
       const file=files[i],key=existingKey||crypto.randomUUID();const form=new FormData();form.set('file',file);form.set('request_id',key);form.set('allow_duplicate',String(retain));
@@ -153,8 +170,15 @@ export function BatchWorkspace() {
       catch(e){setFailedUploads(old=>[...old.filter(x=>x.file!==file),{file,key,reason:errorText(e)}]);}
     }
     sessionStorage.removeItem('vantaline-upload:'+owner);setUploadNote('上传处理结束；成功图片已保存，失败项可单独重试。');
-  });}
-  async function rerun(ids:string[],matches:Record<string,unknown>={}){await operation(async()=>{const next=await apiClient.post<Batch>(`${BATCHES}/${bid}/retry`,{...retryKey.current,label_ids:ids,matches});retryKey.current=request();await accept(next);setParams({batch:next.id});scroll.current=0;});}
+  });
+    } finally { finishVersionOperation(); }
+  }
+  async function rerun(ids:string[],matches:Record<string,unknown>={}){
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
+    try {await operation(async()=>{const next=await apiClient.post<Batch>(`${BATCHES}/${bid}/retry`,{...retryKey.current,label_ids:ids,matches});retryKey.current=request();await accept(next);setParams({batch:next.id});scroll.current=0;});
+    } finally { finishVersionOperation(); }
+  }
   const cards = [...(batch?.labels||[])].filter(e=>filter==='all'||e.outcome===filter).sort((a,b)=>rank[a.outcome]-rank[b.outcome]);
   const actualCount=batch?.labels.length||0;
   return <div className="bw-shell">
@@ -187,7 +211,7 @@ export function BatchWorkspace() {
           </div>
         </section>
         <section className="bw-results"><header className="bw-results-heading"><div><span className="bw-eyebrow">检查报告</span><h2>{batch?.inputs.standard_name||'订单批量检查'}</h2><p>{batch?`${stateName(batch.status)} · ${actualCount} 枚标签`:'上传订单与实拍后开始检查'}{batch?.parent_id&&<> · <Link to={`?batch=${batch.parent_id}`}>查看原批次</Link></>}</p></div>
-          {draft?<button className="bw-primary" disabled={!editable||!actualCount||batch.import_state!=='ready'} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/submit`,submitKey.current));setParams({batch:bid},{replace:true});})}><ScanLine size={18}/>开始检查整批</button>:batch&&!terminal(batch.status)?<button disabled={busy} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${ROOT}/tasks/${bid}/cancel`));})}>取消整批</button>:batch&&actualCount>0?<button disabled={!editable} onClick={()=>void rerun(batch.labels.map(e=>e.id))}>整批重新检查</button>:null}</header>
+          {draft?<button className="bw-primary" disabled={!editable||!actualCount||batch.import_state!=='ready'} onClick={()=>void runVersionAction(() => operation(async()=>{await accept(await apiClient.post<Batch>(`${BATCHES}/${bid}/submit`,submitKey.current));setParams({batch:bid},{replace:true});}))}><ScanLine size={18}/>开始检查整批</button>:batch&&!terminal(batch.status)?<button disabled={busy} onClick={()=>void operation(async()=>{await accept(await apiClient.post<Batch>(`${ROOT}/tasks/${bid}/cancel`));})}>取消整批</button>:batch&&actualCount>0?<button disabled={!editable} onClick={()=>void rerun(batch.labels.map(e=>e.id))}>整批重新检查</button>:null}</header>
           {batch?.error&&<p role="alert" className="bw-error">{batch.error}</p>}{batch?.progress_message&&<p role="status">{batch.progress_message}</p>}
           {batch?.summary&&<p className="bw-summary">{batch.summary.message}{batch.summary.unchecked_scope&&<span>未确认：{batch.summary.unchecked_scope}</span>}</p>}
           <div className="bw-filters">{[['all','全部'],['difference','存在差异'],['uncertain','需要确认'],['pending','未完成'],['match','一致']].map(([key,name])=><button key={key} className={filter===key?'active':''} onClick={()=>setFilter(key)}>{name}<strong>{key==='all'?actualCount:batch?.counts[key]||0}</strong></button>)}</div>

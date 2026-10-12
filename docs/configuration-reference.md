@@ -1981,3 +1981,7 @@ New camera dispatches add trusted `owner_user_id` from the server-authorized lea
 ## Independent account record loading
 
 **Status: Authoritative.** PLC and business record tabs query their paginated read service independently of the general user-data snapshot. A snapshot error does not block record browsing. Historical business JSON that is null or not an object is omitted from the legacy metadata projection; the new list retains its native owner-scoped ID/time and marks missing structured metadata explicitly. Original rows and evidence are never rewritten or deleted. Source manifest v292 records this compatibility correction. Acceptance includes null/string/scalar legacy metadata and record browsing while the unrelated snapshot fails; the complete immutable release and existing zero-PLC-activity installer gates remain required.
+
+## Frontend release identity
+
+Immutable production builds supply `VITE_RELEASE_ID` and `VITE_GIT_COMMIT` from the same release/commit used for `VERSION.json`, alongside the existing PLC bundle version. These are public build metadata, not user-editable configuration or secrets. The frontend embeds a `VANTALINE_RELEASE:<release>:<commit>` marker; artifact packaging rejects absent or mismatched identity. Local/preview builds default to development/unknown and disable automatic version refresh. No new API, database migration or account setting is introduced.

@@ -1,3 +1,5 @@
+import { useVersionParticipant } from "../version/hooks";
+import { runVersionAction } from "../version/runtime";
 import {
   useEffect,
   useRef,
@@ -297,6 +299,7 @@ function Camera({
     [device, setDevice] = useState(""),
     [active, setActive] = useState(false),
     [starting, setStarting] = useState(false);
+  useVersionParticipant({ busy: () => starting, cleanup: stop });
   function stop() {
     ++generation.current;
     stream.current?.getTracks().forEach((t) => t.stop());
@@ -876,6 +879,7 @@ export function LabelWorkspace() {
   function fail(e: unknown) {
     setError(e instanceof Error ? e.message : "操作失败，请重试");
   }
+  useVersionParticipant({ busy: () => submission.current || busy, dirty: () => Boolean(localPhoto && !localPhoto.requestId && !localPhoto.runId) });
   async function perform(fn: (isCurrent: () => boolean) => Promise<void>) {
     const submittedView = activeView.current;
     const isCurrent = () =>
@@ -1215,13 +1219,13 @@ export function LabelWorkspace() {
                     fail(new Error("PDF 不能超过 200 MiB")); return;
                   }
                   if (files[0])
-                    void perform(async (isCurrent) => {
+                    void runVersionAction(() => perform(async (isCurrent) => {
                       const created = await apiClient.upload<Task>(
                         `${API}/tasks`,
                         form(files[0]),
                       );
                       if (isCurrent()) openTask(created.id);
-                    });
+                    }));
                 }}
               >
                 <strong>
@@ -1243,12 +1247,12 @@ export function LabelWorkspace() {
                   <button
                     disabled={busy || !!value.missing}
                     onClick={() =>
-                      void perform(async (isCurrent) => {
+                      void runVersionAction(() => perform(async (isCurrent) => {
                         const continued = await apiClient.post<Task>(
                           `${API}/tasks/${encodeURIComponent(value.id)}/continue`,
                         );
                         if (isCurrent()) openTask(continued.id);
-                      })
+                      }))
                     }
                   >
                     继续检测（建立标准快照）
@@ -1420,12 +1424,12 @@ export function LabelWorkspace() {
                           onFiles={(files) => {
                             resumeAfterPicker();
                             if (files[0])
-                              void perform(async () => {
+                              void runVersionAction(() => perform(async () => {
                                 await apiClient.upload(
                                   `${API}/tasks/${value.id}/assets`,
                                   form(files[0], { revision: value.revision }),
                                 );
-                              });
+                              }));
                           }}
                         >
                           ＋ 追加标准图片
@@ -1550,7 +1554,7 @@ export function LabelWorkspace() {
                           !capabilities.data?.enabled
                         }
                         onClick={() =>
-                          void perform(async (isCurrent) => {
+                          void runVersionAction(() => perform(async (isCurrent) => {
                             if (!actual || !reference) return;
                             const requestId =
                               sessionStorage.getItem(pendingKey) || key();
@@ -1597,7 +1601,7 @@ export function LabelWorkspace() {
                             );
                             setPending("");
                             setParams({ task: value.id, run: created.id });
-                          })
+                          }))
                         }
                       >
                         {busy

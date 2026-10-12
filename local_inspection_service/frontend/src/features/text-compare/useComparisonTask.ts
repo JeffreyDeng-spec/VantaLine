@@ -1,3 +1,4 @@
+import { guardVersionAction, versionCoordinator } from "../version/runtime";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../api/client";
 import type { TextCompareBetaResult } from "../../api/types";
@@ -98,6 +99,8 @@ export function useComparisonTask(owner: string) {
   async function start(binding: Pick<ComparisonSession, "standardId" | "assetId" | "photoId">,
     submit: (requestId: string) => Promise<TextCompareBetaResult>) {
     if (current.current) { save({ ...current.current, open: true }); return; }
+    if (!await guardVersionAction()) return;
+    const finishVersionOperation = versionCoordinator.beginOperation();
     const requestId = "cmp_" + crypto.randomUUID().replace(/-/g, "");
     uploading.current = requestId;
     save({ ...binding, owner, requestId, startedAt: Date.now(), open: true });
@@ -110,7 +113,7 @@ export function useComparisonTask(owner: string) {
           setBlocked(true); setNotice(`提交被拒绝：${error.message}。请重新选择图片或标准。`);
         } else setNotice(`${(error as Error).message}。正在查询提交结果，不自动重试上传。`);
       }
-    } finally { if (uploading.current === requestId) uploading.current = ""; }
+    } finally { if (uploading.current === requestId) uploading.current = ""; finishVersionOperation(); }
   }
   function reset() { save(null); setResult(null); setNotice(""); setBlocked(false); }
   return { task, result, notice: notice || (task?.rejected ? "提交未成功，请重新选择图片或标准；不会自动重试。" : ""), blocked, phase, start, reset,
