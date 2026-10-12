@@ -8,7 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_SHA256 = "8f2f9b9df6c4b32cac840c61aef3c37d8c7a26e57cfdfa08652cf271db8e3e97"
+FIXTURE_SHA256 = "d88c65e5d464217e080bdd020e70a1c1f3811e4863ed8075abb7d280df2f3056"
 
 def checked_fixture():
     raw = (ROOT / "tests/backend_contract/modbus_auto_delta.json").read_bytes()

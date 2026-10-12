@@ -376,11 +376,6 @@ def build_web_serial_diagnostic_plan() -> list[dict[str, Any]]:
 def build_legacy_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[str, Any]]:
     """Rebuild v3 frames solely for immutable historical verification."""
     normalized = normalize_legacy_web_serial_config(config)
-    if normalized["protocol"] == "modbus_rtu":
-        from .plc_modbus_rtu import write_word
-        frame = write_word(int(normalized["result_register"][1:]), 1 if passed else 0)
-        return [{**_frame_item(normalized["result_register"], frame, "write_result"),
-                 "expected_response_hex": frame.hex().upper()}]
     checksum_mode = normalized["checksum_mode"]
     result_register = normalized["result_register"]
     frames = [

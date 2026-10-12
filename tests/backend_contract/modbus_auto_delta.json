@@ -64,7 +64,7 @@
     },
     "local_inspection_service/plc_web_serial.py": {
       "parent_sha256": "efd554b053f4f447a0de6bbcc12f5a4deb3aea901d7b36870828dac37a2f967b",
-      "current_sha256": "aea62ea5fa7865840c6fe438d78359dde7f8ee966ba51fd2be5adb7e6ab5562e",
+      "current_sha256": "750f60449bb4be412db46bd1248afac00a148114bca16dd225eed8425ecb7118",
       "regions": [
         {
           "start": 195,
@@ -97,62 +97,56 @@
           "original": ""
         },
         {
-          "start": 378,
-          "end": 383,
-          "expected": "    if normalized[\"protocol\"] == \"modbus_rtu\":\n        from .plc_modbus_rtu import write_word\n        frame = write_word(int(normalized[\"result_register\"][1:]), 1 if passed else 0)\n        return [{**_frame_item(normalized[\"result_register\"], frame, \"write_result\"),\n                 \"expected_response_hex\": frame.hex().upper()}]\n",
-          "original": ""
-        },
-        {
-          "start": 423,
-          "end": 424,
+          "start": 418,
+          "end": 419,
           "expected": "def _connection_candidate(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n",
           "original": "def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n    \"\"\"A bounded, read-only check tied to this connecting lease; never a D/Y write.\"\"\"\n"
         },
         {
-          "start": 427,
-          "end": 432,
+          "start": 422,
+          "end": 427,
           "expected": "        if normalized[\"protocol\"] == \"modbus_rtu\":\n            from .plc_modbus_rtu import read_word\n            frame = read_word(int(target[1:]))\n        else:\n            frame = build_d_register_read_frame(logical_device_address(target), normalized[\"checksum_mode\"])\n",
           "original": "        frame = build_d_register_read_frame(logical_device_address(target), normalized[\"checksum_mode\"])\n"
         },
         {
-          "start": 435,
-          "end": 439,
+          "start": 430,
+          "end": 434,
           "expected": "            \"deadline_at\": lease[\"expires_at\"], \"timeout_ms\": WEB_SERIAL_ACK_TIMEOUT_MS,\n            \"frames\": frames, \"config\": normalized,\n            \"serial_options\": {\"baudRate\": normalized[\"baudrate\"], \"dataBits\": normalized[\"data_bits\"],\n                               \"stopBits\": 1, \"parity\": \"even\", \"flowControl\": \"none\"}}\n",
           "original": "            \"deadline_at\": lease[\"expires_at\"], \"timeout_ms\": WEB_SERIAL_ACK_TIMEOUT_MS, \"frames\": frames}\n"
         },
         {
-          "start": 441,
-          "end": 455,
+          "start": 436,
+          "end": 450,
           "expected": "def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n    \"\"\"Exactly two bounded profiles, no address/baud scan, no physical writes.\"\"\"\n    from .plc_modbus_rtu import PROFILE, PROTOCOL\n    normalized = normalize_web_serial_config(config)\n    primary = _connection_candidate(lease, normalized, check_id)\n    if normalized[\"protocol\"] != PROTOCOL and not normalized[\"output_control_point\"]:\n        alternate = {**normalized, \"profile_id\": PROFILE, \"protocol\": PROTOCOL,\n                     \"checksum_mode\": \"crc16\", \"baudrate\": 19200, \"data_bits\": 8,\n                     \"capture_trigger_enabled\": False}\n        primary[\"alternatives\"] = [_connection_candidate(lease, alternate, check_id + \"_rtu\")]\n    return primary\n\n\ndef validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> dict[str, Any]:\n",
           "original": "def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> None:\n"
         },
         {
-          "start": 456,
-          "end": 461,
+          "start": 451,
+          "end": 456,
           "expected": "    from .plc_modbus_rtu import parse_word\n    root = lease.get(\"connection_check\") or {}\n    plans = [root, *root.get(\"alternatives\", [])]\n    plan = next((item for item in plans if check_id and item.get(\"id\") == check_id), {})\n    if not plan:\n",
           "original": "    plan = lease.get(\"connection_check\") or {}\n    if not check_id or plan.get(\"id\") != check_id:\n"
         },
         {
-          "start": 468,
-          "end": 470,
+          "start": 463,
+          "end": 465,
           "expected": "    config = plan.get(\"config\") or DEFAULT_WEB_SERIAL_CONFIG\n    modbus = config.get(\"protocol\") == \"modbus_rtu\"\n",
           "original": ""
         },
         {
-          "start": 473,
-          "end": 474,
+          "start": 468,
+          "end": 469,
           "expected": "            if evidence[\"target\"] != frame[\"target\"] or not re.fullmatch(r\"[0-9A-Fa-f]{14}\" if modbus else r\"[0-9A-Fa-f]{16}\", evidence[\"response_hex\"]):\n",
           "original": "            if evidence[\"target\"] != frame[\"target\"] or not re.fullmatch(r\"[0-9A-Fa-f]{16}\", evidence[\"response_hex\"]):\n"
         },
         {
-          "start": 475,
-          "end": 476,
+          "start": 470,
+          "end": 471,
           "expected": "            (parse_word if modbus else parse_d_register_read_response)(bytes.fromhex(evidence[\"response_hex\"]))\n",
           "original": "            parse_d_register_read_response(bytes.fromhex(evidence[\"response_hex\"]))\n"
         },
         {
-          "start": 478,
-          "end": 479,
+          "start": 473,
+          "end": 474,
           "expected": "    return normalize_web_serial_config(config)\n",
           "original": ""
         }
