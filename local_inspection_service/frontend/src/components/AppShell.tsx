@@ -84,7 +84,7 @@ function SidebarLink({ item, indent = false }: { item: (typeof navItems)[number]
   const location = useLocation();
   const Icon = item.icon;
   return (
-    <Link className={`nav-item ${indent ? "nav-item-child" : ""} ${taskNavActive(item.path, location) ? "active" : ""}`} to={item.path} aria-current={taskNavActive(item.path, location) ? "page" : undefined}>
+    <Link className={`nav-item ${indent ? "nav-item-child" : ""} ${taskNavActive(item.path, location) ? "active" : ""}`} to={item.path} title={item.label} aria-current={taskNavActive(item.path, location) ? "page" : undefined}>
       <Icon size={18} aria-hidden="true" />
       <span>{item.label}</span>
     </Link>

@@ -1,3 +1,4 @@
+import "./normalInspection.css";
 import { apiClient, withAuthScope } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
@@ -477,13 +478,15 @@ function DetectionMetrics({
   mode,
   source,
   requiredCounts,
-  compact = false
+  compact = false,
+  singleScreen = false
 }: {
   result: DetectionResult | null;
   mode: WorkbenchMode;
   source: SourceMode;
   requiredCounts?: Record<string, number>;
   compact?: boolean;
+  singleScreen?: boolean;
 }) {
   const rows = source === "video" ? videoMissingRows(result, requiredCounts) : detectionRows(result, requiredCounts);
   const detectionCount = result?.frames?.length
@@ -491,7 +494,7 @@ function DetectionMetrics({
     : result?.detections?.length ?? "-";
   const passRate = result?.frames?.length ? formatPercent(result.pass_rate) : mode === "ai" ? aiMetaText(result) : "-";
   return (
-    <section className={`panel page-panel detection-metrics-panel ${compact ? "compact-detection-metrics" : ""}`}>
+    <section className={`panel page-panel detection-metrics-panel ${compact ? "compact-detection-metrics" : ""} ${singleScreen ? "normal-detection-metrics" : ""}`}>
       <div className="metric-grid">
         <MetricCard label="结论" value={result ? (result.passed ? "通过" : "不通过") : "-"} tone={result ? (result.passed ? "ok" : "fail") : "neutral"} />
         {compact ? null : <MetricCard label="检测数量" value={detectionCount} detail={source === "video" ? "采样帧" : "检测项"} />}
@@ -660,6 +663,23 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [debugOpen, setDebugOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [plcDetailsOpen, setPlcDetailsOpen] = useState(false);
+  const plcDetailsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!plcDetailsOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    plcDetailsRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setPlcDetailsOpen(false); return; }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(plcDetailsRef.current?.querySelectorAll<HTMLElement>("button, input, select, summary, a") || []).filter(node => !node.hasAttribute("disabled") && node.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); previous?.focus(); };
+  }, [plcDetailsOpen]);
   const [plcStatusTarget, setPlcStatusTarget] = useState<HTMLDivElement | null>(null);
   const [fullscreenPlcStatusTarget, setFullscreenPlcStatusTarget] = useState<HTMLDivElement | null>(null);
   const requestedTaskId = searchParams.get("task_id") || "";
@@ -1632,7 +1652,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   if (shouldLoadAiTasks && aiTasksQuery.isError) return <ErrorState error={aiTasksQuery.error} action={<button onClick={() => aiTasksQuery.refetch()}>重试</button>} />;
 
   return (
-    <section className="view active detection-workbench">
+    <section className={`view active detection-workbench detection-single-screen normal-source-${source}`}>
       <header className="page-head">
         <div>
           <h2>{routeTask?.label || "检测中心"}</h2>
@@ -1642,7 +1662,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </div>
         <div className="page-head-actions detection-head-actions">
           <strong className={`pill ${statusBadge.includes("就绪") || statusBadge.includes("加载") ? "ok" : "neutral"}`}>{statusBadge}</strong>
-          <button className="secondary compact-action" type="button" disabled={Boolean(busy)} onClick={openFullscreenCamera}>
+          <button className="normal-fullscreen-guide compact-action" type="button" disabled={Boolean(busy)} onClick={openFullscreenCamera}>
             <Maximize2 size={16} aria-hidden="true" />
             全屏检测
           </button>
@@ -1659,10 +1679,9 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       </header>
 
       <section className="panel page-panel detection-toolbar task-bound-toolbar">
-        <div className="selected-task-card compact-selected-task-card">
-          <strong>{routeTask?.label || selectedAiTask?.name || currentTask?.label || "当前任务"}</strong>
+        <div className="normal-task-context" title={routeTask ? `${routeTask.label} · ${routeTask.meta} · 配件：${taskAccessoryText(routeTask)}` : selectedAiTask?.accessory_names?.join("、") || currentTask?.label || "当前任务"}>
           <span>{routeTask ? routeTask.meta : isAi ? "AI 检测任务" : currentTask?.meta}</span>
-          <span>配件：{routeTask ? taskAccessoryText(routeTask) : selectedAiTask?.accessory_names?.join("、") || currentTask?.accessory_names?.join("、") || "-"}</span>
+          <span>配件：{routeTask ? taskAccessoryText(routeTask) : selectedAiTask?.accessory_names?.join("、") || "—"}</span>
         </div>
         <label className="toolbar-field task-bound-model-field">
           <span className="toolbar-field-label">当前模型</span>
@@ -1691,13 +1710,14 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </label>
       </section>
 
-      {source === "camera" && <div ref={setPlcStatusTarget} className="plc-status-slot" />}
+      {source === "camera" && <div className="normal-plc-row">
+        <div ref={setPlcStatusTarget} className="plc-status-slot" />
+        <button type="button" className="normal-plc-detail-button" onClick={() => setPlcDetailsOpen(true)}>PLC 详情</button>
+      </div>}
 
       <div className="inspect-grid">
         <section className="panel page-panel input-panel">
-          <div className="section-title">
-            <h3>输入源</h3>
-          </div>
+          <div className="normal-input-toolbar">
           <div className="tabbar" role="tablist" aria-label={`${title}输入源`}>
             {SOURCE_TABS.map(({ value, label, Icon }) => (
               <button
@@ -1712,6 +1732,26 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 {label}
               </button>
             ))}
+          </div>
+          {source === "camera" ? (
+              <label className="toolbar-field normal-camera-selector">
+                <span className="normal-sr-only">摄像头</span>
+                <select value={selectedDeviceId} onChange={(event) => {
+                  setSelectedDeviceId(event.currentTarget.value);
+                  if (event.currentTarget.value) startCamera(event.currentTarget.value);
+                }}>
+                  {devices.length ? (
+                    devices.map((device, index) => (
+                      <option value={device.deviceId} key={device.deviceId || index}>
+                        {device.label || `摄像头 ${index + 1}`}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">未检测到摄像头</option>
+                  )}
+                </select>
+              </label>
+          ) : null}
           </div>
 
           {source === "image" ? (
@@ -1744,28 +1784,14 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
           {source === "camera" ? (
             <div className="tabpane active">
-              <label className="toolbar-field">
-                摄像头
-                <select value={selectedDeviceId} onChange={(event) => {
-                  setSelectedDeviceId(event.currentTarget.value);
-                  if (event.currentTarget.value) startCamera(event.currentTarget.value);
-                }}>
-                  {devices.length ? (
-                    devices.map((device, index) => (
-                      <option value={device.deviceId} key={device.deviceId || index}>
-                        {device.label || `摄像头 ${index + 1}`}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">未检测到摄像头</option>
-                  )}
-                </select>
-              </label>
               <div className="camera-preview">
                 <video ref={videoRef} autoPlay playsInline muted />
                 {!stream ? <div className="camera-empty">选择摄像头后显示实时画面</div> : null}
               </div>
               <div className="camera-actions">
+                <span className="normal-capture-state" title={plcCapturePoll.message}>
+                  {plcWorkstationQuery.data?.config?.capture_trigger_enabled ? "到位自动拍照已启用" : "到位自动拍照未启用"} · {plcConnected ? `${plcWorkstationQuery.data?.config?.capture_input_register || "—"} = ${plcCapturePoll.value ?? "—"}` : "PLC 未连接"}
+                </span>
                 <button className="secondary compact-action" type="button" disabled={busy === "camera"} onClick={async () => {
                   await refreshCameras();
                   await startCamera();
@@ -1778,6 +1804,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   拍照 {activeDetectionLabel}
                 </button>
               </div>
+              <div ref={plcDetailsRef} className={`normal-plc-details ${plcDetailsOpen ? "is-open" : ""}`} role={plcDetailsOpen ? "dialog" : undefined} aria-modal={plcDetailsOpen || undefined} aria-label="PLC 状态与诊断详情">
+                <header className="normal-plc-details-head"><h3>PLC 状态与诊断详情</h3><button type="button" className="icon-only" aria-label="关闭 PLC 详情" onClick={() => setPlcDetailsOpen(false)}><X size={18} /></button></header>
               <LocalPlcControls client={plcClientRef.current} modelId={activeModelId} connected={plcConnected}
                 statusTarget={plcStatusTarget} fullscreenStatusTarget={fullscreenPlcStatusTarget}
                 captureStatus={plcCapturePoll.message}
@@ -1863,6 +1891,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                   </div>
                 </section>
               ) : null}
+              </div>
+              <p className={`normal-camera-notice ${error ? "danger-text" : ""}`} role={error ? "alert" : "status"} title={error || cameraStatus}>{error || cameraStatus}</p>
             </div>
           ) : null}
         </section>
@@ -1891,7 +1921,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </section>
       </div>
 
-      <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} />
+      <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} singleScreen />
+      {plcDetailsOpen && <div className="normal-plc-backdrop" onClick={() => setPlcDetailsOpen(false)} aria-hidden="true" />}
 
       {rulesOpen && !activeModelIsAi ? (
         <div className="modal-backdrop" role="presentation">
