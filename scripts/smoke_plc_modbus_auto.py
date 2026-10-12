@@ -106,4 +106,20 @@ class ModbusContract(unittest.TestCase):
                 service.plc_web_serial_begin_camera_detection("station","session","request-123","model","fingerprint")
             self.assertIsNone(state["dispatch"])
 
+    def test_source_contract_rejects_mutations_and_preserves_parent(self):
+        import hashlib
+        from plc_modbus_source_contract import checked_fixture, restore_modbus_business
+        fixture=checked_fixture()
+        root=Path(__file__).resolve().parents[1]
+        for path,change in fixture["files"].items():
+            current=(root/path).read_bytes()
+            self.assertEqual(hashlib.sha256(restore_modbus_business(path,current)).hexdigest(),change["parent_sha256"])
+            with self.assertRaises(AssertionError): restore_modbus_business(path,current+b"\n# unexpected mutation\n")
+        # A mutated added protocol adapter must fail before any inverse runs.
+        from unittest.mock import patch
+        original=Path.read_bytes
+        added=root/"local_inspection_service/plc_modbus_rtu.py"
+        with patch.object(Path,"read_bytes",lambda p: original(p)+b"\n# mutation" if p==added else original(p)):
+            with self.assertRaisesRegex(AssertionError,"adapter changed"): checked_fixture()
+
 if __name__=="__main__": unittest.main()

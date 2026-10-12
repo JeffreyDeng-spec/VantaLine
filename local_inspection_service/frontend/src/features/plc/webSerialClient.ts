@@ -223,7 +223,17 @@ export class PlcWebSerialClient {
       });
       ensureCurrent();
       this.diagnosticTriggerHigh = null;
-      this.diagnostics.record("activate","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
+      this.diagnostics.bind(stationId, this.lease.config_generation, this.lease.lease_epoch);
+      const verifiedConfig = check.config;
+      this.diagnostics.record("activate","ok",{
+        duration_ms:Math.round(performance.now()-diagnosticStarted),
+        ...(verifiedConfig?.baudrate && verifiedConfig.data_bits ? {config:{
+          baudrate:verifiedConfig.baudrate,data_bits:verifiedConfig.data_bits,parity:"E" as const,stop_bits:1 as const,
+          input_register:verifiedConfig.capture_input_register,result_register:verifiedConfig.result_register,
+          output_control_point:verifiedConfig.output_control_point,timeout_ms:500 as const,
+          capture_enabled:verifiedConfig.capture_trigger_enabled,trigger_value:verifiedConfig.capture_trigger_value
+        }} : {})
+      });
       this.stopped = false;
       this.disconnectListener = (event: Event) => {
         if (event.target === this.port) void this.failClosed("PLC 串口已拔出，请检查线路后人工重连", onFatal, "unplugged");

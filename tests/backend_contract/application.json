@@ -2346,8 +2346,8 @@
           "properties": {
             "response_hex": {
               "maxLength": 16,
-              "minLength": 16,
-              "pattern": "^[0-9A-Fa-f]{16}$",
+              "minLength": 14,
+              "pattern": "^(?:[0-9A-Fa-f]{14}|[0-9A-Fa-f]{16})$",
               "title": "Response Hex",
               "type": "string"
             },

@@ -184,19 +184,11 @@ function CostLedgerPanel({ ledger }: { ledger: ApiCostLedgerResponse }) {
   );
 }
 
-function readPlcPayload(form: HTMLFormElement): PlcWebSerialConfig {
+function readPlcPayload(form: HTMLFormElement, current: PlcWebSerialConfig): PlcWebSerialConfig {
   const data = new FormData(form);
   return {
-    schema_version: 5,
-    transport_mode: "web_serial",
-    profile_id: "mitsubishi_fx3ga_40mr",
+    ...current,
     enabled: data.get("enabled") === "on",
-    protocol: "fx_programming_port_ascii",
-    checksum_mode: "include_etx",
-    baudrate: 9600,
-    parity: "E",
-    data_bits: 7,
-    stop_bits: 1,
     result_register: String(data.get("result_register") || "D206")
       .trim()
       .toUpperCase(),
@@ -307,7 +299,8 @@ export function DeviceSettings() {
 
   function handlePlcSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const payload = readPlcPayload(event.currentTarget);
+    if (!plc) return;
+    const payload = readPlcPayload(event.currentTarget, plc);
     if (payload.enabled) {
       const summary = [
         `检测结果将写入 ${payload.result_register}`,
@@ -463,6 +456,7 @@ export function DeviceSettings() {
                 输出控制点（可不填）
                 <input
                   name="output_control_point"
+                  disabled={plc.protocol !== "fx_programming_port_ascii"}
                   pattern="Y(?:0[0-7]|1[0-7])"
                   defaultValue={plc.output_control_point}
                   placeholder="例如 Y04；留空则不控制"
@@ -484,7 +478,7 @@ export function DeviceSettings() {
                   required
                 />
                 <span className="field-hint">
-                  FX3GA 测试范围 D0–D255；不得与输出寄存器相同。
+                  支持范围 D0–D255；不得与输出寄存器相同。
                 </span>
               </label>
               <label className="field">
@@ -506,8 +500,10 @@ export function DeviceSettings() {
             <details className="settings-advanced">
               <summary>高级设置与诊断</summary>
               <p className="hint-line">
-                预设 PLC：三菱 FX3GA-40MR；通信固定为 9600 / 偶校验 / 7 数据位 /
-                1 停止位；校验和包含 ETX；超时 500ms；自动重试 0 次。
+                {plc.profile_id === "mitsubishi_fx3ga_40mr"
+                  ? "三菱 FX 通信配置：9600 / 7E1，校验和包含 ETX。"
+                  : "已识别 Modbus RTU 通信配置：19200 / 8E1，站号 1，CRC16；响应不代表已确认设备型号或生产地址。"}
+                超时 500ms；自动重试 0 次。
               </p>
               <p className="hint-line">
                 协议地址（只读）：输入寄存器{" "}
@@ -556,7 +552,9 @@ export function DeviceSettings() {
                   if (
                     next &&
                     !window.confirm(
-                      "只应在真实 PLC 已返回 ACK、地址已由 PLC 工程师确认后标记为正式。确认继续？",
+                      plc.protocol === "fx_programming_port_ascii"
+                        ? "只应在真实 PLC 已返回 ACK、地址已由 PLC 工程师确认后标记为正式。确认继续？"
+                        : "只应在现场 Modbus 写入响应、生产地址及数值约定均已由 PLC 工程师确认后标记为正式。确认继续？",
                     )
                   )
                     return;

@@ -256,9 +256,9 @@ POST `/api/plc/diagnostic-events/batch` accepts a strict bounded report; GET `/a
 
 Input reads additionally report only transitions between the configured trigger level and reset level, never the raw register word. The snapshot includes automatic capture enablement and its configured trigger value; this observation does not generate a capture or dispatch.
 
-## XD5 serial compatibility candidate
+## XD5 serial compatibility
 
-**Proposal — candidate implementation; not released or hardware accepted.**
+**Status: Authoritative.** Hardware commissioning remains separate from synthetic acceptance.
 
 Add `xinje_xd5_modbus_rtu` / `modbus_rtu` alongside Mitsubishi FX ASCII. The bounded candidate matches the supplied customer settings: unit 1, 19200/8E1, CRC16. Host transaction timeout remains 500 ms and physical retries remain zero; the PLC configuration screenshot's 300 ms / three retries is not copied into browser writes. XD5 D0-D255 maps to zero-based holding-register addresses 0-255 (XINJE XD/XL basic-instruction manual PD05 20240814, section 6, XD5 mapping table). Only function 03 single-word reads and function 06 single-word result writes are supported. Optional Y must remain blank; coil-output support is not implemented in this candidate.
 

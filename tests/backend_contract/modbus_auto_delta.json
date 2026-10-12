@@ -1,0 +1,189 @@
+{
+  "schema": 1,
+  "parent": "25c96812dfaaa14144432850455b6d1d708a44af",
+  "files": {
+    "local_inspection_service/plc/browser_dispatch.py": {
+      "parent_sha256": "b11db4a85d2e13f6ef1a4933dbadba539ad632dea7d46d3d4a73e81baa6e3a29",
+      "current_sha256": "bde040d1062e5a728e5a1226e6e4b3c0bab1ad472e52d3685bfb9a7b49aa28ae",
+      "regions": [
+        {
+          "start": 11,
+          "end": 12,
+          "expected": "from ..plc_web_serial import web_serial_profile_fingerprint\n",
+          "original": ""
+        },
+        {
+          "start": 55,
+          "end": 60,
+          "expected": "            if config_snapshot.get(\"protocol\") == \"modbus_rtu\" and not (\n                station.get(\"profile_verified\") and hmac.compare_digest(\n                    str(station.get(\"profile_verified_fingerprint\") or \"\"),\n                    web_serial_profile_fingerprint(config_snapshot))):\n                raise self.policy.PlcConfigError()(\"plc_modbus_business_mapping_not_verified\")\n",
+          "original": ""
+        },
+        {
+          "start": 285,
+          "end": 286,
+          "expected": "            if status == \"acknowledged\" and response_hex != expected.get(\"expected_response_hex\", \"06\"):\n",
+          "original": "            if status == \"acknowledged\" and response_hex != \"06\":\n"
+        },
+        {
+          "start": 287,
+          "end": 288,
+          "expected": "            if status == \"nak\" and (expected.get(\"expected_response_hex\", \"06\") != \"06\" or response_hex != \"15\"):\n",
+          "original": "            if status == \"nak\" and response_hex != \"15\":\n"
+        }
+      ]
+    },
+    "local_inspection_service/plc/diagnostic_state.py": {
+      "parent_sha256": "984637157183777427e6913c7bf114d4892f15a7337ea3c2746d1a72335c9f3a",
+      "current_sha256": "a8d0d08eecc319466fbda583293543a13e2aa83d9324d25a5d6d6782ffa5e495",
+      "regions": [
+        {
+          "start": 20,
+          "end": 22,
+          "expected": "            if (station.get(\"config\") or {}).get(\"protocol\") == \"modbus_rtu\":\n                raise self.ports.config_error()(\"plc_modbus_write_diagnostic_not_supported\")\n",
+          "original": ""
+        }
+      ]
+    },
+    "local_inspection_service/plc/lease_acquisition.py": {
+      "parent_sha256": "6f7370ff1fa46acd18108b804be697939eb3d0e0719855e3c04582ca3379393e",
+      "current_sha256": "7d35eee32e6b3ac1f7ae0442ee87a651d0e1f4fb7c004bc5e28f88b1c11d7a1a",
+      "regions": [
+        {
+          "start": 79,
+          "end": 80,
+          "expected": "                selected_config = validate_connection_check(lease, request.connection_check_id, request.connection_reads, now)\n",
+          "original": "                validate_connection_check(lease, request.connection_check_id, request.connection_reads, now)\n"
+        },
+        {
+          "start": 82,
+          "end": 91,
+          "expected": "            if selected_config[\"protocol\"] != (station.get(\"config\") or {}).get(\"protocol\", \"fx_programming_port_ascii\"):\n                station[\"config\"] = selected_config\n                station[\"config_generation\"] = int(station.get(\"config_generation\") or 0) + 1\n                station[\"profile_verified\"] = False\n                station[\"profile_verified_fingerprint\"] = \"\"\n                # The repository accepts record rows with raw_json through the station mapper.\n                state[\"station\"] = {**state[\"station\"], \"config_generation\": station[\"config_generation\"],\n                                    \"profile_verified\": False, \"raw_json\": station}\n                lease[\"config_generation\"] = station[\"config_generation\"]\n",
+          "original": ""
+        }
+      ]
+    },
+    "local_inspection_service/plc_web_serial.py": {
+      "parent_sha256": "efd554b053f4f447a0de6bbcc12f5a4deb3aea901d7b36870828dac37a2f967b",
+      "current_sha256": "aea62ea5fa7865840c6fe438d78359dde7f8ee966ba51fd2be5adb7e6ab5562e",
+      "regions": [
+        {
+          "start": 195,
+          "end": 211,
+          "expected": "    from .plc_modbus_rtu import PROFILE, PROTOCOL\n    if (raw or {}).get(\"profile_id\") == PROFILE:\n        source = dict(raw or {})\n        expected = {\"protocol\": PROTOCOL, \"checksum_mode\": \"crc16\", \"baudrate\": 19200, \"data_bits\": 8}\n        if any(source.get(key) != value for key, value in expected.items()):\n            raise PlcConfigError(\"XD5 requires Modbus RTU station 1, 19200/8E1\")\n        # Reuse logical D range, interlock, timeout and no-retry validation.\n        translated = {**source, \"profile_id\": WEB_SERIAL_PROFILE_ID,\n                      \"protocol\": PROTOCOL_ID, \"checksum_mode\": CHECKSUM_INCLUDE_ETX,\n                      \"baudrate\": 9600, \"data_bits\": 7}\n        validated = _normalize_web_serial_config(translated, defaults=DEFAULT_WEB_SERIAL_CONFIG,\n            schema_version=WEB_SERIAL_SCHEMA_VERSION, profile_id=WEB_SERIAL_PROFILE_ID,\n            checksum_modes=frozenset({CHECKSUM_INCLUDE_ETX}))\n        if validated[\"output_control_point\"]:\n            raise PlcConfigError(\"XD5 initial adapter requires blank optional output\")\n        return {**validated, \"profile_id\": PROFILE, **expected}\n",
+          "original": ""
+        },
+        {
+          "start": 275,
+          "end": 279,
+          "expected": "    if normalized[\"protocol\"] == \"modbus_rtu\":\n        return {\"result_register\": f'{int(normalized[\"result_register\"][1:]):04X}',\n                \"capture_input_register\": f'{int(normalized[\"capture_input_register\"][1:]):04X}',\n                \"output_control_point\": \"\"}\n",
+          "original": ""
+        },
+        {
+          "start": 293,
+          "end": 298,
+          "expected": "    if normalized[\"protocol\"] == \"modbus_rtu\":\n        from .plc_modbus_rtu import read_word\n        frame = read_word(int(register[1:]))\n    else:\n        frame = build_d_register_read_frame(logical_device_address(register), normalized[\"checksum_mode\"])\n",
+          "original": "    frame = build_d_register_read_frame(logical_device_address(register), normalized[\"checksum_mode\"])\n"
+        },
+        {
+          "start": 303,
+          "end": 304,
+          "expected": "        \"expected_response_bytes\": 7 if normalized[\"protocol\"] == \"modbus_rtu\" else 8,\n",
+          "original": "        \"expected_response_bytes\": 8,\n"
+        },
+        {
+          "start": 325,
+          "end": 330,
+          "expected": "    if normalized[\"protocol\"] == \"modbus_rtu\":\n        from .plc_modbus_rtu import write_word\n        frame = write_word(int(normalized[\"result_register\"][1:]), 1 if passed else 0)\n        return [{**_frame_item(normalized[\"result_register\"], frame, \"write_result\"),\n                 \"expected_response_hex\": frame.hex().upper()}]\n",
+          "original": ""
+        },
+        {
+          "start": 378,
+          "end": 383,
+          "expected": "    if normalized[\"protocol\"] == \"modbus_rtu\":\n        from .plc_modbus_rtu import write_word\n        frame = write_word(int(normalized[\"result_register\"][1:]), 1 if passed else 0)\n        return [{**_frame_item(normalized[\"result_register\"], frame, \"write_result\"),\n                 \"expected_response_hex\": frame.hex().upper()}]\n",
+          "original": ""
+        },
+        {
+          "start": 423,
+          "end": 424,
+          "expected": "def _connection_candidate(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n",
+          "original": "def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n    \"\"\"A bounded, read-only check tied to this connecting lease; never a D/Y write.\"\"\"\n"
+        },
+        {
+          "start": 427,
+          "end": 432,
+          "expected": "        if normalized[\"protocol\"] == \"modbus_rtu\":\n            from .plc_modbus_rtu import read_word\n            frame = read_word(int(target[1:]))\n        else:\n            frame = build_d_register_read_frame(logical_device_address(target), normalized[\"checksum_mode\"])\n",
+          "original": "        frame = build_d_register_read_frame(logical_device_address(target), normalized[\"checksum_mode\"])\n"
+        },
+        {
+          "start": 435,
+          "end": 439,
+          "expected": "            \"deadline_at\": lease[\"expires_at\"], \"timeout_ms\": WEB_SERIAL_ACK_TIMEOUT_MS,\n            \"frames\": frames, \"config\": normalized,\n            \"serial_options\": {\"baudRate\": normalized[\"baudrate\"], \"dataBits\": normalized[\"data_bits\"],\n                               \"stopBits\": 1, \"parity\": \"even\", \"flowControl\": \"none\"}}\n",
+          "original": "            \"deadline_at\": lease[\"expires_at\"], \"timeout_ms\": WEB_SERIAL_ACK_TIMEOUT_MS, \"frames\": frames}\n"
+        },
+        {
+          "start": 441,
+          "end": 455,
+          "expected": "def build_connection_check(lease: Mapping[str, Any], config: Mapping[str, Any], check_id: str) -> dict[str, Any]:\n    \"\"\"Exactly two bounded profiles, no address/baud scan, no physical writes.\"\"\"\n    from .plc_modbus_rtu import PROFILE, PROTOCOL\n    normalized = normalize_web_serial_config(config)\n    primary = _connection_candidate(lease, normalized, check_id)\n    if normalized[\"protocol\"] != PROTOCOL and not normalized[\"output_control_point\"]:\n        alternate = {**normalized, \"profile_id\": PROFILE, \"protocol\": PROTOCOL,\n                     \"checksum_mode\": \"crc16\", \"baudrate\": 19200, \"data_bits\": 8,\n                     \"capture_trigger_enabled\": False}\n        primary[\"alternatives\"] = [_connection_candidate(lease, alternate, check_id + \"_rtu\")]\n    return primary\n\n\ndef validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> dict[str, Any]:\n",
+          "original": "def validate_connection_check(lease: Mapping[str, Any], check_id: str | None, reads: list[Any], now: int) -> None:\n"
+        },
+        {
+          "start": 456,
+          "end": 461,
+          "expected": "    from .plc_modbus_rtu import parse_word\n    root = lease.get(\"connection_check\") or {}\n    plans = [root, *root.get(\"alternatives\", [])]\n    plan = next((item for item in plans if check_id and item.get(\"id\") == check_id), {})\n    if not plan:\n",
+          "original": "    plan = lease.get(\"connection_check\") or {}\n    if not check_id or plan.get(\"id\") != check_id:\n"
+        },
+        {
+          "start": 468,
+          "end": 470,
+          "expected": "    config = plan.get(\"config\") or DEFAULT_WEB_SERIAL_CONFIG\n    modbus = config.get(\"protocol\") == \"modbus_rtu\"\n",
+          "original": ""
+        },
+        {
+          "start": 473,
+          "end": 474,
+          "expected": "            if evidence[\"target\"] != frame[\"target\"] or not re.fullmatch(r\"[0-9A-Fa-f]{14}\" if modbus else r\"[0-9A-Fa-f]{16}\", evidence[\"response_hex\"]):\n",
+          "original": "            if evidence[\"target\"] != frame[\"target\"] or not re.fullmatch(r\"[0-9A-Fa-f]{16}\", evidence[\"response_hex\"]):\n"
+        },
+        {
+          "start": 475,
+          "end": 476,
+          "expected": "            (parse_word if modbus else parse_d_register_read_response)(bytes.fromhex(evidence[\"response_hex\"]))\n",
+          "original": "            parse_d_register_read_response(bytes.fromhex(evidence[\"response_hex\"]))\n"
+        },
+        {
+          "start": 478,
+          "end": 479,
+          "expected": "    return normalize_web_serial_config(config)\n",
+          "original": ""
+        }
+      ]
+    },
+    "local_inspection_service/schemas/plc.py": {
+      "parent_sha256": "1e893d1a1976a9b97eb226666d768f64e72f69125cf1382bf99a06ecf7581fb8",
+      "current_sha256": "c09141ad1348c82ffe170e8dcd56ab21b0a5da0e04737bff5dd69540c53d402c",
+      "regions": [
+        {
+          "start": 90,
+          "end": 91,
+          "expected": "    response_hex: StrictStr = Field(min_length=14, max_length=16, pattern=r\"^(?:[0-9A-Fa-f]{14}|[0-9A-Fa-f]{16})$\")\n",
+          "original": "    response_hex: StrictStr = Field(min_length=16, max_length=16, pattern=r\"^[0-9A-Fa-f]{16}$\")\n"
+        }
+      ]
+    },
+    "local_inspection_service/schemas/plc_diagnostics.py": {
+      "parent_sha256": "5a2ecd3e5711217ac6f538ee1fa69a973713bb0007287e081325fc794060c1fd",
+      "current_sha256": "0e50af20959480e930dfb8b88e355939f9796f4a0a02913e3c9689e038e762d0",
+      "regions": [
+        {
+          "start": 10,
+          "end": 12,
+          "expected": "    baudrate: Literal[9600, 19200] = 9600\n    data_bits: Literal[7, 8] = 7\n",
+          "original": "    baudrate: Literal[9600] = 9600\n    data_bits: Literal[7] = 7\n"
+        }
+      ]
+    }
+  },
+  "added_sources": {
+    "local_inspection_service/plc_modbus_rtu.py": "25db2f162b5271e6cab4c52c630ee8f9c0366a79f8f2b0bc91f51feaf00a0ba1"
+  }
+}

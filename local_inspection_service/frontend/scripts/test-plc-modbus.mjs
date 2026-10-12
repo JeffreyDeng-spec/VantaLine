@@ -1,5 +1,7 @@
 // Actual browser/controller with synthetic serial/API. Never connects to hardware.
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
@@ -58,4 +60,22 @@ async function scenario(mode){
  if(mode==='fallback')assert.deepEqual(evidence.opens.map(o=>[o.baudRate,o.dataBits]),[[9600,7],[19200,8]]);
  assert.deepEqual(errors,[]);await context.close();console.log(`Modbus browser ${mode}: PASS`);
 }
-try{for(const mode of ['rtu','fallback','fx','fx-noise','occupied','crc','partial','extra','exception','wrong-unit','write-ok','write-timeout','write-wrong-echo'])await scenario(mode);}finally{await browser.close();await server.close();}
+async function settingsPreserveProtocol(){
+ const source=ts.createSourceFile('DeviceSettings.tsx',readFileSync(new URL('../src/features/rules/DeviceSettings.tsx',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ const node=source.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='readPlcPayload');
+ assert(node,'actual settings payload function required');
+ const compiled=ts.transpileModule(node.getText(source),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+ const page=await browser.newPage();await page.goto(`${base}/__test`);
+ for(const protocol of ['fx_programming_port_ascii','modbus_rtu']){
+  const current={schema_version:5,transport_mode:'web_serial',profile_id:protocol==='modbus_rtu'?'xinje_xd5_modbus_rtu':'mitsubishi_fx3ga_40mr',protocol,checksum_mode:protocol==='modbus_rtu'?'crc16':'include_etx',baudrate:protocol==='modbus_rtu'?19200:9600,data_bits:protocol==='modbus_rtu'?8:7,parity:'E',stop_bits:1,enabled:true,result_register:'D206',capture_input_register:'D205',capture_trigger_value:1,capture_poll_interval_ms:200,ack_timeout_ms:500,retries:0,output_control_point:'',capture_trigger_enabled:false};
+  const result=await page.evaluate(({compiled,current})=>{
+    const payload=new Function('FormData',compiled+';return readPlcPayload;')(FormData);
+    const form=document.createElement('form');form.innerHTML='<input name="enabled" type="checkbox" checked><input name="result_register" value="D8"><input name="capture_input_register" value="D7"><input name="capture_trigger_value" value="1"><input name="output_control_point" value="">';
+    return payload(form,current);
+  },{compiled,current});
+  assert.deepEqual(result,{...current,result_register:'D8',capture_input_register:'D7'});
+ }
+ await page.close();console.log('Admin settings preserve identified protocol/serial parameters: PASS');
+}
+
+try{await settingsPreserveProtocol();for(const mode of ['rtu','fallback','fx','fx-noise','occupied','crc','partial','extra','exception','wrong-unit','write-ok','write-timeout','write-wrong-echo'])await scenario(mode);}finally{await browser.close();await server.close();}
