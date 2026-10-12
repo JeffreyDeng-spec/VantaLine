@@ -217,8 +217,9 @@ and the outstanding acceptance items below remain unchanged.
 - Browser registration uses `document.modelContext.registerTool(tool, {signal})`.
   Results are JSON strings for Chrome interoperability. One document-level queue
   handles React remounts and module changes; in-flight results are preserved
-  before removing registrations, including on Chrome 152. The page reports tool
-  readiness only after registration finishes. Legacy
+  before removing registrations, including on Chrome 152. The page exposes hidden readiness metadata only after registration finishes.
+  AgentToolsProvider never renders a visible status row: unsupported, preparing,
+  enabled and registration-error states all remain absent from the interface. Legacy
   `unregisterTool` is used only when present. See the
   [Chrome imperative API documentation](https://developer.chrome.com/docs/ai/webmcp/imperative-api),
   verified September 11, 2026. Registration hints are not authorization.
