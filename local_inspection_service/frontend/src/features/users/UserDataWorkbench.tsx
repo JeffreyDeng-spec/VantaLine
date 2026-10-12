@@ -9,6 +9,8 @@ import type { AuthUser } from "../../api/types";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { AdminConfirm, AdminConfirmation, AdminDialog } from "./AdminDialog";
 
+import { DatasetPhotos, DatasetMembers } from "./DatasetPhotos";
+
 type Resource = {
   resource_id: string;
   kind: string;
@@ -139,8 +141,12 @@ export function UserDataWorkbench({
     [filter, setFilter] = useState(""),
     [archived, setArchived] = useState(false),
     [photoId, setPhotoId] = useState("");
+  const [datasetDetail, setDatasetDetail] = useState<string | null>(null);
   async function refresh() {
     await qc.invalidateQueries({ queryKey: ["admin-user-data", owner] });
+    await qc.invalidateQueries({ queryKey: ["admin-dataset-photos", owner] });
+    await qc.invalidateQueries({ queryKey: ["admin-dataset-members", owner] });
+    await qc.invalidateQueries({ queryKey: ["admin-photo-history"] });
     await qc.invalidateQueries({ queryKey: ["admin-account-records", owner] });
     await qc.invalidateQueries({ queryKey: ["admin-samples", owner] });
     await qc.invalidateQueries({ queryKey: ["admin-sample-versions", owner] });
@@ -391,7 +397,11 @@ export function UserDataWorkbench({
                                   : "恢复调度"}
                               </button>
                               <button
-                                disabled={t.params_locked || (t.control_kind === "legacy" && autoEnabled(t) === true)}
+                                disabled={
+                                  t.params_locked ||
+                                  (t.control_kind === "legacy" &&
+                                    autoEnabled(t) === true)
+                                }
                                 title={
                                   t.params_locked
                                     ? "实拍训练固定 80 轮 / 640 px"
@@ -521,6 +531,7 @@ export function UserDataWorkbench({
         ))}
       {tab === "assets" && (
         <>
+          <DatasetPhotos owner={owner} />
           <section className="panel page-panel">
             <div className="section-title">
               <h3>数据集与模型</h3>
@@ -556,7 +567,15 @@ export function UserDataWorkbench({
                       <td>{r.sample_count ?? "—"}</td>
                       <td>
                         <div className="admin-actions">
-                          <button onClick={() => setDetail(r)}>详情</button>
+                          <button
+                            onClick={() =>
+                              r.kind === "dataset"
+                                ? setDatasetDetail(r.resource_id)
+                                : setDetail(r)
+                            }
+                          >
+                            详情
+                          </button>
                           <button onClick={() => archive(r)}>
                             {r.archived ? "恢复" : "归档"}
                           </button>
@@ -590,6 +609,13 @@ export function UserDataWorkbench({
             候选模型仍通过检测工作台手动选择。历史版本不提供原地增删或永久清理。
           </p>
         </>
+      )}
+      {datasetDetail && (
+        <DatasetMembers
+          owner={owner}
+          id={datasetDetail}
+          onClose={() => setDatasetDetail(null)}
+        />
       )}
       {tab === "audit" && (
         <>

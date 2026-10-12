@@ -1,5 +1,5 @@
 {
-  "version": 292,
+  "version": 293,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -622,6 +622,7 @@
     "storage/plc_diagnostic_repository.py",
     "plc_modbus_rtu.py",
     "auth/data_workbench.py",
-    "auth/account_records.py"
+    "auth/account_records.py",
+    "auth/dataset_photos.py"
   ]
 }
