@@ -528,6 +528,8 @@ export function UsersPage() {
               ["tasks", "任务与训练"],
               ["images", "图片资产"],
               ["assets", "数据集与模型"],
+              ["plc", "PLC 连接"],
+              ["business", "业务记录"],
               ["audit", "操作记录"],
             ].map(([k, label]) => (
               <button

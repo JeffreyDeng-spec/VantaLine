@@ -104,7 +104,7 @@ class ModbusContract(unittest.TestCase):
         from local_inspection_service.plc.browser_dispatch import PlcBrowserDispatchService
         for verified, fingerprint in ((False,""),(True,"stale")):
             station={"config":self.config,"profile_verified":verified,"profile_verified_fingerprint":fingerprint}
-            lease={"model_id":"model","lease_epoch":1,"expires_at":200}
+            lease={"owner_user_id":"fixture-owner","model_id":"model","lease_epoch":1,"expires_at":200}
             state={"station":station,"lease":lease,"dispatch":None}
             service=PlcBrowserDispatchService(
                 NS(_plc_web_serial_mutate=lambda:lambda sid,did,callback:(callback(state),state)[1],_plc_web_serial_record=lambda:lambda row:row,
@@ -117,6 +117,7 @@ class ModbusContract(unittest.TestCase):
             record, created = service.plc_web_serial_begin_camera_detection("station","session","request-123","model","fingerprint")
             self.assertTrue(created)
             self.assertEqual(record["status"], "detecting")
+            self.assertEqual(record["owner_user_id"], "fixture-owner")
             self.assertEqual(record["frames"], [])
             self.assertEqual(lease["in_flight_dispatch_id"], record["dispatch_id"])
 

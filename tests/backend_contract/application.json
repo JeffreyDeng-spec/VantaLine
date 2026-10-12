@@ -6356,6 +6356,82 @@
           "summary": "Operate"
         }
       },
+      "/api/auth/users/{owner}/data/records": {
+        "get": {
+          "operationId": "account_records_api_auth_users__owner__data_records_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "category",
+              "required": true,
+              "schema": {
+                "maxLength": 64,
+                "title": "Category",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Account Records"
+        }
+      },
       "/api/auth/users/{owner}/data/references/{resource}/image": {
         "get": {
           "operationId": "reference_image_api_auth_users__owner__data_references__resource__image_get",
@@ -18080,6 +18156,22 @@
       "permission": {
         "POST": [
           "ai_config"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "account_records",
+      "path": "/api/auth/users/{owner}/data/records",
+      "permission": {
+        "GET": [
+          "user_management"
         ]
       },
       "response_model_exclude_unset": false,
