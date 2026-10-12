@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "parent": "0008a39de29cd2949986af734c36e79c2ef1fcaf",
+  "files": {
+    "local_inspection_service/runtime/wiring/http_registration.py": {
+      "current_sha256": "9841fb18b1b6d1bf43bae75e0d7fede8f849ccf7df6d93a7f6be577775806ee2",
+      "parent_sha256": "80d70f48468286782e5c77fc0adf8da95dfa830087498ede2844673acd100d83",
+      "regions": [
+        {
+          "current": "        from local_inspection_service.storage.postgres_runtime_repository import _decode_value\n",
+          "parent": ""
+        },
+        {
+          "current": "                    for row in c.fetchall() for record in [_decode_value('raw_json', repo._row_to_dict(c, row)['raw_json'])] if isinstance(record, dict)]\n",
+          "parent": "                    for row in c.fetchall() for record in [repo._row_to_dict(c, row)['raw_json']]]\n"
+        }
+      ],
+      "accepted_ancestors": [
+        "d329198f75e6d31ded407202db455f99c9502f2c480931648a8d7d35287d5fb9"
+      ]
+    },
+    "local_inspection_service/auth/account_records.py": {
+      "current_sha256": "7fa0991b9aea380f6e7c83b65935b8af79ec216b9c479ec30938ad06943ce736",
+      "parent_sha256": "50215d619a507ec3c4b2bb414fcc2961c990cdfbcf5846c5658776551ce5e14d",
+      "regions": [
+        {
+          "current": "from ..storage.postgres_runtime_repository import _decode_value, quote_ident\n",
+          "parent": "from ..storage.postgres_runtime_repository import quote_ident\n"
+        },
+        {
+          "current": "            stored = _decode_value('raw_json', row['raw_json'])\n            raw = stored if isinstance(stored, dict) else {}\n",
+          "parent": "            raw = row['raw_json'] or {}\n"
+        },
+        {
+          "current": "            if not isinstance(stored, dict):\n                item['metadata_available'] = False\n",
+          "parent": ""
+        }
+      ],
+      "accepted_ancestors": []
+    },
+    "local_inspection_service/model_profiles/prompt_sources.json": {
+      "current_sha256": "c0d5f6d12c8ab6f9d7d7a3344ddeeb3e81a68516dd723de857d24ef9d8732e37",
+      "parent_sha256": "0560c464e413541d27d51dd1170c131d7a384ec67e72c2625e8e673ed48778d4",
+      "regions": [
+        {
+          "current": "  \"version\": 292,\n",
+          "parent": "  \"version\": 291,\n"
+        }
+      ],
+      "accepted_ancestors": [
+        "31426200999ffffa8063c2842b3cefa02e5c34f1e9a59b11c15097ea1e9cfb4b",
+        "8411436910d6f1b42b10cc7feb4809724040009e9476f953a7ff8bc62264f597",
+        "8492fe4bf7c65bc7abde4385e1049bc123a1365b90ccc913adcba9f19a880fed"
+      ]
+    }
+  }
+}

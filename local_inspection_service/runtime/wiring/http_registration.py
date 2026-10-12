@@ -1085,6 +1085,7 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
         return reader.training_resources_payload(**options)
 
     def readonly_business_records(owner):
+        from local_inspection_service.storage.postgres_runtime_repository import _decode_value
         result = {}
         repo = runtime_postgres_repository_or_none()
         if repo is None:
@@ -1095,7 +1096,7 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
                 c.execute(f'SELECT raw_json FROM {repo._qualified_table(table)} WHERE owner_user_id=%s', (owner,))
                 result[table] = [{key: record[key] for key in
                     ('id', 'record_id', 'name', 'title', 'display_name', 'status', 'decision', 'created_at', 'updated_at', 'passed', 'standard_id') if key in record}
-                    for row in c.fetchall() for record in [repo._row_to_dict(c, row)['raw_json']]]
+                    for row in c.fetchall() for record in [_decode_value('raw_json', repo._row_to_dict(c, row)['raw_json'])] if isinstance(record, dict)]
                 repo._end_read_transaction()
             finally:
                 c.close()

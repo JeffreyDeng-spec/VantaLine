@@ -15,6 +15,7 @@ import { useToast } from "../../components/ToastProvider";
 import type { AuthUser } from "../../api/types";
 import { useAuth } from "../auth/auth-context";
 import { AdminDialog, AdminConfirm, AdminConfirmation } from "./AdminDialog";
+import { AccountRecords } from "./AccountRecords";
 import { UserDataWorkbench } from "./UserDataWorkbench";
 import { apiClient } from "../../api/client";
 import "./users-workbench.css";
@@ -548,7 +549,8 @@ export function UsersPage() {
               账号已停用；恢复账号后，任务与实拍回流仍需显式恢复。
             </p>
           )}
-          {tab !== "account" && (
+          {(tab === "plc" || tab === "business") && <AccountRecords key={target.id + tab} owner={target.id} mode={tab} />}
+          {!["account", "plc", "business"].includes(tab) && (
             <UserDataWorkbench key={target.id} owner={target.id} tab={tab} />
           )}
         </>
