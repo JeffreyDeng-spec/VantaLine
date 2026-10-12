@@ -3,7 +3,7 @@ import base64
 import json
 import time
 from fastapi import HTTPException
-from ..storage.postgres_runtime_repository import quote_ident
+from ..storage.postgres_runtime_repository import _decode_value, quote_ident
 
 BUSINESS = {
     'text_inspection_standards': ('id', 'created_at'),
@@ -76,9 +76,12 @@ def records_page(repo, owner, category, cursor=None, limit=24):
         rows = [repo._row_to_dict(c, row) for row in c.fetchall()]
         items = []
         for row in rows[:limit]:
-            raw = row['raw_json'] or {}
+            stored = _decode_value('raw_json', row['raw_json'])
+            raw = stored if isinstance(stored, dict) else {}
             item = project(raw)
             item.update(id=row['id'], created_at=int(row['sort_time']))
+            if not isinstance(stored, dict):
+                item['metadata_available'] = False
             if category in ('connections', 'stations', 'diagnostics', 'plc_executions'):
                 for key in ('station_id', 'state', 'heartbeat_at', 'expires_at', 'step', 'result', 'code',
                             'target', 'duration_ms', 'expected_bytes', 'actual_bytes', 'ownership_basis', 'registered_by_target'):

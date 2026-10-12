@@ -1,4 +1,3 @@
-import { AccountRecords } from "./AccountRecords";
 import { FormEvent, useState } from "react";
 import {
   useInfiniteQuery,
@@ -592,7 +591,6 @@ export function UserDataWorkbench({
           </p>
         </>
       )}
-      {(tab === "plc" || tab === "business") && <AccountRecords owner={owner} mode={tab} key={tab} />}
       {tab === "audit" && (
         <>
           <section className="panel page-panel">

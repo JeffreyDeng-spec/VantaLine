@@ -77,6 +77,17 @@ def main():
                 ids.extend(r['id'] for r in result['items']); cursor=result['next_cursor']
             assert len(ids)==101 and len(set(ids))==101 and 'new-record' not in ids
             assert page('text_inspection_records')['items'][0]['id']=='new-record'
+            with psycopg.connect(connection) as c:
+                for rid, raw in [('legacy-null', None), ('legacy-string', 'id'), ('legacy-scalar', 42), ('legacy-encoded', json.dumps({'title':'encoded legacy object','secret':'must-not-return'}))]:
+                    c.execute("INSERT INTO vantaline.text_inspection_records VALUES (%s,%s,'standard',%s,'done','MATCH','MATCH','hash',3000,3000,%s)",(rid,owner,rid,Jsonb(raw)))
+            recovered=page('text_inspection_records')
+            assert recovered['total']==106
+            assert all(r['metadata_available'] is False for r in recovered['items'] if r['id'] in ('legacy-null','legacy-string','legacy-scalar'))
+            assert next(r for r in recovered['items'] if r['id']=='legacy-encoded')['title']=='encoded legacy object'
+            snapshot=client.get(f'/api/auth/users/{owner}/data')
+            assert snapshot.status_code==200,snapshot.text
+            assert len(snapshot.json()['business']['text_inspection_records'])==103
+
             assert client.get(path,params={'category':'connections','cursor':first['next_cursor']}).status_code==422
             assert client.get(f'/api/auth/users/{actor}/data/records',params={'category':'text_inspection_records','cursor':first['next_cursor']}).status_code==422
             assert client.get(path,params={'category':'bad'}).status_code==422
