@@ -1953,7 +1953,7 @@ No new configuration or permission is introduced. Existing allowlisting, task ow
 
 ## XD5 compatibility settings
 
-**Status: Authoritative.** Supported RTU candidate is fixed unit 1, 19200 baud, even parity, 8 data bits, one stop bit, CRC16, 500 ms host timeout and zero retries. D0-D255 is the initial register range; result values remain PASS=1/FAIL=0 and Y is unsupported/blank. These business defaults are not discovered device configuration. The administrator settings form preserves the identified protocol and serial parameters when saving business addresses; unsupported optional Y remains disabled for RTU. A successful alternate selection retains D choices but clears profile verification and disables automatic capture; camera dispatch does not require a separate manual profile confirmation. Existing explicit disabled configurations remain disabled. USB IDs describe the adapter, not the PLC model. New task fingerprints append `plc_modbus_rtu.py` to manifest v288 without rewriting historical snapshots.
+**Status: Authoritative.** Supported RTU candidate is fixed unit 1, 19200 baud, even parity, 8 data bits, one stop bit, CRC16, 500 ms host timeout and zero retries. D0-D255 is the initial register range; result values default to PASS=1/FAIL=0 and are independently configurable via `result_pass_value`/`result_fail_value`; Y is unsupported/blank. These business defaults are not discovered device configuration. The administrator settings form preserves the identified protocol and serial parameters when saving business addresses; unsupported optional Y remains disabled for RTU. A successful alternate selection retains D choices but clears profile verification and disables automatic capture; camera dispatch does not require a separate manual profile confirmation. Existing explicit disabled configurations remain disabled. USB IDs describe the adapter, not the PLC model. New task fingerprints append `plc_modbus_rtu.py` to manifest v288 without rewriting historical snapshots.
 
 ## Administrator workbench configuration
 
@@ -1991,3 +1991,18 @@ Immutable production builds supply `VITE_RELEASE_ID` and `VITE_GIT_COMMIT` from 
 **Status: Authoritative.** User management → target account → datasets/models now shows owner-scoped detection photos, task/current-status filters, whole-result counts and 24-row cursor pages. Current eligible/excluded/uncertain/processing/annotation-failed/disabled/not-collected/unknown states are distinct from historical frozen membership. Real-photo current states reuse the existing valid-review/definition/usage admission projection; legacy label states do not impersonate real-photo Agent conclusions. Exact stored record/sample IDs and frozen member manifests establish membership, including multiple versions and train/val/test splits; missing evidence remains unknown. Original photos and annotated fallback previews are explicitly labelled. Dataset details show actual frozen members, including derived legacy members and sources without a detection record; unavailable historical manifests/media leave metadata visible.
 
 Administrator-only GET routes under `/api/auth/users/{owner}/data` add `/detection-photos`, `/detection-photos/{record_id}`, `/detection-photos/{record_id}/image`, `/datasets/{dataset_id}/members` and `/datasets/{dataset_id}/members/{index}/image`. Photo list accepts task_id/status and owner/filter-bound anchored cursor with default 24/max100; member lists accept dataset-bound cursor. Response projects items, matching/full counts and next/refresh cursors, plus photo task options/revision and frozen member availability. Media is served only after target/record/dataset ownership checks, with private no-store; no caller paths or remote URL fetching. Browsing uses stored data only, never definition reconciliation, historical backfill, paid work, training submission or resource mutation. No migration or new configuration. While visible, the page checks every 30 seconds, refreshes anchored loaded pages and shows a new-photo prompt before resetting the page anchor. Existing image-use changes invalidate current photo/detail/history caches; they do not rewrite frozen membership. Whole-release rollback preserves records, datasets and history.
+
+## Configurable PLC detection result values
+
+**Status: Authoritative.** Workstation configuration adds `result_pass_value`
+(default 1) and `result_fail_value` (default 0). Both are strict integers in
+0–65535; equal values are allowed. Missing historical fields normalize to their
+defaults. The local and administrator configuration forms persist both values
+and show required numeric inputs beside the result register. FX ASCII and Modbus
+RTU camera dispatch plans encode the selected value in the configured D register.
+Y remains pass ON / fail OFF, independent of either numeric value; blank Y produces
+no Y operation. Saving changed values advances configuration generation, fences
+old leases/plans and requires reconnection. Browser-only serial ownership, D-before-Y
+ACK, camera-only dispatch and uncertain-write no-retry behavior remain unchanged.
+This additive configuration extension keeps schema 5 and protocol v4; rollback to
+a pre-feature release requires the configuration preparation in production-runbook.md.

@@ -128,10 +128,12 @@ let browser;
   assert.equal(await page.getByRole('link', { name: '用户管理', exact: true }).count(), 0);
   // Failed logout does not claim success; successful logout stays on /login.
   logoutFails = true;
+  await page.locator('.sidebar').hover();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await page.getByText('退出登录未完成，请重试', { exact: true }).waitFor();
   assert.equal(new URL(page.url()).pathname, '/workspace/users');
   logoutFails = false;
+  await page.locator('.sidebar').hover();
   await page.getByRole('button', { name: '退出登录', exact: true }).click();
   await page.getByLabel('Workspace username').waitFor();
   assert.equal(new URL(page.url()).pathname, '/login');

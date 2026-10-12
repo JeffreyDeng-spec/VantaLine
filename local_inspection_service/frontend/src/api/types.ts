@@ -958,6 +958,8 @@ export interface PlcWebSerialConfig {
   data_bits: 7 | 8;
   stop_bits: 1;
   result_register: string;
+  result_pass_value: number;
+  result_fail_value: number;
   output_control_point: string;
   capture_trigger_enabled: boolean;
   capture_input_register: string;

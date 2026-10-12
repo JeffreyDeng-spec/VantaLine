@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
 const root=fileURLToPath(new URL('../',import.meta.url));
-const server=await createServer({root,configFile:false,server:{host:'127.0.0.1',port:0},plugins:[{
+const server=await createServer({root,configFile:false,define:{__VANTALINE_RELEASE_IDENTITY__:JSON.stringify("VANTALINE_RELEASE:development:unknown")},server:{host:'127.0.0.1',port:0},plugins:[{
   name:'modbus-harness',resolveId(id){if(id==='/__entry.ts')return id;},
   load(id){if(id==='/__entry.ts')return `import {PlcWebSerialClient} from '/src/features/plc/webSerialClient.ts';window.client=new PlcWebSerialClient();`;},
   configureServer(s){s.middlewares.use(async(req,res,next)=>{if(req.url!=='/__test')return next();res.setHeader('Content-Type','text/html');res.end(await s.transformIndexHtml(req.url,'<html><body><script type="module" src="/__entry.ts"></script></body></html>'));});}
@@ -78,7 +78,7 @@ async function settingsPreserveProtocol(){
     const form=document.createElement('form');form.innerHTML='<input name="enabled" type="checkbox" checked><input name="result_register" value="D8"><input name="capture_input_register" value="D7"><input name="capture_trigger_value" value="1"><input name="output_control_point" value="">';
     return payload(form,current);
   },{compiled,current});
-  assert.deepEqual(result,{...current,result_register:'D8',capture_input_register:'D7'});
+  assert.deepEqual(result,{...current,result_register:'D8',capture_input_register:'D7',result_pass_value:1,result_fail_value:0});
  }
  await page.close();console.log('Admin settings preserve identified protocol/serial parameters: PASS');
 }

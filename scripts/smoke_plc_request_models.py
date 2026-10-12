@@ -37,6 +37,7 @@ PAYLOADS = {
     'PlcWebSerialReceiptRequest': dict(session_id='session', lease_epoch=1, attempt_token='token', outcome='ack', operations=[OPERATION]),
 }
 if not BASELINE:
+    PAYLOADS['PlcWebSerialConfigRequest'].update(result_pass_value=1, result_fail_value=0)
     PAYLOADS['PlcWorkstationSelfPairRequest'] = dict(name='产线电脑')
     PAYLOADS['PlcWorkstationLeaseActivateRequest'].update(
         connection_check_id='check', connection_reads=[dict(target='D205', response_hex='0230303030034333')])

@@ -3317,3 +3317,48 @@ Acceptance: inspect the real shared component at 1920, 1366 and 1280px and verif
 ## Administrator detection photos and frozen dataset membership
 
 **Status: Authoritative.** Run `python -m pytest tests/test_dataset_photos.py tests/test_real_photo_pagination.py` and `node scripts/test_dataset_photos_ui.cjs`. Cover 105-record stable paging/new arrival refresh, whole-owner category counts, positive/negative admission, current/stale review, uncertain/excluded/failed/disabled states, immutable multi-version membership, legacy reliable source IDs, orphan training members, missing manifests/media, account/cursor isolation and no reconciliation/queue writes. Run the isolated PostgreSQL assembled administrator smoke, existing administrator/photo regressions, frontend typecheck/production build, assembled OpenAPI and exact source guards, boundaries, docs and diff checks. Browser fixtures cover detail/history, version member paging, filter scopes, visible-page polling/new-arrival prompt, snapshot/transport failures and 390px layout; they do not certify private media availability or physical PLC behavior. CI remains skipped under owner release policy.
+
+## PLC configurable result acceptance
+
+Run `python scripts/smoke_plc_result_values.py` and
+`python scripts/smoke_plc_result_values_http.py`; run the real React configuration
+scenarios in `node local_inspection_service/frontend/scripts/test-plc-result-values.mjs`.
+Cover absent-field defaults, strict API validation, 2/3, 0/1, 0/65535 and equal
+values, FX word bytes/ACK and RTU CRC/echo, unchanged optional Y, fingerprints,
+logout/login persistence, generation fencing and old-release rejection/rollback
+preparation. Run existing request-model, Web Serial v4, Modbus, self-service, lease,
+browser dispatch and frontend provenance contracts, capture/connection tests,
+typecheck/build, release/boundary/docs contracts and diff check. The new exact
+source inverse verifies the accepted feature bytes before historical oracles;
+historical fixtures are not rewritten. All evidence uses synthetic ports and
+isolated storage, never a field PLC or customer records.
+
+
+PLC browser harnesses that bypass Vite configuration provide the same development
+release identity constant as the real dev build, so importing version-aware
+controls/controller does not bypass module construction. The background-free
+inspection fixture waits for its intended selected model before submission;
+option availability alone does not prove React selection effects have settled.
+
+
+The manual CI PostgreSQL service pulls the official Docker Hub image at the
+unchanged `sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d`
+manifest. Registry content was checked against that digest after the ECR mirror
+returned data-limit errors. Container version, storage budgets, isolated service
+roles and benchmark assertions are unchanged. The ordinary inspection fixture
+selects its model and locates image/video uploads by their named dropzone; it does
+not assume the first file input on the entire application belongs to inspection.
+
+
+The background-free inspection browser fixture moves its initial pointer out of
+the hover-expanding navigation rail and waits for the rail to collapse before
+clicking business actions. It retains Playwright's normal visibility and pointer
+interception checks; no forced click or product CSS override is used.
+
+The record-recovery source replay composes both independent dataset-photo and PLC
+result-value checkpoints before its unchanged historical oracle. Each checkpoint
+validates its own exact descendant bytes; neither permits unknown source edits.
+
+Navigation logout fixtures open the shared hover sidebar before selecting its
+logout action, retaining normal pointer/visibility checks and logout-failure
+assertions. The collapsed rail intentionally hides that action.

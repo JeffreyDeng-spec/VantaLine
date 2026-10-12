@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const server = await createServer({ root, configFile: false, optimizeDeps: { include: ['react','react-dom/client','@tanstack/react-query'] }, server: { host: '127.0.0.1', port: 0 }, plugins: [react(), {
+const server = await createServer({ root, configFile: false, define: { __VANTALINE_RELEASE_IDENTITY__: JSON.stringify("VANTALINE_RELEASE:development:unknown") }, optimizeDeps: { include: ['react','react-dom/client','@tanstack/react-query'] }, server: { host: '127.0.0.1', port: 0 }, plugins: [react(), {
   name: 'plc-test-harness', enforce: 'pre',
   resolveId(id) { if(id.endsWith('/__plc_entry.tsx')) return id; },
   load(id) { if(id.endsWith('/__plc_entry.tsx')) return `
@@ -103,13 +103,13 @@ async function scenario(mode, paired = false) {
   }
   if(['success','unplug','edit','refresh','duplicate','tabs'].includes(mode)) {
     await page.getByRole('button',{name:'断开 PLC'}).waitFor();
-    assert.match(await page.getByRole('status').innerText(),paired?/通信正常.*等待相机/:/通信正常.*已关闭到位自动拍照/);
+    assert.match(await page.getByRole('status').innerText(),paired?/PLC 已连接.*等待相机/s:/PLC 已连接.*自动拍照未启用/s);
     if(mode==='success'&&process.env.PLC_UI_OUTPUT) await page.screenshot({path:join(process.env.PLC_UI_OUTPUT,'connected.png')});
     if(mode==='tabs') {
       const other=await context.newPage();await other.goto(`${base}/__plc_test`);
       await other.getByRole('button',{name:'连接 PLC',exact:true}).click();
       await other.waitForFunction(()=>document.querySelector('[role=status]')?.textContent.includes('另一个标签页'));
-      assert.match(await page.getByRole('status').innerText(),/通信正常/);await other.close();
+      assert.match(await page.getByRole('status').innerText(),/PLC 已连接/);await other.close();
     }
     if(mode==='edit') {
       await page.getByRole('button',{name:'本机 PLC 设置'}).click();
@@ -122,14 +122,14 @@ async function scenario(mode, paired = false) {
       await page.reload();await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
       assert.match(await page.getByRole('status').innerText(),/未连接/);
     }
-    if(mode==='unplug') {await page.evaluate(()=>window.unplug());await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();assert.match(await page.getByRole('status').innerText(),/未连接/);}
+    if(mode==='unplug') {await page.evaluate(()=>window.unplug());await page.getByRole('button',{name:'重新连接 PLC',exact:true}).waitFor();assert.match(await page.getByRole('status').innerText(),/PLC 已断开/);}
   } else if(mode==='navigate') {
     await page.waitForFunction(()=>window.serialEvidence.writes.length===1);
     await page.reload();await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor();
     await new Promise(resolve=>setTimeout(resolve,650));
     assert(!requests.some(x=>x.endsWith('/activate')),'unload must not activate');
   } else {
-    await page.waitForFunction(()=>document.querySelector('[role=status]')?.textContent.includes('未连接')&&!document.querySelector('[role=status]')?.textContent.includes('请选择'));
+    await page.waitForFunction(()=>document.querySelector('[role=status]')?.textContent.includes('PLC 已断开')&&!document.querySelector('[role=status]')?.textContent.includes('请选择'));
     assert(!requests.some(x=>x.endsWith('/activate')),mode+' must never activate');
   }
   const evidence=await page.evaluate(()=>window.serialEvidence);
@@ -230,7 +230,7 @@ async function productionCase(mode, enabled=true) {
     else if(mode!=='heartbeatfailed'){try{await client.execute({dispatch_id:'dispatch'},()=>{});}catch{}}
     return performance.now()-start;
   },{mode,enabled});
-  if(mode==='heartbeatfailed')await page.getByRole('button',{name:'连接 PLC',exact:true}).waitFor({timeout:7000});
+  if(mode==='heartbeatfailed')await page.getByRole('button',{name:'重新连接 PLC',exact:true}).waitFor({timeout:7000});
   await page.evaluate(()=>{window.plcDiagnosticTest.client.diagnostics.summary();});
   await page.evaluate(()=>window.plcDiagnosticTest.transport.tick());
   const evidence=await page.evaluate(()=>window.productionEvidence);

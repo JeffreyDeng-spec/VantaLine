@@ -74,6 +74,8 @@ DEFAULT_WEB_SERIAL_CONFIG: dict[str, Any] = {
     "data_bits": 7,
     "stop_bits": 1,
     "result_register": "D206",
+    "result_pass_value": 1,
+    "result_fail_value": 0,
     "output_control_point": "",
     "capture_trigger_enabled": False,
     "capture_input_register": "D205",
@@ -159,6 +161,10 @@ def _normalize_web_serial_config(
     if not 0 <= result_number <= 255:
         raise PlcConfigError("result_register must be D0 through D255")
     result_register = f"D{result_number}"
+    for field in ("result_pass_value", "result_fail_value"):
+        value = _strict_int(config[field], field)
+        if not 0 <= value <= 65535:
+            raise PlcConfigError(f"{field} must be 0 through 65535")
 
     output_control_point = str(config["output_control_point"] or "").strip().upper()
     if output_control_point:
@@ -323,9 +329,10 @@ def _frame_item(target: str, frame: bytes, operation: str) -> dict[str, Any]:
 
 def build_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[str, Any]]:
     normalized = normalize_web_serial_config(config)
+    result_value = normalized["result_pass_value" if passed else "result_fail_value"]
     if normalized["protocol"] == "modbus_rtu":
         from .plc_modbus_rtu import write_word
-        frame = write_word(int(normalized["result_register"][1:]), 1 if passed else 0)
+        frame = write_word(int(normalized["result_register"][1:]), result_value)
         return [{**_frame_item(normalized["result_register"], frame, "write_result"),
                  "expected_response_hex": frame.hex().upper()}]
     checksum_mode = normalized["checksum_mode"]
@@ -335,7 +342,7 @@ def build_web_serial_plan(config: Mapping[str, Any], passed: bool) -> list[dict[
             result_register,
             build_d_register_write_frame(
                 logical_device_address(result_register),
-                1 if passed else 0,
+                result_value,
                 checksum_mode,
             ),
             "write_result",

@@ -949,3 +949,17 @@ New camera dispatches add trusted `owner_user_id` from the server-authorized lea
 ## Independent account record loading
 
 **Status: Authoritative.** PLC and business record tabs query their paginated read service independently of the general user-data snapshot. A snapshot error does not block record browsing. Historical business JSON that is null or not an object is omitted from the legacy metadata projection; the new list retains its native owner-scoped ID/time and marks missing structured metadata explicitly. Original rows and evidence are never rewritten or deleted. Source manifest v292 records this compatibility correction. Acceptance includes null/string/scalar legacy metadata and record browsing while the unrelated snapshot fails; the complete immutable release and existing zero-PLC-activity installer gates remain required.
+
+
+## PLC result-value configuration persistence
+
+**Status: Authoritative.** `result_pass_value` and `result_fail_value` are additive
+fields inside the existing workstation `raw_json.config`, with 1/0 defaults for
+historical records. No table migration or destructive business-record change is
+required. Existing station transactions advance configuration generation and
+fence leases when either value changes. Actual HTTP acceptance uses disposable
+JSON storage; rollback SQL was separately executed against temporary PostgreSQL
+with synthetic workstation/lease rows. The stopped-service transaction and
+restricted backup requirements are in production-runbook.md. Pre-feature binaries
+reject new fields until that rollback preparation removes them; retained dispatch
+snapshots/evidence must never be rewritten or physically replayed.

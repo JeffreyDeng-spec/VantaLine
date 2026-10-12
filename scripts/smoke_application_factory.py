@@ -23,7 +23,7 @@ from local_inspection_service.runtime.path_configuration_composition import Path
 from local_inspection_service.runtime.application_lifetime import ApplicationLifetime, register_application_lifetime
 from local_inspection_service.runtime.connections import ThreadRepositoryFactory
 from local_inspection_service.runtime.shutdown import ShutdownStep, WebShutdown, register_web_shutdown
-from verify_backend_contract import capture_http_errors, same_capability, assert_owned_text_callbacks
+from verify_backend_contract import capture_http_errors, same_capability, assert_owned_text_callbacks, result_values_openapi_checkpoint
 
 
 def environment(home):
@@ -224,7 +224,7 @@ class ApplicationContracts(unittest.TestCase):
                 for name in ('DEFAULT_CONFIG', 'MODEL_REGISTRY', 'AI_DEFAULT_MODELS'):
                     self.assertIsNot(getattr(a.values, name), getattr(b.values, name))
                 expected = json.loads((ROOT / 'tests/backend_contract/application.json').read_text())
-                self.assertEqual(a.app.openapi(), expected['openapi'])
+                self.assertEqual(result_values_openapi_checkpoint(a.app.openapi()), expected['openapi'])
                 self.assertEqual(capture_http_errors(a.app), expected['http_errors'])
                 self.assertEqual([hook.__name__ for hook in a.app.router.on_startup], expected['startup'])
                 self.assertEqual([hook.__name__ for hook in a.app.router.on_shutdown], expected['shutdown'])

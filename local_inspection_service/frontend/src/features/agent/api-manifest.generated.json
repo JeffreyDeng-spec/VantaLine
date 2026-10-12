@@ -914,6 +914,12 @@
               "type": "string",
               "maxLength": 8192
             },
+            "result_pass_value": {
+              "type": "number"
+            },
+            "result_fail_value": {
+              "type": "number"
+            },
             "output_control_point": {
               "type": "string",
               "maxLength": 8192
@@ -959,6 +965,8 @@
             "data_bits",
             "stop_bits",
             "result_register",
+            "result_pass_value",
+            "result_fail_value",
             "output_control_point",
             "capture_trigger_enabled",
             "capture_input_register",

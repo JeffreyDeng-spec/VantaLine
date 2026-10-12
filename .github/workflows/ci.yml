@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: storage_fixture
@@ -234,6 +234,9 @@ jobs:
         java-version: '17'
       if: ${{ needs.ci-mode.outputs.mode == 'full' }}
     - name: Build and inspect immutable embedded package
+      env:
+        VITE_RELEASE_ID: v2026.10.0
+        VITE_GIT_COMMIT: ${{ github.sha }}
       run: "(cd local_inspection_service/frontend && npm ci && npm run build:production-cutover)\npython scripts/build_doc_image_extractor.py\
         \ --output \"$RUNNER_TEMP/doc-image-bundle\"\npython scripts/build_release_artifact.py \\\n  --release v2026.10.0\
         \ --git-commit \"$(git rev-parse HEAD)\" \\\n  --built-at 2026-10-03T00:00:00Z \\\n  --doc-image-bundle \"$RUNNER_TEMP/doc-image-bundle\"\
@@ -386,7 +389,7 @@ jobs:
         - 11
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -395,7 +398,7 @@ jobs:
         - 5432:5432
         options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
       postgres_benchmark:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -562,7 +565,7 @@ jobs:
     runs-on: ubuntu-22.04
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -610,7 +613,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -655,7 +658,7 @@ jobs:
     timeout-minutes: 180
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci
@@ -664,7 +667,7 @@ jobs:
         - 5432:5432
         options: --health-cmd "pg_isready -U vantaline" --health-interval 5s --health-timeout 5s --health-retries 10
       postgres_benchmark:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+        image: docker.io/library/postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: vantaline
           POSTGRES_PASSWORD: vantaline_ci

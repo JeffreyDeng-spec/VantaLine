@@ -59,6 +59,8 @@ class PlcWebSerialConfigRequest(BaseModel):
     data_bits: StrictInt = 7
     stop_bits: StrictInt = 1
     result_register: StrictStr = "D206"
+    result_pass_value: StrictInt = Field(default=1, ge=0, le=65535)
+    result_fail_value: StrictInt = Field(default=0, ge=0, le=65535)
     output_control_point: StrictStr = ""
     capture_trigger_enabled: StrictBool = False
     capture_input_register: StrictStr = "D205"
