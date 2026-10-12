@@ -3347,3 +3347,9 @@ returned data-limit errors. Container version, storage budgets, isolated service
 roles and benchmark assertions are unchanged. The ordinary inspection fixture
 selects its model and locates image/video uploads by their named dropzone; it does
 not assume the first file input on the entire application belongs to inspection.
+
+
+The background-free inspection browser fixture moves its initial pointer out of
+the hover-expanding navigation rail and waits for the rail to collapse before
+clicking business actions. It retains Playwright's normal visibility and pointer
+interception checks; no forced click or product CSS override is used.

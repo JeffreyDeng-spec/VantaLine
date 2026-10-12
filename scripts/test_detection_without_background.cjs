@@ -43,6 +43,9 @@ vite.stderr.on('data', b => {if(!String(b).includes('[console.')) process.stderr
     });
     await page.goto(base+'/workspace/tasks/ai%3Afixture/inspect');
     try {await page.getByRole('button',{name:'开始 AI 检测',exact:true}).waitFor({timeout:10000});} catch(e) {console.error(page.url(),await page.locator('body').innerText());throw e;}
+    // Keep the starting pointer outside the hover-expanding navigation rail.
+    await page.mouse.move(1300,900);
+    await page.waitForFunction(()=>document.querySelector('.sidebar')?.getBoundingClientRect().width<100);
     // Allow model selection effects to settle; no missing-background check may run.
     await page.locator('select').filter({has:page.locator('option[value="ai_task_fixture"]')}).first().selectOption('ai_task_fixture');
     await page.getByRole('button',{name:/拖拽或选择.*图片/}).locator('input[type=file]').setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9N8AAAAASUVORK5CYII=','base64')});
