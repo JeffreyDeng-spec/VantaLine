@@ -201,3 +201,12 @@ New camera dispatches add trusted `owner_user_id` from the server-authorized lea
 ## Independent account record loading
 
 **Status: Authoritative.** PLC and business record tabs query their paginated read service independently of the general user-data snapshot. A snapshot error does not block record browsing. Historical business JSON that is null or not an object is omitted from the legacy metadata projection; the new list retains its native owner-scoped ID/time and marks missing structured metadata explicitly. Original rows and evidence are never rewritten or deleted. Source manifest v292 records this compatibility correction. Acceptance includes null/string/scalar legacy metadata and record browsing while the unrelated snapshot fails; the complete immutable release and existing zero-PLC-activity installer gates remain required.
+
+
+Workstation PLC result values are configurable through the existing local and
+administrator settings: strict `result_pass_value` / `result_fail_value` words
+(default 1/0, range 0–65535). The browser owns physical I/O and the backend binds
+the selected value into immutable camera plans. See plc-web-serial-v4.md for the
+current behavior and production-runbook.md for pre-feature rollback preparation.
+Historical factory/OpenAPI comparisons verify the exact additive fields before
+projecting to the unchanged baseline; product OpenAPI caches remain intact.

@@ -7,7 +7,7 @@ import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import { chromium } from 'playwright';
 const root = fileURLToPath(new URL('../', import.meta.url));
-const server = await createServer({ root, configFile: false, optimizeDeps: { include: ['react','react-dom/client','@tanstack/react-query'] }, server: { host: '127.0.0.1', port: 0 }, plugins: [react(), {
+const server = await createServer({ root, configFile: false, define: { __VANTALINE_RELEASE_IDENTITY__: JSON.stringify("VANTALINE_RELEASE:development:unknown") }, optimizeDeps: { include: ['react','react-dom/client','@tanstack/react-query'] }, server: { host: '127.0.0.1', port: 0 }, plugins: [react(), {
   name: 'plc-test-harness', enforce: 'pre',
   resolveId(id) { if(id.endsWith('/__plc_entry.tsx')) return id; },
   load(id) { if(id.endsWith('/__plc_entry.tsx')) return `

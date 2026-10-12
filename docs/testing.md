@@ -3331,3 +3331,10 @@ typecheck/build, release/boundary/docs contracts and diff check. The new exact
 source inverse verifies the accepted feature bytes before historical oracles;
 historical fixtures are not rewritten. All evidence uses synthetic ports and
 isolated storage, never a field PLC or customer records.
+
+
+PLC browser harnesses that bypass Vite configuration provide the same development
+release identity constant as the real dev build, so importing version-aware
+controls/controller does not bypass module construction. The background-free
+inspection fixture waits for its intended selected model before submission;
+option availability alone does not prove React selection effects have settled.

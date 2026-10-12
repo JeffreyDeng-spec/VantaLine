@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const server = await createServer({root,configFile:false,server:{host:'127.0.0.1',port:0},plugins:[{
+const server = await createServer({root,configFile:false,define:{__VANTALINE_RELEASE_IDENTITY__:JSON.stringify("VANTALINE_RELEASE:development:unknown")},server:{host:'127.0.0.1',port:0},plugins:[{
   name:'plc-values-test',
   resolveId(id) { if(id==='/__values.tsx') return id; },
   load(id) { if(id==='/__values.tsx') return `

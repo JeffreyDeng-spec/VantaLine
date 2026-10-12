@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
 const root=fileURLToPath(new URL('../',import.meta.url));
-const server=await createServer({root,configFile:false,server:{host:'127.0.0.1',port:0},plugins:[{
+const server=await createServer({root,configFile:false,define:{__VANTALINE_RELEASE_IDENTITY__:JSON.stringify("VANTALINE_RELEASE:development:unknown")},server:{host:'127.0.0.1',port:0},plugins:[{
   name:'modbus-harness',resolveId(id){if(id==='/__entry.ts')return id;},
   load(id){if(id==='/__entry.ts')return `import {PlcWebSerialClient} from '/src/features/plc/webSerialClient.ts';window.client=new PlcWebSerialClient();`;},
   configureServer(s){s.middlewares.use(async(req,res,next)=>{if(req.url!=='/__test')return next();res.setHeader('Content-Type','text/html');res.end(await s.transformIndexHtml(req.url,'<html><body><script type="module" src="/__entry.ts"></script></body></html>'));});}
