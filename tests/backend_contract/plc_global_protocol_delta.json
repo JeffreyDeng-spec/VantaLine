@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "parent": "b7f3c96137c08ed7326e2f86d0bc0c617aa00376",
+  "files": {
+    "local_inspection_service/plc_web_serial.py": {
+      "parent_sha256": "750f60449bb4be412db46bd1248afac00a148114bca16dd225eed8425ecb7118",
+      "current_sha256": "693b14775dd8e96e7441e9d0b568d6aae2c4ac32f4d07f3814fa656542d14648",
+      "regions": [
+        {
+          "start": 441,
+          "end": 447,
+          "expected": "    if normalized[\"protocol\"] == PROTOCOL:\n        alternate = {**normalized, \"profile_id\": WEB_SERIAL_PROFILE_ID, \"protocol\": PROTOCOL_ID,\n                     \"checksum_mode\": CHECKSUM_INCLUDE_ETX, \"baudrate\": 9600, \"data_bits\": 7,\n                     \"capture_trigger_enabled\": False, \"output_control_point\": \"\"}\n        suffix = \"_fx\"\n    else:\n",
+          "original": "    if normalized[\"protocol\"] != PROTOCOL and not normalized[\"output_control_point\"]:\n"
+        },
+        {
+          "start": 449,
+          "end": 452,
+          "expected": "                     \"capture_trigger_enabled\": False, \"output_control_point\": \"\"}\n        suffix = \"_rtu\"\n    primary[\"alternatives\"] = [_connection_candidate(lease, alternate, check_id + suffix)]\n",
+          "original": "                     \"capture_trigger_enabled\": False}\n        primary[\"alternatives\"] = [_connection_candidate(lease, alternate, check_id + \"_rtu\")]\n"
+        }
+      ]
+    },
+    "local_inspection_service/plc/lease_acquisition.py": {
+      "parent_sha256": "7d35eee32e6b3ac1f7ae0442ee87a651d0e1f4fb7c004bc5e28f88b1c11d7a1a",
+      "current_sha256": "a5e593fb689619fbd4463c104edd8acfd84c1ae72178741fe8b92bb86f7b1785",
+      "regions": [
+        {
+          "start": 83,
+          "end": 87,
+          "expected": "                station[\"previous_serial_profile\"] = {\n                    \"config\": station.get(\"config\"), \"config_generation\": station[\"config_generation\"],\n                    \"changed_at\": now,\n                }\n",
+          "original": ""
+        }
+      ]
+    }
+  }
+}

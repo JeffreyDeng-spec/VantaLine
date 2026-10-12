@@ -936,3 +936,7 @@ The user-data workbench reuses current PostgreSQL tables and adds no schema migr
 Account deletion removes identity/sessions and pauses new work, preserving business records. Ownership reassignment and permanent cleanup of orphaned data remain separate operations and are not implemented by this workbench. Restore of an archived resource does not revive an account or restart training.
 
 Legacy sample reads reuse their existing owner-scoped optimization storage without public-status hydration; no migration or new authoritative store is introduced. Frozen real-photo datasets and candidate versions share the administrator resource list, while their immutable history remains visible after archive.
+
+## Protocol-switch metadata
+
+`previous_serial_profile` is additive workstation raw_json metadata, written inside the existing station/lease mutation transaction. They require no column/table migration. The prior config includes protocol and output point for authorized restoration; do not bulk reset or reinterpret it. The metadata does not contain frame payloads, credentials or asserted physical-write results. Old releases ignore the added metadata and may lack reverse recognition; restore complete immutable releases only.

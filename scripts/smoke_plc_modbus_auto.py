@@ -43,8 +43,14 @@ class ModbusContract(unittest.TestCase):
         self.assertEqual(frames[0]["expected_response_hex"],frames[0]["frame_hex"])
         self.assertEqual(build_web_serial_capture_read_plan(self.config,2)["expected_response_bytes"],7)
         self.assertEqual(web_serial_resolved_addresses(self.config)["result_register"],"00CE")
-        self.assertFalse(build_connection_check(self.lease,self.config,"check").get("alternatives"))
-        self.assertFalse(build_connection_check(self.lease,{**self.fx,"output_control_point":"Y04"},"check").get("alternatives"))
+        reverse=build_connection_check(self.lease,self.config,"check")["alternatives"][0]
+        self.assertEqual(reverse["config"]["protocol"],"fx_programming_port_ascii")
+        self.assertEqual(reverse["serial_options"]["dataBits"],7)
+        with_y={**self.fx,"output_control_point":"Y04"}
+        alternate=build_connection_check(self.lease,with_y,"check")["alternatives"][0]
+        self.assertEqual(with_y["output_control_point"],"Y04")
+        self.assertEqual(alternate["config"]["output_control_point"],"")
+        self.assertFalse(alternate["config"]["capture_trigger_enabled"])
     def test_read_rejects_noise_wrong_unit_exception_crc(self):
         for response in (frame(bytes.fromhex("0203020000")),frame(bytes.fromhex("018302")),frame(bytes.fromhex("0103020000"))+b"x",bytes.fromhex("01030200000000")):
             with self.assertRaises(PlcConfigError): parse_word(response)
@@ -73,7 +79,9 @@ class ModbusContract(unittest.TestCase):
         station=record(state["station"])
         self.assertEqual(station["config"]["protocol"],PROTOCOL)
         self.assertFalse(station["profile_verified"])
+        self.assertEqual(station["previous_serial_profile"]["config"],self.fx)
         self.assertFalse(station["config"]["capture_trigger_enabled"])
+        self.assertEqual(station["config"]["output_control_point"],"")
         self.assertEqual(station["config_generation"],2)
         self.assertEqual(result["config_generation"],2)
         self.assertTrue(result["communication_verified"])
@@ -127,5 +135,26 @@ class ModbusContract(unittest.TestCase):
         added=root/"local_inspection_service/plc_modbus_rtu.py"
         with patch.object(Path,"read_bytes",lambda p: original(p)+b"\n# mutation" if p==added else original(p)):
             with self.assertRaisesRegex(AssertionError,"adapter changed"): checked_fixture()
+
+    def test_global_contract_preserves_immutable_312_and_rejects_unknown(self):
+        from plc_global_protocol_source_contract import checked_global_fixture,global_parent_bytes
+        import hashlib
+        root=Path(__file__).resolve().parents[1]
+        for path,change in checked_global_fixture()["files"].items():
+            current=(root/path).read_bytes()
+            self.assertEqual(hashlib.sha256(global_parent_bytes(path,current)).hexdigest(),change["parent_sha256"])
+            with self.assertRaises(AssertionError):global_parent_bytes(path,current+b"\n# unknown edit\n")
+
+    def test_configured_y_is_preserved_before_safe_rtu_selection(self):
+        self.fx["output_control_point"]="Y04"
+        self.lease["connection_check"]=build_connection_check(self.lease,self.fx,"check")
+        self.test_actual_activation_persists_fenced_profile()
+
+    def test_reverse_read_verification(self):
+        check=build_connection_check(self.lease,self.config,"check")
+        self.lease["connection_check"]=check
+        alt=check["alternatives"][0]
+        reads=[dict(target=f["target"],response_hex="0230303030034333") for f in alt["frames"]]
+        self.assertEqual(validate_connection_check(self.lease,alt["id"],reads,100)["protocol"],"fx_programming_port_ascii")
 
 if __name__=="__main__": unittest.main()
