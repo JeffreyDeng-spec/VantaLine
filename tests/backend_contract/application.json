@@ -1621,6 +1621,118 @@
           "title": "CancelOperation",
           "type": "object"
         },
+        "DataOperation": {
+          "properties": {
+            "action": {
+              "enum": [
+                "pause",
+                "resume",
+                "params",
+                "archive",
+                "restore",
+                "image_usage"
+              ],
+              "title": "Action",
+              "type": "string"
+            },
+            "enabled": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enabled"
+            },
+            "epochs": {
+              "anyOf": [
+                {
+                  "maximum": 500.0,
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Epochs"
+            },
+            "image_size": {
+              "anyOf": [
+                {
+                  "maximum": 1280.0,
+                  "minimum": 320.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Image Size"
+            },
+            "kind": {
+              "enum": [
+                "pipeline",
+                "training",
+                "dataset",
+                "model",
+                "real_photo",
+                "sample",
+                "reference",
+                "legacy"
+              ],
+              "title": "Kind",
+              "type": "string"
+            },
+            "reason": {
+              "maxLength": 300,
+              "minLength": 1,
+              "title": "Reason",
+              "type": "string"
+            },
+            "resource_id": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Resource Id",
+              "type": "string"
+            },
+            "sample_count": {
+              "anyOf": [
+                {
+                  "maximum": 20000.0,
+                  "minimum": 50.0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Count"
+            },
+            "task_id": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "resource_id",
+            "reason"
+          ],
+          "title": "DataOperation",
+          "type": "object"
+        },
         "Edit": {
           "properties": {
             "operation": {
@@ -3348,6 +3460,18 @@
               "title": "Permissions",
               "type": "array"
             },
+            "reason": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
+            },
             "role": {
               "default": "user",
               "title": "Role",
@@ -3382,6 +3506,18 @@
                 }
               ],
               "title": "Password"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
             },
             "revoke_sessions": {
               "default": true,
@@ -3440,6 +3576,18 @@
                 }
               ],
               "title": "Permissions"
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason"
             },
             "role": {
               "anyOf": [
@@ -6108,6 +6256,467 @@
           "summary": "Create User"
         }
       },
+      "/api/auth/users-data-summary": {
+        "get": {
+          "operationId": "summary_api_auth_users_data_summary_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Summary"
+        }
+      },
+      "/api/auth/users/{owner}/data": {
+        "get": {
+          "operationId": "data_api_auth_users__owner__data_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Data"
+        }
+      },
+      "/api/auth/users/{owner}/data/operations": {
+        "post": {
+          "operationId": "operate_api_auth_users__owner__data_operations_post",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            }
+          ],
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataOperation"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Operate"
+        }
+      },
+      "/api/auth/users/{owner}/data/references/{resource}/image": {
+        "get": {
+          "operationId": "reference_image_api_auth_users__owner__data_references__resource__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "resource",
+              "required": true,
+              "schema": {
+                "title": "Resource",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Reference Image"
+        }
+      },
+      "/api/auth/users/{owner}/data/tasks/{task_id}/legacy-samples": {
+        "get": {
+          "operationId": "legacy_samples_api_auth_users__owner__data_tasks__task_id__legacy_samples_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Legacy Samples"
+        }
+      },
+      "/api/auth/users/{owner}/data/tasks/{task_id}/legacy-samples/{sample_id}/image": {
+        "get": {
+          "operationId": "legacy_image_api_auth_users__owner__data_tasks__task_id__legacy_samples__sample_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Legacy Image"
+        }
+      },
+      "/api/auth/users/{owner}/data/tasks/{task_id}/samples": {
+        "get": {
+          "operationId": "samples_api_auth_users__owner__data_tasks__task_id__samples_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Samples"
+        }
+      },
+      "/api/auth/users/{owner}/data/tasks/{task_id}/samples/{sample_id}/image": {
+        "get": {
+          "operationId": "image_api_auth_users__owner__data_tasks__task_id__samples__sample_id__image_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Image"
+        }
+      },
+      "/api/auth/users/{owner}/data/tasks/{task_id}/samples/{sample_id}/versions": {
+        "get": {
+          "operationId": "versions_api_auth_users__owner__data_tasks__task_id__samples__sample_id__versions_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "owner",
+              "required": true,
+              "schema": {
+                "title": "Owner",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "path",
+              "name": "sample_id",
+              "required": true,
+              "schema": {
+                "title": "Sample Id",
+                "type": "string"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Versions"
+        }
+      },
       "/api/auth/users/{user_id}": {
         "delete": {
           "operationId": "delete_user_api_auth_users__user_id__delete",
@@ -6118,6 +6727,17 @@
               "required": true,
               "schema": {
                 "title": "User Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "reason",
+              "required": false,
+              "schema": {
+                "default": "管理员确认删除账号",
+                "maxLength": 300,
+                "title": "Reason",
                 "type": "string"
               }
             }
@@ -17460,6 +18080,150 @@
       "permission": {
         "POST": [
           "ai_config"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "summary",
+      "path": "/api/auth/users-data-summary",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "data",
+      "path": "/api/auth/users/{owner}/data",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "operate",
+      "path": "/api/auth/users/{owner}/data/operations",
+      "permission": {
+        "POST": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "legacy_samples",
+      "path": "/api/auth/users/{owner}/data/tasks/{task_id}/legacy-samples",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "legacy_image",
+      "path": "/api/auth/users/{owner}/data/tasks/{task_id}/legacy-samples/{sample_id}/image",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "reference_image",
+      "path": "/api/auth/users/{owner}/data/references/{resource}/image",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "samples",
+      "path": "/api/auth/users/{owner}/data/tasks/{task_id}/samples",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "image",
+      "path": "/api/auth/users/{owner}/data/tasks/{task_id}/samples/{sample_id}/image",
+      "permission": {
+        "GET": [
+          "user_management"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "versions",
+      "path": "/api/auth/users/{owner}/data/tasks/{task_id}/samples/{sample_id}/versions",
+      "permission": {
+        "GET": [
+          "user_management"
         ]
       },
       "response_model_exclude_unset": false,

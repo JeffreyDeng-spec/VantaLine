@@ -454,3 +454,7 @@ Operator PLC self-pair and self-config are explicit controller exceptions in the
 **Status: Authoritative**
 
 The retired empty-background workbench workflow exposes neither detection_save_environment nor the upload_ai_task_environment_background API adapter. Detection Agent actions continue through the same image/video/camera methods; their model, busy, permission and PLC gates remain unchanged.
+
+## User administration workbench
+
+The current account API adapters retain Admin-only authorization and include optional bounded operation reasons. Deletion reasons are query metadata; neither password entry nor generated temporary secrets are exposed to Agent tools. Secure create/reset actions still prepare native UI forms for human input. User-data operations are explicit administrator HTTP routes and manual UI confirmations; selection does not impersonate the target owner or grant that user additional permissions.

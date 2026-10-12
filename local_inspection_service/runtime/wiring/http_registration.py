@@ -1065,6 +1065,83 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
 
     ports._model_profile_configuration().register(app, ProfileApiDependencies(require_admin=lambda: ports.require_admin_role()(), cost_from_usage=lambda model, usage: api_cost_from_usage(model, usage), cursor_api_url=lambda base, path: cursor_api_url(base, path), cursor_auth_headers=lambda key: cursor_auth_headers(key), model_options_from_items=lambda items, **kwargs: agent_model_options_from_items(items, **kwargs), codex_compare_model=lambda: environment.get('VANTALINE_CODEX_COMPARE_MODEL', '')))
 
+    from local_inspection_service.auth.data_workbench import WorkbenchPorts, UserDataWorkbench, register as register_user_data
+    from local_inspection_service.training.resource_queries import TrainingResources, ResourceRecords
+
+    def readonly_training_records():
+        repo = runtime_postgres_repository_or_none()
+        if repo is None:
+            raise HTTPException(503, '用户数据管理需要 PostgreSQL')
+        return [row['raw_json'] for row in repo.fetch_all('training_tasks')]
+
+    def readonly_resources(**options):
+        source = ports._training_resources()
+        records = ResourceRecords(
+            tasks=lambda **scope: [t for t in readonly_training_records()
+                if t.get('owner_user_id') == scope.get('target_user_id')],
+            models=source.records.models, ai=source.records.ai)
+        reader = TrainingResources(source.datasets, records, source.config, source.access,
+                                   source.resolve, source.output, files=source.files)
+        return reader.training_resources_payload(**options)
+
+    def readonly_business_records(owner):
+        result = {}
+        repo = runtime_postgres_repository_or_none()
+        if repo is None:
+            return result
+        for table in ('text_inspection_standards', 'text_inspection_records', 'incoming_text_inspections', 'data_analysis_records', 'accessories', 'label_inspection_objects', 'codex_comparison_tasks'):
+            c = repo._cursor()
+            try:
+                c.execute(f'SELECT raw_json FROM {repo._qualified_table(table)} WHERE owner_user_id=%s', (owner,))
+                result[table] = [{key: record[key] for key in
+                    ('id', 'record_id', 'name', 'title', 'display_name', 'status', 'decision', 'created_at', 'updated_at', 'passed', 'standard_id') if key in record}
+                    for row in c.fetchall() for record in [repo._row_to_dict(c, row)['raw_json']]]
+                repo._end_read_transaction()
+            finally:
+                c.close()
+        return result
+
+    user_data = UserDataWorkbench(WorkbenchPorts(
+        admin=ports._access_control().require_admin_role,
+        auth_load=ports._authentication_http().services.repository.load_auth_store,
+        auth_save_user=ports._authentication_http().services.repository.save_auth_user,
+        repository=runtime_postgres_repository_or_none,
+        config=load_config, accessory_save=ports._accessory_files().store.save_item, pipelines=ports._pipeline_tasks().load_pipeline_tasks,
+        pipeline_save=ports._pipeline_tasks().save_pipeline_task,
+        pipeline_update=ports._pipeline_tasks().updater.update,
+        pipeline_pause=ports._pipeline_tasks().control.cancel,
+        training_records=readonly_training_records, resources=readonly_resources,
+        feedback=lambda: ports._real_photo_workflows().feedback, business_records=readonly_business_records,
+        operation_lock=lambda: ports._authentication_http().services.write_lock,
+        legacy_update=ports._auto_optimization_requests().update_ai_task_auto_optimize_status,
+    ))
+    register_user_data(app, user_data)
+
+    def pause_account_data(owner):
+        # Execute with the actual administrator identity, never impersonate the owner.
+        _, target = user_data.target(owner)
+        for task in ports._pipeline_tasks().load_pipeline_tasks():
+            if task.get('owner_user_id') == owner:
+                ports._pipeline_tasks().control.cancel(task['id'])
+        for task in ports._real_photo_workflows().feedback.ports.tasks():
+            if task.get('owner_user_id') == owner:
+                state = ports._real_photo_workflows().feedback.ports.legacy_state(task['id'])
+                if state.get('owner_user_id') == owner and state.get('settings', {}).get('enabled'):
+                    ports._auto_optimization_requests().update_ai_task_auto_optimize_status(task['id'], AutoOptimizeSettingsRequest(enabled=False))
+        if runtime_postgres_repository_or_none() is None:
+            return  # Legacy JSON accounts have no real-photo queue.
+        feedback = user_data.feedback(target)
+        with feedback.repo() as repo:
+            states = repo.states({owner})
+            for state in states:
+                if state.get('enabled'):
+                    repo.enable(owner, state['task_id'], state['classes'], state['profiles'], False)
+    ports._authentication_http().services.users.on_disable = pause_account_data
+    def audit_account(*args, **kwargs):
+        if runtime_postgres_repository_or_none() is not None:
+            return user_data.audit(*args, **kwargs)
+    ports._authentication_http().services.users.on_audit = audit_account
+
     register_spa(app, ports._web_shell())
 
     @app.on_event('startup')

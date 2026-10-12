@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from collections.abc import Callable
 from typing import Any
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, Query
 from .flows import AuthFlows
 from .sessions import SessionService
 from .users import UserService
@@ -80,7 +80,7 @@ def register_user_api(app: FastAPI, sessions: SessionService, users: UserService
         return users.reset_user_password(user_id, payload, request.cookies.get(sessions.settings().cookie, ""))
 
     @app.delete("/api/auth/users/{user_id}")
-    def delete_user(user_id: str) -> dict[str, Any]:
-        return users.delete_user(user_id)
+    def delete_user(user_id: str, reason: str = Query(default="管理员确认删除账号", max_length=300)) -> dict[str, Any]:
+        return users.delete_user(user_id, reason=reason)
 
     return UserRoutes(list_users, create_user, update_user, reset_user_password, delete_user)

@@ -130,7 +130,7 @@ def reason(value):
 
 def approved(state):
     classes = state['classes']
-    return [s for s in state['samples'] if source_confirmed(s) and s.get('annotation', {}).get('status') == 'completed'
+    return [s for s in state['samples'] if s.get('usage_enabled', True) and source_confirmed(s) and s.get('annotation', {}).get('status') == 'completed'
             and s.get('review', {}).get('key') == review_key(s, classes)
             and s['review'].get('decision') in {'accept_positive', 'accept_negative'}]
 

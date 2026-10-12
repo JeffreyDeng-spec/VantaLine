@@ -187,24 +187,25 @@ class AuthApiContracts(unittest.TestCase):
         users = UserService(repository, accounts, access, lambda: True, outer_lock)
         with identity.bind(admin):
             users.update_user("admin", UserUpdateRequest(password=PASSWORD), "current-cookie")
-            self.assertEqual(calls, [("revoke", "admin", "current-cookie"), ("save", "admin")])
+            self.assertEqual(calls, [("lock", "enter"), ("revoke", "admin", "current-cookie"), ("save", "admin"), ("lock", "exit")])
             calls.clear()
             users.update_user("other", UserUpdateRequest(password=PASSWORD), "actor-cookie")
-            self.assertEqual(calls, [("revoke", "other", ""), ("save", "other")])
+            self.assertEqual(calls, [("lock", "enter"), ("revoke", "other", ""), ("save", "other"), ("lock", "exit")])
             calls.clear()
             users.reset_user_password("other", UserPasswordResetRequest(password=PASSWORD, revoke_sessions=False), "actor-cookie")
-            self.assertEqual(calls, [("save", "other")])
+            self.assertEqual(calls, [("lock", "enter"), ("save", "other"), ("lock", "exit")])
             calls.clear()
             users.reset_user_password("admin", UserPasswordResetRequest(password=PASSWORD, revoke_sessions=True), "current-cookie")
-            self.assertEqual(calls, [("revoke", "admin", "current-cookie"), ("save", "admin")])
+            self.assertEqual(calls, [("lock", "enter"), ("revoke", "admin", "current-cookie"), ("save", "admin"), ("lock", "exit")])
             calls.clear()
             with self.assertRaises(HTTPException) as rejected, patch("local_inspection_service.auth.users.generate_temporary_password", side_effect=AssertionError("must reject before generation")):
                 users.reset_user_password("admin", UserPasswordResetRequest(generate=True), "current-cookie")
             self.assertEqual(rejected.exception.status_code, 400)
-            self.assertEqual(calls, [])
+            self.assertEqual(calls, [("lock", "enter"), ("lock", "exit")])
+            calls.clear()
             with self.assertRaises(RuntimeError):
                 users.delete_user("other")
-            self.assertEqual(calls, [("lock", "enter"), ("revoke", "other", ""), ("delete", "other"), ("lock", "exit")])
+            self.assertEqual(calls, [("lock", "enter"), ("lock", "enter"), ("revoke", "other", ""), ("delete", "other"), ("lock", "exit"), ("lock", "exit")])
         def acquire():
             got = lock.acquire(timeout=2)
             if got:

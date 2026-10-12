@@ -4,6 +4,7 @@ Older domain contracts retain their complete original assembly assertions. The
 new graph must match its fixed AST before any delta is reversed; unrelated or
 unknown changes cannot be hidden by the replay.
 """
+from admin_user_data_source_contract import checkpoint_bytes
 import ast
 from functools import lru_cache
 import hashlib
@@ -86,7 +87,8 @@ def _restore_delta_cached(source, fixture_json):
 def reviewed_business_bytes(path):
     """Reverse only the reviewed quota-removal delta for historical source oracles."""
     from plc_modbus_source_contract import restore_modbus_business
-    actual = restore_modbus_business(path, (ROOT / path).read_bytes().replace(b"\r\n", b"\n"))
+    actual = checkpoint_bytes(path, (ROOT / path).read_bytes().replace(b"\r\n", b"\n"))
+    actual = restore_modbus_business(path, actual)
     raw = (ROOT / "tests/backend_contract/production_quota_removal_delta.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "0cb0e3da54b1872ad52915452becb1295c147c48c6e7d1f0213c6f2a86312eb8", "Unreviewed quota-removal fixture"
     fixture = json.loads(raw)

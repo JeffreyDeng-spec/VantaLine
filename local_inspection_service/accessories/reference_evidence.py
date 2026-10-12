@@ -63,8 +63,11 @@ class ReferenceEvidence:
 
     def ai_profile_reference_paths(self, item: dict[str, Any]) -> list[Path]:
         paths: list[Path] = []
+        blocked = {str(self._paths.resolve()(p)) for p in item.get("disabled_ai_profile_reference_files", []) or []}
         for path_str in item.get("ai_profile_reference_files", []) or []:
             path = self._paths.resolve()(path_str)
+            if str(path) in blocked:
+                continue
             if self.files.exists(path) and path.suffix.lower() in self._policy.suffixes():
                 paths.append(path)
         unique = []

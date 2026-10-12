@@ -3804,6 +3804,14 @@
         "payload": {
           "type": "object",
           "properties": {
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 8192
+                }
+              ]
+            },
             "display_name": {
               "anyOf": [
                 {
@@ -3876,6 +3884,14 @@
         "userId": {
           "type": "string",
           "maxLength": 8192
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 8192
+            }
+          ]
         }
       },
       "required": [

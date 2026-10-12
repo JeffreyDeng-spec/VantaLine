@@ -68,7 +68,9 @@ jobs:
 
         python -m pytest -q tests/test_real_photo_feedback.py tests/test_real_photo_workflow.py tests/test_training_review_tools.py
         tests/test_real_photo_dataset.py tests/test_real_photo_dispatch.py tests/test_real_photo_training_config.py tests/test_real_photo_provenance.py
-        tests/test_real_photo_cache.py
+        tests/test_real_photo_cache.py tests/test_real_photo_pagination.py tests/test_admin_user_data.py
+
+        python scripts/smoke_admin_user_data.py
 
         '
     - name: Verify Linux kernel capacity and cross-user cache leases
@@ -307,6 +309,18 @@ jobs:
         NAVIGATION_UI_OUTPUT: ${{ runner.temp }}/navigation-ui
       run: npm run test:navigation && node ../../scripts/test_label_workspace_ui.cjs && node ../../scripts/test_settings_ui.cjs
       if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Verify administrator user-management interactions
+      env:
+        ADMIN_UI_OUTPUT: ${{ runner.temp }}/admin-user-ui
+      run: node ../../scripts/test_admin_user_ui.cjs
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (true) }}
+    - name: Upload administrator UI evidence
+      if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: admin-user-ui
+        path: ${{ runner.temp }}/admin-user-ui
+        if-no-files-found: ignore
     - name: Upload navigation evidence
       if: ${{ needs.ci-mode.outputs.mode == 'full' && (always()) }}
       uses: actions/upload-artifact@v4
@@ -437,6 +451,11 @@ jobs:
         python scripts/smoke_ci_chain_timing.py
 
         '
+    - name: Verify actual administrator PostgreSQL application
+      if: ${{ matrix.shard == 0 }}
+      env:
+        ADMIN_USER_TEST_DATABASE_URL: ${{ env.VANTALINE_POSTGRES_DSN }}
+      run: python scripts/smoke_admin_user_application.py
     - name: Run isolated backend shard
       env:
         BACKEND_RESULT_DIR: ${{ runner.temp }}/backend-results
