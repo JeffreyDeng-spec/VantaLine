@@ -1,3 +1,4 @@
+import { AccountRecords } from "./AccountRecords";
 import { FormEvent, useState } from "react";
 import {
   useInfiniteQuery,
@@ -141,6 +142,7 @@ export function UserDataWorkbench({
     [photoId, setPhotoId] = useState("");
   async function refresh() {
     await qc.invalidateQueries({ queryKey: ["admin-user-data", owner] });
+    await qc.invalidateQueries({ queryKey: ["admin-account-records", owner] });
     await qc.invalidateQueries({ queryKey: ["admin-samples", owner] });
     await qc.invalidateQueries({ queryKey: ["admin-sample-versions", owner] });
     await qc.invalidateQueries({ queryKey: ["admin-user-counts"] });
@@ -590,63 +592,9 @@ export function UserDataWorkbench({
           </p>
         </>
       )}
+      {(tab === "plc" || tab === "business") && <AccountRecords owner={owner} mode={tab} key={tab} />}
       {tab === "audit" && (
         <>
-          <section className="panel page-panel">
-            <h3>检测记录与业务证据</h3>
-            <p className="hint-line">
-              原始结果只读，纠错须追加复核证据。不会覆盖检测结果。
-            </p>
-            {Object.entries(data.business || {})
-              .filter(([k]) => k !== "accessories")
-              .map(([kind, records]) => (
-                <details key={kind}>
-                  <summary>
-                    {{
-                      text_inspection_standards: "文字标准 / 订单",
-                      text_inspection_records: "文字检测记录",
-                      incoming_text_inspections: "历史包材检测",
-                      data_analysis_records: "检测分析记录",
-                      label_inspection_objects: "标签检测与准备记录",
-                      codex_comparison_tasks: "文字对比任务",
-                    }[kind] || kind}{" "}
-                    · {records.length} 条
-                  </summary>
-                  <div className="admin-table-wrap">
-                    <table>
-                      <tbody>
-                        {records.map((r, i) => (
-                          <tr key={i}>
-                            <td>
-                              {String(
-                                r.name ||
-                                  r.title ||
-                                  r.display_name ||
-                                  r.id ||
-                                  r.record_id ||
-                                  "历史记录",
-                              )}
-                            </td>
-                            <td>
-                              {statusLabel(
-                                String(r.decision || r.status || ""),
-                              )}
-                            </td>
-                            <td>
-                              {r.created_at
-                                ? new Date(
-                                    Number(r.created_at) * 1000,
-                                  ).toLocaleString()
-                                : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              ))}
-          </section>
           <section className="panel page-panel">
             <h3>管理员操作记录 · 最近 50 条</h3>
             <p className="hint-line">

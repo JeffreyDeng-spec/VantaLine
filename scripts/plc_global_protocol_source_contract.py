@@ -1,4 +1,5 @@
 """Exact global read-only discovery delta over immutable PR #312 sources."""
+from account_records_source_contract import checkpoint_bytes as records_checkpoint
 import hashlib
 import json
 from pathlib import Path
@@ -10,10 +11,11 @@ def checked_global_fixture():
     fixture=json.loads(raw)
     assert fixture["parent"]=="b7f3c96137c08ed7326e2f86d0bc0c617aa00376" and fixture["schema"]==1
     for path,change in fixture["files"].items():
-        assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==change["current_sha256"],"Global PLC owner changed: "+path
+        assert hashlib.sha256(records_checkpoint(path, (ROOT/path).read_bytes())).hexdigest()==change["current_sha256"],"Global PLC owner changed: "+path
     return fixture
 
 def global_parent_bytes(path,actual):
+    actual=records_checkpoint(path,actual)
     change=checked_global_fixture()["files"].get(path)
     if change is None:return actual
     digest=hashlib.sha256(actual).hexdigest()

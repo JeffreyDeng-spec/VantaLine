@@ -55,7 +55,7 @@ class BrowserDispatchContracts(unittest.TestCase):
         self.api = load_target()
         self.calls = []
         self.state = {"station": {"id": "station", "config_generation": 3, "config": dict(protocol.DEFAULT_WEB_SERIAL_CONFIG)},
-                      "lease": {"session_id": "session", "lease_epoch": 7, "expires_at": 130, "model_id": "model", "state": "active"},
+                      "lease": {"owner_user_id": "fixture-owner", "session_id": "session", "lease_epoch": 7, "expires_at": 130, "model_id": "model", "state": "active"},
                       "clock": {"now": 100}, "dispatch": None}
         def mutate(station_id, dispatch_id, callback):
             self.calls.append((station_id, dispatch_id))
@@ -104,6 +104,8 @@ class BrowserDispatchContracts(unittest.TestCase):
         self.assertTrue(created)
         expected = "plcweb_" + hashlib.sha256(b"station:request-001").hexdigest()[:32]
         self.assertEqual(record["dispatch_id"], expected)
+        if not BASELINE:
+            self.assertEqual(record["owner_user_id"], "fixture-owner")
         self.assertEqual(self.state["lease"]["in_flight_deadline_at"], 130)
         replay, created = self.begin()
         self.assertFalse(created)

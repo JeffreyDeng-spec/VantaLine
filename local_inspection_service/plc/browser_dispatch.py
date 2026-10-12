@@ -54,6 +54,7 @@ class PlcBrowserDispatchService:
             config_snapshot = self.policy.migrate_web_serial_config()(station.get("config") or {})
             record = {
                 "dispatch_id": dispatch_id,
+                "owner_user_id": str(lease["owner_user_id"]),
                 "protocol_version": self.policy.WEB_SERIAL_PROTOCOL_VERSION(),
                 "station_id": station_id,
                 "detection_request_id": clean_request_id,
