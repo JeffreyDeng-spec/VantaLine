@@ -1,0 +1,106 @@
+/* Ordinary inspection workspace only; fullscreen selectors and components are unchanged. */
+.app-shell:has(> .workspace > .detection-single-screen) { height: 100dvh; min-height: 0; grid-template-columns: 64px minmax(0, 1fr); overflow: hidden; }
+.app-shell:has(> .workspace > .detection-single-screen) > .workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: 10px 18px; overflow: hidden; gap: 8px; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar { width: 64px; padding: 14px 8px; z-index: 30; background: #192330; box-shadow: none; transition: width .15s; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:is(:hover, :focus-within) { position: fixed; inset: 0 auto 0 0; width: 240px; box-shadow: 10px 0 24px #14203425; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .brand-copy,
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .nav-item > span,
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .account-card > div,
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .sidebar-create-task-button { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .nav-chevron,
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .pinned-task-group { display: none; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .nav-item { justify-content: center; padding: 10px; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .brand-block { padding: 0 0 12px; justify-content: center; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar .account-card { min-width: 0; padding: 7px 3px; }
+.app-shell:has(> .workspace > .detection-single-screen) .top-scope-bar { flex: 0 0 auto; margin: 0; max-width: none; font-size: 12px; }
+.view.active.detection-single-screen { flex: 1; min-height: 0; max-width: none; width: 100%; display: grid !important; grid-template-rows: 44px 38px minmax(0, 1fr) 124px; gap: 8px; overflow: hidden; align-items: stretch; }
+.view.active.detection-single-screen.normal-source-camera { grid-template-rows: 44px 38px 32px minmax(0, 1fr) 124px; }
+.detection-single-screen > .page-head { min-height: 0; margin: 0; padding: 0; align-items: center; gap: 10px; }
+.detection-single-screen > .page-head h2 { margin: 0; font-size: 18px; line-height: 1.3; }
+.detection-single-screen > .page-head .page-desc { display: none; }
+.detection-single-screen > .page-head .page-head-actions { gap: 8px; flex-wrap: nowrap; }
+.detection-single-screen > .page-head .normal-fullscreen-guide { background: #087f83; color: white; border: 1px solid #087f83; border-radius: 7px; min-height: 34px; padding: 6px 15px; font-size: 13px; }
+.detection-single-screen > .page-head .normal-fullscreen-guide:hover { background: #06666a; }
+.detection-single-screen > .detection-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; min-height: 0; gap: 10px; }
+.normal-task-context { display: flex; align-items: center; gap: 14px; min-width: 0; color: var(--text-2); font-size: 12px; }
+.normal-task-context > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detection-single-screen > .detection-toolbar .task-bound-model-field { display: flex; align-items: center; gap: 8px; padding: 0; min-height: 0; background: none; border: 0; margin-left: auto; }
+.detection-single-screen > .detection-toolbar select { width: min(250px, 22vw); min-height: 30px; height: 30px; padding: 3px 8px; font-size: 12px; }
+.detection-single-screen > .detection-toolbar .toolbar-field-label { white-space: nowrap; }
+.normal-plc-row { position: relative; min-width: 0; }
+.normal-plc-row .plc-status-slot { position: static; margin: 0; }
+.normal-plc-row .plc-connection-bar { min-height: 32px; padding-block: 2px; padding-right: 90px; }
+.normal-plc-row .normal-plc-detail-button { position: absolute; right: 7px; top: 3px; min-height: 26px; padding: 2px 8px; background: transparent; color: white; border: 1px solid #ffffff45; border-radius: 3px; font-size: 12px; }
+.detection-single-screen > .inspect-grid { min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.detection-single-screen > .inspect-grid > .panel { min-width: 0; min-height: 0; padding: 0; margin: 0; overflow: hidden; border-radius: 9px; display: flex; flex-direction: column; }
+.normal-input-toolbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; min-height: 40px; border-bottom: 1px solid var(--border); }
+.normal-input-toolbar .tabbar { margin: 0; padding: 0; border: 0; gap: 3px; min-width: 0; }
+.normal-input-toolbar .mode-tab { padding: 4px 8px; min-height: 28px; font-size: 12px; }
+.normal-camera-selector { padding: 0; min-height: 0; }
+.normal-camera-selector select { width: min(180px, 15vw); height: 28px; min-height: 28px; padding: 2px 6px; font-size: 12px; }
+.normal-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.detection-single-screen > .inspect-grid .input-panel > .tabpane { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0; }
+.detection-single-screen > .inspect-grid .camera-preview { flex: 1; min-height: 0; overflow: hidden; background: #0b1118; }
+.detection-single-screen > .inspect-grid .camera-preview video { position: absolute; inset: 0; height: 100%; width: 100%; min-height: 0; max-height: none; object-fit: contain; }
+.detection-single-screen > .inspect-grid .camera-actions { flex: 0 0 auto; margin: 0; padding: 6px 10px; min-height: 40px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; border-top: 1px solid var(--border); }
+.detection-single-screen > .inspect-grid .camera-actions button { min-height: 28px; padding: 5px 8px; font-size: 12px; }
+.normal-capture-state { margin-right: auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; color: var(--text-2); }
+.normal-camera-notice { margin: 0; padding: 2px 10px; flex: 0 0 auto; min-height: 20px; font-size: 11px; line-height: 16px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.detection-single-screen > .inspect-grid .dropzone { flex: 1; min-height: 0; margin: 10px; padding: 12px; overflow: auto; }
+.detection-single-screen > .inspect-grid .tabpane > button { flex: 0 0 auto; align-self: flex-end; margin: 0 10px 8px; min-height: 30px; padding: 5px 12px; font-size: 12px; }
+.detection-single-screen > .inspect-grid .result-panel > .section-title { flex: 0 0 auto; min-height: 40px; padding: 6px 12px; margin: 0; border-bottom: 1px solid var(--border); }
+.detection-single-screen > .inspect-grid .section-title h3 { font-size: 13px; margin: 0; }
+.detection-single-screen > .inspect-grid .result-panel .preview-frame { flex: 1; min-height: 0; margin: 0; border: 0; border-radius: 0; position: relative; background: #0b1118; overflow: hidden; }
+.detection-single-screen > .inspect-grid .result-panel .preview-frame img { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.detection-single-screen > .inspect-grid .result-panel .empty-state { height: 100%; min-height: 0; color: #9eacc0; }
+.detection-single-screen > .inspect-grid .result-panel .progress-panel:not(.active) { display: none; }
+.detection-single-screen > .inspect-grid .result-panel .progress-panel.active { padding: 5px 10px; margin: 0; flex: 0 0 auto; font-size: 11px; }
+.detection-single-screen > .inspect-grid .progress-panel p { display: none; }
+.normal-detection-metrics { position: relative; min-height: 0; padding: 0 !important; margin: 0 !important; display: flex; flex-direction: column; overflow: hidden; border-radius: 9px; }
+.normal-detection-metrics .metric-grid { display: flex; align-items: center; gap: 22px; flex: 0 0 28px; padding: 3px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.normal-detection-metrics .metric-card { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; box-shadow: none; min-height: 0; }
+.normal-detection-metrics .metric-card label, .normal-detection-metrics .metric-card > span { font-size: 11px; margin: 0; }
+.normal-detection-metrics .metric-value { font-size: 12px; line-height: 18px; padding: 0; background: none; }
+.normal-detection-metrics .settings-subhead { position: absolute; right: 12px; top: 3px; margin: 0; max-width: 48%; min-height: 0; }
+.normal-detection-metrics .settings-subhead h4, .normal-detection-metrics .settings-subhead > .pill { display: none; }
+.normal-detection-metrics .settings-subhead p { margin: 0; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.normal-detection-metrics .table-wrap { flex: 1; min-height: 0; overflow: auto; }
+.normal-detection-metrics table { margin: 0; font-size: 12px; }
+.normal-detection-metrics th, .normal-detection-metrics td { height: 22px; padding: 2px 12px; line-height: 18px; }
+.normal-detection-metrics .frame-summary-list { flex: 0 0 auto; max-height: 26px; overflow: auto; margin: 0; padding: 2px 12px; }
+.normal-plc-details { height: 0; flex: 0 0 0; }
+.normal-plc-details:not(.is-open) > :not(.local-plc-controls), .normal-plc-details:not(.is-open) > .local-plc-controls > :not(.modal-backdrop) { display: none; }
+.normal-plc-details:not(.is-open) > .local-plc-controls { padding: 0; }
+.normal-plc-details.is-open { position: fixed; z-index: 101; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(820px, calc(100vw - 32px)); height: auto; max-height: calc(100dvh - 40px); padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: auto; box-shadow: 0 18px 60px #0003; }
+.normal-plc-details-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.normal-plc-details-head h3 { margin: 0; font-size: 16px; }
+.normal-plc-backdrop { position: fixed; inset: 0; z-index: 100; background: #0c17264d; }
+@media (min-width: 960px) and (max-height: 680px) {
+  .view.active.detection-single-screen { grid-template-rows: 38px 32px minmax(0, 1fr) 116px; gap: 6px; }
+  .view.active.detection-single-screen.normal-source-camera { grid-template-rows: 38px 32px 32px minmax(0, 1fr) 116px; }
+  .app-shell:has(> .workspace > .detection-single-screen) > .workspace { padding: 6px 12px; }
+}
+@media (max-width: 959px) {
+  .normal-task-context > span:last-child { display: none; }
+  .normal-capture-state { max-width: 90px; }
+  .detection-single-screen > .page-head .result-badge { display: none; }
+  .normal-input-toolbar .mode-tab { padding: 4px 5px; gap: 3px; }
+  .normal-camera-selector select { width: 110px; }
+}
+@media (max-width: 700px) {
+  .app-shell:has(> .workspace > .detection-single-screen) { height: auto; overflow: visible; }
+  .app-shell:has(> .workspace > .detection-single-screen) > .workspace { height: auto; min-height: 100dvh; overflow: visible; }
+  .detection-single-screen, .view.active.detection-single-screen.normal-source-camera { display: flex !important; flex-direction: column; overflow: visible; }
+  .detection-single-screen > .inspect-grid { grid-template-columns: minmax(0, 1fr); }
+  .detection-single-screen > .inspect-grid > .panel { height: 360px; }
+  .normal-detection-metrics { min-height: 150px; }
+}
+
+.normal-detection-metrics .metric-value { border: 0; box-shadow: none; border-radius: 0; }
+.normal-detection-metrics .metric-card > span { display: none; }
+.normal-detection-metrics .metric-grid { margin: 0; min-height: 0; height: 26px; flex-basis: 26px; padding-block: 2px; }
+.normal-detection-metrics .metric-card .metric-value { border: 0; padding: 0; margin: 0; min-height: 0; height: auto; font-size: 12px; line-height: 16px; background: transparent; box-shadow: none; border-radius: 0; }
+.normal-detection-metrics .metric-card label { line-height: 16px; }
+.normal-detection-metrics th, .normal-detection-metrics td { height: 21px; line-height: 16px; padding-block: 2px; }
+.detection-single-screen > .normal-detection-metrics .metric-grid { margin: 0; }
+.app-shell:has(> .workspace > .detection-single-screen) > .sidebar:not(:hover):not(:focus-within) .account-logout { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
