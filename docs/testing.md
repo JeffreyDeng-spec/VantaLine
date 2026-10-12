@@ -3338,3 +3338,12 @@ release identity constant as the real dev build, so importing version-aware
 controls/controller does not bypass module construction. The background-free
 inspection fixture waits for its intended selected model before submission;
 option availability alone does not prove React selection effects have settled.
+
+
+The manual CI PostgreSQL service pulls the official Docker Hub image at the
+unchanged `sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d`
+manifest. Registry content was checked against that digest after the ECR mirror
+returned data-limit errors. Container version, storage budgets, isolated service
+roles and benchmark assertions are unchanged. The ordinary inspection fixture
+selects its model and locates image/video uploads by their named dropzone; it does
+not assume the first file input on the entire application belongs to inspection.
