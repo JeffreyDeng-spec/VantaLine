@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getPlcWorkstation, queryKeys, selfPairPlcWorkstation, selfSavePlcWorkstationConfig } from "../../api/queries";
 import type { PlcWebSerialConfig } from "../../api/types";
 import { PlcWebSerialClient } from "./webSerialClient";
+import { diagnosticErrorDetail, diagnosticMessages, diagnosticTransport } from "./diagnosticLog";
+import { PlcDiagnosticPanel } from "./PlcDiagnosticPanel";
 import "./localPlcControls.css";
 
 const DEFAULTS: PlcWebSerialConfig = {
@@ -30,6 +32,8 @@ export function LocalPlcControls(props: Props) {
   const [phase, setPhase] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [, refreshDiagnosticStatus] = useState(0);
+  useEffect(() => diagnosticTransport.subscribe(() => refreshDiagnosticStatus(value => value+1)), []);
   const pendingRef = useRef(false);
   const [editing, setEditing] = useState(false);
   const [connectAfterSave, setConnectAfterSave] = useState(false);
@@ -81,12 +85,15 @@ export function LocalPlcControls(props: Props) {
     setPending(true);
     setError("");
     let port: SerialPort | undefined;
+    let diagnosticStep: "selection"|"workstation" = "selection";
+    if(connect) client.diagnostics.begin();
     try {
       // Must happen before ANY network await to preserve the browser click grant.
       if (connect) {
         setPhase("请选择本机 PLC 串口");
         if (!PlcWebSerialClient.supported() || !navigator.serial) throw new Error("请通过 HTTPS 使用桌面 Edge 或 Chrome 连接 PLC。");
         port = await navigator.serial.requestPort();
+        client.diagnostics.record("selection","ok");
       }
       if (!mounted.current) return;
       if (payload) {
@@ -99,12 +106,16 @@ export function LocalPlcControls(props: Props) {
       }
       if (connect) {
         setPhase("正在打开本机串口…");
+        diagnosticStep="workstation";
+        client.diagnostics.record("workstation","started");
         const station = await selfPairPlcWorkstation();
         if (!station.station || !station.config?.enabled) throw new Error("请先确认本机 PLC 配置并启用联动。");
         if (!mounted.current) return;
+        client.diagnostics.bind(station.station.id,station.config_generation);
+        client.diagnostics.record("workstation","ok",{config:{baudrate:9600,data_bits:7,parity:"E",stop_bits:1,input_register:station.config.capture_input_register,result_register:station.config.result_register,output_control_point:station.config.output_control_point,timeout_ms:500,capture_enabled:station.config.capture_trigger_enabled,trigger_value:station.config.capture_trigger_value}});
         await client.connect(station.station.id, props.modelId || "", (message) => {
           report(false);
-          setError(message);
+          setError(`${message}。诊断编号：${client.diagnostics.attemptId}`);
           setPhase("");
           void refresh();
         }, port, setPhase);
@@ -115,12 +126,15 @@ export function LocalPlcControls(props: Props) {
       }
       await refresh();
     } catch (e) {
+      if(connect && !client.diagnostics.lastFailure) client.diagnostics.failure(diagnosticStep,e);
       // Cancellation can leave an existing production connection untouched.
       if (!(e instanceof DOMException && e.name === "NotFoundError" && client.state())) {
         await client.disconnect(true);
         report(false);
       }
-      setError(e instanceof DOMException && e.name === "NotFoundError" ? "未选择串口，请连接 PLC 后重试。" : e instanceof Error ? e.message : String(e));
+      const detail={target:"",...diagnosticErrorDetail(e),...client.diagnostics.lastFailure};
+      const code=detail.code || "serial_error";
+      setError(connect ? `${code === "serial_error" && e instanceof Error ? e.message : diagnosticMessages[code]}${detail.target ? `（${detail.target}，收到 ${detail.actual_bytes || 0}/${detail.expected_bytes || 8} 字节）` : ""}。诊断编号：${client.diagnostics.attemptId}` : e instanceof Error ? e.message : String(e));
       setPhase("");
     } finally {
       pendingRef.current = false;
@@ -166,6 +180,8 @@ export function LocalPlcControls(props: Props) {
     <p role="status" aria-live="polite" className={`hint-line ${error ? "danger-text" : connected ? "success-text" : ""}`}>
       {pending ? phase : connected ? `PLC 通信正常；${config.capture_trigger_enabled ? readiness : "已关闭到位自动拍照，可手动检测"}。` : `当前 PLC 未连接，PLC 联动未生效。${error || props.externalStatus || phase}`}
     </p>
+    {client.diagnostics.attemptId && diagnosticTransport.pending(client.diagnostics.attemptId) && <p className="hint-line">诊断记录尚未上传；关页可能丢失。</p>}
+    <PlcDiagnosticPanel />
     {!PlcWebSerialClient.supported() && <p className="hint-line">连接需要桌面 Edge / Chrome，并通过 HTTPS 打开网站。</p>}
     {workstation.isError && <p role="alert">本机 PLC 配置加载失败：{String(workstation.error)}</p>}
     {editing && <div className="modal-backdrop" role="presentation">

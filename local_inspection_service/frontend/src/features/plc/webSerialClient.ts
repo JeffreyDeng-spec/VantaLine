@@ -1,3 +1,4 @@
+import { PlcDiagnosticLog, diagnosticError } from "./diagnosticLog";
 import {
   activatePlcWorkstationConnection,
   claimPlcWorkstationConnection,
@@ -35,14 +36,14 @@ function hexFromBytes(value: Uint8Array) {
 
 function parseDiagnosticWordResponse(response: Uint8Array) {
   if (response.length !== 8 || response[0] !== 0x02 || response[5] !== 0x03) {
-    throw new Error("PLC 读取返回帧格式错误");
+    throw diagnosticError(new Error("PLC 读取返回帧格式错误"), {code:"invalid_frame",expected_bytes:8,actual_bytes:response.length});
   }
   const dataText = String.fromCharCode(...response.slice(1, 5)).toUpperCase();
-  if (!/^[0-9A-F]{4}$/.test(dataText)) throw new Error("PLC 读取返回值不是十六进制");
+  if (!/^[0-9A-F]{4}$/.test(dataText)) throw diagnosticError(new Error("PLC 读取返回值不是十六进制"), {code:"invalid_frame",expected_bytes:8,actual_bytes:response.length});
   const expectedChecksum = Array.from(response.slice(1, 6)).reduce((sum, item) => (sum + item) & 0xff, 0);
   const checksumText = String.fromCharCode(...response.slice(6, 8)).toUpperCase();
   if (checksumText !== expectedChecksum.toString(16).padStart(2, "0").toUpperCase()) {
-    throw new Error("PLC 读取返回校验和错误");
+    throw diagnosticError(new Error("PLC 读取返回校验和错误"), {code:"invalid_checksum",expected_bytes:8,actual_bytes:response.length});
   }
   const lowByte = Number.parseInt(dataText.slice(0, 2), 16);
   const highByte = Number.parseInt(dataText.slice(2, 4), 16);
@@ -81,6 +82,8 @@ export interface PlcBrowserConnectionState {
 }
 
 export class PlcWebSerialClient {
+  readonly diagnostics = new PlcDiagnosticLog();
+  private diagnosticTriggerHigh: boolean | null = null;
   private port: SerialPort | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -115,6 +118,11 @@ export class PlcWebSerialClient {
     if (!PlcWebSerialClient.supported() || !navigator.serial) throw new Error("请使用最新版桌面 Edge 或 Chrome，并通过 HTTPS 打开网站");
     if (this.state()) return this.state();
     if (this.connecting) throw new Error("PLC 正在连接，请稍候");
+    if (!this.diagnostics.attemptId) this.diagnostics.begin();
+    this.diagnostics.enter();
+    let diagnosticStep: "lease"|"open"|"quiet"|"read"|"activate" = "lease";
+    let diagnosticTarget = "";
+    let diagnosticStarted = performance.now();
     this.connecting = true;
     const generation = ++this.connectionGeneration;
     const ensureCurrent = () => {
@@ -129,14 +137,20 @@ export class PlcWebSerialClient {
       ensureCurrent();
       this.releaseLock = await acquireStationLock(stationId);
       ensureCurrent();
+      this.diagnostics.record("lease","started");
       this.lease = await claimPlcWorkstationConnection({
         client_instance_id: clientInstanceId(),
         model_id: modelId,
         bundle_version: PLC_WEB_SERIAL_VERSION
       });
       ensureCurrent();
+      this.diagnostics.bind(stationId,this.lease.config_generation,this.lease.lease_epoch);
+      this.diagnostics.record("lease","ok");
+      diagnosticStep = "open"; diagnosticStarted = performance.now();
+      this.diagnostics.record("open","started");
       await this.port.open({ baudRate: 9600, dataBits: 7, stopBits: 1, parity: "even", flowControl: "none" });
       ensureCurrent();
+      this.diagnostics.record("open","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
       if (!this.port.readable || !this.port.writable) throw new Error("串口未提供读写通道");
       this.reader = this.port.readable.getReader();
       this.writer = this.port.writable.getWriter();
@@ -144,18 +158,24 @@ export class PlcWebSerialClient {
       if (!check || check.frames.length !== 2) throw new Error("请刷新页面后重新连接 PLC");
       const verify = async () => {
         ensureCurrent();
+        diagnosticStep = "quiet"; diagnosticStarted=performance.now();
+        this.diagnostics.record("quiet","started");
         await this.requireQuietInput(500);
+        this.diagnostics.record("quiet","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
         onProgress?.("正在校验 PLC 通信…");
         const reads: Array<{ target: string; response_hex: string }> = [];
         for (const frame of check.frames) {
           ensureCurrent();
           if (document.visibilityState !== "visible" || Date.now() >= check.deadline_at * 1000) throw new Error("PLC 校验已过期或页面在后台，请重新连接");
+          diagnosticStep = "read"; diagnosticTarget = frame.target; diagnosticStarted=performance.now();
+          this.diagnostics.record("read","started",{target:frame.target,expected_bytes:8});
           this.armRead();
           await Promise.resolve();
           if (this.pendingReadResolved) throw new Error("PLC 校验前存在串口残留数据");
           await this.writer!.write(bytesFromHex(frame.frame_hex));
           const response = await this.readExact(8, check.timeout_ms);
           parseDiagnosticWordResponse(response);
+          this.diagnostics.record("read","ok",{target:frame.target,expected_bytes:8,actual_bytes:response.length,duration_ms:Math.round(performance.now()-diagnosticStarted)});
           reads.push({ target: frame.target, response_hex: hexFromBytes(response) });
           await this.requireQuietInput(check.timeout_ms);
         }
@@ -165,6 +185,8 @@ export class PlcWebSerialClient {
       this.queue = verification.then(() => undefined, () => undefined);
       const connectionReads = await verification;
       const info = this.port.getInfo();
+      diagnosticStep="activate";diagnosticStarted=performance.now();
+      this.diagnostics.record("activate","started");
       this.lease = await activatePlcWorkstationConnection({
         session_id: this.lease.session_id,
         lease_epoch: this.lease.lease_epoch,
@@ -174,29 +196,35 @@ export class PlcWebSerialClient {
         connection_reads: connectionReads
       });
       ensureCurrent();
+      this.diagnosticTriggerHigh = null;
+      this.diagnostics.record("activate","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
       this.stopped = false;
       this.disconnectListener = (event: Event) => {
-        if (event.target === this.port) void this.failClosed("PLC 串口已拔出，请检查线路后人工重连", onFatal);
+        if (event.target === this.port) void this.failClosed("PLC 串口已拔出，请检查线路后人工重连", onFatal, "unplugged");
       };
       navigator.serial.addEventListener("disconnect", this.disconnectListener);
       this.heartbeatTimer = window.setInterval(() => {
         const lease = this.lease;
         if (!lease || this.stopped) return;
         void heartbeatPlcWorkstationConnection(lease.session_id, lease.lease_epoch).then(
-          (renewed) => { this.lease = renewed; },
-          () => { void this.failClosed("PLC 工作站租约已失效，请人工重新连接", onFatal); }
+          (renewed) => { this.lease = renewed; this.diagnostics.count("heartbeats"); },
+          () => { void this.failClosed("PLC 工作站租约已失效，请人工重新连接", onFatal, "lease_lost"); }
         );
       }, 5000);
       return this.state();
     } catch (error) {
-      await this.disconnect(true);
+      this.diagnostics.failure(diagnosticStep,error,{target:diagnosticTarget,duration_ms:Math.round(performance.now()-diagnosticStarted)});
+      await this.disconnect(true, "connection_failed");
       throw error;
     } finally {
+      this.diagnostics.leave();
       this.connecting = false;
     }
   }
 
-  async disconnect(notifyServer = true) {
+  async disconnect(notifyServer = true, reason: import("./diagnosticLog").DiagnosticCode = "user_disconnect") {
+    const hadConnection = Boolean(this.port || this.lease);
+    this.diagnostics.enter();
     this.connectionGeneration += 1;
     this.stopped = true;
     if (this.heartbeatTimer !== null) window.clearInterval(this.heartbeatTimer);
@@ -219,6 +247,8 @@ export class PlcWebSerialClient {
     }
     this.releaseLock?.();
     this.releaseLock = null;
+    if(hadConnection) {this.diagnostics.summary();this.diagnostics.record("disconnect","ok",{code:reason});}
+    this.diagnostics.leave();
   }
 
   private async waitUntilVisible() {
@@ -241,7 +271,7 @@ export class PlcWebSerialClient {
       this.lease = await heartbeatPlcWorkstationConnection(lease.session_id, lease.lease_epoch);
       return this.state();
     } catch (error) {
-      await this.failClosed("PLC 工作站租约已失效，请人工重新连接", onFatal);
+      await this.failClosed("PLC 工作站租约已失效，请人工重新连接", onFatal, "lease_lost");
       throw error;
     }
   }
@@ -265,8 +295,9 @@ export class PlcWebSerialClient {
     return next;
   }
 
-  private async failClosed(message: string, onFatal: (message: string) => void) {
-    await this.disconnect(true);
+  private async failClosed(message: string, onFatal: (message: string) => void, code: import("./diagnosticLog").DiagnosticCode = "uncertain") {
+    this.diagnostics.record(code === "lease_lost" ? "heartbeat" : "disconnect","failed",{code});
+    await this.disconnect(true, code);
     onFatal(message);
   }
 
@@ -288,7 +319,7 @@ export class PlcWebSerialClient {
     const quiet = new Promise<"quiet">((resolve) => { timer = window.setTimeout(() => resolve("quiet"), timeoutMs); });
     const outcome = await Promise.race([read.then(() => "data" as const), quiet]);
     window.clearTimeout(timer);
-    if (outcome === "data") throw new Error("串口中存在上一次操作的残留数据，请拔插后重连");
+    if (outcome === "data") throw diagnosticError(new Error("串口中存在上一次操作的残留数据，请拔插后重连"),{code:"residual_data"});
   }
 
   private async readAck(timeoutMs: number) {
@@ -317,11 +348,11 @@ export class PlcWebSerialClient {
     const deadline = performance.now() + timeoutMs;
     while (chunks.length < length) {
       const remaining = deadline - performance.now();
-      if (remaining <= 0) throw new DOMException("PLC response timeout", "TimeoutError");
+      if (remaining <= 0) throw diagnosticError(new DOMException("PLC response timeout", "TimeoutError"),{code:chunks.length ? "partial_response" : "timeout",expected_bytes:length,actual_bytes:chunks.length});
       const read = this.armRead();
       let timer = 0;
       const timeout = new Promise<never>((_, reject) => {
-        timer = window.setTimeout(() => reject(new DOMException("PLC response timeout", "TimeoutError")), remaining);
+        timer = window.setTimeout(() => reject(diagnosticError(new DOMException("PLC response timeout", "TimeoutError"),{code:chunks.length ? "partial_response" : "timeout",expected_bytes:length,actual_bytes:chunks.length})), remaining);
       });
       try {
         const result = await Promise.race([read, timeout]);
@@ -329,7 +360,7 @@ export class PlcWebSerialClient {
         this.pendingReadResolved = false;
         if (result.done || !result.value?.length) throw new Error("PLC 串口读取已结束");
         chunks.push(...result.value);
-        if (chunks.length > length) throw new Error("PLC 返回了超出预期长度的数据");
+        if (chunks.length > length) throw diagnosticError(new Error("PLC 返回了超出预期长度的数据"),{code:"invalid_frame",expected_bytes:length,actual_bytes:chunks.length});
       } finally {
         window.clearTimeout(timer);
       }
@@ -366,6 +397,8 @@ export class PlcWebSerialClient {
   execute(dispatch: PlcSyncStatus, onFatal: (message: string) => void): Promise<PlcSyncStatus> {
     this.priorityOperations += 1;
     const operation = async () => {
+      this.diagnostics.enter();
+      try {
       const resumedFromBackground = await this.waitUntilVisible();
       if (resumedFromBackground) await this.resume(onFatal);
       const state = this.state();
@@ -379,10 +412,14 @@ export class PlcWebSerialClient {
         });
         const deadline = requestStarted + attempt.execution_window_ms;
         const operations: PlcWebSerialOperation[] = [];
+        const dStarted = performance.now();
         const dResult = await this.transact(attempt.frames[0], attempt.ack_timeout_ms, deadline);
+        const operationDurations = [Math.round(performance.now()-dStarted)];
         operations.push(dResult);
         if (dResult.status === "acknowledged" && attempt.frames[1]) {
+          const yStarted = performance.now();
           operations.push(await this.transact(attempt.frames[1], attempt.ack_timeout_ms, deadline));
+          operationDurations.push(Math.round(performance.now()-yStarted));
         }
         let nakSyncLost = false;
         if (operations.some((item) => item.status === "nak")) {
@@ -395,6 +432,10 @@ export class PlcWebSerialClient {
 
             nakSyncLost = true;
           }
+        }
+        for (const [index, physical] of operations.entries()) {
+          if(physical.status === "acknowledged") this.diagnostics.count("writes");
+          else this.diagnostics.record("write",physical.status === "nak" ? "failed" : "uncertain",{dispatch_id:attempt.dispatch_id,target:physical.target,duration_ms:operationDurations[index],expected_bytes:1,actual_bytes:Math.min(65536,physical.response_hex.length/2),code:physical.status === "nak" ? "nak" : physical.status === "timeout" ? "timeout" : physical.status === "unexpected_response" ? "invalid_frame" : "serial_error"});
         }
         const uncertain = nakSyncLost || operations.some((item) => ["timeout", "serial_error", "unexpected_response"].includes(item.status));
         const requiresClose = uncertain;
@@ -413,8 +454,10 @@ export class PlcWebSerialClient {
         });
       } catch (error) {
         if (this.state()) await this.failClosed("PLC 控制链路中断，端口已关闭；请人工重连", onFatal);
+        this.diagnostics.failure("write",error,{dispatch_id:dispatch.dispatch_id,code:"transport_error"});
         throw error;
       }
+      } finally {this.diagnostics.leave();}
     };
     const next = this.queue.then(operation, operation).finally(() => { this.priorityOperations -= 1; });
     this.queue = next.catch(() => undefined);
@@ -428,6 +471,8 @@ export class PlcWebSerialClient {
     if (this.priorityOperations > 0) return Promise.resolve(null);
     const operation = async (): Promise<PlcCaptureInputReadResult | null> => {
       if (this.priorityOperations > 0 || document.visibilityState !== "visible") return null;
+      this.diagnostics.enter();
+      try {
       const state = this.state();
       if (!state || !this.writer) throw new Error("PLC 未连接或租约无效");
       if (plan.protocol_version !== PLC_WEB_SERIAL_VERSION || plan.config_generation !== state.configGeneration) {
@@ -440,16 +485,25 @@ export class PlcWebSerialClient {
         if (this.pendingReadResolved) throw new Error("读取前发现串口残留数据");
         await this.writer.write(bytesFromHex(plan.frame_hex));
         const response = await this.readExact(plan.expected_response_bytes, plan.read_timeout_ms);
+        const value = parseDiagnosticWordResponse(response);
+        this.diagnostics.count("reads");
+        const triggerHigh = value === plan.trigger_value;
+        if(triggerHigh !== this.diagnosticTriggerHigh) {
+          this.diagnosticTriggerHigh = triggerHigh;
+          this.diagnostics.record("read","ok",{target:plan.target,trigger_state:triggerHigh ? "high" : "reset",expected_bytes:plan.expected_response_bytes,actual_bytes:response.length});
+        }
         return {
-          value: parseDiagnosticWordResponse(response),
+          value,
           request_hex: plan.frame_hex,
           response_hex: hexFromBytes(response),
           read_at: Date.now()
         };
       } catch (error) {
+        this.diagnostics.failure("read",error,{target:plan.target,expected_bytes:plan.expected_response_bytes});
         if (this.state()) await this.failClosed("PLC 输入寄存器读取失败，串口已关闭；请检查后重新连接", onFatal);
         throw error;
       }
+      } finally {this.diagnostics.leave();}
     };
     const next = this.queue.then(operation, operation);
     this.queue = next.catch(() => undefined);
@@ -459,6 +513,8 @@ export class PlcWebSerialClient {
   diagnoseD206(onFatal: (message: string) => void): Promise<PlcWebSerialDiagnosticResult> {
     this.priorityOperations += 1;
     const operation = async (): Promise<PlcWebSerialDiagnosticResult> => {
+      this.diagnostics.enter();
+      try {
       const state = this.state();
       if (!state) throw new Error("请先连接本机 PLC");
       const plan = await getPlcWebSerialDiagnosticPlan({
@@ -529,6 +585,7 @@ export class PlcWebSerialClient {
           if (this.state()) await this.failClosed("PLC 诊断状态无法确认，串口已关闭，请人工重连", onFatal);
         }
       }
+      } finally {this.diagnostics.leave();}
     };
     const next = this.queue.then(operation, operation).finally(() => { this.priorityOperations -= 1; });
     this.queue = next.catch(() => undefined);

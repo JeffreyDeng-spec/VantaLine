@@ -13,7 +13,8 @@
     "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",
     "build": "npm run build:preview",
     "preview": "vite preview --host 0.0.0.0",
-    "test:plc-connection": "node scripts/test-plc-connection.mjs"
+    "test:plc-connection": "node scripts/test-plc-connection.mjs",
+    "test:plc-diagnostics": "node scripts/test-plc-diagnostics.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

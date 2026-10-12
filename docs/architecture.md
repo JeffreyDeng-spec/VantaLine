@@ -2432,3 +2432,8 @@ The strict integration source replay binds the completed-review recovery workflo
 ## Real-photo task process data
 
 Task detail selects its process-data adapter from owner-scoped real-photo status. Selected paused tasks keep three drawers; unknown/error status does not show legacy data. Shared sample previews/details/history use scoped query invalidation. The additive read-only sample endpoint in real-photo-feedback.md uses an anchored cursor over existing stored originals and server-owned current-review classification, never definition reconciliation or paid work. Frozen datasets and current eligible originals are displayed separately. Candidates remain manually selected through the existing picker.
+
+
+## PLC diagnostic isolation
+
+`plc/diagnostic_events_api.py` registers additive authenticated diagnostic endpoints through canonical HTTP composition. Its strict schemas reject arbitrary error text and secret-bearing fields. `storage/plc_diagnostic_repository.py` owns one independent asynchronous connection at a time per Web application: admission and connection establishment each wait at most 50ms, with a 200ms SQL/transaction budget and 50ms lock timeout. Connections close after each request, and there are no business repository pins or station/dispatch mutations. Diagnostic storage failure produces only a retryable log-upload failure. Source-contract verification recognizes an exact additive HTTP registration delta and still compares its inverse against the immutable canonical parent; unknown owner or registration edits fail.

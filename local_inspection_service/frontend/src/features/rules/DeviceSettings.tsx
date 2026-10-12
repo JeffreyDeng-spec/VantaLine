@@ -1,3 +1,5 @@
+import { PlcDiagnosticPanel } from "../plc/PlcDiagnosticPanel";
+import "../plc/localPlcControls.css";
 import { FormEvent, useRef } from "react";
 import { PlugZap } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -570,6 +572,7 @@ export function DeviceSettings() {
 
           <section className="cost-ledger-section">
             <div className="section-title compact">
+              <PlcDiagnosticPanel />
               <h4>最近同步状态</h4>
               <span className="muted-text">
                 当前显示最近 {plcResponse.recent_dispatches.length} 条

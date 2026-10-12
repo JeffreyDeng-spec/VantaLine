@@ -1889,6 +1889,29 @@ verify_application
 if [[ "$controller_started" -eq 1 ]]; then runtime_controller accept "$runtime_journal"; fi
 deployment_committed=1
 if [[ "$controller_started" -eq 1 ]]; then runtime_controller finish "$runtime_journal"; fi
+# Diagnostic expiry is independent of admission/PLC and starts on its next
+# daily timer, never during release acceptance. Old rollback releases skip it
+# through ConditionPathExists; the additive table remains preserved.
+diagnostic_units_managed=1
+for unit in vantaline-plc-diagnostics-cleanup.service vantaline-plc-diagnostics-cleanup.timer; do
+  installed_unit="/etc/systemd/system/$unit"
+  if [[ -e "$installed_unit" ]] && ! head -n 1 "$installed_unit" | grep -q '^# VantaLine managed PLC diagnostic expiry v1$'; then
+    diagnostic_units_managed=0
+  fi
+done
+if [[ "$diagnostic_units_managed" -eq 1 ]]; then
+  for unit in vantaline-plc-diagnostics-cleanup.service vantaline-plc-diagnostics-cleanup.timer; do
+    if ! install -m 0644 "$target/deploy/$unit" "/etc/systemd/system/$unit"; then
+      diagnostic_units_managed=0
+      echo "diagnostic expiry unit unavailable" >&2
+    fi
+  done
+  if [[ "$diagnostic_units_managed" -eq 1 ]]; then
+    systemctl daemon-reload && systemctl enable --now vantaline-plc-diagnostics-cleanup.timer || echo "diagnostic expiry timer unavailable" >&2
+  fi
+else
+  echo "diagnostic expiry units are unmanaged; retained" >&2
+fi
 rm -f "$archive"
 promote_installer
 echo "release=$release previous=$previous"

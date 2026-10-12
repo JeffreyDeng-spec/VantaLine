@@ -2058,3 +2058,10 @@ When completed real-photo review chunks leave stale recheck flags and block an a
 ## Real-photo process-data rollout
 
 Ship the sample-list API and frontend together in one immutable release. No schema/backfill or account activation is required. Verify exact production version, three entries on selected tasks, retained entries after pause, complete pagination and legacy four-entry tasks. Viewing/refreshing must not enqueue paid work. Rollback closes admission, settles active attempts and restores the previous whole release, retaining all evidence; never copy frontend/backend files individually.
+
+
+## PLC diagnostic rollout and triage
+
+Collection initially defaults to JHC001 only. Inspect its next operator-initiated connection in the existing PLC settings/connection panel's “诊断日志”; do not generate extra serial traffic to populate logs. Confirm failure step, bytes, diagnostic ID, account isolation and server receipt. Query or upload failure and missing terminal events do not prove a PLC timeout or physical outcome. Normal production availability remains governed by existing lease/dispatch rules.
+
+The immutable installer adds the two managed diagnostic-expiry units only after release acceptance; it never replaces an unmanaged unit. The timer runs daily at 04:00 UTC plus up to one hour of jitter, with no catch-up. Its root launcher reads the protected runtime environment, drops to the vantaline service identity before connecting, and uses Nice=19, idle I/O, a 5% CPU quota and a 60-second limit. Unit-installation failure is reported without undoing an already accepted production release. Check timer/service status separately. Disable collection with `VANTALINE_PLC_DIAGNOSTICS_ENABLED=0`; reload runtime configuration/restart only through the normal configuration procedure. Roll back the complete release if needed; the additive table remains, and old releases without the expiry script skip that job through ConditionPathExists.

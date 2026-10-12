@@ -5406,6 +5406,115 @@
           "summary": "Restart"
         }
       },
+      "/api/ai/tasks/{task_id}/real-photo/samples": {
+        "get": {
+          "operationId": "samples_api_ai_tasks__task_id__real_photo_samples_get",
+          "parameters": [
+            {
+              "in": "path",
+              "name": "task_id",
+              "required": true,
+              "schema": {
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "category",
+              "required": false,
+              "schema": {
+                "default": "all",
+                "title": "Category",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "decision",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Decision"
+              }
+            },
+            {
+              "in": "query",
+              "name": "cursor",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cursor"
+              }
+            },
+            {
+              "in": "query",
+              "name": "limit",
+              "required": false,
+              "schema": {
+                "default": 24,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "sample_id",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sample Id"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Samples"
+        }
+      },
       "/api/ai/tasks/{task_id}/real-photo/samples/{sample_id}/group": {
         "patch": {
           "operationId": "group_api_ai_tasks__task_id__real_photo_samples__sample_id__group_patch",
@@ -8918,6 +9027,166 @@
             }
           },
           "summary": "Update Plc Config"
+        }
+      },
+      "/api/plc/diagnostic-events": {
+        "get": {
+          "operationId": "events_api_plc_diagnostic_events_get",
+          "parameters": [
+            {
+              "in": "query",
+              "name": "account",
+              "required": false,
+              "schema": {
+                "default": "",
+                "maxLength": 80,
+                "title": "Account",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "station",
+              "required": false,
+              "schema": {
+                "default": "",
+                "maxLength": 80,
+                "title": "Station",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "attempt",
+              "required": false,
+              "schema": {
+                "default": "",
+                "maxLength": 80,
+                "title": "Attempt",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "code",
+              "required": false,
+              "schema": {
+                "default": "",
+                "enum": [
+                  "",
+                  "unsupported",
+                  "cancelled",
+                  "occupied",
+                  "serial_error",
+                  "timeout",
+                  "partial_response",
+                  "invalid_frame",
+                  "invalid_checksum",
+                  "residual_data",
+                  "permission_denied",
+                  "lease_rejected",
+                  "lease_lost",
+                  "config_changed",
+                  "background",
+                  "nak",
+                  "uncertain",
+                  "unplugged",
+                  "user_disconnect",
+                  "connection_failed",
+                  "transport_error"
+                ],
+                "title": "Code",
+                "type": "string"
+              }
+            },
+            {
+              "in": "query",
+              "name": "since",
+              "required": false,
+              "schema": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Since",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "until",
+              "required": false,
+              "schema": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Until",
+                "type": "integer"
+              }
+            },
+            {
+              "in": "query",
+              "name": "offset",
+              "required": false,
+              "schema": {
+                "default": 0,
+                "maximum": 10000,
+                "minimum": 0,
+                "title": "Offset",
+                "type": "integer"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            },
+            "422": {
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              },
+              "description": "Validation Error"
+            }
+          },
+          "summary": "Events"
+        }
+      },
+      "/api/plc/diagnostic-events/batch": {
+        "post": {
+          "operationId": "batch_api_plc_diagnostic_events_batch_post",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Batch"
+        }
+      },
+      "/api/plc/diagnostic-events/config": {
+        "get": {
+          "operationId": "config_api_plc_diagnostic_events_config_get",
+          "responses": {
+            "200": {
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              },
+              "description": "Successful Response"
+            }
+          },
+          "summary": "Config"
         }
       },
       "/api/plc/workstation": {
@@ -13680,6 +13949,57 @@
       "include_in_schema": true,
       "kind": "route",
       "methods": [
+        "GET"
+      ],
+      "name": "config",
+      "path": "/api/plc/diagnostic-events/config",
+      "permission": {
+        "GET": [
+          "inspection",
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "POST"
+      ],
+      "name": "batch",
+      "path": "/api/plc/diagnostic-events/batch",
+      "permission": {
+        "POST": [
+          "inspection",
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "events",
+      "path": "/api/plc/diagnostic-events",
+      "permission": {
+        "GET": [
+          "inspection",
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
         "POST"
       ],
       "name": "self_pair_plc_workstation",
@@ -14499,6 +14819,22 @@
       ],
       "name": "status",
       "path": "/api/ai/tasks/{task_id}/real-photo",
+      "permission": {
+        "GET": [
+          "ai_detection"
+        ]
+      },
+      "response_model_exclude_unset": false,
+      "status_code": null
+    },
+    {
+      "include_in_schema": true,
+      "kind": "route",
+      "methods": [
+        "GET"
+      ],
+      "name": "samples",
+      "path": "/api/ai/tasks/{task_id}/real-photo/samples",
       "permission": {
         "GET": [
           "ai_detection"

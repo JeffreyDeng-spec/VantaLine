@@ -1,0 +1,12 @@
+# VantaLine managed PLC diagnostic expiry v1
+[Unit]
+Description=Expire only VantaLine PLC diagnostic logs
+ConditionPathExists=/opt/vantaline/current/scripts/cleanup_plc_diagnostics.py
+[Service]
+Type=oneshot
+ExecStart=/opt/vantaline/current/.venv/bin/python /opt/vantaline/current/scripts/cleanup_plc_diagnostics.py --runtime-config /etc/vantaline/runtime/current/config.json
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=5%
+TimeoutStartSec=60
+NoNewPrivileges=true

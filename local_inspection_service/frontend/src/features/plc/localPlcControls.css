@@ -7,3 +7,12 @@
 
 .local-plc-dialog h3 { margin: 0 0 8px; }
 .local-plc-dialog > p { margin: 0 0 16px; line-height: 1.6; }
+
+.plc-diagnostic-panel { margin: 12px 0; }
+.plc-diagnostic-panel summary { cursor: pointer; }
+.plc-diagnostic-panel form { flex-wrap: wrap; gap: 12px; }
+.plc-diagnostic-panel label { display: grid; gap: 4px; }
+.plc-diagnostic-table { overflow-x: auto; }
+.plc-diagnostic-table table { width: 100%; border-collapse: collapse; }
+.plc-diagnostic-table td, .plc-diagnostic-table th { padding: 8px; text-align: left; border-bottom: 1px solid var(--border, #ddd); }
+.plc-diagnostic-panel li { padding: 8px 0; overflow-wrap: anywhere; }

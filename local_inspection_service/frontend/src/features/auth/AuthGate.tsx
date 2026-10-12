@@ -14,6 +14,7 @@ import { loginPath, safeWorkspaceNext } from "../../app/paths";
 import { AgentToolsProvider } from "../agent/AgentToolsProvider";
 import { actionRegistry } from "../agent/registry";
 import { clearFiles } from "../agent/files";
+import { diagnosticTransport } from "../plc/diagnosticLog";
 
 import { BatchWorkspace } from '../codex-compare/BatchWorkspace';
 import { AppShell } from "../../components/AppShell";
@@ -41,6 +42,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const [cacheIdentity, setCacheIdentity] = useState<string | null>(null);
   const explicitLogout = useRef(false);
   useLayoutEffect(() => {
+    diagnosticTransport.setIdentity(identity);
     if (identity) explicitLogout.current = false;
     const privateQueries = { predicate: (query: { queryKey: readonly unknown[] }) => JSON.stringify(query.queryKey) !== JSON.stringify(queryKeys.authStatus) };
     void queryClient.cancelQueries(privateQueries);
@@ -50,7 +52,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   }, [identity, queryClient, setDataUserId]);
 
   const logoutMutation = useMutation({
-    mutationFn: () => apiClient.post<{ status: string }>("/api/auth/logout"),
+    mutationFn: () => { diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },
     onSuccess: async () => {
       actionRegistry.reset();
       clearFiles();
@@ -66,7 +68,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
       navigate("/login", { replace: true });
       notify({ title: "已退出登录" });
     },
-    onError: () => notify({ title: "退出登录未完成，请重试", tone: "error" })
+    onError: () => { diagnosticTransport.setIdentity(identity); notify({ title: "退出登录未完成，请重试", tone: "error" }); }
   });
 
   if (authQuery.isLoading || (!authQuery.isFetchedAfterMount && !authQuery.isError)) {
