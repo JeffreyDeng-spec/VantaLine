@@ -3317,6 +3317,7 @@ Acceptance: inspect the real shared component at 1920, 1366 and 1280px and verif
 ## Administrator detection photos and frozen dataset membership
 
 **Status: Authoritative.** Run `python -m pytest tests/test_dataset_photos.py tests/test_real_photo_pagination.py` and `node scripts/test_dataset_photos_ui.cjs`. Cover 105-record stable paging/new arrival refresh, whole-owner category counts, positive/negative admission, current/stale review, uncertain/excluded/failed/disabled states, immutable multi-version membership, legacy reliable source IDs, orphan training members, missing manifests/media, account/cursor isolation and no reconciliation/queue writes. Run the isolated PostgreSQL assembled administrator smoke, existing administrator/photo regressions, frontend typecheck/production build, assembled OpenAPI and exact source guards, boundaries, docs and diff checks. Browser fixtures cover detail/history, version member paging, filter scopes, visible-page polling/new-arrival prompt, snapshot/transport failures and 390px layout; they do not certify private media availability or physical PLC behavior. CI remains skipped under owner release policy.
+
 ## PLC configurable result acceptance
 
 Run `python scripts/smoke_plc_result_values.py` and

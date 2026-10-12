@@ -311,6 +311,7 @@ Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; 
 
 
 Ordinary inspection now uses the shared workspace overlay sidebar. Explicit main-grid placement prevents hover expansion from clipping or remounting the camera workspace. The local serial owner, lease, polling, capture and fullscreen JSX remain unchanged; closed mobile navigation is inert and text workflows retain their existing layout.
+
 ## Configurable PLC detection result values
 
 **Status: Authoritative.** Workstation configuration adds `result_pass_value`
