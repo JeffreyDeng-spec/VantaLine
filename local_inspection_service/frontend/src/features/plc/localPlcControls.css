@@ -17,15 +17,25 @@
 .plc-diagnostic-table td, .plc-diagnostic-table th { padding: 8px; text-align: left; border-bottom: 1px solid var(--border, #ddd); }
 .plc-diagnostic-panel li { padding: 8px 0; overflow-wrap: anywhere; }
 
-.plc-status-slot { position: sticky; top: 0; z-index: 5; margin-bottom: 12px; }
-.plc-connection-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 14px; border: 1px solid #cbd5e1; border-left: 5px solid #64748b; border-radius: 10px; background: #f8fafc; color: #334155; }
-.plc-connection-bar-copy { flex: 1 1 240px; min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
-.plc-connection-bar-copy strong { display: flex; align-items: center; gap: 8px; font-size: 16px; }
-.plc-connection-bar-copy i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.plc-connection-bar-copy span, .plc-connection-bar-copy time { font-size: 13px; line-height: 1.5; }
-.plc-connection-bar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.plc-connection-bar--connected { border-color: #86efac; border-left-color: #15803d; background: #f0fdf4; color: #166534; }
-.plc-connection-bar--connecting { border-color: #fcd34d; border-left-color: #b45309; background: #fffbeb; color: #92400e; }
-.plc-connection-bar--fault { border-color: #fca5a5; border-left-color: #dc2626; background: #fef2f2; color: #991b1b; }
-.plc-status-slot--fullscreen { flex: 0 0 auto; position: relative; margin: 0 4px 12px; }
-@media (max-width: 600px) { .plc-connection-bar { padding: 10px; gap: 8px; } .plc-connection-bar-actions { width: 100%; } }
+.plc-status-slot { position: sticky; top: 0; z-index: 5; width: 100%; min-width: 0; margin-bottom: 8px; }
+.plc-connection-bar { box-sizing: border-box; width: 100%; min-height: 36px; display: flex; align-items: center; gap: 12px; padding: 4px 12px; border: 0; border-radius: 4px; background: #475569; color: #fff; }
+.plc-connection-bar-copy { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.plc-connection-bar-copy strong { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.plc-connection-bar-copy i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.plc-connection-bar-copy span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 1.5; }
+.plc-connection-bar-copy time { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
+.plc-connection-bar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+.plc-connection-bar-actions .compact-action { min-height: 28px; padding: 3px 8px; border: 0; border-radius: 3px; background: transparent; color: #fff; font-size: 12px; box-shadow: none; white-space: nowrap; }
+.plc-connection-bar-actions .compact-action:hover:not(:disabled) { background: transparent; text-decoration: underline; }
+.plc-connection-bar-actions .compact-action:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.plc-connection-bar--connected { background: #0f766e; }
+.plc-connection-bar--connecting { background: #92400e; }
+.plc-connection-bar--fault { background: #b91c1c; }
+.plc-status-slot--fullscreen { position: relative; margin: 0 0 8px; }
+@media (max-width: 600px) {
+  .plc-connection-bar { padding: 5px 8px; gap: 6px; }
+  .plc-connection-bar-copy { flex-wrap: wrap; column-gap: 8px; row-gap: 2px; }
+  .plc-connection-bar-copy span { order: 3; flex-basis: 100%; }
+  .plc-connection-bar-copy time { font-size: 11px; }
+  .plc-connection-bar-actions .compact-action { padding: 3px 5px; }
+}

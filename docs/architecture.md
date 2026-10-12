@@ -2461,7 +2461,7 @@ The workbench also reads owner-scoped legacy optimization state directly, withou
 
 ## Visible PLC connection status
 
-**Status: Authoritative.** The camera workbench places a persistent PLC status bar above the camera controls and in the fullscreen header area. Both render from the same mounted LocalPlcControls owner through portals; fullscreen changes do not create another serial client, lease or heartbeat. Text and color distinguish disconnected, connecting, connected and abnormal disconnect; faults retain the reason/time until successful connection or intentional disconnect. Both bars expose the same manual connection actions. Capture readiness remains separate from serial connection. No automatic reconnect, physical replay, detection gating or alarm sound is introduced.
+**Status: Authoritative.** The camera workbench places a persistent PLC status bar across the full camera-workspace width and in the fullscreen header area. Both render from the same mounted LocalPlcControls owner through portals; fullscreen changes do not create another serial client, lease or heartbeat. Text and color distinguish disconnected, connecting, connected and abnormal disconnect; faults retain the reason/time until successful connection or intentional disconnect. Both bars expose the same manual connection actions. Capture readiness remains separate from serial connection. No automatic reconnect, physical replay, detection gating or alarm sound is introduced.
 
 ## Global two-profile connection behavior
 
@@ -2475,3 +2475,5 @@ New camera dispatches add trusted `owner_user_id` from the server-authorized lea
 ## Independent account record loading
 
 **Status: Authoritative.** PLC and business record tabs query their paginated read service independently of the general user-data snapshot. A snapshot error does not block record browsing. Historical business JSON that is null or not an object is omitted from the legacy metadata projection; the new list retains its native owner-scoped ID/time and marks missing structured metadata explicitly. Original rows and evidence are never rewritten or deleted. Source manifest v292 records this compatibility correction. Acceptance includes null/string/scalar legacy metadata and record browsing while the unrelated snapshot fails; the complete immutable release and existing zero-PLC-activity installer gates remain required.
+
+The PLC status bar uses a compact solid-color strip (36px minimum desktop height), inline status/detail/time and small actions. It spans the full workspace width; long details are visually ellipsized with the complete text available on hover and to assistive technology. Narrow screens wrap the copy without hiding connection actions.

@@ -1691,6 +1691,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </label>
       </section>
 
+      {source === "camera" && <div ref={setPlcStatusTarget} className="plc-status-slot" />}
+
       <div className="inspect-grid">
         <section className="panel page-panel input-panel">
           <div className="section-title">
@@ -1742,7 +1744,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
 
           {source === "camera" ? (
             <div className="tabpane active">
-              <div ref={setPlcStatusTarget} className="plc-status-slot" />
               <label className="toolbar-field">
                 摄像头
                 <select value={selectedDeviceId} onChange={(event) => {
