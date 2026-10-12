@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,7 +61,7 @@ try {
     await good().fill('0');await page.setViewportSize({width:390,height:780});
     assert.equal(await good().isVisible(),true);assert.equal(await bad().isVisible(),true);
     const rect=await good().boundingBox();assert(rect.x>=0&&rect.x+rect.width<=390);
-    if(mode==='local')await page.screenshot({path:'/private/tmp/plc-result-values-dialog.png'});
+    if(mode==='local')await page.screenshot({path:join(tmpdir(),'plc-result-values-dialog.png')});
     assert.deepEqual(errors,[]);await context.close();
   }
   console.log('PASS real React local/admin output values: defaults, persistence, zero, boundaries, equal values, invalid input and narrow layout');

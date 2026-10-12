@@ -459,3 +459,10 @@ The retired empty-background workbench workflow exposes neither detection_save_e
 ## User administration workbench
 
 The current account API adapters retain Admin-only authorization and include optional bounded operation reasons. Deletion reasons are query metadata; neither password entry nor generated temporary secrets are exposed to Agent tools. Secure create/reset actions still prepare native UI forms for human input. User-data operations are explicit administrator HTTP routes and manual UI confirmations; selection does not impersonate the target owner or grant that user additional permissions.
+
+
+The generated administrator `save_plc_workstation_config` action contract includes
+`result_pass_value` and `result_fail_value`, matching the two workstation settings
+forms. Defaults are 1/0; backend strict integer/range validation remains the
+authority. This changes configuration payloads only, preserves `system_settings`
+permission and adds no physical serial or detection dispatch capability.

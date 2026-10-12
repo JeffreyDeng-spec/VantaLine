@@ -94,6 +94,16 @@ def assert_owned_text_callbacks(application):
     return tuple(verified)
 
 
+def result_values_openapi_checkpoint(openapi):
+    import copy
+    openapi = copy.deepcopy(openapi)
+    # Verify the exact additive interface before replaying the historical oracle.
+    properties = openapi["components"]["schemas"]["PlcWebSerialConfigRequest"]["properties"]
+    for name, default, title in (("result_pass_value", 1, "Result Pass Value"), ("result_fail_value", 0, "Result Fail Value")):
+        assert properties.pop(name) == {"default": default, "maximum": 65535.0, "minimum": 0.0, "title": title, "type": "integer"}
+    return openapi
+
+
 def capture():
     # Never inherit a developer/production runtime or provider admission settings.
     with tempfile.TemporaryDirectory(prefix="vantaline-contract-") as temporary:
@@ -340,7 +350,7 @@ def capture():
             routes.append(item)
         return {
             "routes": routes,
-            "openapi": server.app.openapi(),
+            "openapi": result_values_openapi_checkpoint(server.app.openapi()),
             "middleware": [
                 {"class": entry.cls.__name__, "options": {
                     key: value.__name__ if callable(value) else value
@@ -413,12 +423,7 @@ def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--record", action="store_true")
     args = parser.parse_args()
-    snapshot = capture()
-    # Verify the additive interface before comparing the immutable historical oracle.
-    properties = snapshot["openapi"]["components"]["schemas"]["PlcWebSerialConfigRequest"]["properties"]
-    for name, default, title in (("result_pass_value", 1, "Result Pass Value"), ("result_fail_value", 0, "Result Fail Value")):
-        assert properties.pop(name) == {"default": default, "maximum": 65535.0, "minimum": 0.0, "title": title, "type": "integer"}
-    actual = encoded(snapshot)
+    actual = encoded(capture())
     if args.record:
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE.write_text(actual, encoding="utf-8")
