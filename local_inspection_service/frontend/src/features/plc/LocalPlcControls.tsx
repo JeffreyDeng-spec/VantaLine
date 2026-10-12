@@ -187,7 +187,6 @@ export function LocalPlcControls(props: Props) {
     {editing && <div className="modal-backdrop" role="presentation">
       <section ref={dialogRef} className="modal-panel local-plc-dialog" role="dialog" aria-modal="true" aria-label="本机 PLC 配置">
         <h3>本机 PLC 配置</h3>
-        <p>三菱 FX3GA-40MR · 9600 / 7E1。请确认地址与本条产线的 PLC 程序一致；自动校验只检查通信。</p>
         <form onSubmit={submit} key={`${data?.config_generation}-${editing}`}>
           <div className="form-grid">
             <label className="field">到位输入寄存器<input autoFocus name="input" required pattern="[Dd](?:0|[1-9][0-9]{0,2})" defaultValue={config.capture_input_register} /></label>
