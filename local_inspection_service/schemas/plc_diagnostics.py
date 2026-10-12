@@ -8,8 +8,8 @@ Code = Literal['','unsupported','cancelled','occupied','serial_error','timeout',
 
 class DiagnosticConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    baudrate: Literal[9600] = 9600
-    data_bits: Literal[7] = 7
+    baudrate: Literal[9600, 19200] = 9600
+    data_bits: Literal[7, 8] = 7
     parity: Literal['E'] = 'E'
     stop_bits: Literal[1] = 1
     input_register: str = Field(default='', pattern=r'^(|D(?:0|[1-9][0-9]{0,2}))$')

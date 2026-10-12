@@ -1,5 +1,5 @@
 {
-  "version": 287,
+  "version": 288,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -619,6 +619,7 @@
     "training/real_photo_transport.py",
     "plc/diagnostic_events_api.py",
     "schemas/plc_diagnostics.py",
-    "storage/plc_diagnostic_repository.py"
+    "storage/plc_diagnostic_repository.py",
+    "plc_modbus_rtu.py"
   ]
 }

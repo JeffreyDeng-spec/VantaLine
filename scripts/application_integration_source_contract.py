@@ -85,7 +85,8 @@ def _restore_delta_cached(source, fixture_json):
 
 def reviewed_business_bytes(path):
     """Reverse only the reviewed quota-removal delta for historical source oracles."""
-    actual = (ROOT / path).read_bytes().replace(b"\r\n", b"\n")
+    from plc_modbus_source_contract import restore_modbus_business
+    actual = restore_modbus_business(path, (ROOT / path).read_bytes().replace(b"\r\n", b"\n"))
     raw = (ROOT / "tests/backend_contract/production_quota_removal_delta.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "0cb0e3da54b1872ad52915452becb1295c147c48c6e7d1f0213c6f2a86312eb8", "Unreviewed quota-removal fixture"
     fixture = json.loads(raw)

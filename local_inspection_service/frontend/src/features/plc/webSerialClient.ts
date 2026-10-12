@@ -1,4 +1,5 @@
-import { PlcDiagnosticLog, diagnosticError } from "./diagnosticLog";
+import { parseModbusWord } from "./modbusRtu";
+import { PlcDiagnosticLog, diagnosticError, diagnosticErrorDetail } from "./diagnosticLog";
 import {
   activatePlcWorkstationConnection,
   claimPlcWorkstationConnection,
@@ -84,6 +85,7 @@ export interface PlcBrowserConnectionState {
 export class PlcWebSerialClient {
   readonly diagnostics = new PlcDiagnosticLog();
   private diagnosticTriggerHigh: boolean | null = null;
+  private modbus = false;
   private port: SerialPort | null = null;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -148,42 +150,66 @@ export class PlcWebSerialClient {
       this.diagnostics.record("lease","ok");
       diagnosticStep = "open"; diagnosticStarted = performance.now();
       this.diagnostics.record("open","started");
-      await this.port.open({ baudRate: 9600, dataBits: 7, stopBits: 1, parity: "even", flowControl: "none" });
-      ensureCurrent();
-      this.diagnostics.record("open","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
-      if (!this.port.readable || !this.port.writable) throw new Error("串口未提供读写通道");
-      this.reader = this.port.readable.getReader();
-      this.writer = this.port.writable.getWriter();
-      const check = this.lease.connection_check;
-      if (!check || check.frames.length !== 2) throw new Error("请刷新页面后重新连接 PLC");
-      const verify = async () => {
+      const rootCheck = this.lease.connection_check;
+      if (!rootCheck || rootCheck.frames.length !== 2) throw new Error("请刷新页面后重新连接 PLC");
+      let check = rootCheck;
+      let connectionReads: Array<{target: string; response_hex: string}> = [];
+      const candidates = [rootCheck, ...(rootCheck.alternatives || [])].slice(0, 2);
+      for (let index = 0; index < candidates.length; index++) {
+        check = candidates[index];
+        this.modbus = check.config?.protocol === "modbus_rtu";
+        const length = this.modbus ? 7 : 8;
         ensureCurrent();
-        diagnosticStep = "quiet"; diagnosticStarted=performance.now();
-        this.diagnostics.record("quiet","started");
-        await this.requireQuietInput(500);
-        this.diagnostics.record("quiet","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
-        onProgress?.("正在校验 PLC 通信…");
-        const reads: Array<{ target: string; response_hex: string }> = [];
-        for (const frame of check.frames) {
+        diagnosticStep = "open";
+        await this.port.open(check.serial_options || {baudRate:9600,dataBits:7,stopBits:1,parity:"even",flowControl:"none"});
+        ensureCurrent();
+        if (!this.port.readable || !this.port.writable) throw new Error("串口未提供读写通道");
+        this.reader = this.port.readable.getReader();
+        this.writer = this.port.writable.getWriter();
+        this.diagnostics.record("open", "ok");
+        try {
+          const verify = async () => {
+            ensureCurrent();
+            diagnosticStep = "quiet";
+            await this.requireQuietInput(500);
+            onProgress?.(this.modbus ? "正在识别 Modbus RTU（19200 / 8E1，站号 1）…" : "正在校验 PLC 通信…");
+            const reads: Array<{target: string; response_hex: string}> = [];
+            for (const frame of check.frames) {
+              ensureCurrent();
+              if (document.visibilityState !== "visible" || Date.now() >= check.deadline_at * 1000) throw new Error("PLC 校验已过期或页面在后台，请重新连接");
+              diagnosticStep = "read"; diagnosticTarget = frame.target; diagnosticStarted = performance.now();
+              this.diagnostics.record("read", "started", {target:frame.target,expected_bytes:length});
+              this.armRead();
+              await Promise.resolve();
+              if (this.pendingReadResolved) throw new Error("PLC 校验前存在串口残留数据");
+              await this.writer!.write(bytesFromHex(frame.frame_hex));
+              const response = await this.readExact(length, check.timeout_ms);
+              (this.modbus ? parseModbusWord : parseDiagnosticWordResponse)(response);
+              this.diagnostics.record("read", "ok", {target:frame.target,expected_bytes:length,actual_bytes:response.length,duration_ms:Math.round(performance.now()-diagnosticStarted)});
+              reads.push({target:frame.target,response_hex:hexFromBytes(response)});
+              await this.requireQuietInput(check.timeout_ms);
+            }
+            return reads;
+          };
+          const verification = this.queue.then(verify, verify);
+          this.queue = verification.then(() => undefined, () => undefined);
+          connectionReads = await verification;
+          break;
+        } catch (error) {
+          // Only zero-response read timeout may try the single alternate profile.
+          // Occupancy, partial response, CRC, residual bytes and cancellation fail closed.
+          const detail = diagnosticErrorDetail(error);
+          if (index + 1 >= candidates.length || detail.code !== "timeout" || detail.actual_bytes) throw error;
           ensureCurrent();
-          if (document.visibilityState !== "visible" || Date.now() >= check.deadline_at * 1000) throw new Error("PLC 校验已过期或页面在后台，请重新连接");
-          diagnosticStep = "read"; diagnosticTarget = frame.target; diagnosticStarted=performance.now();
-          this.diagnostics.record("read","started",{target:frame.target,expected_bytes:8});
-          this.armRead();
-          await Promise.resolve();
-          if (this.pendingReadResolved) throw new Error("PLC 校验前存在串口残留数据");
-          await this.writer!.write(bytesFromHex(frame.frame_hex));
-          const response = await this.readExact(8, check.timeout_ms);
-          parseDiagnosticWordResponse(response);
-          this.diagnostics.record("read","ok",{target:frame.target,expected_bytes:8,actual_bytes:response.length,duration_ms:Math.round(performance.now()-diagnosticStarted)});
-          reads.push({ target: frame.target, response_hex: hexFromBytes(response) });
-          await this.requireQuietInput(check.timeout_ms);
+          this.diagnostics.failure("read", error, {target:diagnosticTarget});
+          await this.reader.cancel();
+          this.reader.releaseLock();
+          this.writer.releaseLock();
+          this.reader = null; this.writer = null;
+          this.pendingRead = null; this.pendingReadResolved = false;
+          await this.port.close();
         }
-        return reads;
-      };
-      const verification = this.queue.then(verify, verify);
-      this.queue = verification.then(() => undefined, () => undefined);
-      const connectionReads = await verification;
+      }
       const info = this.port.getInfo();
       diagnosticStep="activate";diagnosticStarted=performance.now();
       this.diagnostics.record("activate","started");
@@ -197,7 +223,17 @@ export class PlcWebSerialClient {
       });
       ensureCurrent();
       this.diagnosticTriggerHigh = null;
-      this.diagnostics.record("activate","ok",{duration_ms:Math.round(performance.now()-diagnosticStarted)});
+      this.diagnostics.bind(stationId, this.lease.config_generation, this.lease.lease_epoch);
+      const verifiedConfig = check.config;
+      this.diagnostics.record("activate","ok",{
+        duration_ms:Math.round(performance.now()-diagnosticStarted),
+        ...(verifiedConfig?.baudrate && verifiedConfig.data_bits ? {config:{
+          baudrate:verifiedConfig.baudrate,data_bits:verifiedConfig.data_bits,parity:"E" as const,stop_bits:1 as const,
+          input_register:verifiedConfig.capture_input_register,result_register:verifiedConfig.result_register,
+          output_control_point:verifiedConfig.output_control_point,timeout_ms:500 as const,
+          capture_enabled:verifiedConfig.capture_trigger_enabled,trigger_value:verifiedConfig.capture_trigger_value
+        }} : {})
+      });
       this.stopped = false;
       this.disconnectListener = (event: Event) => {
         if (event.target === this.port) void this.failClosed("PLC 串口已拔出，请检查线路后人工重连", onFatal, "unplugged");
@@ -383,6 +419,11 @@ export class PlcWebSerialClient {
         return { ...base, status: "unexpected_response", response_hex: hexFromBytes(stale.value || new Uint8Array()), completed_at: Date.now() };
       }
       await this.writer.write(bytesFromHex(frame.frame_hex));
+      if (this.modbus) {
+        const response = await this.readExact(8, timeoutMs);
+        const acknowledged = hexFromBytes(response) === frame.expected_response_hex;
+        return {...base,status:acknowledged ? "acknowledged" : "unexpected_response",response_hex:hexFromBytes(response),completed_at:Date.now()};
+      }
       const reply = await this.readAck(timeoutMs);
       return { ...base, status: reply.status, response_hex: hexFromBytes(reply.response), completed_at: Date.now() };
     } catch (error) {
@@ -435,7 +476,7 @@ export class PlcWebSerialClient {
         }
         for (const [index, physical] of operations.entries()) {
           if(physical.status === "acknowledged") this.diagnostics.count("writes");
-          else this.diagnostics.record("write",physical.status === "nak" ? "failed" : "uncertain",{dispatch_id:attempt.dispatch_id,target:physical.target,duration_ms:operationDurations[index],expected_bytes:1,actual_bytes:Math.min(65536,physical.response_hex.length/2),code:physical.status === "nak" ? "nak" : physical.status === "timeout" ? "timeout" : physical.status === "unexpected_response" ? "invalid_frame" : "serial_error"});
+          else this.diagnostics.record("write",physical.status === "nak" ? "failed" : "uncertain",{dispatch_id:attempt.dispatch_id,target:physical.target,duration_ms:operationDurations[index],expected_bytes:this.modbus ? 8 : 1,actual_bytes:Math.min(65536,physical.response_hex.length/2),code:physical.status === "nak" ? "nak" : physical.status === "timeout" ? "timeout" : physical.status === "unexpected_response" ? "invalid_frame" : "serial_error"});
         }
         const uncertain = nakSyncLost || operations.some((item) => ["timeout", "serial_error", "unexpected_response"].includes(item.status));
         const requiresClose = uncertain;
@@ -485,7 +526,7 @@ export class PlcWebSerialClient {
         if (this.pendingReadResolved) throw new Error("读取前发现串口残留数据");
         await this.writer.write(bytesFromHex(plan.frame_hex));
         const response = await this.readExact(plan.expected_response_bytes, plan.read_timeout_ms);
-        const value = parseDiagnosticWordResponse(response);
+        const value = (this.modbus ? parseModbusWord : parseDiagnosticWordResponse)(response);
         this.diagnostics.count("reads");
         const triggerHigh = value === plan.trigger_value;
         if(triggerHigh !== this.diagnosticTriggerHigh) {

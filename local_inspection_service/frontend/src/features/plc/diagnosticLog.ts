@@ -7,7 +7,7 @@ export type DiagnosticEvent = {
   client_time_ms:number; duration_ms:number; config_generation:number; lease_epoch:number; bundle_version:string;
   dispatch_id:string; target:string; trigger_state:""|"high"|"reset"; expected_bytes:number; actual_bytes:number;
   reads_ok:number; heartbeats_ok:number; writes_ok:number; dropped:number;
-  config?:{baudrate:9600;data_bits:7;parity:"E";stop_bits:1;input_register:string;result_register:string;output_control_point:string;timeout_ms:500;capture_enabled:boolean;trigger_value:number};
+  config?:{baudrate:9600|19200;data_bits:7|8;parity:"E";stop_bits:1;input_register:string;result_register:string;output_control_point:string;timeout_ms:500;capture_enabled:boolean;trigger_value:number};
 };
 type ErrorDetail = {code:DiagnosticCode;expected_bytes?:number;actual_bytes?:number};
 const errorDetails = new WeakMap<object, ErrorDetail>();

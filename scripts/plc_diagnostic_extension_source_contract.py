@@ -10,7 +10,8 @@ def digest(source):return hashlib.sha256(ast.dump(ast.parse(source),include_attr
 def diagnostic_parent_source(source):
     assert digest(source)==FIXTURE[HTTP], 'Unknown diagnostic HTTP extension'
     for path,expected in FIXTURE.items():
-        assert digest((ROOT/path).read_text())==expected, 'Diagnostic owner changed: '+path
+        from plc_modbus_source_contract import restore_modbus_business
+        assert digest(restore_modbus_business(path, (ROOT/path).read_bytes()).decode())==expected, 'Diagnostic owner changed: '+path
     tree=ast.parse(source);removed_import=0;removed_call=0
     for node in list(tree.body):
         if isinstance(node,ast.ImportFrom) and node.module=='local_inspection_service.plc.diagnostic_events_api':

@@ -9,6 +9,7 @@ import hmac
 import secrets
 import time
 from typing import Any
+from ..plc_web_serial import web_serial_profile_fingerprint
 from .browser_dispatch_ports import BrowserDispatchStorage, BrowserDispatchIdentity, BrowserDispatchPolicy, BrowserDispatchProjection, PlcWebSerialAttemptRequest, PlcWebSerialReceiptRequest
 
 @dataclass(frozen=True)
@@ -52,6 +53,11 @@ class PlcBrowserDispatchService:
                     raise self.policy.PlcConfigError()("plc_camera_request_payload_conflict")
                 return
             config_snapshot = self.policy.migrate_web_serial_config()(station.get("config") or {})
+            if config_snapshot.get("protocol") == "modbus_rtu" and not (
+                station.get("profile_verified") and hmac.compare_digest(
+                    str(station.get("profile_verified_fingerprint") or ""),
+                    web_serial_profile_fingerprint(config_snapshot))):
+                raise self.policy.PlcConfigError()("plc_modbus_business_mapping_not_verified")
             record = {
                 "dispatch_id": dispatch_id,
                 "protocol_version": self.policy.WEB_SERIAL_PROTOCOL_VERSION(),
@@ -277,9 +283,9 @@ class PlcBrowserDispatchService:
                 raise self.policy.PlcConfigError()("plc_receipt_status_invalid")
             if operation.get("target") != expected.get("target") or operation.get("frame_sha256") != expected.get("frame_sha256"):
                 raise self.policy.PlcConfigError()("plc_receipt_frame_mismatch")
-            if status == "acknowledged" and response_hex != "06":
+            if status == "acknowledged" and response_hex != expected.get("expected_response_hex", "06"):
                 raise self.policy.PlcConfigError()("plc_receipt_ack_evidence_invalid")
-            if status == "nak" and response_hex != "15":
+            if status == "nak" and (expected.get("expected_response_hex", "06") != "06" or response_hex != "15"):
                 raise self.policy.PlcConfigError()("plc_receipt_nak_evidence_invalid")
             if status in {"timeout", "serial_error"} and response_hex:
                 raise self.policy.PlcConfigError()("plc_receipt_empty_response_required")
