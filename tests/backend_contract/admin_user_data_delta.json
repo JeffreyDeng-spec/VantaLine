@@ -43,6 +43,6 @@
     }
   },
   "new_sources": {
-    "local_inspection_service/auth/data_workbench.py": "a257b7821a0a2247f73f2a2fc5914929dca107699a6351d973fb178f07ead64d"
+    "local_inspection_service/auth/data_workbench.py": "bd8a9aa09e95b8451bf28dbc94605dc2006091dd13f16c55c1c03c4f512b6c27"
   }
 }

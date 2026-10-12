@@ -77,11 +77,13 @@ class IntegrationContracts(unittest.TestCase):
         import json
         target = contract.ROOT / 'local_inspection_service/training/real_photo_api.py'
         actual = target.read_bytes()
-        restored = contract.pagination_checkpoint_bytes(actual)
+        def checked(value):
+            return contract.pagination_checkpoint_bytes(contract.checkpoint_bytes('local_inspection_service/training/real_photo_api.py', value))
+        restored = checked(actual)
         self.assertEqual(hashlib.sha256(restored).hexdigest(), '6822f9a6b85a8280fc5651f2305d3b9d60b90703e5399dedcbecb47784358494')
         for changed in (actual + b'\nunreviewed = True\n', actual.replace(b'limit=24', b'limit=25')):
             with self.assertRaises(AssertionError):
-                contract.pagination_checkpoint_bytes(changed)
+                checked(changed)
         fixture_path = contract.ROOT / 'tests/backend_contract/real_photo_pagination_delta.json'
         original = Path.read_text
         def read(path, *args, **kwargs):
@@ -92,7 +94,7 @@ class IntegrationContracts(unittest.TestCase):
                 return json.dumps(altered)
             return value
         with patch.object(Path, 'read_text', read), self.assertRaises(AssertionError):
-            contract.pagination_checkpoint_bytes(actual)
+            checked(actual)
 
     def test_current_root_and_actual_owner_bindings_pass_before_replay(self):
         contract.verify_actual_compositions()
@@ -220,7 +222,7 @@ class IntegrationContracts(unittest.TestCase):
     def test_coordinated_main289_source_and_hash_mutations_are_rejected(self):
         cases = [
             ('local_inspection_service/training/real_photo_api.py', b"if k not in {'response_id','references'}", b'if True'),
-            ('local_inspection_service/training/real_photo_contracts.py', b'if source_confirmed(s) and s.get(', b'if s.get('),
+            ('local_inspection_service/training/real_photo_contracts.py', b'source_confirmed(s) and s.get(', b's.get('),
             ('local_inspection_service/training_review/worker.py', b"'source_group_confirmed':source_confirmed(s)", b"'source_group_confirmed':True"),
         ]
         original_read = Path.read_bytes

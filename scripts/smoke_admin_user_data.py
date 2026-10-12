@@ -80,4 +80,14 @@ assert client.post('/api/auth/users/a/data/operations',json={'action':'params','
 assert client.post('/api/auth/users/a/data/operations',json={'action':'params','kind':'pipeline','resource_id':'p1','epochs':1,'reason':'   '}).status_code==422
 assert client.get('/api/auth/users-data-summary').status_code==200
 assert actor['id']=='admin', 'admin reads/mutations never change ambient identity'
+# Archive follows explicit AI linkage, even when the pipeline ID has no pipe_ai prefix.
+pipelines[0]['ai_task_id'] = 'ai1'
+original_snapshot, original_feedback = service.snapshot, service.feedback
+service.snapshot = lambda owner: {'real_photo': [{'task_id': 'ai1', 'enabled': True}]}
+service.feedback = lambda target: SimpleNamespace(enable=lambda identifier, request: calls.append(('feedback_pause', identifier, request.enabled)))
+service.operate('a', DataOperation(action='archive', kind='pipeline', resource_id='p1', reason='archive linked task'))
+assert ('feedback_pause', 'ai1', False) in calls
+for mode in ('real_photo', 'legacy'):
+    fail(409, lambda: service.apply(users[0], DataOperation(action='resume', kind=mode, resource_id='ai1', reason='must restore archive')))
+service.snapshot, service.feedback = original_snapshot, original_feedback
 print('PASS admin user data: readonly counts, role/owner isolation, durable intents, parameter bounds, inactive resume, no fake remote cancellation, reference usage, last-reference guard, no identity impersonation')

@@ -271,6 +271,12 @@ class UserDataWorkbench:
         owner = target['id']
         if r.action == 'resume' and not target.get('active', True):
             raise HTTPException(409, '先启用账号，再显式恢复任务')
+        if r.action == 'resume' and r.kind in {'real_photo', 'legacy'}:
+            archived = set((target.get('admin_data') or {}).get('archived', []))
+            if any(t.get('owner_user_id') == owner and 'pipeline:'+t['id'] in archived
+                   and (t.get('ai_task_id') == r.resource_id or t['id'] == 'pipe_ai_'+r.resource_id)
+                   for t in self.ports.pipelines()):
+                raise HTTPException(409, '先恢复归档任务')
         if r.kind == 'pipeline':
             task = next((t for t in self.ports.pipelines() if t.get('id') == r.resource_id and t.get('owner_user_id') == owner), None)
             if not task:
@@ -364,7 +370,7 @@ class UserDataWorkbench:
             self.ports.pipeline_pause(r.resource_id)
             # Pause real feedback independently; restoring an archive never enables it.
             for photo in self.snapshot(owner)['real_photo']:
-                if r.resource_id == 'pipe_ai_'+photo['task_id'] and photo['enabled']:
+                if photo['task_id'] == aid and photo['enabled']:
                     self.feedback(target).enable(photo['task_id'], EnableRequest(enabled=False))
         if r.kind == 'training':
             task = next(t for t in self.ports.training_records() if str(t.get('id') or t.get('job_id') or t.get('task_id')) == r.resource_id and t.get('owner_user_id') == owner)
