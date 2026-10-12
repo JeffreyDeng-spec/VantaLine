@@ -1791,3 +1791,8 @@ Installer heartbeat acceptance reports a fixed failure stage and a whitelisted
 SQLSTATE category before its generic failure message. It never logs exception
 text, configuration, connection strings or database records. All acceptance and
 whole-release rollback gates remain required.
+
+
+## Lightweight diagnostic release
+
+PLC diagnostics ship with their strict API, browser collector/viewer, additive migration and independent expiry units in one immutable frontend/backend package. The frontend embeds the release ID through `VITE_PLC_BUNDLE_VERSION`. Follow the current owner CI policy, report focused local evidence and never claim skipped CI passed. Package integrity, installer acceptance, exact production version and whole-release rollback remain required. Start collection only for JHC001; broader collection requires an explicit allowlist change. Diagnostic expiry installation follows acceptance and does not issue PLC traffic or act as a release gate.

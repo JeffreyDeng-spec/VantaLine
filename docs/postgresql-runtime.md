@@ -917,3 +917,10 @@ Real-photo scheduling reconciles recheck keys and reads pending training jobs on
 ## Read-only real-photo sample pages
 
 Pages read the existing owner/task real_photo_states JSON through RealPhotoRepository.get. There is no migration, write/event insertion or job enqueue. HTTP page size is bounded, but the existing whole-state JSON read remains; this is not a database latency optimization. A capture anchor excludes later originals until refresh. Filters re-evaluate current review identity on each read, so explicit source/version edits can change membership. Historical evidence and frozen datasets remain intact.
+
+
+## PLC diagnostic table and expiry
+
+The additive `2026_10_12_plc_diagnostic_events.sql` creates only `plc_diagnostic_events` and its account/time, attempt, station and received-time indexes. `(owner_user_id,event_id)` deduplicates retries; event ordering retains browser sequence separately from server receipt time. This append-only diagnostic table is intentionally outside generic mutable business-row adapters. Existing users, station/lease and dispatch tables remain unchanged. Account identity is server-derived; station binding is checked through the cookie hash on the diagnostic connection. Reads enforce account scope in SQL and expose only fixed report fields.
+
+Retention is 30 days by server receipt time. `scripts/cleanup_plc_diagnostics.py` independently removes expired diagnostics in batches of at most 500, uses SKIP LOCKED, pauses 200ms between full batches and stops after 50 batches. It neither imports the Web application nor deletes existing PLC/inspection/audit records. Failure is redacted and is not a production recovery action.

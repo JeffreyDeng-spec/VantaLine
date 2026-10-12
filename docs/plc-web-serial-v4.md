@@ -244,3 +244,14 @@ The native chooser runs in the click handler before network awaits. After port o
 **Status: Authoritative**
 
 Removing the empty-background prerequisite does not alter PLC readiness, connection verification, model binding, camera provenance, at-most-once dispatch or uncertainty handling. Camera production no longer pauses for a background-photo dialog. Image/video analysis retains zero PLC output.
+
+
+## Lightweight PLC diagnostic evidence
+
+Each connection click receives a diagnostic attempt ID. Browser events cover port selection, workstation setup, lease acquisition, open, quiet-input checks, register verification, activation, read faults, write ACK/NAK/uncertain outcomes, heartbeat failure and disconnect. Successful polling/heartbeats/writes accumulate one-minute summaries; they do not create per-poll HTTP requests. Reports contain fixed error codes, configured addresses, byte counts, monotonic elapsed time and the compiled release ID. They contain no raw frames, values, stack traces, credentials or media. Physical results remain authoritative only in existing dispatch/receipt audit; browser reports and the server lease observed at ingestion are explicitly distinguished.
+
+The uploader is separate from the serialized physical queue. It pauses/aborts while a physical transaction starts, sends at most 20 events/32KiB per request every 10 seconds, aborts at 2 seconds and backs off up to 60 seconds. Fixed 2KiB reservations bound memory to 256KiB and at most 200 events (the conservative reservation currently admits 128); normal summaries are evicted first and dropped counts are recorded. Close/crash may lose unsent diagnostics. Identity changes and logout clear the memory queue. No storage persistence, beacon, serial replay or logging-dependent production gate exists. Connection failure retains its original Chinese reason, byte counts and diagnostic ID; pending upload is visible separately.
+
+POST `/api/plc/diagnostic-events/batch` accepts a strict bounded report; GET `/api/plc/diagnostic-events/config` controls eligible collection; GET `/api/plc/diagnostic-events` returns 50 events per page with explicit account/station/attempt/error/time filters. Ordinary users see only their own reports; admins may filter across accounts. Station IDs must match the authenticated workstation cookie. Pre-pair events may have no station. The viewer is manual-refresh only and marks absent terminal evidence unknown.
+
+Input reads additionally report only transitions between the configured trigger level and reset level, never the raw register word. The snapshot includes automatic capture enablement and its configured trigger value; this observation does not generate a capture or dispatch.

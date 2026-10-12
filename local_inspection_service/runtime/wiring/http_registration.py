@@ -46,6 +46,7 @@ from local_inspection_service.schemas.plc import PlcWorkstationLeaseRequest
 from local_inspection_service.schemas.plc import PlcWorkstationSelfPairRequest
 from local_inspection_service.plc.workstation_self_service import WorkstationSelfService
 from local_inspection_service.plc.workstation_self_service_api import register_workstation_self_service
+from local_inspection_service.plc.diagnostic_events_api import register_diagnostic_events
 from local_inspection_service.schemas.plc import PlcWorkstationPairRequest
 from local_inspection_service.schemas.plc import PlcWorkstationVerifyRequest
 from local_inspection_service.model_profiles.dependencies import ProfileApiDependencies
@@ -678,6 +679,8 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
     @app.get('/api/version')
     def get_release_version() -> dict[str, Any]:
         return current_release_version()
+
+    register_diagnostic_events(app, environment=environment, current_user=lambda: ports.current_auth_user()(), cookie_name=values.PLC_WORKSTATION_COOKIE)
 
     _plc_self_service_routes = register_workstation_self_service(app, ports._plc_workstation_self_service())
     self_pair_plc_workstation = _plc_self_service_routes.self_pair_plc_workstation

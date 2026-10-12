@@ -1,0 +1,10 @@
+# VantaLine managed PLC diagnostic expiry v1
+[Unit]
+Description=Daily bounded PLC diagnostic expiry
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+RandomizedDelaySec=3600
+Persistent=false
+Unit=vantaline-plc-diagnostics-cleanup.service
+[Install]
+WantedBy=timers.target

@@ -1945,3 +1945,8 @@ Real-photo recovery adds no setting or model change. Current-version recheck rec
 ## Real-photo process-data viewing
 
 No new configuration or permission is introduced. Existing allowlisting, task ownership and read authorization apply to `/real-photo/samples`; category, decision, cursor, limit and sample_id are read-only query parameters. Advanced source/relabel/mask/restart tools still use the existing authorized endpoints and frozen-group/active-round restrictions. Display mode follows selected rather than enabled, so pause retains the real-photo view.
+
+
+## PLC diagnostic collection
+
+`VANTALINE_PLC_DIAGNOSTICS_ENABLED=1` permits diagnostic collection; `0` stops new collection. `VANTALINE_PLC_DIAGNOSTIC_ACCOUNTS` is a comma-separated allowlist of usernames or user IDs, default `jhc001`; `*` explicitly enables all eligible users. These are diagnostic collection settings, not PLC authorization. The browser rechecks them at most once a minute while idle, clearing queued events when disabled. The existing `DATABASE_URL` supplies the independent diagnostic connection; missing/unavailable PostgreSQL does not change PLC behavior. Build production with `VITE_PLC_BUNDLE_VERSION` set to the immutable release ID (the release workflow does this); development defaults to `development`.

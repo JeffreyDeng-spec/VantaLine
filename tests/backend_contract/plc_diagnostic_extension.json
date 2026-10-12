@@ -1,0 +1,6 @@
+{
+  "local_inspection_service/runtime/wiring/http_registration.py": "1fe2eb9139ecc88742cff765585a4851d2848b49a71647207936f5d8f4bae6fc",
+  "local_inspection_service/plc/diagnostic_events_api.py": "39a635b0c83521037949f08efd28f2ebcdd8f70e7958ad986d62aa80fd9b58a1",
+  "local_inspection_service/schemas/plc_diagnostics.py": "53580162eeca6a6eb1c1e684c8b57992c431d0a28ebb938a4ac3d9ee8bb53d6f",
+  "local_inspection_service/storage/plc_diagnostic_repository.py": "a209a7a8a71d3bf20788fb02832f7ec4f62b549e5489ddfe48bcc68c04ca7854"
+}
