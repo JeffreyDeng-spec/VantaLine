@@ -787,7 +787,7 @@ export function UsersPage() {
         <section className="panel page-panel">
           <div className="section-title">
             <h3>账号与权限</h3>
-            <span className="pill neutral">当前账号</span>
+            <span className="pill neutral">{target.id === auth.user.id ? "当前登录账号" : "被管理账号"}</span>
           </div>
           <div className="user-management-list">
             {users.length ? (
