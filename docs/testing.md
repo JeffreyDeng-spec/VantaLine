@@ -3317,3 +3317,17 @@ Acceptance: inspect the real shared component at 1920, 1366 and 1280px and verif
 ## Administrator detection photos and frozen dataset membership
 
 **Status: Authoritative.** Run `python -m pytest tests/test_dataset_photos.py tests/test_real_photo_pagination.py` and `node scripts/test_dataset_photos_ui.cjs`. Cover 105-record stable paging/new arrival refresh, whole-owner category counts, positive/negative admission, current/stale review, uncertain/excluded/failed/disabled states, immutable multi-version membership, legacy reliable source IDs, orphan training members, missing manifests/media, account/cursor isolation and no reconciliation/queue writes. Run the isolated PostgreSQL assembled administrator smoke, existing administrator/photo regressions, frontend typecheck/production build, assembled OpenAPI and exact source guards, boundaries, docs and diff checks. Browser fixtures cover detail/history, version member paging, filter scopes, visible-page polling/new-arrival prompt, snapshot/transport failures and 390px layout; they do not certify private media availability or physical PLC behavior. CI remains skipped under owner release policy.
+## PLC configurable result acceptance
+
+Run `python scripts/smoke_plc_result_values.py` and
+`python scripts/smoke_plc_result_values_http.py`; run the real React configuration
+scenarios in `node local_inspection_service/frontend/scripts/test-plc-result-values.mjs`.
+Cover absent-field defaults, strict API validation, 2/3, 0/1, 0/65535 and equal
+values, FX word bytes/ACK and RTU CRC/echo, unchanged optional Y, fingerprints,
+logout/login persistence, generation fencing and old-release rejection/rollback
+preparation. Run existing request-model, Web Serial v4, Modbus, self-service, lease,
+browser dispatch and frontend provenance contracts, capture/connection tests,
+typecheck/build, release/boundary/docs contracts and diff check. The new exact
+source inverse verifies the accepted feature bytes before historical oracles;
+historical fixtures are not rewritten. All evidence uses synthetic ports and
+isolated storage, never a field PLC or customer records.

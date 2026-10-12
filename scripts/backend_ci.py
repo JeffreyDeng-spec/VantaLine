@@ -76,6 +76,10 @@ def load_manifest(path=MANIFEST):
     delta = ADDITIONS.read_bytes().replace(b'\r\n', b'\n')
     assert hashlib.sha256(delta).hexdigest()==ADDITIONS_SHA256, 'refactor inventory bytes changed'
     manifest = compose_manifest(manifest, json.loads(delta))
+    # Add feature acceptance without rewriting either fixed historical inventory.
+    for name in ("smoke_plc_result_values", "smoke_plc_result_values_http"):
+        manifest["checks"].append(dict(id=name, run=f"python scripts/{name}.py",
+            env={}, cwd=".", group="plc-result-values", step="PLC configurable result values", shard=0))
     assert manifest['schema'] == 1 and manifest['shard_count'] == 12
     checks = manifest['checks']
     ids = [item['id'] for item in checks + manifest['performance']]

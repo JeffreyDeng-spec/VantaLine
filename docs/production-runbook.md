@@ -2094,3 +2094,65 @@ Release the account-records backend, UI, additive dispatch owner evidence and so
 After installing this feature, verify `/api/version` matches the deployed whole release and commit. With a tab opened on the prior guarded release, background discovery must leave the page in place; navigating must load the selected target URL on the current release. A new business action must refresh without submitting or replaying it. Retain/discard must protect unsaved inputs/files/annotations; a current PLC operation and receipt must finish before disconnect/reload, and reconnection must be manual.
 
 If the refreshed page still has the prior identity, the browser stops automatic retries for that target and offers an explicit retry. Inspect release consistency and HTML/proxy caching before retrying. Offline/unhealthy version checks cannot force reload. A tab opened before the first guarded release needs one manual refresh. Roll back the complete previous immutable artifact, never copy a frontend file or alter workstation/dispatch evidence. Physical PLC acceptance remains distinct from synthetic browser fixtures.
+
+## Rollback of configurable PLC result values
+
+**Status: Authoritative.** Pre-feature schema-5 binaries reject the new fields.
+Never activate that release over unchanged feature configuration. Keep the prior
+complete immutable release and a restricted backup of workstation/lease rows.
+Rollback returns result semantics to PASS=1 / FAIL=0; keep the line paused until
+its PLC program has been checked for that mapping. Custom mappings are retained
+in the restricted backup, not in repository files or logs.
+
+1. Pause camera dispatch on all affected workstations, disconnect browsers, and
+   stop the Web service using the normal maintenance procedure. Do not retry an
+   uncertain operation. Wait for all in-flight dispatch/diagnostic deadlines to
+   expire and preserve their original evidence.
+2. Back up `vantaline.plc_workstations` and `vantaline.plc_workstation_leases`
+   with the normal restricted database backup tooling. On the coordinated
+   production PostgreSQL store, run the following transaction using the existing
+   service database access (no DSN in command history). It removes only the two
+   unsupported configuration fields, disables linkage and fences existing leases.
+
+```sql
+BEGIN;
+LOCK TABLE vantaline.plc_workstations, vantaline.plc_workstation_leases IN EXCLUSIVE MODE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM vantaline.plc_workstation_leases
+             WHERE COALESCE((raw_json->>'in_flight_deadline_at')::bigint,0)
+                   > EXTRACT(EPOCH FROM clock_timestamp())) THEN
+    RAISE EXCEPTION 'Wait for all in-flight PLC deadlines before rollback';
+  END IF;
+END $$;
+UPDATE vantaline.plc_workstations
+SET config_generation = config_generation + 1, profile_verified = false,
+    status = 'commissioning',
+    raw_json = jsonb_set(jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          jsonb_set(raw_json #- '{config,result_pass_value}' #- '{config,result_fail_value}'
+                    #- '{previous_serial_profile,config,result_pass_value}'
+                    #- '{previous_serial_profile,config,result_fail_value}',
+                    '{config,enabled}', 'false'),
+          '{config_generation}', to_jsonb(config_generation + 1)),
+        '{profile_verified}', 'false'),
+      '{profile_verified_fingerprint}', '""'), '{status}', '"commissioning"')
+WHERE raw_json->'config' ?| ARRAY['result_pass_value','result_fail_value']
+   OR raw_json#>'{previous_serial_profile,config}' ?| ARRAY['result_pass_value','result_fail_value'];
+UPDATE vantaline.plc_workstation_leases
+SET state = 'revoked_config_changed', expires_at = EXTRACT(EPOCH FROM clock_timestamp())::bigint,
+    raw_json = jsonb_set(jsonb_set(raw_json, '{state}', '"revoked_config_changed"'),
+                        '{expires_at}', to_jsonb(EXTRACT(EPOCH FROM clock_timestamp())::bigint))
+WHERE state IN ('connecting','active','draining');
+COMMIT;
+```
+
+3. Restore the previous **complete** immutable release through the normal
+   installer, then verify `/api/version`, Web/label heartbeats and workstation
+   configuration reads. Old result plans must remain fenced; preserve all dispatch
+   records unchanged. Verify PASS=1 / FAIL=0 with synthetic tests and the approved
+   production mapping before explicitly re-enabling and reconnecting each station.
+
+The feature's protocol tests execute the exact pre-feature normalizer/plan owner:
+new fields are rejected before preparation and FX/RTU configurations are accepted
+after removal. This is compatibility evidence, not a performed production rollback.

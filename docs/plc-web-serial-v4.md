@@ -82,7 +82,7 @@ Only dedicated camera detection, whether manually requested or initiated by a va
 
 The shared drag/drop component changes only browser file selection. A dragged image or video retains ordinary upload provenance and cannot create a PLC plan. Camera-device lifecycle in the PLC detection workbench remains governed by the existing readiness, edge-latching and no-replay rules; the text-comparison camera selector does not participate in PLC dispatch.
 
-The browser declares the complete attempt before I/O, writes D (`PASS=1`, `FAIL=0`), waits for `ACK=06`, then handles optional Y. D failure suppresses Y. Blank Y produces no Y plan/frame/write/audit. `NAK=15` is rejected only when the input becomes quiet; residual bytes make the operation uncertain.
+The browser declares the complete attempt before I/O, writes D using configured `result_pass_value` / `result_fail_value` (defaults `PASS=1`, `FAIL=0`), waits for `ACK=06`, then handles optional Y. D failure suppresses Y. Blank Y produces no Y plan/frame/write/audit. `NAK=15` is rejected only when the input becomes quiet; residual bytes make the operation uncertain.
 
 Receipts are workstation evidence, not proof against browser/OS failure. At-most-once is the promised physical safety property; end-to-end exactly-once is not claimed.
 
@@ -311,3 +311,17 @@ Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; 
 
 
 Ordinary inspection now uses the shared workspace overlay sidebar. Explicit main-grid placement prevents hover expansion from clipping or remounting the camera workspace. The local serial owner, lease, polling, capture and fullscreen JSX remain unchanged; closed mobile navigation is inert and text workflows retain their existing layout.
+## Configurable PLC detection result values
+
+**Status: Authoritative.** Workstation configuration adds `result_pass_value`
+(default 1) and `result_fail_value` (default 0). Both are strict integers in
+0–65535; equal values are allowed. Missing historical fields normalize to their
+defaults. The local and administrator configuration forms persist both values
+and show required numeric inputs beside the result register. FX ASCII and Modbus
+RTU camera dispatch plans encode the selected value in the configured D register.
+Y remains pass ON / fail OFF, independent of either numeric value; blank Y produces
+no Y operation. Saving changed values advances configuration generation, fences
+old leases/plans and requires reconnection. Browser-only serial ownership, D-before-Y
+ACK, camera-only dispatch and uncertain-write no-retry behavior remain unchanged.
+This additive configuration extension keeps schema 5 and protocol v4; rollback to
+a pre-feature release requires the configuration preparation in production-runbook.md.

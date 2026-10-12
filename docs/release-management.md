@@ -1812,3 +1812,10 @@ The owner explicitly approved the corresponding source-contract update and norma
 ## Browser version identity packaging
 
 The production workflow supplies `VITE_RELEASE_ID=$RELEASE_ID` and `VITE_GIT_COMMIT=$RELEASE_SHA` during the frontend build. Packaging verifies the entry bundle contains that exact identity before generating `VERSION.json`; frontend identity may not be learned from the running backend. The browser accepts only healthy `/api/version` identity changes and applies them at navigation/new-work boundaries, including rollback to a previous complete immutable release. Automatic CI remains disabled under the owner release policy; record focused local checks and skipped CI explicitly. First deployment cannot update already-open bundles lacking this feature.
+
+PLC configurable result values adds strict schema-5 fields with 1/0 defaults.
+Release the frontend/backend together. The required local tests and CI manifest
+include result-word/HTTP checks; the frontend connection command also exercises
+both configuration forms. Rollback to a pre-feature complete release requires
+the stopped-service configuration preparation in production-runbook.md; never
+copy individual frontend/backend files or replay uncertain PLC writes.

@@ -78,7 +78,7 @@ async function settingsPreserveProtocol(){
     const form=document.createElement('form');form.innerHTML='<input name="enabled" type="checkbox" checked><input name="result_register" value="D8"><input name="capture_input_register" value="D7"><input name="capture_trigger_value" value="1"><input name="output_control_point" value="">';
     return payload(form,current);
   },{compiled,current});
-  assert.deepEqual(result,{...current,result_register:'D8',capture_input_register:'D7'});
+  assert.deepEqual(result,{...current,result_register:'D8',capture_input_register:'D7',result_pass_value:1,result_fail_value:0});
  }
  await page.close();console.log('Admin settings preserve identified protocol/serial parameters: PASS');
 }

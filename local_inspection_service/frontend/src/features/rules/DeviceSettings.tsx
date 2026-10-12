@@ -199,6 +199,8 @@ function readPlcPayload(form: HTMLFormElement, current: PlcWebSerialConfig): Plc
       .trim()
       .toUpperCase(),
     capture_trigger_value: Number(data.get("capture_trigger_value") ?? 1),
+    result_pass_value: Number(data.get("result_pass_value") ?? current.result_pass_value ?? 1),
+    result_fail_value: Number(data.get("result_fail_value") ?? current.result_fail_value ?? 0),
     capture_poll_interval_ms: 200,
     ack_timeout_ms: 500,
     retries: 0,
@@ -286,7 +288,7 @@ export function DeviceSettings() {
     const payload = readPlcPayload(event.currentTarget, plc);
     if (payload.enabled) {
       const summary = [
-        `检测结果将写入 ${payload.result_register}`,
+        `检测结果将写入 ${payload.result_register}：通过 ${payload.result_pass_value}，不通过 ${payload.result_fail_value}`,
         payload.output_control_point
           ? `将直接控制 ${payload.output_control_point}`
           : "不会直接控制流水线",
@@ -400,7 +402,7 @@ export function DeviceSettings() {
           <form
             className="settings-form"
             ref={plcFormRef}
-            key={`${plcResponse.config_generation}-${plc.enabled}-${plc.result_register}-${plc.output_control_point}-${plc.capture_trigger_enabled}-${plc.capture_input_register}-${plc.capture_trigger_value}`}
+            key={`${plcResponse.config_generation}-${plc.enabled}-${plc.result_register}-${plc.output_control_point}-${plc.capture_trigger_enabled}-${plc.capture_input_register}-${plc.capture_trigger_value}-${plc.result_pass_value}-${plc.result_fail_value}`}
             onSubmit={handlePlcSubmit}
           >
             <div className="form-grid settings-option-grid">
@@ -432,7 +434,7 @@ export function DeviceSettings() {
                   required
                 />
                 <span className="field-hint">
-                  测试范围 D0–D255；通过写 1，不通过写 0。
+                  支持范围 D0–D255；写入下方配置的检测结果值。
                 </span>
               </label>
               <label className="field">
@@ -448,6 +450,14 @@ export function DeviceSettings() {
                   测试范围 Y00–Y17（八进制）；留空时计划和串口都不会产生 Y
                   指令。
                 </span>
+              </label>
+            </div>
+            <div className="form-grid">
+              <label className="field">通过输出值
+                <input name="result_pass_value" type="number" required min={0} max={65535} step={1} defaultValue={plc.result_pass_value ?? 1} />
+              </label>
+              <label className="field">不通过输出值
+                <input name="result_fail_value" type="number" required min={0} max={65535} step={1} defaultValue={plc.result_fail_value ?? 0} />
               </label>
             </div>
             <div className="form-grid">
@@ -510,8 +520,8 @@ export function DeviceSettings() {
               {plc.capture_trigger_enabled
                 ? `每 200ms 读取 ${plc.capture_input_register}；先读到非 ${plc.capture_trigger_value} 后，再变为 ${plc.capture_trigger_value} 时拍照一次。`
                 : "PLC 到位自动拍照未启用。"}{" "}
-              检测通过写 {plc.result_register}=1，检测不通过写{" "}
-              {plc.result_register}=0；
+              检测通过写 {plc.result_register}={plc.result_pass_value ?? 1}，检测不通过写{" "}
+              {plc.result_register}={plc.result_fail_value ?? 0}；
               {plc.output_control_point
                 ? `D 得到 ACK 后才控制 ${plc.output_control_point}`
                 : "不直接控制流水线"}

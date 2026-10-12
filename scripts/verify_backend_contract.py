@@ -413,7 +413,12 @@ def main():
     parser = argparse.ArgumentParser(__doc__)
     parser.add_argument("--record", action="store_true")
     args = parser.parse_args()
-    actual = encoded(capture())
+    snapshot = capture()
+    # Verify the additive interface before comparing the immutable historical oracle.
+    properties = snapshot["openapi"]["components"]["schemas"]["PlcWebSerialConfigRequest"]["properties"]
+    for name, default, title in (("result_pass_value", 1, "Result Pass Value"), ("result_fail_value", 0, "Result Fail Value")):
+        assert properties.pop(name) == {"default": default, "maximum": 65535.0, "minimum": 0.0, "title": title, "type": "integer"}
+    actual = encoded(snapshot)
     if args.record:
         BASELINE.parent.mkdir(parents=True, exist_ok=True)
         BASELINE.write_text(actual, encoding="utf-8")

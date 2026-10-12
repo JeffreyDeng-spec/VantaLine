@@ -15,6 +15,7 @@ const DEFAULTS: PlcWebSerialConfig = {
   schema_version: 5, transport_mode: "web_serial", profile_id: "mitsubishi_fx3ga_40mr",
   enabled: true, protocol: "fx_programming_port_ascii", checksum_mode: "include_etx",
   baudrate: 9600, parity: "E", data_bits: 7, stop_bits: 1, result_register: "D206",
+  result_pass_value: 1, result_fail_value: 0,
   output_control_point: "", capture_trigger_enabled: true, capture_input_register: "D205",
   capture_trigger_value: 1, capture_poll_interval_ms: 200, ack_timeout_ms: 500, retries: 0
 };
@@ -192,6 +193,8 @@ export function LocalPlcControls(props: Props) {
         capture_input_register: String(values.get("input") || "").trim().toUpperCase(),
         result_register: String(values.get("result") || "").trim().toUpperCase(),
         capture_trigger_value: Number(values.get("trigger")),
+        result_pass_value: Number(values.get("result_pass_value")),
+        result_fail_value: Number(values.get("result_fail_value")),
         output_control_point: String(values.get("output") || "").trim().toUpperCase(),
         capture_trigger_enabled: values.get("auto") === "on" }
     };
@@ -245,6 +248,10 @@ export function LocalPlcControls(props: Props) {
             <label className="field">到位输入寄存器<input autoFocus name="input" required pattern="[Dd](?:0|[1-9][0-9]{0,2})" defaultValue={config.capture_input_register} /></label>
             <label className="field">到位触发值<input name="trigger" type="number" required min={0} max={65535} step={1} defaultValue={config.capture_trigger_value} /></label>
             <label className="field">检测结果寄存器<input name="result" required pattern="[Dd](?:0|[1-9][0-9]{0,2})" defaultValue={config.result_register} /></label>
+          </div>
+          <div className="form-grid">
+            <label className="field">通过输出值<input name="result_pass_value" type="number" required min={0} max={65535} step={1} defaultValue={config.result_pass_value ?? 1} /></label>
+            <label className="field">不通过输出值<input name="result_fail_value" type="number" required min={0} max={65535} step={1} defaultValue={config.result_fail_value ?? 0} /></label>
           </div>
           <label className="toggle-row"><input name="auto" type="checkbox" defaultChecked={config.capture_trigger_enabled} />启用到位自动拍照</label>
           <details><summary>名称与输出控制</summary>
