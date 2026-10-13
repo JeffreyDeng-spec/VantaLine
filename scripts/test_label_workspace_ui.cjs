@@ -9,7 +9,7 @@ const vite=spawn(process.execPath,[path.join(frontend,'node_modules/vite/bin/vit
 let browser;
 (async()=>{
  for(let i=0;i<100;i++){try{if((await fetch(base)).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
- browser=await chromium.launch({headless:true,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
+ browser=await chromium.launch({headless:true,channel:process.env.LABEL_TEST_BROWSER||undefined,args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
  const context=await browser.newContext({viewport:{width:1440,height:1000},permissions:['camera']});const page=await context.newPage();page.setDefaultTimeout(15000);
  await context.addInitScript(() => {
   const original = Element.prototype.requestFullscreen;
@@ -57,8 +57,43 @@ let browser;
  await page.getByLabel('上传实物照片').locator('input').setInputFiles({name:'actual.png',mimeType:'image/png',buffer:png});
  await page.getByRole('button',{name:'开始检测',exact:true}).dblclick();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);
  await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),0);
+ const color=selector=>page.locator(selector).first().evaluate(e=>getComputedStyle(e).color);
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('.li-result-summary h2')).color==='rgb(242, 196, 94)');
+ assert.equal(await color('.li-result-summary h2'),'rgb(242, 196, 94)');
+ assert.equal(await page.locator('.li-status-spinner').count(),1);
+ assert.equal(await page.locator('.li-pass-message').count(),0);
+ await page.locator('.li-dock').screenshot({path:path.join(output,'result-progress.png')});
  task.runs[0]={...task.runs[0],status:'completed',phase:'completed',decision:'DIFFERENCES',elapsed:18,crop:[60,40,300,200],scope:'仅检测选中标签',result:{decision:'DIFFERENCES',similarity:85,issues:[{id:1,type:'missing_line',description:'缺少 MODEL 行',standardText:'MODEL: TEST',actualText:'',severity:'high',confidence:'',position_note:'无法可靠定位'}]}};
  await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(await page.locator('.li-box-number').count(),0);await page.getByRole('button',{name:'查看异常 1 详情',exact:true}).click();await page.getByRole('dialog').getByText('模型置信度',{exact:true}).waitFor();await page.getByRole('dialog').getByText('无法可靠定位',{exact:true}).waitFor();await page.getByRole('button',{name:'关闭详情'}).click();assert.equal(await page.locator('.li-crop').count(),1);
+ assert.equal(await color('.li-result-summary h2'),'rgb(255, 119, 119)');
+ assert.equal(await color('.li-issue-line'),'rgb(255, 119, 119)');
+ assert.equal(await color('.li-result-count'),'rgb(255, 119, 119)');
+ assert.equal(await page.locator('.li-issue-comparison').textContent(),'标准标签：MODEL: TEST实物标签：未提供');
+ await page.locator('.li-dock').screenshot({path:path.join(output,'result-differences.png')});
+ const differenceSaved=structuredClone(task.runs[0]);
+ task.runs[0]={...differenceSaved,decision:'MATCH',result:{decision:'MATCH',similarity:100,issues:[]}};
+ await page.reload();await page.getByRole('heading',{name:'无差异',exact:true}).waitFor();
+ await page.waitForFunction(()=>getComputedStyle(document.querySelector('.li-result-summary h2')).color==='rgb(88, 214, 155)');
+ assert.equal(await color('.li-result-summary h2'),'rgb(88, 214, 155)');
+ assert.equal(await color('.li-pass-message'),'rgb(88, 214, 155)');
+ assert.equal(await page.locator('.li-result-count').textContent(),'0 项差异');
+ assert.equal(await page.locator('.li-issue').count(),0);
+ await page.locator('.li-dock').screenshot({path:path.join(output,'result-match.png')});
+ // Incomplete, review-required, failed and inconsistent results never look passed.
+ for(const override of [
+  {status:'queued'},
+  {status:'running',phase:'compare'},
+  {status:'completed',decision:'REVIEW_REQUIRED'},
+  {status:'failed',error:'检测失败，请重新检查'},
+  {status:'interrupted',error:'检测中断'},
+  {status:'completed',result:differenceSaved.result},
+ ]){
+  task.runs[0]={...differenceSaved,decision:'MATCH',result:{decision:'MATCH',similarity:100,issues:[]},...override};
+  await page.reload();await page.locator('.li-result-summary h2').waitFor();
+  assert.notEqual(await color('.li-result-summary h2'),'rgb(88, 214, 155)');
+  assert.equal(await page.locator('.li-pass-message').count(),0);
+ }
+ task.runs[0]=differenceSaved;await page.reload();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();
  await page.getByText('检测编号：run-1',{exact:true}).waitFor();assert.equal(await page.getByText(/调用诊断/).count(),0);assert.equal(await page.locator('.li-results pre').count(),0);assert.equal(diagnostics,0);
  await page.screenshot({path:path.join(output,'desktop-difference.png'),fullPage:true});
  await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),0);
@@ -67,7 +102,7 @@ let browser;
  await page.getByRole('button',{name:'返回缩略图'}).click();await page.getByRole('button',{name:'隐藏标准',exact:true}).click();await page.getByLabel('显示已隐藏 / 无效标准').check();await page.getByRole('button',{name:'恢复标准',exact:true}).click();assert.equal(task.revision,3);assert.equal(task.runs[0].revision,1);assert.ok(await page.locator('.li-gallery').isVisible());
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'mobile-workbench.png'),fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await page.getByRole('tab',{name:/历史记录/}).click();await page.getByRole('button',{name:/旧文字检验|Evolving.*版本/}).click();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();assert.equal(submits,1);
- // Compact rows: six abnormalities with trustworthy coordinates, one unlocated item.
+ // Readable evidence rows: six abnormalities, one unlocated item, local overflow.
  task.runs[0].result.issues=Array.from({length:6},(_,i)=>({...task.runs[0].result.issues[0],id:i+1,
   description:`异常 ${i+1}：型号文字与标准不一致，请核对实际印刷内容。`,
   actual_box:i===0?undefined:[.2,.1+i*.1,.25,.08]}));
@@ -89,8 +124,9 @@ let browser;
   assert.ok(geometry.ratio.every(r=>Math.abs(r-1)<.01),JSON.stringify(geometry));
   if(width===1920||width===1440){
    const rows=await page.locator('.li-issue').evaluateAll(es=>{const pane=document.querySelector('.li-result-content').getBoundingClientRect();return es.map(e=>({visible:e.getBoundingClientRect().bottom<=pane.bottom,height:e.getBoundingClientRect().height,font:parseFloat(getComputedStyle(e.querySelector('.li-issue-line')).fontSize)}));});
-   assert.ok(rows.every(r=>r.height===32 && r.font>=16),JSON.stringify(rows));
-   assert.ok(rows.filter(r=>r.visible).length >= (width===1920?6:5),JSON.stringify(rows));
+   assert.ok(rows.every(r=>r.height>=44 && r.font>=16),JSON.stringify(rows));
+   assert.ok(rows[0].visible,JSON.stringify(rows));
+   assert.ok(await page.locator('.li-result-content').evaluate(e=>e.scrollHeight>e.clientHeight));
   }
   await page.screenshot({path:path.join(output,`fixed-${width}x${height}.png`),fullPage:true});
  }
