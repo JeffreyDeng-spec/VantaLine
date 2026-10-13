@@ -45,6 +45,17 @@ Pipeline recommendation pre-generation keeps the same model binding, request ide
 
 # Configuration reference
 
+## Financial query configuration
+
+Administrator billing uses server-only `VANTALINE_BILLING_ACCOUNTS_JSON` and
+existing secret-environment references, with no browser key editor or inference
+key reuse. It defines provider/site/payer, alias/currency and verified resource
+project mappings. Balance and bill intervals are fixed at 60/900 seconds;
+unavailable credentials or permissions remain explicit pending/error states.
+See [billing configuration and acceptance](billing.md#configuration-acceptance-and-rollback)
+for accepted fields, source limits, Decimal/currency semantics and safe setup.
+All billing APIs require `role=admin`, not merely `system_settings`.
+
 Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.
 
 Pipeline training status extraction keeps training job lookup, local interruption settlement and Agent stage configuration unchanged. Source manifest v115 contains 312 entries including the two moved modules for new task fingerprints; existing snapshots, model bindings and secret references remain unchanged.

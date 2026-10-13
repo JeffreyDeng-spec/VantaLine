@@ -10,6 +10,8 @@ def parse_fixture(raw):
     return json.loads(raw)
 
 def checkpoint_bytes(path, actual):
+    from billing_source_contract import checkpoint_bytes as billing_checkpoint
+    actual=billing_checkpoint(path,actual)
     actual = recovery_checkpoint(path, actual)
     raw = (ROOT/'tests/backend_contract/account_records_delta.json').read_bytes()
     assert hashlib.sha256(raw).hexdigest() == "e5e7caf439cdfee37bcc73e08f86617ab7aa3c0098cb5b10b291e773a89126a9", 'Unreviewed account records fixture'

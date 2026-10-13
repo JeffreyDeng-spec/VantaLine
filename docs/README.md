@@ -27,6 +27,7 @@ This is the single index for current project knowledge. Documents marked **Autho
 
 ## Authoritative subsystem guides
 
+- [Administrator usage and costs](billing.md) — official financial snapshots, permissions, sync and coverage limits
 - [Inspection service entry](../local_inspection_service/README.md)
 - [RunPod training integration](../local_inspection_service/docs/runpod-yolo-train-worker.md)
 - [RunPod worker package](../local_inspection_service/workers/vantaline_yolo_train_worker/README.md)

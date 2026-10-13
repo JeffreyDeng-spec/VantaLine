@@ -97,9 +97,9 @@ function CostLedgerPanel({ ledger }: { ledger: ApiCostLedgerResponse }) {
     <div className="cost-ledger-stack">
       <div className="metric-grid">
         <MetricCard
-          label="已计价总成本"
+          label="按单价计算的历史成本"
           value={formatUsd(summary.total_cost_usd)}
-          detail={`已记录 ${summary.call_count} 次含 usage 的 API 调用`}
+          detail={`项目内计价参考 · ${summary.call_count} 次含 usage 的调用，非官方账单`}
         />
         <MetricCard
           label="做一张图均价"

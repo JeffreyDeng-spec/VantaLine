@@ -1,12 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { apiClient } from "../../api/client";
+import { apiClient, ApiError } from "../../api/client";
+import { queryKeys } from "../../api/queries";
 import { workspacePath } from "../../app/paths";
 import { ErrorState, LoadingState } from "../../components/LoadingState";
 import { useAuth } from "../auth/auth-context";
 import { useToast } from "../../components/ToastProvider";
 import { DeviceSettings, LegacyCostLedger } from "./DeviceSettings";
+import { BillingPage } from "../billing/BillingPage";
 import "./settings.css";
 import { LocalPlcControls } from "../plc/LocalPlcControls";
 
@@ -585,6 +587,33 @@ function Usage({
   profiles: Profile[];
   purposes: Purpose[];
 }) {
+  const client = useQueryClient();
+  const blocked = useRef(false);
+  const [denied, setDenied] = useState(false);
+  useEffect(() => client.getQueryCache().subscribe(event => {
+    const error = event.query.state.error;
+    const key = event.query.queryKey;
+    const financial = key[0] === "billing" || key[0] === "profileUsage" || JSON.stringify(key) === JSON.stringify(queryKeys.apiCostLedger);
+    if (!blocked.current && event.type === "updated" && financial && error instanceof ApiError && [401, 403].includes(error.status)) {
+      blocked.current = true;
+      setDenied(true);
+      const privateQueries = { predicate: (query: { queryKey: readonly unknown[] }) => query.queryKey[0] === "billing" || query.queryKey[0] === "profileUsage" || JSON.stringify(query.queryKey) === JSON.stringify(queryKeys.apiCostLedger) };
+      void client.cancelQueries(privateQueries);
+      client.removeQueries(privateQueries);
+      void client.invalidateQueries({ queryKey: queryKeys.authStatus });
+    }
+  }), [client]);
+  if (denied) return <p className="hint-line">财务访问已失效，请重新确认管理员身份。</p>;
+  return <><BillingPage /><details className="settings-advanced"><summary>模型调用明细与项目内估算</summary><ModelUsage profiles={profiles} purposes={purposes} /></details></>;
+}
+
+function ModelUsage({
+  profiles,
+  purposes,
+}: {
+  profiles: Profile[];
+  purposes: Purpose[];
+}) {
   const query = useQuery({
     queryKey: ["profileUsage"],
     queryFn: () => apiClient.get<{ items: Call[] }>(API + "/usage"),
@@ -620,7 +649,7 @@ function Usage({
     <section className="panel page-panel">
       <h3>模型调用</h3>
       <p className="hint-line">
-        最近 500 次已记录调用；历史成本单独显示。没有返回 usage
+        最近 500 次已记录调用；下列费用按配置单价估算，与官方账单分开。没有返回 usage
         或未配置价格的调用不做估算。
       </p>
       <label className="field">

@@ -1,5 +1,5 @@
 {
-  "version": 293,
+  "version": 294,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -623,6 +623,13 @@
     "plc_modbus_rtu.py",
     "auth/data_workbench.py",
     "auth/account_records.py",
-    "auth/dataset_photos.py"
+    "auth/dataset_photos.py",
+    "analytics/billing/__init__.py",
+    "analytics/billing/api.py",
+    "analytics/billing/providers.py",
+    "analytics/billing/service.py",
+    "analytics/billing/transport.py",
+    "analytics/billing/types.py",
+    "storage/billing_repository.py"
   ]
 }

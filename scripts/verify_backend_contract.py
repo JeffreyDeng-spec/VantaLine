@@ -96,6 +96,8 @@ def assert_owned_text_callbacks(application):
 
 def result_values_openapi_checkpoint(openapi):
     import copy
+    from billing_source_contract import openapi_checkpoint
+    openapi = openapi_checkpoint(openapi)
     openapi = copy.deepcopy(openapi)
     # Verify the exact additive interface before replaying the historical oracle.
     properties = openapi["components"]["schemas"]["PlcWebSerialConfigRequest"]["properties"]
@@ -349,7 +351,7 @@ def capture():
                 )
             routes.append(item)
         return {
-            "routes": routes,
+            "routes": __import__('billing_source_contract').routes_checkpoint(routes),
             "openapi": result_values_openapi_checkpoint(server.app.openapi()),
             "middleware": [
                 {"class": entry.cls.__name__, "options": {
@@ -357,7 +359,7 @@ def capture():
                     for key, value in entry.kwargs.items()
                 }} for entry in server.app.user_middleware
             ],
-            "startup": [fn.__name__ for fn in server.app.router.on_startup],
+            "startup": __import__('billing_source_contract').startup_checkpoint(server.app.router.on_startup),
             "shutdown": [fn.__name__ for fn in server.app.router.on_shutdown],
             "http_errors": capture_http_errors(server.app),
         }

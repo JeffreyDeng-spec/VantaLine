@@ -64,6 +64,37 @@ With `VANTALINE_PLC_LEASE_API_BASELINE_SOURCE`, `python scripts/smoke_plc_connec
 
 # Testing
 
+## Administrator financial acceptance
+
+Run `python scripts/smoke_billing.py` for role-before-validation, read-only GET,
+exact monetary parsing, identity/currency checks, complete provider paging,
+fixed financial transports and error redaction. With a disposable database named
+exactly `vantaline_billing_test`, run `BILLING_TEST_DATABASE_URL=... python
+scripts/smoke_billing_postgres.py` for additive migration repeatability, 101-row
+frozen pagination during publication of 111 new rows, account/period isolation,
+exact dedup/refund totals, durable restart, independent recharge, stale forecasts,
+request coalescing, expired-lease fencing and all-or-nothing publication.
+
+`python scripts/smoke_billing_application.py` exercises actual application
+sessions: two distinct administrators, ordinary/settings-granted users,
+anonymous and logged-out sessions, private configuration and inert GETs.
+`python scripts/smoke_billing_source_contract.py` checks the exact new owner
+inventory, reversible assembly extension and five financial OpenAPI routes;
+unknown source/API changes must fail the retained historical oracles.
+
+`scripts/billing_browser_fixture.py` serves the real application/production
+React build against that disposable database with synthetic users and supplier
+ports only. Check admin and ordinary-user login, no ordinary billing fetches,
+1440/1280/390 layouts, details/paging, keyboard close/focus return, billing month,
+scenarios and refresh failure preservation. No real paid call or PLC operation
+is an acceptance fixture. Run frontend typecheck/build, existing cost/auth and
+application-factory regressions, migration/docs/source contracts and diff checks.
+Real supplier acceptance additionally requires same-time official console/API
+balance and same-period summary/detail evidence. Unconfigured/partial providers
+are not certified through mocks. `scripts/check_billing_connection.py` performs
+explicit read-only commissioning against fresh private console evidence.
+Details are in [billing](billing.md).
+
 The backend CI coverage verifier follows the current owner-authorized trigger policy: correctness, performance, dependency preparation and runtime observation are manual-only; immutable releases run on main pushes. It verifies the exact main SHA binding and that the effective superseded-main rejection runs before packaging, deployment and publication. These trigger checks do not reduce the frozen 461 ordinary commands, 11 ordered performance-plan commands, numeric acceptance thresholds or required evidence archives.
 
 `python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.
