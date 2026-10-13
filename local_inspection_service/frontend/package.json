@@ -13,7 +13,7 @@
     "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",
     "build": "npm run build:preview",
     "preview": "vite preview --host 0.0.0.0",
-    "test:plc-connection": "node scripts/test-plc-connection.mjs && node scripts/test-plc-result-values.mjs && npm run test:camera-result-expiry",
+    "test:plc-connection": "node scripts/test-plc-connection.mjs && node scripts/test-plc-result-values.mjs && node scripts/test-plc-register-readback.mjs && npm run test:camera-result-expiry",
     "test:camera-result-expiry": "node scripts/test-camera-result-expiry.mjs",
     "test:plc-diagnostics": "node scripts/test-plc-diagnostics.mjs",
     "test:plc-modbus": "node scripts/test-plc-modbus.mjs"

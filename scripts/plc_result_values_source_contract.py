@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_SHA256 = "c1a740d97ddadb4af467d940fd20d70b3e67a792304a49f84713c56e04ccf95e"
 
 def checkpoint_bytes(path, actual):
+    from plc_output_readback_source_contract import checkpoint_bytes as readback_parent
+    actual = readback_parent(path, actual)
     raw = (ROOT / "tests/backend_contract/plc_result_values_delta.json").read_bytes()
     assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "Unreviewed PLC result values delta"
     fixture = json.loads(raw)

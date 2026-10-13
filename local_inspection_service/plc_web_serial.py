@@ -294,9 +294,7 @@ def web_serial_resolved_addresses(config: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def build_web_serial_capture_read_plan(config: Mapping[str, Any], config_generation: int) -> dict[str, Any]:
-    normalized = normalize_web_serial_config(config)
-    register = normalized["capture_input_register"]
+def _register_read_plan(normalized: Mapping[str, Any], register: str, operation: str, config_generation: int, interval_ms: int) -> dict[str, Any]:
     if normalized["protocol"] == "modbus_rtu":
         from .plc_modbus_rtu import read_word
         frame = read_word(int(register[1:]))
@@ -304,16 +302,24 @@ def build_web_serial_capture_read_plan(config: Mapping[str, Any], config_generat
         frame = build_d_register_read_frame(logical_device_address(register), normalized["checksum_mode"])
     return {
         "target": register,
-        "operation": "read_capture_input",
+        "operation": operation,
         "frame_hex": frame.hex().upper(),
         "frame_sha256": hashlib.sha256(frame).hexdigest(),
         "expected_response_bytes": 7 if normalized["protocol"] == "modbus_rtu" else 8,
         "read_timeout_ms": normalized["ack_timeout_ms"],
-        "poll_interval_ms": normalized["capture_poll_interval_ms"],
-        "trigger_value": normalized["capture_trigger_value"],
+        "poll_interval_ms": interval_ms,
         "config_generation": int(config_generation),
         "protocol_version": WEB_SERIAL_PROTOCOL_VERSION,
     }
+
+
+def build_web_serial_capture_read_plan(config: Mapping[str, Any], config_generation: int) -> dict[str, Any]:
+    normalized = normalize_web_serial_config(config)
+    plan = _register_read_plan(normalized, normalized["capture_input_register"], "read_capture_input", config_generation, normalized["capture_poll_interval_ms"])
+    plan["trigger_value"] = normalized["capture_trigger_value"]
+    # Additive read-only telemetry: older clients continue using the original input plan.
+    plan["result_read_plan"] = _register_read_plan(normalized, normalized["result_register"], "read_result_register", config_generation, 1000)
+    return plan
 
 
 def _frame_item(target: str, frame: bytes, operation: str) -> dict[str, Any]:

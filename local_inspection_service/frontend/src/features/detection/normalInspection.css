@@ -145,3 +145,6 @@
  .normal-plc-row { flex-basis: 100%; }
  .normal-data-scope select { width: 130px; }
 }
+
+.normal-plc-row .plc-register-status { order:2; color:var(--text-2); font-size:11px; }
+@media(max-width:1150px) { .normal-plc-row .plc-register-status { font-size:10px; } }

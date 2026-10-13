@@ -16,6 +16,8 @@ import type {
   PlcCaptureInputReadResult,
   PlcSyncStatus,
   PlcWebSerialCaptureReadPlan,
+  PlcWebSerialRegisterReadPlan,
+  PlcWebSerialResultReadPlan,
   PlcWebSerialDiagnosticResult,
   PlcWebSerialFrame,
   PlcWebSerialOperation,
@@ -516,6 +518,14 @@ export class PlcWebSerialClient {
     plan: PlcWebSerialCaptureReadPlan,
     onFatal: (message: string) => void
   ): Promise<PlcCaptureInputReadResult | null> {
+    return this.readRegister(plan, onFatal);
+  }
+
+  readResultRegister(plan: PlcWebSerialResultReadPlan, onFatal: (message: string) => void): Promise<PlcCaptureInputReadResult | null> {
+    return this.readRegister(plan, onFatal);
+  }
+
+  private readRegister(plan: PlcWebSerialRegisterReadPlan, onFatal: (message: string) => void): Promise<PlcCaptureInputReadResult | null> {
     if (this.priorityOperations > 0) return Promise.resolve(null);
     const operation = async (): Promise<PlcCaptureInputReadResult | null> => {
       if (this.priorityOperations > 0 || document.visibilityState !== "visible") return null;
@@ -524,8 +534,8 @@ export class PlcWebSerialClient {
       const state = this.state();
       if (!state || !this.writer) throw new Error("PLC 未连接或租约无效");
       if (plan.protocol_version !== PLC_WEB_SERIAL_VERSION || plan.config_generation !== state.configGeneration) {
-        await this.failClosed("PLC 输入读取配置已变化，请人工重新连接", onFatal);
-        throw new Error("PLC 输入读取计划与当前连接不一致");
+        await this.failClosed("PLC 寄存器读取配置已变化，请人工重新连接", onFatal);
+        throw new Error("PLC 寄存器读取计划与当前连接不一致");
       }
       try {
         this.armRead();
@@ -535,10 +545,12 @@ export class PlcWebSerialClient {
         const response = await this.readExact(plan.expected_response_bytes, plan.read_timeout_ms);
         const value = (this.modbus ? parseModbusWord : parseDiagnosticWordResponse)(response);
         this.diagnostics.count("reads");
-        const triggerHigh = value === plan.trigger_value;
-        if(triggerHigh !== this.diagnosticTriggerHigh) {
-          this.diagnosticTriggerHigh = triggerHigh;
-          this.diagnostics.record("read","ok",{target:plan.target,trigger_state:triggerHigh ? "high" : "reset",expected_bytes:plan.expected_response_bytes,actual_bytes:response.length});
+        if (plan.operation === "read_capture_input") {
+          const triggerHigh = value === (plan as PlcWebSerialCaptureReadPlan).trigger_value;
+          if (triggerHigh !== this.diagnosticTriggerHigh) {
+            this.diagnosticTriggerHigh = triggerHigh;
+            this.diagnostics.record("read","ok",{target:plan.target,trigger_state:triggerHigh ? "high" : "reset",expected_bytes:plan.expected_response_bytes,actual_bytes:response.length});
+          }
         }
         return {
           value,
@@ -548,7 +560,7 @@ export class PlcWebSerialClient {
         };
       } catch (error) {
         this.diagnostics.failure("read",error,{target:plan.target,expected_bytes:plan.expected_response_bytes});
-        if (this.state()) await this.failClosed("PLC 输入寄存器读取失败，串口已关闭；请检查后重新连接", onFatal);
+        if (this.state()) await this.failClosed(`PLC ${plan.operation === "read_result_register" ? "输出" : "输入"}寄存器读取失败，串口已关闭；请检查后重新连接`, onFatal);
         throw error;
       }
       } finally {this.diagnostics.leave();}

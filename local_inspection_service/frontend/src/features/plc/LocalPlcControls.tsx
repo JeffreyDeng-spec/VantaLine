@@ -23,6 +23,7 @@ const DEFAULTS: PlcWebSerialConfig = {
 type Props = {
   client?: PlcWebSerialClient; modelId?: string; connected?: boolean; externalStatus?: string;
   statusTarget?: HTMLElement | null; fullscreenStatusTarget?: HTMLElement | null; captureStatus?: string;
+  registerStatus?: string; registerStatusTitle?: string;
   productionReady?: boolean; disabled?: boolean; onConnectionChange?: (connected: boolean) => void;
 };
 
@@ -230,6 +231,7 @@ export function LocalPlcControls(props: Props) {
   }
   const connectionDisabled = blocked || workstation.isLoading || workstation.isError || !PlcWebSerialClient.supported();
   const bar = (fullscreen = false) => <PlcConnectionStatusBar {...status} disabled={connectionDisabled}
+    registerStatus={props.registerStatus} registerStatusTitle={props.registerStatusTitle}
     onConnect={requestConnection} onDisconnect={disconnectManually}
     onSettings={!fullscreen ? () => { setConnectAfterSave(false); setEditing(true); } : undefined} />;
   return <section className="local-plc-controls" aria-label="本机 PLC">

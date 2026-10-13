@@ -2017,3 +2017,14 @@ old leases/plans and requires reconnection. Browser-only serial ownership, D-bef
 ACK, camera-only dispatch and uncertain-write no-retry behavior remain unchanged.
 This additive configuration extension keeps schema 5 and protocol v4; rollback to
 a pre-feature release requires the configuration preparation in production-runbook.md.
+
+
+## PLC output register readback
+
+**Status: Authoritative.** A paired workstation capture-read plan now includes an optional `result_read_plan`: read-only FX ASCII or RTU frames targeting the configured result register, with the same configuration-generation fence and a 1000ms interval. Existing input plan fields and v4/v5 compatibility remain; older clients ignore this addition, and new clients with older payloads show no output value. No new configuration, database migration or physical write is introduced.
+
+The camera page reads output state even when automatic capture is disabled, only while connected/enabled/visible. Input/output reads share the existing serial queue and yield to production writes/diagnostics; result reads never modify input edge-latching or trigger diagnostics. Timeout, malformed/extra data or generation mismatch close the lease/port without retry or reconnect. Hidden pages and version-update drain suppress new reads. Normal and fullscreen bars share actual input/output values; output value resets on disconnect/reconnect/config change, and read time plus separate last-write acknowledgement are available in details/tooltip. Register names follow local configuration rather than hardcoded D0/D1.
+
+Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/priority suppression, generation fencing and uncertain-read fail-close/no-retry with simulated serial. Check zero, changing output, disabled automatic capture, disconnect/reconnect, normal/fullscreen display and missing optional plans. Do not label an ACK or requested value as actual readback; a PLC program may reset the register after receiving a write. Run PLC/backend/frontend contracts, capture-trigger tests, typecheck/build, docs contract and diff check; no physical PLC test writes are authorized by this UI change.
+
+The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
