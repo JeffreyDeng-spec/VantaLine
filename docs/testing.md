@@ -66,6 +66,14 @@ With `VANTALINE_PLC_LEASE_API_BASELINE_SOURCE`, `python scripts/smoke_plc_connec
 
 ## Administrator financial acceptance
 
+Run `scripts/smoke_billing_configuration.py` for private-file hot reload, explicit
+runtime precedence/disable, no GET work, private modes, symlink/hardlink/FIFO/
+oversize/duplicate rejection and Tencent-only paired COS references. Run
+`scripts/smoke_billing_configuration_source_contract.py` alongside existing
+financial/canonical contracts: the exact new owner and changed source hashes
+must be verified before restoring finite reviewed parent inputs; original
+financial fixtures remain unchanged and unknown source inputs must fail.
+
 Run `python scripts/smoke_billing.py` for role-before-validation, read-only GET,
 exact monetary parsing, identity/currency checks, complete provider paging,
 fixed financial transports and error redaction. With a disposable database named
@@ -3430,3 +3438,6 @@ smoke contracts, browser-media input, release/docs contracts and diff checks.
 Fixtures perform no real camera, model/provider or physical PLC I/O. The existing
 `test:plc-connection` CI command includes `test:camera-result-expiry` after its
 connection and configured-result-value scenarios.
+
+
+Run python scripts/smoke_billing_runpod_dates.py for the live network-volume date variant, equivalent-schema deduplication, exact decimal amounts, missing/invalid/conflicting/out-of-period dates and conflicting same-day amounts. Other RunPod families still require time; partial resource coverage remains explicit. These synthetic checks do not replace official account acceptance.

@@ -1,5 +1,5 @@
 {
-  "version": 294,
+  "version": 295,
   "sources": [
     "server.py",
     "label_inspection/readiness.py",
@@ -627,6 +627,7 @@
     "analytics/billing/__init__.py",
     "analytics/billing/api.py",
     "analytics/billing/providers.py",
+    "analytics/billing/configuration.py",
     "analytics/billing/service.py",
     "analytics/billing/transport.py",
     "analytics/billing/types.py",

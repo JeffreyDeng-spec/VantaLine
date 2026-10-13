@@ -60,6 +60,12 @@ lease fencing, exact money, source coverage and UI semantics are specified in
 [Administrator usage and costs](billing.md). Ordinary feature permissions grant
 no financial access. No supplier/model mutation is performed.
 
+BillingConfiguration supplies two narrow callables for validated operator payer
+configuration and secret resolution. It reads private account mappings at call
+time and may resolve explicitly authorized Tencent references from the existing
+service-owned COS credential mount. Constructors perform no reads; HTTP route,
+worker, lease, PostgreSQL and model/resource boundaries remain unchanged.
+
 Pipeline trained-model linking now lives beside the reverse run lookup in `pipeline/training_links.py`, as a separate class with a late-resolved catalog capability. It selects the first visible matching run and mutates the caller-owned task in place. The caller still owns locks, saves and any following Agent or training actions.
 
 Pipeline training-job lookup and status projection now live in `pipeline/training_status.py`, separate from terminal training-to-pipeline synchronization. Late-resolved capabilities preserve the selected loader, root-linked callback and Agent stage updates; the caller retains locks and storage. Local interrupted-job projection may still write training state, so this is not a read-only boundary.
@@ -2572,3 +2578,6 @@ available after presentation expiry. The empty camera view reports ready only
 when idle with a live camera/model and no error; busy, unavailable, PLC connection
 and automatic-input reset states keep their respective messages. Expiry neither
 starts capture nor changes PLC output or any persisted record.
+
+
+The RunPod financial reader accepts the observed network-volume startDate date alongside time, rejects conflicting/missing/out-of-period evidence and deduplicates equivalent normalized daily aggregation keys. It retains supported-resource coverage and does not infer payer totals or remaining days.

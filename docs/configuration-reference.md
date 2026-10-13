@@ -56,6 +56,13 @@ See [billing configuration and acceptance](billing.md#configuration-acceptance-a
 for accepted fields, source limits, Decimal/currency semantics and safe setup.
 All billing APIs require `role=admin`, not merely `system_settings`.
 
+If `VANTALINE_BILLING_ACCOUNTS_JSON` is absent, a private operator-managed
+`billing_accounts.local.json` in the data directory supplies the same schema and
+is reloaded without service restart. Explicit runtime values override it.
+Tencent's paired `VANTALINE_BILLING_COS_SECRET_ID/KEY` references require explicit
+operator authorization and resolve from the existing private credential mount;
+no credentials enter the account file. Temporary COS tokens are unsupported.
+
 Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.
 
 Pipeline training status extraction keeps training job lookup, local interruption settlement and Agent stage configuration unchanged. Source manifest v115 contains 312 entries including the two moved modules for new task fingerprints; existing snapshots, model bindings and secret references remain unchanged.
@@ -2028,3 +2035,6 @@ The camera page reads output state even when automatic capture is disabled, only
 Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/priority suppression, generation fencing and uncertain-read fail-close/no-retry with simulated serial. Check zero, changing output, disabled automatic capture, disconnect/reconnect, normal/fullscreen display and missing optional plans. Do not label an ACK or requested value as actual readback; a PLC program may reset the register after receiving a write. Run PLC/backend/frontend contracts, capture-trigger tests, typecheck/build, docs contract and diff check; no physical PLC test writes are authorized by this UI change.
 
 The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
+
+
+RunPod account references also enable the existing read-only resource billing APIs; network-volume startDate is a supported live date variant. It is not a new credential or IAM capability. Unknown project associations stay unknown, and partial coverage cannot establish account-wide expense.

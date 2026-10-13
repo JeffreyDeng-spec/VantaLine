@@ -53,6 +53,13 @@ official account total, reconciliation delta and runway remain null. Gemini and
 Codex remain unverified until an official financial source and payer are defined;
 API inference credentials and subscription quotas are not cash balances.
 
+Network-volume records accept the documented `time` or the observed live
+`startDate` billing date; both must agree when present. Other resource families
+still require `time`. Missing, invalid or out-of-period dates fail the complete
+snapshot instead of being guessed from the request. Aggregation identity uses
+the normalized billing day so equivalent schema variants deduplicate, while
+conflicting amounts reject publication.
+
 Every bills snapshot publishes only after all required pages succeed. Entries
 deduplicate by provider identity or documented resource aggregation keys;
 conflicting identities reject publication. Partial failure retains the previous
@@ -120,6 +127,24 @@ references are existing secret-environment names, not values or URLs. RunPod
 needs `key_ref` only. Volcengine international balance is currently unverified
 and is rejected explicitly. Resource associations require operator-verified
 evidence; no filename, time or proportional guesses are allowed.
+
+When the runtime variable is absent, operators may atomically publish the same
+JSON list to the private data file `billing_accounts.local.json`. Explicit runtime
+values, including `[]`, always take precedence. The reader reloads this file on
+queries and scheduler ticks without restarting services. Files must be bounded,
+private regular single-link files owned by root or the service user; terminal
+symlinks, public modes, duplicate JSON keys and invalid payer mappings fail with
+a fixed error. This is configuration only, never a filesystem financial ledger.
+
+After explicit operator authorization and a successful official financial query,
+a Tencent payer may use the reserved references `VANTALINE_BILLING_COS_SECRET_ID`
+and `VANTALINE_BILLING_COS_SECRET_KEY`. They resolve only from the Web service's
+existing private `CREDENTIALS_DIRECTORY/cos-credentials.json`; they never copy
+credentials into the payer file or expand supplier permissions. Both references
+must be paired on Tencent only. Temporary COS session credentials are currently
+unsupported and remain unconnected. RunPod can explicitly reference its existing
+`VANTALINE_RUNPOD_API_KEY`. Missing/denied capabilities remain pending; no business
+or inference key is silently selected or tested in the background.
 
 Missing configuration retains provider placeholders. Missing permissions keep
 old snapshots with a reason; credentials and source permission are not created

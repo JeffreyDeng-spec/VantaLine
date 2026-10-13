@@ -157,9 +157,15 @@ class ProviderReader:
                 if not isinstance(rows,list):
                     raise BillingError('invalid_provider_record')
                 for row in rows:
-                    day=str(field(row,'time'))[:10]
+                    # Network-volume billing also returns startDate in the
+                    # live schema. Never substitute query dates for missing
+                    # evidence or silently choose conflicting date fields.
+                    time_value=field(row,'time','startDate') if path=='networkvolumes' else field(row,'time')
+                    day=bill_day(time_value)
+                    if path=='networkvolumes' and row.get('time') is not None and row.get('startDate') is not None and bill_day(row['startDate'])!=day:
+                        raise BillingError('billing_scope_mismatch')
                     resource=str(row.get('podId') or row.get('endpointId') or '')
-                    identifier=aggregate_id(row,['time','podId','endpointId','gpuTypeId'])+':'+path
+                    identifier=aggregate_id({**row,'time':day+'T00:00:00Z'},['time','podId','endpointId','gpuTypeId'])+':'+path
                     entries.append(entry(identifier,day,label,field(row,'amount'),resource=resource,granularity='daily_resource',payer=payer))
             # These APIs do not establish coverage of public APIs, savings plans
             # or clusters. Do not invent an account total, zero delta or runway.

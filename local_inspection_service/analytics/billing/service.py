@@ -13,9 +13,10 @@ from .transport import FinancialTransport
 
 
 class BillingService:
-    def __init__(self, environment, repository, secret, scope=nullcontext, *, clock=time.time, reader=None):
+    def __init__(self, environment, repository, secret, scope=nullcontext, *, clock=time.time, reader=None, account_environment=None):
         self.environment, self.repository, self.scope, self.clock = environment, repository, scope, clock
         self.reader = reader or ProviderReader(FinancialTransport(secret),clock)
+        self.account_environment = account_environment or (lambda: self.environment)
         self.stop = threading.Event()
         self.wake = threading.Event()
         self.thread = None
@@ -23,7 +24,7 @@ class BillingService:
         self.worker_error = None
 
     def configured(self):
-        return payers(self.environment)
+        return payers(self.account_environment())
 
     def payer(self, identifier):
         found = next((p for p in self.configured() if p.id == identifier),None)
