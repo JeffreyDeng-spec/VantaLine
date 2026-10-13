@@ -3400,3 +3400,20 @@ assertions. The collapsed rail intentionally hides that action.
 **Status: Authoritative.** The fullscreen sidebar's live camera preview uses an absolutely positioned video bounded to its preview container, with centered `object-fit: contain`. Full sensor frames remain visible with letterboxing where ratios differ; intrinsic video dimensions no longer enlarge the grid item and get clipped by the short preview row. The sidebar has one explicitly shrinkable column. Camera capture resolution, result images, stream/serial ownership and detection/dispatch logic are unchanged.
 
 Acceptance: run the actual AppShell/workbench isolated preview with `?role=admin&ratio=4:3`, `ratio=16:9` (default) and `ratio=portrait`. Its synthetic camera draws a complete border and four corner labels. Enter fullscreen at 1920x1080 and 1366x768; confirm all four edges, video element bounds within the preview, no horizontal overflow, and capture/exit actions. Run frontend production build/typecheck, PLC frontend/media contracts, capture-trigger tests, docs contract and diff check. These fixtures do not certify physical production camera or PLC I/O.
+
+## Camera PASS display expiry acceptance
+
+Run `node local_inspection_service/frontend/scripts/test-camera-result-expiry.mjs`
+with the installed Playwright browser (`CAMERA_RESULT_TEST_BROWSER=msedge` selects
+Edge). The real React workbench uses isolated synthetic API/media fixtures and a
+controlled browser clock. Verify five-second PASS expiry in normal/fullscreen,
+unchanged FAIL including a pending next detection, pass-to-fail stale timer
+fencing, fresh deadlines for consecutive passes, no fullscreen deadline reset,
+processing/error/not-ready after expiry, unchanged image/video results and
+retained PLC/diagnostic evidence and recent detection time. Also exercise
+task/model context change and unmount cleanup in the real presentation hook.
+Run frontend typecheck/production build, PLC capture/connection tests, both PLC
+smoke contracts, browser-media input, release/docs contracts and diff checks.
+Fixtures perform no real camera, model/provider or physical PLC I/O. The existing
+`test:plc-connection` CI command includes `test:camera-result-expiry` after its
+connection and configured-result-value scenarios.

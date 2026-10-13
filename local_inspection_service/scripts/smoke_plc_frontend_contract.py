@@ -183,7 +183,8 @@ def main() -> None:
     require(
         detection,
         {
-            "result status": "result.plc_sync.status",
+            "retained result status": "plcResult.plc_sync.status",
+            "display and PLC evidence separation": "result={displayResult} plcResult={result}",
             "disabled no-I/O copy": "PLC 同步已关闭（未打开串口）",
             "failure copy": "PLC 同步失败",
             "diagnostic payload": "plc_sync: result.plc_sync || null",
