@@ -385,7 +385,6 @@ svg {
 }
 
 .auth-form label,
-.top-scope-bar label,
 .accessory-create-form label,
 .file-drop-field,
 .filter-grid label,
@@ -1096,17 +1095,6 @@ textarea:disabled {
 .workspace {
   min-width: 0;
   padding: 26px clamp(20px, 2vw, 30px) 48px;
-}
-
-.top-scope-bar {
-  max-width: var(--content-max);
-  margin: 0 auto 16px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.top-scope-bar label {
-  width: min(260px, 100%);
 }
 
 .view {
@@ -5951,14 +5939,6 @@ button.pipeline-params-chip:hover {
 
   .compact-action {
     justify-content: center;
-  }
-
-  .top-scope-bar {
-    justify-content: stretch;
-  }
-
-  .top-scope-bar label {
-    width: 100%;
   }
 
   .range-field {

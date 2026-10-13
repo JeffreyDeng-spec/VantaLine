@@ -2,13 +2,12 @@ import { useDetectionResultDisplay } from "./useDetectionResultDisplay";
 import { useVersionParticipant } from "../version/hooks";
 import { markVersionFilesUploaded } from "../version/files";
 import { guardVersionAction, versionCoordinator } from "../version/runtime";
-import { InspectionScopeTarget } from "../../components/InspectionScopeTarget";
 import "./normalInspection.css";
-import { apiClient, withAuthScope } from "../../api/client";
+import { apiClient } from "../../api/client";
 import { useAgentActions } from "../agent/useAgentActions";
 import { cameraPermissionRequired } from "../agent/nativePermissions";
 import { getFile } from "../agent/files";
-import { FormEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { workspacePath } from "../../app/paths";
 import { Camera, ChevronRight, FileImage, Maximize2, Play, RefreshCw, Save, Settings, Video, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -623,7 +622,6 @@ function TaskDetectionEntryPage({
 
 export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const auth = useAuth();
-  const setInspectionScopeTarget = useContext(InspectionScopeTarget);
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const { taskId: routeTaskId = "" } = useParams();
@@ -703,7 +701,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const shouldLoadTaskEntries = Boolean(decodedRouteTaskId) || !requestedTaskId;
 
   const statusQuery = useQuery({
-    queryKey: queryKeys.serviceStatus(auth.dataUserId),
+    queryKey: queryKeys.serviceStatus(auth.user.id),
     queryFn: () => getServiceStatus(auth),
     refetchInterval: 30_000
   });
@@ -713,13 +711,13 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     refetchOnWindowFocus: false
   });
   const trainingResourcesQuery = useQuery({
-    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryKey: queryKeys.trainingResources(auth.user.id),
     queryFn: () => getTrainingResources(auth),
     enabled: shouldLoadTaskEntries,
     refetchInterval: 60_000
   });
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth),
     enabled: shouldLoadTaskEntries,
     refetchInterval: 60_000
@@ -736,14 +734,14 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const isAi = isTaskEntryAi(routeTask) || mode === "ai" || searchParams.get("mode") === "ai";
   const shouldLoadAiTasks = routeHasAiBaseline || isAi;
   const aiTasksQuery = useQuery({
-    queryKey: queryKeys.aiTasks(auth.dataUserId),
+    queryKey: queryKeys.aiTasks(auth.user.id),
     queryFn: () => getAiTasks(auth),
     enabled: shouldLoadAiTasks
   });
   const globalRuleMutation = useMutation({
     mutationFn: updateRules,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.user.id) });
       notify({ title: "规则已保存", tone: "success" });
       setRulesOpen(false);
     },
@@ -753,7 +751,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     mutationFn: ({ taskId, payload }: { taskId: string; payload: { confidence_threshold: number; required_accessory_counts: Record<string, number> } }) =>
       updateTaskRules(taskId, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.user.id) });
       notify({ title: "任务规则已保存", tone: "success" });
       setRulesOpen(false);
     },
@@ -762,7 +760,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const modelWarmupMutation = useMutation({
     mutationFn: (modelId: string) => warmupYoloModel(modelId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.user.id) });
     },
     onError: (nextError: Error) => notify({ title: "模型预热失败", description: nextError.message, tone: "error" })
   });
@@ -808,8 +806,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     ? routeTask.autoOptimizeTaskId || routeTask.aiBaselineTaskId || routeTask.aiTaskId || (isTaskEntryAi(routeTask) ? routeTask.sourceId : "")
     : isAi ? selectedAiTask?.id || "" : "";
   const realPhotoFeedbackQuery = useQuery({
-    queryKey:["real-photo",auth.user.id,auth.dataUserId,realPhotoTaskId],
-    queryFn:() => apiClient.get<{selected?:boolean;candidate_models?:{model_id:string;status:string}[]}>(withAuthScope(`/api/ai/tasks/${encodeURIComponent(realPhotoTaskId)}/real-photo`,auth.user,auth.dataUserId)),
+    queryKey:["real-photo",auth.user.id,realPhotoTaskId],
+    queryFn:() => apiClient.get<{selected?:boolean;candidate_models?:{model_id:string;status:string}[]}>(`/api/ai/tasks/${encodeURIComponent(realPhotoTaskId)}/real-photo`),
     enabled:Boolean(realPhotoTaskId),refetchInterval:5000
   });
   const realPhotoSelected=Boolean(realPhotoFeedbackQuery.data?.selected);
@@ -882,7 +880,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const displayedModelWarming = displayedModelWarmable && !displayedModelReady && !displayedModelWarmupFailed;
   const requiredCounts = routeTask?.accessoryCounts || (isAi ? selectedAiTask?.required_accessory_counts : undefined);
   const { result, displayResult, setResult } = useDetectionResultDisplay(
-    JSON.stringify([mode, decodedRouteTaskId, selectedTaskId, selectedAiTaskId, activeModelId, auth.user.id, auth.dataUserId])
+    JSON.stringify([mode, decodedRouteTaskId, selectedTaskId, selectedAiTaskId, activeModelId, auth.user.id])
   );
   const resultImage = previewUrl(displayResult);
   const cameraIdleLabel = busy || plcDiagnosticBusy ? "检测中…"
@@ -1313,7 +1311,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     async function pollPendingWarmup() {
       try {
         const nextStatus = await getServiceStatus(auth);
-        queryClient.setQueryData(queryKeys.serviceStatus(auth.dataUserId), nextStatus);
+        queryClient.setQueryData(queryKeys.serviceStatus(auth.user.id), nextStatus);
         if (cancelled) return;
         if (warmupFailedForModel(nextStatus.yolo_warmup?.failed_model_ids, pendingModelId)) {
           setPendingModelId("");
@@ -1735,7 +1733,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
           <span>最近检测 {lastDetectionAt ? new Date(lastDetectionAt).toLocaleTimeString("zh-CN", { hour12: false }) : "—"}</span>
           {result && <span className="normal-write-status" title={plcSyncLabel(result)}>{plcSyncLabel(result)}</span>}
         </div>
-        <div ref={auth.user.role === "admin" ? setInspectionScopeTarget : undefined} className="normal-scope-slot" />
         <div className="page-head-actions detection-head-actions">
           <strong className={`pill ${statusBadge.includes("就绪") || statusBadge.includes("加载") ? "ok" : "neutral"}`}>{statusBadge}</strong>
           <button className="normal-fullscreen-guide compact-action" type="button" disabled={Boolean(busy)} onClick={openFullscreenCamera}>

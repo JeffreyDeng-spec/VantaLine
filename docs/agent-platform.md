@@ -466,3 +466,7 @@ The generated administrator `save_plc_workstation_config` action contract includ
 forms. Defaults are 1/0; backend strict integer/range validation remains the
 authority. This changes configuration payloads only, preserves `system_settings`
 permission and adds no physical serial or detection dispatch capability.
+
+## Administrator data context
+
+`get_context` reports `account_id` as the authenticated identity and `data_scope` as `all` for administrators, or that identity for ordinary users. The global selected-user range is retired; tool requests follow the server role/ownership policy. Identity and role changes still reset private data and tool state.

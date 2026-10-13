@@ -3,7 +3,6 @@ const state = {
     user: null,
     users: [],
     features: {},
-    dataUserId: "",
   },
   config: null,
   aiConfig: null,
@@ -337,19 +336,6 @@ function apiErrorMessage(response, body = "", path = "") {
   return raw;
 }
 
-function authQuery() {
-  if (state.auth.user?.role === "admin" && state.auth.dataUserId) {
-    return `user_id=${encodeURIComponent(state.auth.dataUserId)}`;
-  }
-  return "";
-}
-
-function withAuthScope(path) {
-  const query = authQuery();
-  if (!query || !path.startsWith("/api/")) return path;
-  return `${path}${path.includes("?") ? "&" : "?"}${query}`;
-}
-
 function isAdmin() {
   return state.auth.user?.role === "admin";
 }
@@ -465,7 +451,6 @@ function showAuthedApp(user, features = {}) {
   $("authShell")?.classList.add("hidden");
   renderCurrentUser();
   applyPermissions();
-  renderAdminDataScope();
   startPipelinePolling();
 }
 
@@ -681,14 +666,6 @@ function bindAuth() {
       toast(`用户更新失败:${error.message}`);
     }
   });
-  document.querySelectorAll("[data-admin-scope-select]").forEach((select) => {
-    select.addEventListener("change", async (event) => {
-      state.auth.dataUserId = event.currentTarget.value;
-      renderAdminDataScope();
-      await reloadScopedData();
-    });
-  });
-  $("refreshAdminDataScope")?.addEventListener("click", reloadScopedData);
 }
 
 function permissionCheckboxes(container, selected = []) {
@@ -729,28 +706,9 @@ async function refreshUsers() {
   renderUserManagement();
 }
 
-function renderAdminDataScope() {
-  document.querySelectorAll("[data-admin-scope-wrap]").forEach((wrap) => {
-    wrap.classList.toggle("hidden", !isAdmin());
-  });
-  const selects = document.querySelectorAll("[data-admin-scope-select]");
-  if (!selects.length) return;
-  const current = state.auth.dataUserId || "";
-  const options = [
-    `<option value="">全部用户与历史数据</option>`,
-    `<option value="legacy_admin">历史数据</option>`,
-    ...state.auth.users.map((user) => `<option value="${escapeAttr(user.id)}">${escapeHtml(user.display_name || user.username)}</option>`),
-  ].join("");
-  selects.forEach((select) => {
-    select.innerHTML = options;
-    select.value = current;
-  });
-}
-
 function renderUserManagement() {
   if (!isAdmin()) return;
   permissionCheckboxes($("newUserPermissions"), DEFAULT_USER_PERMISSIONS);
-  renderAdminDataScope();
   const list = $("userManagementList");
   if (!list) return;
   list.innerHTML = state.auth.users.length
@@ -793,13 +751,6 @@ function renderUserManagement() {
     const user = state.auth.users.find((item) => item.id === row.dataset.userId);
     permissionCheckboxes(row.querySelector("[data-user-permissions]"), user?.permissions || []);
   });
-}
-
-async function reloadScopedData() {
-  await loadInitial();
-  await refreshTrainingLibrary();
-  await refreshImageJobs();
-  await refreshPipeline();
 }
 
 function modelVariantLabel(model) {
@@ -3015,7 +2966,7 @@ function dataAnalysisCompareClass(summary = {}) {
 function dataAnalysisQueryPath() {
   const params = new URLSearchParams({ limit: "200" });
   if (state.dataAnalysis.selectedTaskId) params.set("task_id", state.dataAnalysis.selectedTaskId);
-  return withAuthScope(`/api/data-analysis/records?${params.toString()}`);
+  return `/api/data-analysis/records?${params.toString()}`;
 }
 
 async function refreshDataAnalysisRecords(options = {}) {
@@ -3776,7 +3727,7 @@ function readAiTaskForm() {
 }
 
 async function refreshAiTasks(selectedId = state.selectedAiTaskId) {
-  const result = await api(withAuthScope("/api/ai/tasks"));
+  const result = await api("/api/ai/tasks");
   state.aiTasks = result.tasks || [];
   state.selectedAiTaskId = selectedId || result.selected_task_id || state.aiTasks[0]?.id || "";
   setAiTaskDraftFromTask(currentAiTask());
@@ -3897,7 +3848,7 @@ async function runAiVideoDetection(button) {
 }
 
 async function refreshStatusModels() {
-  const status = await api(withAuthScope("/api/status"));
+  const status = await api("/api/status");
   state.classes = status.classes;
   state.aiTasks = status.ai_detection_tasks || state.aiTasks;
   renderModels(status);
@@ -4057,13 +4008,13 @@ async function loadInitial() {
   const aiConfigRequest = hasPermission("ai_config") ? api("/api/ai/config") : Promise.resolve({});
   const locateConfigRequest = hasPermission("locate_config") ? api("/api/locateanything/config") : Promise.resolve({});
   const [status, config, aiConfig, locateConfig, aiTasks, accessories, trainingPlan] = await Promise.all([
-    api(withAuthScope("/api/status")),
-    api(withAuthScope("/api/config/summary")),
+    api("/api/status"),
+    api("/api/config/summary"),
     aiConfigRequest,
     locateConfigRequest,
-    api(withAuthScope("/api/ai/tasks")),
-    api(withAuthScope("/api/accessories")),
-    api(withAuthScope("/api/training/plan")),
+    api("/api/ai/tasks"),
+    api("/api/accessories"),
+    api("/api/training/plan"),
   ]);
   state.config = config;
   state.aiConfig = aiConfig;
@@ -4104,7 +4055,7 @@ async function loadInitial() {
 
 async function refreshImageJobs() {
   try {
-    const result = await api(withAuthScope("/api/image-jobs"));
+    const result = await api("/api/image-jobs");
     state.imageJobs = result.items || [];
     renderImageJobs(result);
     syncOpenAccessoryJobProgress();
@@ -4128,8 +4079,8 @@ async function refreshTrainingLibrary(options = {}) {
   setBusy(refreshButton, true);
   try {
     const [result, status] = await Promise.all([
-      api(withAuthScope("/api/training/resources")),
-      api(withAuthScope("/api/status")),
+      api("/api/training/resources"),
+      api("/api/status"),
     ]);
     state.trainingResources = result;
     renderTrainingLibrary(result);
@@ -6853,10 +6804,10 @@ async function refreshPipeline() {
   try {
     if (!state.accessories?.length) {
       // 首次渲染可能早于 loadInitial 完成,补拉配件列表。
-      const accessories = await api(withAuthScope("/api/accessories"));
+      const accessories = await api("/api/accessories");
       renderAccessories(accessories.items);
     }
-    const result = await api(withAuthScope("/api/pipeline/tasks"));
+    const result = await api("/api/pipeline/tasks");
     state.pipeline.tasks = result.items || [];
     state.pipeline.agent = result.agent || null;
     state.pipeline.accessories = result.accessories || [];
@@ -7186,7 +7137,7 @@ function renderPipelineAddLibrary() {
 
 async function openPipelineAccessoryModal() {
   try {
-    const accessories = await api(withAuthScope("/api/accessories"));
+    const accessories = await api("/api/accessories");
     renderAccessories(accessories.items);
   } catch {
     // 保留现有列表,弹窗仍可用于新建配件。
@@ -7386,7 +7337,7 @@ async function setAccessoryRoute(accessoryId, route, select) {
 
 async function loadAiTasksQuietly() {
   try {
-    const aiTasks = await api(withAuthScope("/api/ai/tasks"));
+    const aiTasks = await api("/api/ai/tasks");
     state.aiTasks = aiTasks.tasks || [];
     state.selectedAiTaskId = aiTasks.selected_task_id || state.aiTasks[0]?.id || "";
     renderAiTasks();

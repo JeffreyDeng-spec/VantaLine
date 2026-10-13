@@ -3341,9 +3341,9 @@ Also run frontend typecheck/production build, `test:plc-capture`, both PLC smoke
 
 ### Compact ordinary inspection header
 
-**Status: Authoritative.** The ordinary inspection header uses two compact rows: task, camera readiness, detection response/error and latest completed detection time, the existing administrator data-scope selector and fullscreen entry; then accessory/model context and camera-only PLC status, register value, automatic-capture flag and connection/settings/details actions. Administrator scope is portaled from AppShell into this header, retaining the same query, authorization and scope setter; other pages keep the original control. PLC state is portaled from the same mounted local control, without a second serial client. Long status detail remains available in the PLC details dialog and title; narrow layouts reduce secondary metadata. Fullscreen markup, status styling and PLC behavior are unchanged.
+**Status: Authoritative.** The ordinary inspection header uses two compact rows: task, camera readiness, detection response/error and latest completed detection time, fullscreen entry (the administrator data-scope selector is retired); then accessory/model context and camera-only PLC status, register value, automatic-capture flag and connection/settings/details actions. The global administrator scope control is removed from this header and all other pages. PLC state is portaled from the same mounted local control, without a second serial client. Long status detail remains available in the PLC details dialog and title; narrow layouts reduce secondary metadata. Fullscreen markup, status styling and PLC behavior are unchanged.
 
-Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; confirm the two rows, scope change and navigation back to another page, camera/manual capture and PLC details remain accessible without document scrolling. Verify image/video never show PLC actions and compare fullscreen markup against the base revision. Preview fixtures use synthetic media and do not prove physical production I/O.
+Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; confirm the two rows, absence of scope controls on this and other pages, camera/manual capture and PLC details remain accessible without document scrolling. Verify image/video never show PLC actions and compare fullscreen markup against the base revision. Preview fixtures use synthetic media and do not prove physical production I/O.
 
 
 Agent status presentation: AgentToolsProvider must render no visible status row in unsupported, preparing, ready, error or disabled states. Retain its hidden data-agent-ready marker for existing browser integration checks. Run frontend test:agent, typecheck/production build and the docs contract after presentation changes; tool registration and permissions remain unchanged.
@@ -3443,3 +3443,7 @@ connection and configured-result-value scenarios.
 
 
 Run python scripts/smoke_billing_runpod_dates.py for the live network-volume date variant, equivalent-schema deduplication, exact decimal amounts, missing/invalid/conflicting/out-of-period dates and conflicting same-day amounts. Other RunPod families still require time; partial resource coverage remains explicit. These synthetic checks do not replace official account acceptance.
+
+## Administrator all-data default
+
+Run `node scripts/test_admin_all_data.cjs` for real query functions and synthetic React/browser acceptance: multiple admin identities, user and legacy records, task-filter retention, no global range menu or injected `user_id`, identity cache keys, and ordinary-user isolation. Run `python scripts/smoke_record_ownership.py`, `python scripts/smoke_account_projections.py` and `python scripts/smoke_auth_access.py`, frontend typecheck/production build, both PLC smoke contracts and release/docs contracts. These synthetic checks do not certify production data contents or physical PLC I/O.

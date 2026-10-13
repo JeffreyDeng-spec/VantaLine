@@ -20,7 +20,7 @@ function useRoutePipelineTask() {
   const decodedTaskId = decodeURIComponent(taskId || "");
   const isPipelineRoute = decodedTaskId.startsWith("pipeline:");
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth),
     enabled: Boolean(taskId) && isPipelineRoute
   });

@@ -6,8 +6,6 @@ export interface AuthContextValue {
   features: Record<string, string>;
   defaultUserPermissions: string[];
   legacyOwnerId: string;
-  dataUserId: string;
-  setDataUserId: (userId: string) => void;
   logout: () => Promise<void>;
 }
 

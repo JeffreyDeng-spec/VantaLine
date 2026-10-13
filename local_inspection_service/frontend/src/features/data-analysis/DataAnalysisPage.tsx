@@ -413,7 +413,7 @@ export function DataAnalysisPage() {
   const [detailRecordId, setDetailRecordId] = useState("");
 
   const recordsQuery = useQuery({
-    queryKey: queryKeys.dataAnalysisRecords(auth.dataUserId, taskId),
+    queryKey: queryKeys.dataAnalysisRecords(auth.user.id, taskId),
     // 100 latest records keep the list responsive; the header total still
     // reflects the full count from the backend.
     queryFn: () => getDataAnalysisRecords(auth, { taskId, limit: 100 }),
@@ -421,7 +421,7 @@ export function DataAnalysisPage() {
     enabled: hasPermission(auth.user, "ai_detection")
   });
   const incomingQuery = useQuery({
-    queryKey: queryKeys.incomingTextInspections(auth.dataUserId),
+    queryKey: queryKeys.incomingTextInspections(auth.user.id),
     queryFn: () => getIncomingTextInspections(auth),
     enabled: hasPermission(auth.user, "inspection")
   });
@@ -433,9 +433,7 @@ export function DataAnalysisPage() {
   const processingSummary = recordsQuery.data?.image_processing_summary || {};
   const scopeText =
     auth.user.role === "admin"
-      ? auth.dataUserId
-        ? "当前使用顶部数据范围筛选。"
-        : "Admin 正在查看全部用户与历史数据。"
+      ? "Admin 正在查看全部用户与历史数据。"
       : "普通用户仅能查看自己的 AI 检测记录。";
 
   return (

@@ -1,6 +1,4 @@
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
-import { createPortal } from "react-dom";
-import { InspectionScopeTarget } from "./InspectionScopeTarget";
 import { LegacyManualRedirect } from "../features/label-inspection/LegacyManualRedirect";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -27,7 +25,6 @@ import {
   getAccessories,
   getPipeline,
   getTrainingResources,
-  getUsers,
   queryKeys
 } from "../api/queries";
 import type { AccessorySummary, AiTasksResponse, PipelineResponse, PipelineTaskPayload, TrainingResourcesResponse } from "../api/types";
@@ -303,7 +300,6 @@ export function AppShell() {
   const queryClient = useQueryClient();
   const [assetsExpanded, setAssetsExpanded] = useState(() => [workspacePath("/training-library"), workspacePath("/pipeline")].includes(location.pathname));
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
-  const [inspectionScopeTarget, setInspectionScopeTarget] = useState<HTMLElement | null>(null);
   const userManagementActive = location.pathname === workspacePath("/users");
   const canReadTaskResources = ["ai_detection", "model_library", "training_pipeline"].some((permission) => hasPermission(auth.user, permission));
   const canReadPipelineTasks = ["training_pipeline", "incoming_material_config", "inspection"].some((permission) => hasPermission(auth.user, permission));
@@ -311,56 +307,51 @@ export function AppShell() {
     window.alert(error instanceof Error ? error.message : "保存侧边栏任务偏好失败");
   });
   const trainingResourcesQuery = useQuery({
-    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryKey: queryKeys.trainingResources(auth.user.id),
     queryFn: () => getTrainingResources(auth),
     enabled: canReadTaskResources && !userManagementActive,
     refetchInterval: 60_000
   });
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth),
     enabled: canReadPipelineTasks && !userManagementActive,
     refetchInterval: 60_000
   });
   const accessoriesQuery = useQuery({
-    queryKey: queryKeys.accessories(auth.dataUserId),
+    queryKey: queryKeys.accessories(auth.user.id),
     queryFn: () => getAccessories(auth),
     enabled: hasPermission(auth.user, "accessory_library") && (!userManagementActive || createTaskOpen),
     // Accessory data is only shown inside the create-task modal, so it does not
     // need background polling while the modal is closed.
     refetchInterval: createTaskOpen ? 60_000 : false
   });
-  const usersQuery = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: getUsers,
-    enabled: auth.user.role === "admin"
-  });
   const deleteAiTaskMutation = useMutation({
     mutationFn: deleteAiTask,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.user.id) });
     }
   });
   const deletePipelineTaskMutation = useMutation({
     mutationFn: deletePipelineTask,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
     }
   });
 
   function removeTaskFromQueryCache(entry: TaskEntry) {
     if (entry.kind === "pipeline") {
-      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.user.id), (current) =>
         current ? { ...current, items: (current.items || []).filter((task) => task.id !== entry.sourceId) } : current
       );
       return;
     }
-    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId), (current) =>
+    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.user.id), (current) =>
       current ? { ...current, ai_detection_tasks: (current.ai_detection_tasks || []).filter((task) => task.id !== entry.sourceId) } : current
     );
-    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId), (current) =>
+    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.user.id), (current) =>
       current
         ? {
             ...current,
@@ -374,7 +365,7 @@ export function AppShell() {
   const createPipelineTaskMutation = useMutation({
     mutationFn: (payload: PipelineTaskPayload) => createPipelineTask(payload, auth),
     onSuccess: (task) => {
-      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+      queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.user.id), (current) =>
         current
           ? {
               ...current,
@@ -390,8 +381,8 @@ export function AppShell() {
           archivedTaskIds: current.archivedTaskIds.filter((id) => id !== taskKey)
         };
       });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
     }
   });
 
@@ -460,9 +451,9 @@ export function AppShell() {
   async function deleteTask(entry: TaskEntry) {
     if (!entry.canDelete) return;
     if (!window.confirm(`删除任务 ${entry.label}？`)) return;
-    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId));
-    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId));
-    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId));
+    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.user.id));
+    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.user.id));
+    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.user.id));
     const previousPinned = pinnedTaskIds;
     const previousArchived = archivedTaskIds;
     persistTaskPreferences((current) => ({
@@ -477,9 +468,9 @@ export function AppShell() {
         await deleteAiTaskMutation.mutateAsync(entry.sourceId);
       }
     } catch (error) {
-      queryClient.setQueryData(queryKeys.pipeline(auth.dataUserId), previousPipeline);
-      queryClient.setQueryData(queryKeys.trainingResources(auth.dataUserId), previousResources);
-      queryClient.setQueryData(queryKeys.aiTasks(auth.dataUserId), previousAiTasks);
+      queryClient.setQueryData(queryKeys.pipeline(auth.user.id), previousPipeline);
+      queryClient.setQueryData(queryKeys.trainingResources(auth.user.id), previousResources);
+      queryClient.setQueryData(queryKeys.aiTasks(auth.user.id), previousAiTasks);
       persistTaskPreferences((current) => ({
         pinnedTaskIds: previousPinned.includes(entry.id)
           ? [entry.id, ...current.pinnedTaskIds.filter((id) => id !== entry.id)]
@@ -507,23 +498,8 @@ export function AppShell() {
   const textWorkspace = textRoutes.some(path => location.pathname === workspacePath(path) || location.pathname.startsWith(`${workspacePath(path)}/`))
     || Boolean(decodedTaskId && pipelineQuery.data?.items?.some(task => task.id === decodedTaskId && task.task_kind === "incoming_material_text"));
   const accountDisplayName = auth.user.display_name || auth.user.username;
-  const dataScopeControl = (
-    <label>
-      数据范围
-      <select value={auth.dataUserId} onChange={(event) => auth.setDataUserId(event.currentTarget.value)}>
-        <option value="">全部用户与历史数据</option>
-        <option value="legacy_admin">历史数据</option>
-        {(usersQuery.data?.users || []).map((user) => (
-          <option value={user.id} key={user.id}>
-            {user.display_name || user.username}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 
   return (
-    <InspectionScopeTarget.Provider value={setInspectionScopeTarget}>
     <div className="app-shell">
       <WorkspaceSidebar userId={auth.user.id} exempt={textWorkspace}>
         <Link className="brand-block" to={workspacePath()} aria-label="VantaLine 工作台总览">
@@ -659,12 +635,6 @@ export function AppShell() {
       ) : null}
 
       <main className="workspace">
-        {auth.user.role === "admin" && !userManagementActive ? (
-          inspectionScopeTarget
-            ? createPortal(<div className="normal-data-scope">{dataScopeControl}</div>, inspectionScopeTarget)
-            : <div className="top-scope-bar">{dataScopeControl}</div>
-        ) : null}
-
         <Routes>
           <Route path="text-compare-codex" element={<PermissionRoute permission="inspection"><CodexComparePage /></PermissionRoute>} />
           <Route index element={<Dashboard />} />
@@ -767,6 +737,5 @@ export function AppShell() {
         </Routes>
       </main>
     </div>
-    </InspectionScopeTarget.Provider>
   );
 }

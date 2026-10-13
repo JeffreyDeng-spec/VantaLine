@@ -226,7 +226,7 @@ export function LocateAnythingPage() {
     refetchInterval: 30_000
   });
   const accessoriesQuery = useQuery({
-    queryKey: queryKeys.locateAccessories(auth.dataUserId),
+    queryKey: queryKeys.locateAccessories(auth.user.id),
     queryFn: () => getLocateAccessories(auth)
   });
 

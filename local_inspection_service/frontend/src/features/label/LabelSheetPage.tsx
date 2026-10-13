@@ -96,7 +96,7 @@ export function LabelSheetPage() {
   const canViewDiagnostics = auth.user.role === "admin";
 
   const referencesQuery = useQuery({
-    queryKey: queryKeys.labelSheetReferences(auth.dataUserId),
+    queryKey: queryKeys.labelSheetReferences(auth.user.id),
     queryFn: () => getLabelSheetReferences(auth)
   });
 
@@ -198,7 +198,7 @@ export function LabelSheetPage() {
         await addLabelSheetReferences(form);
         setAnnotation("");
         setReferenceFiles([]);
-        await queryClient.invalidateQueries({ queryKey: queryKeys.labelSheetReferences(auth.dataUserId) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.labelSheetReferences(auth.user.id) });
         toast.notify({ title: "标签参考已保存", tone: "success" });
       } catch (error) {
         toast.notify({

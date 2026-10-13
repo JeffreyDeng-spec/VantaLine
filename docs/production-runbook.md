@@ -2190,3 +2190,7 @@ after removal. This is compatibility evidence, not a performed production rollba
 
 
 RunPod commissioning may encounter network-volume startDate rather than time. Publish only after the read-only import succeeds; compare same-window official balance and retain the supported-resources-only fee boundary. Tencent UnauthorizedOperation.CamNoAuth is a denied financial capability; do not grant permissions automatically or publish an unverified payer. Rollback keeps private account configuration and all existing snapshots.
+
+## Administrator range menu removal
+
+Install the complete immutable release to retire the global data-range menu and selected-user browser state together. No data migration or account rewrite is required. Verify administrator workspace reads include users and historical data and ordinary users remain isolated. Rollback restores the previous complete frontend/backend release.

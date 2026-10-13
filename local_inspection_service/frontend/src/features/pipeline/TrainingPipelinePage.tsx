@@ -2045,7 +2045,7 @@ export function TrainingPipelinePage() {
   // Poll quickly only while some task is actually progressing in the background;
   // otherwise fall back to a slow refresh (mutations invalidate the queries anyway).
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth),
     refetchInterval: (query) =>
       (query.state.data?.items || []).some((task) => ["running", "queued", "pending"].includes(String(task.status || "")))
@@ -2053,7 +2053,7 @@ export function TrainingPipelinePage() {
         : 30_000
   });
   const resourcesQuery = useQuery({
-    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryKey: queryKeys.trainingResources(auth.user.id),
     queryFn: () => getTrainingResources(auth),
     refetchInterval: (query) =>
       (query.state.data?.tasks || []).some((task) => ["running", "queued", "pending"].includes(String(task.status || "")))
@@ -2061,7 +2061,7 @@ export function TrainingPipelinePage() {
         : 60_000
   });
   const accessoriesQuery = useQuery({
-    queryKey: queryKeys.accessories(auth.dataUserId),
+    queryKey: queryKeys.accessories(auth.user.id),
     queryFn: () => getAccessories(auth),
     enabled: addOpen
   });
@@ -2095,14 +2095,14 @@ export function TrainingPipelinePage() {
   }, []);
 
   async function refreshPipeline() {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
   }
 
   async function refreshAdjacent() {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.dataUserId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.aiTasks(auth.user.id) })
     ]);
   }
 
@@ -2147,9 +2147,9 @@ export function TrainingPipelinePage() {
       }
       setAddOpen(false);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) })
+        queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.user.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) })
       ]);
     } catch (error) {
       notify({ title: "创建配件失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
@@ -2390,8 +2390,8 @@ export function TrainingPipelinePage() {
 
       <section className="metric-grid four">
         <MetricCard label="当前配件" value={inFlowAccessories.length} detail="流水线内" />
-        <MetricCard label="任务总数" value={totalTasks} detail="当前数据范围" />
-        <MetricCard label="样本库" value={datasets} detail="当前数据范围" />
+        <MetricCard label="任务总数" value={totalTasks} detail="全部可访问数据" />
+        <MetricCard label="样本库" value={datasets} detail="全部可访问数据" />
         <MetricCard label="模型库" value={models + archivedTasks} detail={archivedTasks ? `${archivedTasks} 个流水线入库` : "训练产物"} />
       </section>
 
@@ -2523,16 +2523,16 @@ export function TrainingPipelinePage() {
           onCancel={async () => {
             await deleteAccessory(cropAccessory.id);
             await Promise.all([
-              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
-              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) }),
-              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) })
+              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.user.id) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) })
             ]);
           }}
           onSaved={async () => {
             await Promise.all([
-              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) }),
-              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) }),
-              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) })
+              queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.user.id) }),
+              queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) })
             ]);
           }}
         />
