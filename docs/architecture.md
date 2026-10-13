@@ -2587,3 +2587,12 @@ The RunPod financial reader accepts the observed network-volume startDate date a
 ## Administrator data visibility
 
 Administrators use the existing server-wide read authorization by default, including all users and legacy records. React and the retained static UI have no global data-range selector or selected-user request state. Data cache keys use the authenticated account ID and identity/role changes still clear private caches. Explicit per-user management detail routes retain their selected-owner behavior; ordinary-user ownership/shared-read checks remain enforced by the server.
+
+## Continuous label camera inspection
+
+**Status: Authoritative.** The label workspace keeps one browser camera stream
+through capture, submission and current-result review. Start captures and submits
+a fresh frame; next item preserves the task/standard and restores live preview.
+Ordinary submission no longer flashes the recovery notice; a two-second delayed
+notice retains the existing request-ID recovery contract. See
+[text inspection](text-inspection-v2.md#continuous-label-camera-inspection).

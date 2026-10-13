@@ -992,3 +992,28 @@ Text/Codex/label owners now assemble in `runtime/wiring/text.py` and register th
 ## Browser updates at new-work boundaries
 
 The shared version guard covers new label task imports, comparisons and extraction starts; save, review, confirmation and cancellation remain available without initiating refresh. Route/query task transitions retain their intended URL when updating. Current submissions finish before refresh; persisted server jobs and request identities remain recoverable and are not resubmitted. Unuploaded actual images, file selections and manual polygon/guide edits require discard confirmation. Retaining drafts keeps the current page. Camera tracks are stopped only during final update cleanup. Existing tabs without the guard require one manual refresh after its first deployment.
+
+
+## Continuous label camera inspection
+
+**Status: Authoritative.** In `/workspace/label-inspection`, a writable task opens
+the browser camera automatically (subject to browser permission), using the last
+device selected in this browser tab for the current account. The primary start
+action captures one fresh frame and submits it under the existing request ID
+contract; an uploaded photo is submitted directly. Capture and
+submission share the existing busy guard, so repeated clicks cannot create extra
+runs. The stream stays connected during submission and current-run results, while
+the evidence view shows the submitted still image. Next item preserves task,
+standard selection and fullscreen, clears previous actual/result overlays and
+returns immediately to live preview, opening the camera only if needed.
+
+Direct history entry does not open a camera. Leaving the task/account, hiding the
+page, version-update cleanup, explicit close or device loss stops all tracks;
+returning from a hidden page requires an explicit open or next-item action. Device
+selection replaces the old stream with generation fencing. Permission/no-device
+failures leave uploaded-image inspection available. This label camera creates no
+PLC dispatch. Normal submission uses the ordinary busy/result state; the recovery
+notice appears only after two seconds without acknowledgement or a recovery-read
+error. Existing read-only polling, request identity, uncertain-outcome recovery
+and explicit same-request resubmission remain; no model call is automatically
+replayed. Results stay visible until the operator switches to the next item.

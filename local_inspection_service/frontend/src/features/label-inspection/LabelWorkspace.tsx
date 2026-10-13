@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
   type CSSProperties,
+  type MutableRefObject,
 } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -296,17 +297,29 @@ function Evidence({
   );
 }
 function Camera({
-  onPhoto,
+  captureRef,
+  onReady,
+  onPreview,
   onError,
   preview,
   tools,
+  cameraKey,
+  openRequest,
+  showLive,
+  editable,
   readOnly = false,
   disabled = false,
 }: {
-  onPhoto: (file: File) => void;
+  captureRef: MutableRefObject<(() => Promise<File>) | null>;
+  onReady: (ready: boolean) => void;
+  onPreview: () => void;
   onError: (e: unknown) => void;
   preview: ReactNode;
   tools: ReactNode;
+  cameraKey: string;
+  openRequest: number;
+  showLive: boolean;
+  editable: boolean;
   readOnly?: boolean;
   disabled?: boolean;
 }) {
@@ -314,16 +327,21 @@ function Camera({
     stream = useRef<MediaStream | null>(null),
     generation = useRef(0);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]),
-    [device, setDevice] = useState(""),
+    [device, setDevice] = useState(() => sessionStorage.getItem(cameraKey) || ""),
     [active, setActive] = useState(false),
     [starting, setStarting] = useState(false);
+  // Event callbacks read current page state without reopening a live stream.
+  const callbacks = useRef({ onReady, onPreview, onError });
+  callbacks.current = { onReady, onPreview, onError };
   useVersionParticipant({ busy: () => starting, cleanup: stop });
   function stop() {
     ++generation.current;
     stream.current?.getTracks().forEach((t) => t.stop());
     stream.current = null;
+    if (video.current) video.current.srcObject = null;
     setActive(false);
     setStarting(false);
+    callbacks.current.onReady(false);
   }
   useEffect(() => {
     const pause = () => {
@@ -336,17 +354,18 @@ function Camera({
     };
   }, []);
   useEffect(() => {
-    if (readOnly || disabled) stop();
-  }, [readOnly, disabled]);
-  async function start() {
-    if (readOnly || disabled) return;
+    if (readOnly) stop();
+    else if (!stream.current && !document.hidden) void start();
+  }, [readOnly, openRequest]);
+  async function start(nextDevice = device) {
+    if (readOnly) return;
     stop();
     const token = generation.current;
     setStarting(true);
     try {
       const s = await navigator.mediaDevices.getUserMedia({
-        video: device
-          ? { deviceId: { exact: device } }
+        video: nextDevice
+          ? { deviceId: { exact: nextDevice } }
           : { facingMode: "environment" },
         audio: false,
       });
@@ -360,28 +379,31 @@ function Camera({
         await video.current.play();
       }
       if (token !== generation.current) return;
+      s.getVideoTracks()[0].onended = () => {
+        if (token !== generation.current) return;
+        stop();
+        callbacks.current.onError(new Error("摄像头已断开，请重新开启"));
+      };
       setActive(true);
+      callbacks.current.onReady(true);
       setDevices(
         (await navigator.mediaDevices.enumerateDevices()).filter(
           (x) => x.kind === "videoinput",
         ),
       );
-      s.getVideoTracks()[0].onended = () => {
-        stop();
-        onError(new Error("摄像头已断开，请重新开启"));
-      };
     } catch (e) {
       if (token === generation.current) {
         stop();
-        onError(e);
+        callbacks.current.onError(e);
       }
     } finally {
       if (token === generation.current) setStarting(false);
     }
   }
-  function capture() {
+  async function capture(): Promise<File> {
     const v = video.current;
-    if (!v || !v.videoWidth || !active) return;
+    if (!v || !v.videoWidth || !active || document.hidden || readOnly)
+      throw new Error("摄像头尚未就绪，请重新开启后检测");
     const canvas = document.createElement("canvas");
     const scale = Math.min(
       1,
@@ -391,33 +413,42 @@ function Camera({
     canvas.height = Math.floor(v.videoHeight * scale);
     canvas.getContext("2d")!.drawImage(v, 0, 0, canvas.width, canvas.height);
     const token = generation.current;
-    canvas.toBlob(
+    return new Promise((resolve, reject) => canvas.toBlob(
       (blob) => {
-        if (blob && token === generation.current) {
-          onPhoto(new File([blob], "实物拍照.jpg", { type: "image/jpeg" }));
-          stop();
-        }
+        if (blob && token === generation.current && !document.hidden) {
+          resolve(new File([blob], "实物拍照.jpg", { type: "image/jpeg" }));
+        } else reject(new Error("拍照未完成，请确认摄像头后重新检测"));
       },
       "image/jpeg",
       0.95,
-    );
+    ));
   }
+  useEffect(() => {
+    captureRef.current = capture;
+    return () => {
+      if (captureRef.current === capture) captureRef.current = null;
+    };
+  });
+  const live = showLive && (active || starting);
   return (
     <div className="li-camera">
       <div className="li-visual">
-        <video ref={video} muted playsInline hidden={!active && !starting} />
-        {!active && !starting ? preview : null}
+        <video ref={video} muted playsInline hidden={!live} />
+        {!live ? preview : null}
       </div>
-      {!readOnly && (
+      {!readOnly && editable && (
         <div className="li-tools">
           {tools}
           <select
-            disabled={disabled}
+            disabled={disabled || starting}
             aria-label="选择摄像头"
             value={device}
             onChange={(e) => {
-              stop();
-              setDevice(e.target.value);
+              const next = e.target.value;
+              sessionStorage.setItem(cameraKey, next);
+              setDevice(next);
+              callbacks.current.onPreview();
+              void start(next);
             }}
           >
             <option value="">默认摄像头</option>
@@ -427,14 +458,16 @@ function Camera({
               </option>
             ))}
           </select>
-          <button onClick={() => void start()} disabled={starting || disabled}>
-            {starting ? "正在开启…" : active ? "重新连接" : "开启摄像头 / 重拍"}
-          </button>
+          {!active || !showLive ? (
+            <button onClick={() => {
+              callbacks.current.onPreview();
+              if (!stream.current) void start();
+            }} disabled={starting || disabled}>
+              {starting ? "正在开启…" : active ? "重新拍照" : "开启摄像头 / 重拍"}
+            </button>
+          ) : null}
           {active ? (
-            <>
-              <button onClick={capture}>拍照</button>
-              <button onClick={stop}>关闭摄像头</button>
-            </>
+            <button disabled={disabled} onClick={stop}>关闭摄像头</button>
           ) : null}
         </div>
       )}
@@ -755,12 +788,21 @@ export function LabelWorkspace() {
         ),
       );
   }
+  const cameraCapture = useRef<(() => Promise<File>) | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraOpenRequest, setCameraOpenRequest] = useState(0);
+  const [recoveryNotice, setRecoveryNotice] = useState("");
   const pendingKey = `label-submit:${user.id}:${taskId}`;
   const [pending, setPending] = useState("");
   useEffect(
     () => setPending(sessionStorage.getItem(pendingKey) || ""),
     [pendingKey],
   );
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setTimeout(() => setRecoveryNotice(pending), 2000);
+    return () => window.clearTimeout(timer);
+  }, [pending]);
   const recovery = useQuery({
     queryKey: ["label-request", user.id, pending],
     queryFn: () =>
@@ -938,6 +980,7 @@ export function LabelWorkspace() {
   function fresh() {
     setLocalPhoto(null);
     setZoom(null);
+    setCameraOpenRequest((request) => request + 1);
     if (runId) setParent(runId.startsWith("legacy:") ? "" : runId);
     if (run?.reference) setSelected(run.reference.id);
     setParams({ task: taskId });
@@ -1087,9 +1130,9 @@ export function LabelWorkspace() {
       ) : (
         <>
           <div className="li-notices">
-            {pending ? (
-              <p className="li-warning">
-                正在查询上次提交状态，页面刷新不会再次调用模型。
+            {pending && (recoveryNotice === pending || recovery.error) ? (
+              <p className="li-warning" role="status">
+                正在恢复上次检测，请稍候。
                 <button onClick={() => void recovery.refetch()}>
                   查询提交状态
                 </button>
@@ -1464,9 +1507,19 @@ export function LabelWorkspace() {
                     </header>
                     <Camera
                       key={user.id + ":" + taskId}
-                      readOnly={!!runId || !value.revision}
+                      captureRef={cameraCapture}
+                      onReady={setCameraReady}
+                      onPreview={() => {
+                        setActual(null);
+                        setLocalPhoto(null);
+                        setZoom(null);
+                      }}
+                      cameraKey={`label-camera:${user.id}`}
+                      openRequest={cameraOpenRequest}
+                      showLive={!runId && !actual}
+                      editable={!runId}
+                      readOnly={!value.revision || (!!runId && !photoLease)}
                       disabled={busy || !!pending || !!running}
-                      onPhoto={photo}
                       onError={fail}
                       preview={
                         <>
@@ -1568,24 +1621,33 @@ export function LabelWorkspace() {
                           !!pending ||
                           !!running ||
                           !reference?.enabled ||
-                          !actual ||
+                          (!actual && !cameraReady) ||
                           !capabilities.data?.enabled
                         }
                         onClick={() =>
                           void runVersionAction(() => perform(async (isCurrent) => {
-                            if (!actual || !reference) return;
+                            if (!reference) return;
+                            const file = actual || await cameraCapture.current?.();
+                            if (!isCurrent()) return;
+                            if (!file) throw new Error("摄像头尚未就绪，请重新开启后检测");
+                            if (file.size > 10 * 1024 * 1024)
+                              throw new Error("实物图片不能超过 10 MiB");
+                            if (!actual) {
+                              setActual(file);
+                              setLocalPhoto({ owner: user.id, task: taskId, file, url: URL.createObjectURL(file) });
+                            }
                             const requestId =
                               sessionStorage.getItem(pendingKey) || key();
                             sessionStorage.setItem(pendingKey, requestId);
                             setPending(requestId);
                             setLocalPhoto((photo) =>
-                              photo?.file === actual
+                              photo?.file === file
                                 ? { ...photo, requestId }
                                 : photo,
                             );
                             const created = await apiClient.upload<Run>(
                               `${API}/tasks/${value.id}/runs`,
-                              form(actual, {
+                              form(file, {
                                 request_id: requestId,
                                 revision: value.revision,
                                 asset_id: reference.id,
@@ -1628,7 +1690,7 @@ export function LabelWorkspace() {
                             ? "任务已有检测进行中"
                             : "开始检测"}
                       </button>
-                      <p>{isPdf ? "每次只拍一页，自动框选完整页面并检查文字和图示。" : "自动选择一张标签，检查文字、大小写、图标和外形。"}</p>
+                      <p>{actual ? "检测已上传的照片。" : "点击开始检测，自动拍照并检测。"}{isPdf ? "每次只拍一页，自动框选完整页面并检查文字和图示。" : "每次只检测一张标签。"}</p>
                       {running ? (
                         <button
                           onClick={() =>
@@ -1788,7 +1850,7 @@ export function LabelWorkspace() {
                     ) : null}
                     {!run && !runId && (
                       <p className="li-empty-result">
-                        选择标准并上传或拍摄实物图，点击开始检测。
+                        选择标准后，点击开始检测即可拍照并检测；也可上传实物照片。
                       </p>
                     )}
                   </div>

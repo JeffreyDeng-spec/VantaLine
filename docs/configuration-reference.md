@@ -2044,3 +2044,16 @@ RunPod account references also enable the existing read-only resource billing AP
 ## Administrator data-range retirement
 
 The browser has no configurable selected-user data range. Administrator workspace requests omit the former global `user_id` filter and use the existing all-user/legacy read default. No persisted setting or migration is needed. Explicit per-user management APIs remain available and ordinary-user isolation is unchanged.
+
+## Continuous label camera inspection
+
+**Status: Authoritative.** The label workspace keeps one browser camera stream
+through capture, submission and current-result review. Start captures and submits
+a fresh frame; next item preserves the task/standard and restores live preview.
+Ordinary submission no longer flashes the recovery notice; a two-second delayed
+notice retains the existing request-ID recovery contract. See
+[text inspection](text-inspection-v2.md#continuous-label-camera-inspection).
+
+The selected camera device is remembered in browser session storage per account
+(`label-camera:<user-id>`), not in server or PLC configuration. Browser camera
+permission is still required. Uploaded-image input remains available on denial.
