@@ -1875,7 +1875,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <LocalPlcControls client={plcClientRef.current} modelId={activeModelId} connected={plcConnected}
                 statusTarget={plcStatusTarget} fullscreenStatusTarget={fullscreenPlcStatusTarget}
                 captureStatus={plcCapturePoll.message}
-                registerStatus={`到位 ${plcWorkstationQuery.data?.config?.capture_input_register || "—"}=${plcWorkstationQuery.data?.config?.capture_trigger_enabled ? plcCapturePoll.value ?? "—" : "未读取"} · 输出 ${plcWorkstationQuery.data?.config?.result_register || "—"} 读回=${plcOutputRead.value ?? "—"}`}
+                registerStatus={`${plcWorkstationQuery.data?.config?.capture_input_register || "—"}: ${plcWorkstationQuery.data?.config?.capture_trigger_enabled ? plcCapturePoll.value ?? "—" : "—"} ｜ ${plcWorkstationQuery.data?.config?.result_register || "—"}: ${plcOutputRead.value ?? "—"}`}
                 registerStatusTitle={`${plcOutputRead.message}；最近读回：${plcOutputRead.readAt ? formatLocalTimestamp(plcOutputRead.readAt) : "—"}；最近写入：${result?.plc_sync?.enabled ? plcSyncLabel(result) : "暂无写入确认"}`}
                 externalStatus={plcConnectionStatus} productionReady={Boolean(stream && activeModelId)} disabled={Boolean(busy) || plcDiagnosticBusy}
                 onConnectionChange={(connected) => {

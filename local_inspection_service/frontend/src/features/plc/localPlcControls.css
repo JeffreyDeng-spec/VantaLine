@@ -40,5 +40,5 @@
   .plc-connection-bar-actions .compact-action { padding: 3px 5px; }
 }
 
-.plc-register-status { flex:0 0 auto; white-space:nowrap; font-size:12px; font-variant-numeric:tabular-nums; }
+.plc-register-status { flex:0 0 auto; white-space:nowrap; font-family:var(--font-mono, ui-monospace, monospace); font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; }
 @media(max-width:800px) { .plc-connection-bar { flex-wrap:wrap; } .plc-register-status { font-size:11px; } }
