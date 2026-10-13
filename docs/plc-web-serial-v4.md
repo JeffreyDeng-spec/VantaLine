@@ -344,3 +344,16 @@ The camera page reads output state even when automatic capture is disabled, only
 Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/priority suppression, generation fencing and uncertain-read fail-close/no-retry with simulated serial. Check zero, changing output, disabled automatic capture, disconnect/reconnect, normal/fullscreen display and missing optional plans. Do not label an ACK or requested value as actual readback; a PLC program may reset the register after receiving a write. Run PLC/backend/frontend contracts, capture-trigger tests, typecheck/build, docs contract and diff check; no physical PLC test writes are authorized by this UI change.
 
 The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
+
+## Camera PASS display expiry
+
+**Status: Authoritative.** Camera PASS presentation clears after a fixed five
+seconds in both normal and fullscreen layouts; FAIL keeps its existing lifetime
+until replaced by a new result. Only the display expires: original result/PLC
+settlement evidence, diagnosis and recent detection time are retained. New result
+identities fence old display timers; task/model/account changes and unmount cancel
+them. A busy camera displays processing, and an error, missing device/model,
+unconnected automatic-capture station or unarmed arrival input does not claim
+ready. Image/video results remain unchanged. This UI timer does not reset D/Y,
+disconnect a port, alter leases or input-edge latching, generate another dispatch,
+or replay an uncertain physical write.

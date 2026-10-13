@@ -49,7 +49,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
     queryClient.removeQueries(privateQueries);
     setDataUserId("");
     setCacheIdentity(identity);
-  }, [identity, queryClient, setDataUserId]);
+  }, [identity, authQuery.data?.user?.role, queryClient, setDataUserId]);
 
   const logoutMutation = useMutation({
     mutationFn: () => { diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },

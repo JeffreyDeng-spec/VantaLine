@@ -49,6 +49,17 @@ Pipeline recommendation pre-generation now runs and schedules through `pipeline/
 
 # Architecture
 
+## Administrator financial data
+
+The separate `analytics/billing` service owns official payer snapshots, without
+mixing the existing CostLedger's unit-price estimates. Canonical analytics
+assembly supplies narrow PostgreSQL, secret and thread-scope capabilities; HTTP
+registration installs administrator-only routes and startup, with financial
+producer shutdown preceding repository shutdown. Immutable billing publication,
+lease fencing, exact money, source coverage and UI semantics are specified in
+[Administrator usage and costs](billing.md). Ordinary feature permissions grant
+no financial access. No supplier/model mutation is performed.
+
 Pipeline trained-model linking now lives beside the reverse run lookup in `pipeline/training_links.py`, as a separate class with a late-resolved catalog capability. It selects the first visible matching run and mutates the caller-owned task in place. The caller still owns locks, saves and any following Agent or training actions.
 
 Pipeline training-job lookup and status projection now live in `pipeline/training_status.py`, separate from terminal training-to-pipeline synchronization. Late-resolved capabilities preserve the selected loader, root-linked callback and Agent stage updates; the caller retains locks and storage. Local interrupted-job projection may still write training state, so this is not a read-only boundary.
@@ -2544,3 +2555,20 @@ The camera page reads output state even when automatic capture is disabled, only
 Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/priority suppression, generation fencing and uncertain-read fail-close/no-retry with simulated serial. Check zero, changing output, disabled automatic capture, disconnect/reconnect, normal/fullscreen display and missing optional plans. Do not label an ACK or requested value as actual readback; a PLC program may reset the register after receiving a write. Run PLC/backend/frontend contracts, capture-trigger tests, typecheck/build, docs contract and diff check; no physical PLC test writes are authorized by this UI change.
 
 The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
+
+## Camera result presentation lifetime
+
+**Status: Authoritative.** A camera PASS is shown for a fixed five seconds from its
+committed display, then its image/annotations, conclusion, pass styling and
+inspection statistics are hidden. Normal and fullscreen views share this expiry;
+entering or leaving fullscreen does not restart it. FAIL remains visible until a
+subsequent result replaces it, including while a new detection runs. Image upload
+and video results do not expire. Each completed result owns its presentation
+identity, so an older timer cannot hide a later PASS or FAIL. Task/model/account
+context changes and unmount cancel the timer and hide an old camera PASS.
+
+Result evidence, diagnostics, last detection time and PLC settlement status remain
+available after presentation expiry. The empty camera view reports ready only
+when idle with a live camera/model and no error; busy, unavailable, PLC connection
+and automatic-input reset states keep their respective messages. Expiry neither
+starts capture nor changes PLC output or any persisted record.

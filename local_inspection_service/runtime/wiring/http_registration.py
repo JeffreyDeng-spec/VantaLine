@@ -91,6 +91,8 @@ from local_inspection_service.accessories.candidate_api import register_candidat
 from local_inspection_service.accessories.api import register_catalog_api
 from local_inspection_service.codex_compare.api import register as register_codex_compare
 from local_inspection_service.analytics.cost_api import register_cost_api
+from local_inspection_service.analytics.billing.api import register_billing_api
+from local_inspection_service.analytics.billing.service import BillingService
 from local_inspection_service.runtime.web_shell import register_entry_routes
 from local_inspection_service.accessories.file_api import register_file_api
 from local_inspection_service.label_inspection.api import register as register_label_inspection
@@ -202,6 +204,7 @@ import local_inspection_service.training.transfer_progress
 
 @dataclass(frozen=True)
 class HttpRegistrationInputs:
+    _billing: Callable[[], BillingService]
     _access_control: Callable[[], local_inspection_service.auth.access.AccessControl]
     _accessory_catalog: Callable[[], local_inspection_service.accessories.catalog.AccessoryCatalog]
     _accessory_confirmation: Callable[[], local_inspection_service.accessories.confirmation.AccessoryConfirmation]
@@ -709,6 +712,7 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
         raise HTTPException(status_code=410, detail='legacy_plc_input_capture_is_read_only')
 
     get_api_cost_ledger = register_cost_api(app, ports._access_control().require_admin_role, ports._cost_ledger())
+    register_billing_api(app, ports._access_control().require_admin_role, ports._billing())
 
     @app.get('/api/admin/runtime-store/probe')
     def get_runtime_store_probe() -> dict[str, Any]:
@@ -1158,7 +1162,7 @@ def register_http(shell: HttpApplication, values: ApplicationValues, environment
         except Exception as exc:
             print(f'[incoming-text.retention] skipped: {type(exc).__name__}', flush=True)
 
-    _web_shutdown = register_web_shutdown(app, (ShutdownStep('real-photo-dispatch', ports._real_photo_dispatch_runtime().close), ShutdownStep('pdf-import', app.state.label_pdf_import.close), ShutdownStep('pipeline-auto-agent', ports._pipeline_auto_agent_runtime().close), ShutdownStep('pipeline-advance', ports._pipeline_advance_runtime().close), ShutdownStep('pipeline-recommendation', ports._pipeline_recommendation_runtime().close), ShutdownStep('auto-label', ports._auto_optimization_label_processing().close), ShutdownStep('auto-shadow', ports._auto_optimization_shadow_evaluation().close), ShutdownStep('auto-training-check', ports._auto_optimization_training_scheduling().close), ShutdownStep('training', ports._training_task_runtime().close), ShutdownStep('background-codex', ports._background_codex_thread().close), ShutdownStep('image-worker', ports._image_worker_runtime().close), ShutdownStep('document-import', document_import_jobs.close), ShutdownStep('prepared-comparison', ports._prepared_comparison_runtime().close), ShutdownStep('standard-preparation', standard_preparation_jobs.close), ShutdownStep('text-extraction', ports._text_extraction_runtime().close), ShutdownStep('transfer-progress', ports._transfer_progress().close), ShutdownStep('yolo-warmup', ports._yolo_warmup_runtime().close), ShutdownStep('model-mcp', ports._ai_mcp_client().shutdown)))
+    _web_shutdown = register_web_shutdown(app, (ShutdownStep('billing-sync', ports._billing().close), ShutdownStep('real-photo-dispatch', ports._real_photo_dispatch_runtime().close), ShutdownStep('pdf-import', app.state.label_pdf_import.close), ShutdownStep('pipeline-auto-agent', ports._pipeline_auto_agent_runtime().close), ShutdownStep('pipeline-advance', ports._pipeline_advance_runtime().close), ShutdownStep('pipeline-recommendation', ports._pipeline_recommendation_runtime().close), ShutdownStep('auto-label', ports._auto_optimization_label_processing().close), ShutdownStep('auto-shadow', ports._auto_optimization_shadow_evaluation().close), ShutdownStep('auto-training-check', ports._auto_optimization_training_scheduling().close), ShutdownStep('training', ports._training_task_runtime().close), ShutdownStep('background-codex', ports._background_codex_thread().close), ShutdownStep('image-worker', ports._image_worker_runtime().close), ShutdownStep('document-import', document_import_jobs.close), ShutdownStep('prepared-comparison', ports._prepared_comparison_runtime().close), ShutdownStep('standard-preparation', standard_preparation_jobs.close), ShutdownStep('text-extraction', ports._text_extraction_runtime().close), ShutdownStep('transfer-progress', ports._transfer_progress().close), ShutdownStep('yolo-warmup', ports._yolo_warmup_runtime().close), ShutdownStep('model-mcp', ports._ai_mcp_client().shutdown)))
 
     return HttpRegistration(
         _accessory_catalog_routes=_accessory_catalog_routes,

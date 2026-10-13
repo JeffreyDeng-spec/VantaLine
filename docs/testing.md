@@ -64,6 +64,37 @@ With `VANTALINE_PLC_LEASE_API_BASELINE_SOURCE`, `python scripts/smoke_plc_connec
 
 # Testing
 
+## Administrator financial acceptance
+
+Run `python scripts/smoke_billing.py` for role-before-validation, read-only GET,
+exact monetary parsing, identity/currency checks, complete provider paging,
+fixed financial transports and error redaction. With a disposable database named
+exactly `vantaline_billing_test`, run `BILLING_TEST_DATABASE_URL=... python
+scripts/smoke_billing_postgres.py` for additive migration repeatability, 101-row
+frozen pagination during publication of 111 new rows, account/period isolation,
+exact dedup/refund totals, durable restart, independent recharge, stale forecasts,
+request coalescing, expired-lease fencing and all-or-nothing publication.
+
+`python scripts/smoke_billing_application.py` exercises actual application
+sessions: two distinct administrators, ordinary/settings-granted users,
+anonymous and logged-out sessions, private configuration and inert GETs.
+`python scripts/smoke_billing_source_contract.py` checks the exact new owner
+inventory, reversible assembly extension and five financial OpenAPI routes;
+unknown source/API changes must fail the retained historical oracles.
+
+`scripts/billing_browser_fixture.py` serves the real application/production
+React build against that disposable database with synthetic users and supplier
+ports only. Check admin and ordinary-user login, no ordinary billing fetches,
+1440/1280/390 layouts, details/paging, keyboard close/focus return, billing month,
+scenarios and refresh failure preservation. No real paid call or PLC operation
+is an acceptance fixture. Run frontend typecheck/build, existing cost/auth and
+application-factory regressions, migration/docs/source contracts and diff checks.
+Real supplier acceptance additionally requires same-time official console/API
+balance and same-period summary/detail evidence. Unconfigured/partial providers
+are not certified through mocks. `scripts/check_billing_connection.py` performs
+explicit read-only commissioning against fresh private console evidence.
+Details are in [billing](billing.md).
+
 The backend CI coverage verifier follows the current owner-authorized trigger policy: correctness, performance, dependency preparation and runtime observation are manual-only; immutable releases run on main pushes. It verifies the exact main SHA binding and that the effective superseded-main rejection runs before packaging, deployment and publication. These trigger checks do not reduce the frozen 461 ordinary commands, 11 ordered performance-plan commands, numeric acceptance thresholds or required evidence archives.
 
 `python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.
@@ -3382,3 +3413,20 @@ Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/pri
 Focused commands: `python scripts/smoke_plc_output_readback.py`, `node local_inspection_service/frontend/scripts/test-plc-register-readback.mjs`, and frontend `PLC_TEST_BROWSER=chrome npm run test:plc-connection` / `test:plc-modbus`. The isolated actual-page preview accepts `?plc=1`, with D0=0/D1=1 synthetic values, so normal/fullscreen bars and disconnect clearing can be checked without hardware or production APIs. This fixture overrides the client only inside its injected preview entry; the separate client test exercises the actual serial implementation.
 
 The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
+
+## Camera PASS display expiry acceptance
+
+Run `node local_inspection_service/frontend/scripts/test-camera-result-expiry.mjs`
+with the installed Playwright browser (`CAMERA_RESULT_TEST_BROWSER=msedge` selects
+Edge). The real React workbench uses isolated synthetic API/media fixtures and a
+controlled browser clock. Verify five-second PASS expiry in normal/fullscreen,
+unchanged FAIL including a pending next detection, pass-to-fail stale timer
+fencing, fresh deadlines for consecutive passes, no fullscreen deadline reset,
+processing/error/not-ready after expiry, unchanged image/video results and
+retained PLC/diagnostic evidence and recent detection time. Also exercise
+task/model context change and unmount cleanup in the real presentation hook.
+Run frontend typecheck/production build, PLC capture/connection tests, both PLC
+smoke contracts, browser-media input, release/docs contracts and diff checks.
+Fixtures perform no real camera, model/provider or physical PLC I/O. The existing
+`test:plc-connection` CI command includes `test:camera-result-expiry` after its
+connection and configured-result-value scenarios.
