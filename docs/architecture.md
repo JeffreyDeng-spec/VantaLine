@@ -2578,3 +2578,6 @@ available after presentation expiry. The empty camera view reports ready only
 when idle with a live camera/model and no error; busy, unavailable, PLC connection
 and automatic-input reset states keep their respective messages. Expiry neither
 starts capture nor changes PLC output or any persisted record.
+
+
+The RunPod financial reader accepts the observed network-volume startDate date alongside time, rejects conflicting/missing/out-of-period evidence and deduplicates equivalent normalized daily aggregation keys. It retains supported-resource coverage and does not infer payer totals or remaining days.

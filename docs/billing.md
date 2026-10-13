@@ -53,6 +53,13 @@ official account total, reconciliation delta and runway remain null. Gemini and
 Codex remain unverified until an official financial source and payer are defined;
 API inference credentials and subscription quotas are not cash balances.
 
+Network-volume records accept the documented `time` or the observed live
+`startDate` billing date; both must agree when present. Other resource families
+still require `time`. Missing, invalid or out-of-period dates fail the complete
+snapshot instead of being guessed from the request. Aggregation identity uses
+the normalized billing day so equivalent schema variants deduplicate, while
+conflicting amounts reject publication.
+
 Every bills snapshot publishes only after all required pages succeed. Entries
 deduplicate by provider identity or documented resource aggregation keys;
 conflicting identities reject publication. Partial failure retains the previous

@@ -2035,3 +2035,6 @@ The camera page reads output state even when automatic capture is disabled, only
 Acceptance: test FX/RTU result frames, serialized input/output reads, hidden/priority suppression, generation fencing and uncertain-read fail-close/no-retry with simulated serial. Check zero, changing output, disabled automatic capture, disconnect/reconnect, normal/fullscreen display and missing optional plans. Do not label an ACK or requested value as actual readback; a PLC program may reset the register after receiving a write. Run PLC/backend/frontend contracts, capture-trigger tests, typecheck/build, docs contract and diff check; no physical PLC test writes are authorized by this UI change.
 
 The compact normal/fullscreen register display uses only configured addresses and current values, for example `D0: 0 ｜ D1: 1`, in a monospace numeric style. Unavailable or disabled readings use `—`; input/output/readback labels are omitted from the visible register strip. Diagnostic explanations remain in the tooltip/details.
+
+
+RunPod account references also enable the existing read-only resource billing APIs; network-volume startDate is a supported live date variant. It is not a new credential or IAM capability. Unknown project associations stay unknown, and partial coverage cannot establish account-wide expense.

@@ -982,3 +982,6 @@ with synthetic workstation/lease rows. The stopped-service transaction and
 restricted backup requirements are in production-runbook.md. Pre-feature binaries
 reject new fields until that rollback preparation removes them; retained dispatch
 snapshots/evidence must never be rewritten or physically replayed.
+
+
+RunPod network-volume date compatibility normalizes daily aggregation identities across time/startDate source variants. New complete snapshots replace the published pointer; previous snapshots and rows remain immutable. No financial migration or historical rewrite accompanies this correction.

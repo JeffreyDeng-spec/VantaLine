@@ -2187,3 +2187,6 @@ COMMIT;
 The feature's protocol tests execute the exact pre-feature normalizer/plan owner:
 new fields are rejected before preparation and FX/RTU configurations are accepted
 after removal. This is compatibility evidence, not a performed production rollback.
+
+
+RunPod commissioning may encounter network-volume startDate rather than time. Publish only after the read-only import succeeds; compare same-window official balance and retain the supported-resources-only fee boundary. Tencent UnauthorizedOperation.CamNoAuth is a denied financial capability; do not grant permissions automatically or publish an unverified payer. Rollback keeps private account configuration and all existing snapshots.

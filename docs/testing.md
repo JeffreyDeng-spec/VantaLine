@@ -3438,3 +3438,6 @@ smoke contracts, browser-media input, release/docs contracts and diff checks.
 Fixtures perform no real camera, model/provider or physical PLC I/O. The existing
 `test:plc-connection` CI command includes `test:camera-result-expiry` after its
 connection and configured-result-value scenarios.
+
+
+Run python scripts/smoke_billing_runpod_dates.py for the live network-volume date variant, equivalent-schema deduplication, exact decimal amounts, missing/invalid/conflicting/out-of-period dates and conflicting same-day amounts. Other RunPod families still require time; partial resource coverage remains explicit. These synthetic checks do not replace official account acceptance.
