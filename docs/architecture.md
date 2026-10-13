@@ -2533,3 +2533,20 @@ a pre-feature release requires the configuration preparation in production-runbo
 **Status: Authoritative.** The fullscreen sidebar's live camera preview uses an absolutely positioned video bounded to its preview container, with centered `object-fit: contain`. Full sensor frames remain visible with letterboxing where ratios differ; intrinsic video dimensions no longer enlarge the grid item and get clipped by the short preview row. The sidebar has one explicitly shrinkable column. Camera capture resolution, result images, stream/serial ownership and detection/dispatch logic are unchanged.
 
 Acceptance: run the actual AppShell/workbench isolated preview with `?role=admin&ratio=4:3`, `ratio=16:9` (default) and `ratio=portrait`. Its synthetic camera draws a complete border and four corner labels. Enter fullscreen at 1920x1080 and 1366x768; confirm all four edges, video element bounds within the preview, no horizontal overflow, and capture/exit actions. Run frontend production build/typecheck, PLC frontend/media contracts, capture-trigger tests, docs contract and diff check. These fixtures do not certify physical production camera or PLC I/O.
+
+## Camera result presentation lifetime
+
+**Status: Authoritative.** A camera PASS is shown for a fixed five seconds from its
+committed display, then its image/annotations, conclusion, pass styling and
+inspection statistics are hidden. Normal and fullscreen views share this expiry;
+entering or leaving fullscreen does not restart it. FAIL remains visible until a
+subsequent result replaces it, including while a new detection runs. Image upload
+and video results do not expire. Each completed result owns its presentation
+identity, so an older timer cannot hide a later PASS or FAIL. Task/model/account
+context changes and unmount cancel the timer and hide an old camera PASS.
+
+Result evidence, diagnostics, last detection time and PLC settlement status remain
+available after presentation expiry. The empty camera view reports ready only
+when idle with a live camera/model and no error; busy, unavailable, PLC connection
+and automatic-input reset states keep their respective messages. Expiry neither
+starts capture nor changes PLC output or any persisted record.

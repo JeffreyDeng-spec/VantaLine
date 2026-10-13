@@ -1,3 +1,4 @@
+import { useDetectionResultDisplay } from "./useDetectionResultDisplay";
 import { useVersionParticipant } from "../version/hooks";
 import { markVersionFilesUploaded } from "../version/files";
 import { guardVersionAction, versionCoordinator } from "../version/runtime";
@@ -483,7 +484,8 @@ function DetectionMetrics({
   source,
   requiredCounts,
   compact = false,
-  singleScreen = false
+  singleScreen = false,
+  plcResult = result
 }: {
   result: DetectionResult | null;
   mode: WorkbenchMode;
@@ -491,6 +493,7 @@ function DetectionMetrics({
   requiredCounts?: Record<string, number>;
   compact?: boolean;
   singleScreen?: boolean;
+  plcResult?: DetectionResult | null;
 }) {
   const rows = source === "video" ? videoMissingRows(result, requiredCounts) : detectionRows(result, requiredCounts);
   const detectionCount = result?.frames?.length
@@ -505,13 +508,13 @@ function DetectionMetrics({
         <MetricCard label={mode === "ai" ? "AI 响应" : "通过率"} value={passRate} />
       </div>
 
-      {result?.plc_sync ? (
+      {plcResult?.plc_sync ? (
         <div className="settings-subhead" aria-live="polite">
           <div>
             <h4>PLC 同步</h4>
-            <p>{plcSyncLabel(result)}</p>
+            <p>{plcSyncLabel(plcResult)}</p>
           </div>
-          <span className={`pill ${plcSyncTone(result)}`}>{result.plc_sync.status}</span>
+          <span className={`pill ${plcSyncTone(plcResult)}`}>{plcResult.plc_sync.status}</span>
         </div>
       ) : null}
 
@@ -664,7 +667,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   );
   const [busy, setBusy] = useState("");
   const [lastDetectionAt, setLastDetectionAt] = useState<number | null>(null);
-  const [result, setResult] = useState<DetectionResult | null>(null);
   useVersionParticipant({
     busy: () => Boolean(busyRef.current || cameraCaptureLockRef.current || busy || plcDiagnosticBusy),
     cleanup: async () => {
@@ -878,7 +880,16 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const displayedModelReady = !displayedModelWarmable || warmupReadyForModel(warmupStatus, warmupDisplayModelId);
   const displayedModelWarming = displayedModelWarmable && !displayedModelReady && !displayedModelWarmupFailed;
   const requiredCounts = routeTask?.accessoryCounts || (isAi ? selectedAiTask?.required_accessory_counts : undefined);
-  const resultImage = previewUrl(result);
+  const { result, displayResult, setResult } = useDetectionResultDisplay(
+    JSON.stringify([mode, decodedRouteTaskId, selectedTaskId, selectedAiTaskId, activeModelId, auth.user.id, auth.dataUserId])
+  );
+  const resultImage = previewUrl(displayResult);
+  const cameraIdleLabel = busy || plcDiagnosticBusy ? "检测中…"
+    : error ? "检测异常"
+    : !activeModelId || !selectedModelReady || !stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled) ? "未就绪"
+    : plcWorkstationQuery.data?.config?.capture_trigger_enabled && !plcConnected ? "PLC 未连接"
+    : plcWorkstationQuery.data?.config?.capture_trigger_enabled && plcCapturePoll.status !== "armed" ? "等待到位信号复位"
+    : "已就绪";
   const title = routeTask?.label || (isAi ? "AI 检测" : "检测工作台");
   const statusBadge = activeModelIsAi
     ? formatAiStatus(status?.ai_detection && typeof status.ai_detection === "object" ? status.ai_detection.status : "")
@@ -1486,7 +1497,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
           await plcWorkstationQuery.refetch();
         }
         markVersionFilesUploaded([file]);
-        setResult(next);
+        setResult(next, kind);
         setLastDetectionAt(Date.now());
         setSource(kind);
         playDetectionSound(Boolean(next.passed));
@@ -1694,7 +1705,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </div>
         <div className="normal-runtime-status" role="status" aria-live="polite">
           <span className={stream ? "is-ready" : ""}>相机 {stream ? "就绪" : "未开启"}</span>
-          <span title={error || aiMetaText(result)}>{busy ? "检测中…" : error ? "检测异常" : result ? `响应 ${aiMetaText(result)}` : "等待检测"}</span>
+          <span title={error || aiMetaText(displayResult)}>{busy ? "检测中…" : error ? "检测异常" : displayResult ? `响应 ${aiMetaText(displayResult)}` : source === "camera" ? cameraIdleLabel : "等待检测"}</span>
           <span>最近检测 {lastDetectionAt ? new Date(lastDetectionAt).toLocaleTimeString("zh-CN", { hour12: false }) : "—"}</span>
           {result && <span className="normal-write-status" title={plcSyncLabel(result)}>{plcSyncLabel(result)}</span>}
         </div>
@@ -1711,8 +1722,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               设置规则
             </button>
           ) : null}
-          <span className={`result-badge ${result ? (result.passed ? "pass" : "fail") : "waiting"}`}>
-            {result ? (result.passed ? "通过" : "不通过") : "等待输入"}
+          <span className={`result-badge ${displayResult ? (displayResult.passed ? "pass" : "fail") : "waiting"}`}>
+            {displayResult ? (displayResult.passed ? "通过" : "不通过") : source === "camera" ? cameraIdleLabel : "等待输入"}
           </span>
         </div>
       </header>
@@ -1959,13 +1970,13 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
             <p>{busy ? "文件已提交，等待服务返回检测结果；超时会提示重试。" : "上传图片或视频后开始检测。"}</p>
           </div>
           <div className="preview-frame">
-            {resultImage ? <img src={resultImage} alt={`${activeDetectionLabel}结果`} /> : <div className="empty-state">检测标注图会显示在这里</div>}
+            {resultImage ? <img src={resultImage} alt={`${activeDetectionLabel}结果`} /> : <div className="empty-state">{source === "camera" ? cameraIdleLabel : "检测标注图会显示在这里"}</div>}
           </div>
           {error && source !== "camera" ? <p className="hint-line danger-text">{error}</p> : null}
         </section>
       </div>
 
-      <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} singleScreen />
+      <DetectionMetrics result={displayResult} plcResult={result} mode={activeModelIsAi ? "ai" : "inspect"} source={source} requiredCounts={requiredCounts} singleScreen />
       {plcDetailsOpen && <div className="normal-plc-backdrop" onClick={() => setPlcDetailsOpen(false)} aria-hidden="true" />}
 
       {rulesOpen && !activeModelIsAi ? (
@@ -2063,8 +2074,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <span>{`${activeDetectionLabel} · 摄像头输入`}</span>
             </div>
             <div className="inspection-fullscreen-actions">
-              <span className={`result-badge ${result ? (result.passed ? "pass" : "fail") : "waiting"}`}>
-                {result ? (result.passed ? "通过" : "不通过") : "等待拍照"}
+              <span className={`result-badge ${displayResult ? (displayResult.passed ? "pass" : "fail") : "waiting"}`}>
+                {displayResult ? (displayResult.passed ? "通过" : "不通过") : cameraIdleLabel}
               </span>
               <button className="secondary compact-action" type="button" disabled={Boolean(busy) || plcDiagnosticBusy} onClick={() => runCamera(fullscreenVideoRef.current)}>
                 <Camera size={15} aria-hidden="true" />
@@ -2079,15 +2090,15 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
           <main className="inspection-fullscreen-stage">
             <aside className="inspection-fullscreen-result">
               <div className="preview-frame compact">
-                {resultImage ? <img src={resultImage} alt="检测结果" /> : <div className="empty-state">按 Enter 或点击拍照检测</div>}
+                {resultImage ? <img src={resultImage} alt="检测结果" /> : <div className="empty-state">{cameraIdleLabel}</div>}
               </div>
             </aside>
-            <aside className={`inspection-fullscreen-sidebar ${result ? (result.passed ? "result-pass" : "result-fail") : "result-waiting"}`}>
+            <aside className={`inspection-fullscreen-sidebar ${displayResult ? (displayResult.passed ? "result-pass" : "result-fail") : "result-waiting"}`}>
               <section className="inspection-fullscreen-video">
                 <video ref={fullscreenVideoRef} autoPlay playsInline muted />
                 {!stream ? <div className="camera-empty">正在打开摄像头</div> : null}
               </section>
-              <DetectionMetrics result={result} mode={activeModelIsAi ? "ai" : "inspect"} source="camera" requiredCounts={requiredCounts} compact />
+              <DetectionMetrics result={displayResult} plcResult={result} mode={activeModelIsAi ? "ai" : "inspect"} source="camera" requiredCounts={requiredCounts} compact />
               <p className={`hint-line ${error ? "danger-text" : ""}`}>{error || cameraStatus || "按 Enter 拍照。"}</p>
             </aside>
           </main>
