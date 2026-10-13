@@ -886,7 +886,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const resultImage = previewUrl(displayResult);
   const cameraIdleLabel = busy || plcDiagnosticBusy ? "检测中…"
     : error ? "检测异常"
-    : !activeModelId || !selectedModelReady || !stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled) ? "未就绪"
+    : !activeModelId || !selectedModelReady || (activeModelIsAi && status?.ai_detection?.status !== "ready") || !stream?.getVideoTracks().some((track) => track.readyState === "live" && track.enabled) ? "未就绪"
     : plcWorkstationQuery.data?.config?.capture_trigger_enabled && !plcConnected ? "PLC 未连接"
     : plcWorkstationQuery.data?.config?.capture_trigger_enabled && plcCapturePoll.status !== "armed" ? "等待到位信号复位"
     : "已就绪";

@@ -141,6 +141,13 @@ try {
   await badgeText(normalBadge, '检测异常');
   await capture(); await capture('error'); await page.clock.runFor(5_000); await badgeText(normalBadge, '检测异常'); scenarios++; console.log(`PASS camera display scenario ${scenarios}`);
 
+  // Model service readiness is independent of selecting an existing model.
+  await capture();
+  await page.evaluate(async () => { window.__inspectionFixtureModelStatus = 'disabled'; await window.__inspectionFixtureQueryClient.invalidateQueries({ queryKey: ['serviceStatus'] }); });
+  await page.clock.runFor(5_000); await badgeText(normalBadge, '未就绪');
+  assert.equal(await page.evaluate(() => document.querySelector('.camera-preview video').srcObject.getTracks()[0].readyState), 'live');
+  await page.evaluate(async () => { window.__inspectionFixtureModelStatus = 'ready'; await window.__inspectionFixtureQueryClient.invalidateQueries({ queryKey: ['serviceStatus'] }); }); await page.clock.runFor(1); await badgeText(normalBadge, '已就绪'); scenarios++; console.log(`PASS camera display scenario ${scenarios}`);
+
   // An ended camera is not ready after expiry.
   await capture(); await page.evaluate(() => document.querySelector('.camera-preview video').srcObject.getTracks().forEach(track => track.stop()));
   await page.clock.runFor(5_000); await badgeText(normalBadge, '未就绪'); scenarios++; console.log(`PASS camera display scenario ${scenarios}`);
