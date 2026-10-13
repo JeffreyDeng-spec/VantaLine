@@ -9,7 +9,7 @@ async function main() {
     process.env.LABEL_IMAGE_FRONTEND ||
     path.resolve(__dirname, "../local_inspection_service/frontend");
   const baseline = process.env.LABEL_IMAGE_BASELINE === "1";
-  const { chromium } = require(path.join(frontend, "node_modules/playwright"));
+  const { chromium } = require(process.env.LABEL_TEST_RUNTIME || path.join(frontend, "node_modules/playwright"));
   const output = fs.mkdtempSync(path.join(os.tmpdir(), "label-image-reuse-"));
   const port = process.env.LABEL_IMAGE_PORT || "5187";
   const base = "http://127.0.0.1:" + port;
@@ -126,6 +126,22 @@ async function main() {
       urls = new Map();
     let resultResponseAt = 0;
     await context.addInitScript(() => {
+      window.__cameraOpens = 0;
+      window.__captures = 0;
+      window.__tracks = [];
+      const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = async (...args) => {
+        if (window.__denyCamera) throw new DOMException("fixture denied", "NotAllowedError");
+        const stream = await getUserMedia(...args);
+        window.__cameraOpens++;
+        window.__tracks.push(...stream.getTracks());
+        return stream;
+      };
+      const draw = CanvasRenderingContext2D.prototype.drawImage;
+      CanvasRenderingContext2D.prototype.drawImage = function(source, ...args) {
+        if (source instanceof HTMLVideoElement) window.__captures++;
+        return draw.call(this, source, ...args);
+      };
       window.__revoked = [];
       window.__created = [];
       const create = URL.createObjectURL.bind(URL),
@@ -368,6 +384,7 @@ async function main() {
     );
     await go("run-1");
     await loaded();
+    assert.equal(await page.evaluate(() => window.__cameraOpens), 0);
     assert.ok((await image().getAttribute("src")).endsWith("actual-preview"));
     assert.equal(requests.filter((r) => r.sha === "actual-full").length, 0);
     // Refreshing an active historical run loads one preview; completion changes only overlays.
@@ -465,20 +482,61 @@ async function main() {
       (url) => window.__revoked.includes(url),
       replaced,
     );
-    await page
-      .getByRole("button", { name: "开启摄像头 / 重拍", exact: true })
-      .click();
-    await page.getByRole("button", { name: "拍照", exact: true }).click();
+    await page.getByRole("button", { name: "重新拍照", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector(".li-camera video")?.videoWidth > 0);
+    const opens = await page.evaluate(() => window.__cameraOpens);
+    const captures = await page.evaluate(() => window.__captures);
+    // The primary action captures and submits once, even under a double click.
+    await page.getByRole("button", { name: "开始检测", exact: true }).dblclick();
+    await page.waitForURL(/run=run-3/);
     await loaded();
-    await image().evaluate((img) => (window.__cameraNode = img));
-    await submit();
+    assert.equal(submits, 3);
+    assert.equal(await page.evaluate(() => window.__captures), captures + 1);
+    assert.equal(await page.evaluate(() => window.__cameraOpens), opens);
+    assert.equal(await page.evaluate(() => window.__tracks.filter(t => t.readyState === "live").length), 1);
+    const cameraURL = await image().getAttribute("src");
+    await image().evaluate((img) => window.__cameraNode = img);
+    task.runs[0] = { ...task.runs[0], status: "completed", phase: "completed", result };
+    await page.locator(".li-actual-panel .li-box-number").waitFor();
     assert.ok(await image().evaluate((img) => img === window.__cameraNode));
-    task.runs[0] = {
-      ...task.runs[0],
-      status: "completed",
-      phase: "completed",
-      result,
-    };
+    assert.equal(await page.locator("video:visible").count(), 0);
+    await page.screenshot({ path: path.join(output, "continuous-result.png") });
+    await page.getByRole("button", { name: "检测下一件", exact: true }).click();
+    await page.locator("video:visible").waitFor();
+    assert.equal(await image().count(), 0);
+    assert.equal(await page.evaluate(() => window.__cameraOpens), opens);
+    assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isEnabled());
+    await page.screenshot({ path: path.join(output, "continuous-ready.png") });
+    await submit();
+    assert.equal(submits, 4);
+    assert.equal(await page.evaluate(() => window.__captures), captures + 2);
+    assert.notEqual(await image().getAttribute("src"), cameraURL);
+    assert.equal(await page.evaluate(() => window.__cameraOpens), opens);
+    task.runs[0] = { ...task.runs[0], status: "completed", phase: "completed", result };
+    await page.locator(".li-actual-panel .li-box-number").waitFor();
+    await page.getByRole("button", { name: "检测下一件", exact: true }).click();
+    await page.getByRole("button", { name: "关闭摄像头", exact: true }).click();
+    assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isDisabled());
+    assert.equal(await page.evaluate(() => window.__tracks.filter(t => t.readyState === "live").length), 0);
+    await page.getByRole("button", { name: "开启摄像头 / 重拍", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector(".li-camera video")?.videoWidth > 0);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForFunction(() => window.__tracks.every(t => t.readyState === "ended"));
+    await page.evaluate(() => {
+      Object.defineProperty(document, "hidden", { configurable: true, value: false });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isDisabled());
+    await page.evaluate(() => window.__denyCamera = true);
+    await page.getByRole("button", { name: "开启摄像头 / 重拍", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: "fixture denied" }).waitFor();
+    assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isDisabled());
+    await upload();
+    assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isEnabled());
+    assert.equal(await page.evaluate(() => window.__captures), captures + 2);
     // Invalid local image can still display a server preview after successful upload.
     await go();
     await select();
@@ -621,9 +679,13 @@ async function main() {
     for (let i = 0; i < 100 && !releaseSubmit; i++)
       await new Promise((r) => setTimeout(r, 20));
     assert.ok(releaseSubmit);
+    const submittingCount = submits;
+    assert.equal(await page.locator(".li-notices .li-warning").filter({ hasText: "正在恢复上次检测，请稍候。" }).count(), 0);
+    await page.locator(".li-notices .li-warning").filter({ hasText: "正在恢复上次检测，请稍候。" }).waitFor();
+    assert.equal(submits, submittingCount);
     assert.ok(
       await page
-        .getByRole("button", { name: "开启摄像头 / 重拍", exact: true })
+        .getByRole("button", { name: /重新拍照|开启摄像头 \/ 重拍/, exact: true })
         .isDisabled(),
     );
     await page.getByRole("link", { name: "文字检验", exact: true }).click();

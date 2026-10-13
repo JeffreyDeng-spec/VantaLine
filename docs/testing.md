@@ -3447,3 +3447,26 @@ Run python scripts/smoke_billing_runpod_dates.py for the live network-volume dat
 ## Administrator all-data default
 
 Run `node scripts/test_admin_all_data.cjs` for real query functions and synthetic React/browser acceptance: multiple admin identities, user and legacy records, task-filter retention, no global range menu or injected `user_id`, identity cache keys, and ordinary-user isolation. Run `python scripts/smoke_record_ownership.py`, `python scripts/smoke_account_projections.py` and `python scripts/smoke_auth_access.py`, frontend typecheck/production build, both PLC smoke contracts and release/docs contracts. These synthetic checks do not certify production data contents or physical PLC I/O.
+
+## Continuous label camera inspection
+
+**Status: Authoritative.** The label workspace keeps one browser camera stream
+through capture, submission and current-result review. Start captures and submits
+a fresh frame; next item preserves the task/standard and restores live preview.
+Ordinary submission no longer flashes the recovery notice; a two-second delayed
+notice retains the existing request-ID recovery contract. See
+[text inspection](text-inspection-v2.md#continuous-label-camera-inspection).
+
+Run `node scripts/test_label_workspace_ui.cjs` and
+`node scripts/test_label_image_reuse.cjs` with synthetic camera/API/media. Cover
+automatic open, two fresh captures on one stream, double-click single submission,
+frozen evidence, next-item readiness, upload selection, close/reopen, permission
+denial, history isolation, hidden/unmount cleanup and delayed/lost-ack recovery.
+Also run frontend typecheck/production build, media and PLC frontend/Web Serial
+contracts, docs contract and diff check. Fixtures do not certify physical camera
+operation or production model accuracy.
+
+For an installed Chrome use `LABEL_TEST_BROWSER=chrome`;
+`LABEL_TEST_RUNTIME` may point to a shared Playwright package. The workspace
+fixture also invokes image reuse: run it alone, or assign a separate
+`LABEL_IMAGE_PORT` when running the image fixture concurrently.
