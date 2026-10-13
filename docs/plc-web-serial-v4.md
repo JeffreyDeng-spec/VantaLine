@@ -326,3 +326,10 @@ old leases/plans and requires reconnection. Browser-only serial ownership, D-bef
 ACK, camera-only dispatch and uncertain-write no-retry behavior remain unchanged.
 This additive configuration extension keeps schema 5 and protocol v4; rollback to
 a pre-feature release requires the configuration preparation in production-runbook.md.
+
+
+## Fullscreen camera preview fitting
+
+**Status: Authoritative.** The fullscreen sidebar's live camera preview uses an absolutely positioned video bounded to its preview container, with centered `object-fit: contain`. Full sensor frames remain visible with letterboxing where ratios differ; intrinsic video dimensions no longer enlarge the grid item and get clipped by the short preview row. The sidebar has one explicitly shrinkable column. Camera capture resolution, result images, stream/serial ownership and detection/dispatch logic are unchanged.
+
+Acceptance: run the actual AppShell/workbench isolated preview with `?role=admin&ratio=4:3`, `ratio=16:9` (default) and `ratio=portrait`. Its synthetic camera draws a complete border and four corner labels. Enter fullscreen at 1920x1080 and 1366x768; confirm all four edges, video element bounds within the preview, no horizontal overflow, and capture/exit actions. Run frontend production build/typecheck, PLC frontend/media contracts, capture-trigger tests, docs contract and diff check. These fixtures do not certify physical production camera or PLC I/O.
