@@ -66,6 +66,14 @@ With `VANTALINE_PLC_LEASE_API_BASELINE_SOURCE`, `python scripts/smoke_plc_connec
 
 ## Administrator financial acceptance
 
+Run `scripts/smoke_billing_configuration.py` for private-file hot reload, explicit
+runtime precedence/disable, no GET work, private modes, symlink/hardlink/FIFO/
+oversize/duplicate rejection and Tencent-only paired COS references. Run
+`scripts/smoke_billing_configuration_source_contract.py` alongside existing
+financial/canonical contracts: the exact new owner and changed source hashes
+must be verified before restoring finite reviewed parent inputs; original
+financial fixtures remain unchanged and unknown source inputs must fail.
+
 Run `python scripts/smoke_billing.py` for role-before-validation, read-only GET,
 exact monetary parsing, identity/currency checks, complete provider paging,
 fixed financial transports and error redaction. With a disposable database named

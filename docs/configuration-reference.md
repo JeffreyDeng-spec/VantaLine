@@ -56,6 +56,13 @@ See [billing configuration and acceptance](billing.md#configuration-acceptance-a
 for accepted fields, source limits, Decimal/currency semantics and safe setup.
 All billing APIs require `role=admin`, not merely `system_settings`.
 
+If `VANTALINE_BILLING_ACCOUNTS_JSON` is absent, a private operator-managed
+`billing_accounts.local.json` in the data directory supplies the same schema and
+is reloaded without service restart. Explicit runtime values override it.
+Tencent's paired `VANTALINE_BILLING_COS_SECRET_ID/KEY` references require explicit
+operator authorization and resolve from the existing private credential mount;
+no credentials enter the account file. Temporary COS tokens are unsupported.
+
 Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.
 
 Pipeline training status extraction keeps training job lookup, local interruption settlement and Agent stage configuration unchanged. Source manifest v115 contains 312 entries including the two moved modules for new task fingerprints; existing snapshots, model bindings and secret references remain unchanged.

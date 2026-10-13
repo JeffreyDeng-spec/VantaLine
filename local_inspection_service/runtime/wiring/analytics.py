@@ -16,6 +16,7 @@ from local_inspection_service.analytics.cost_repository import CostPaths
 from local_inspection_service.analytics.cost_composition import CostServices
 from local_inspection_service.analytics.cost_repository import CostStoreDependencies
 from local_inspection_service.analytics.billing.service import BillingService
+from local_inspection_service.analytics.billing.configuration import BillingConfiguration
 from local_inspection_service.storage.billing_repository import BillingRepository
 from local_inspection_service.model_providers.configuration_composition import ProviderConfiguration
 from local_inspection_service.runtime.connections import ThreadRepositoryFactory
@@ -55,7 +56,8 @@ class AnalyticsAssembly:
     api_cost_walk_usage: Callable[..., Any]
 
 def assemble_analytics(values: ApplicationValues, environment: MutableMapping[str, str], ports: AnalyticsWiringInputs) -> AnalyticsAssembly:
-    billing = BillingService(environment, BillingRepository(ports._runtime_repository_access().runtime_postgres_repository_or_none), ports._provider_configuration().local_secret_env_value, ports._runtime_repositories().thread_scope)
+    billing_configuration = BillingConfiguration(environment, values.DATA_DIR, ports._provider_configuration().local_secret_env_value)
+    billing = BillingService(environment, BillingRepository(ports._runtime_repository_access().runtime_postgres_repository_or_none), billing_configuration.secret, ports._runtime_repositories().thread_scope, account_environment=billing_configuration.environment)
     _cost_paths = CostPaths(values.DATA_DIR, values.DATA_ANALYSIS_RECORDS_PATH, values.AI_DETECTION_TASKS_PATH, values.PIPELINE_TASKS_PATH, values.AUTO_OPTIMIZE_DIR, values.AI_PROFILE_CACHE_PATH)
     _cost_services = CostServices(CostStoreDependencies(paths=lambda paths=_cost_paths: paths, runtime_repository=ports._runtime_repository_access().runtime_postgres_repository_or_none, detection_tasks=ports._detection_task_store().load_ai_detection_tasks, pipeline_tasks=ports._pipeline_task_store().load_pipeline_tasks, auto_states=ports._auto_optimization_state_store().list_auto_optimize_states, training_tasks=ports._training_records().load_training_task_records, sanitize_task_id=sanitize_ai_detection_task_id), timestamp=coerce_record_timestamp)
     _cost_repository = _cost_services.repository

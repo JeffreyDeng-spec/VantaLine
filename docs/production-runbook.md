@@ -71,6 +71,19 @@ without putting accounts, keys or provider payloads in Git or application logs.
 Inspect the same-month official net total, full entry count and reconciliation
 delta; a current-month zero delta is provisional, not a final invoice audit.
 Details, error/staleness semantics and source limits are in [billing](billing.md).
+
+Before publishing private payer configuration, query the official balance with
+the existing explicitly authorized signer as the service user, verify its
+principal/currency, and compare fresh console evidence. Preserve the prior payer
+configuration and atomically publish only identities and secret reference names
+as a service-owned mode-0600 `billing_accounts.local.json` in the data directory.
+Do not place keys in command arguments, console output, account mappings or Git.
+The existing worker reads this configuration without restarting or invoking
+resources. Existing COS credentials may be used for Tencent finance only after
+explicit operator approval and a successful financial-permission check; never
+automatically expand IAM or enable temporary-token fallback. Missing/denied
+services remain unconnected. Restore prior configuration atomically if needed;
+retain immutable bill evidence and roll back code only as a complete release.
 Rollback only to the previous full immutable release, preserving all financial
 tables, jobs and snapshots. This feature PR does not authorize merge/deployment.
 

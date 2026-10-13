@@ -9,20 +9,24 @@ FIXTURE_SHA256='fd805a87bb4bdbf71f3716eb80ea69d6e949af9edc0daee0a12e43cb9f7d2a9c
 
 
 def fixture():
+    from billing_configuration_source_contract import added_backend_sources, checkpoint_bytes as configuration_checkpoint
     raw=(ROOT/'tests/backend_contract/billing_extension.json').read_bytes()
     assert hashlib.sha256(raw).hexdigest()==FIXTURE_SHA256,'Unreviewed financial extension fixture'
     value=json.loads(raw)
     actual={str(p.relative_to(ROOT)) for p in (ROOT/'local_inspection_service/analytics/billing').glob('*.py')}
+    actual-=added_backend_sources()
     expected={p for p in value['new_sources'] if p.startswith('local_inspection_service/analytics/billing/')}
     assert actual==expected,'Incomplete financial source inventory'
     for path,change in value['files'].items():
-        assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==change['current_sha256'],'Actual financial assembly changed: '+path
+        assert hashlib.sha256(configuration_checkpoint(path,(ROOT/path).read_bytes())).hexdigest()==change['current_sha256'],'Actual financial assembly changed: '+path
     for path,digest in value['new_sources'].items():
-        assert hashlib.sha256((ROOT/path).read_bytes()).hexdigest()==digest,'Financial owner changed: '+path
+        assert hashlib.sha256(configuration_checkpoint(path,(ROOT/path).read_bytes())).hexdigest()==digest,'Financial owner changed: '+path
     return value
 
 
 def checkpoint_bytes(path,actual):
+    from billing_configuration_source_contract import checkpoint_bytes as configuration_checkpoint
+    actual=configuration_checkpoint(path,actual)
     change=fixture()['files'].get(path)
     if change is None:return actual
     digest=hashlib.sha256(actual).hexdigest()
