@@ -56,6 +56,24 @@ Pipeline recommendation runtime extraction retains the embedded Web thread, shar
 
 # Production runbook
 
+## Financial data commissioning
+
+The administrator-only usage/cost view requires the additive billing migration
+and server payer configuration. Configure only operator-verified payer identities
+and least-privilege financial-query secret references. Neither deployment nor
+page viewing grants supplier permissions, auto-reuses model credentials or
+starts training/resource actions. Missing sources stay pending; RunPod's current
+resource read scope does not certify a complete account bill.
+
+For each enabled payer, compare an official console balance field against an API
+snapshot captured in the same time window; retain safe match/time/currency evidence
+without putting accounts, keys or provider payloads in Git or application logs.
+Inspect the same-month official net total, full entry count and reconciliation
+delta; a current-month zero delta is provisional, not a final invoice audit.
+Details, error/staleness semantics and source limits are in [billing](billing.md).
+Rollback only to the previous full immutable release, preserving all financial
+tables, jobs and snapshots. This feature PR does not authorize merge/deployment.
+
 Pipeline trained-model linking extraction keeps catalog lookup and caller-owned task locks/saves. No database migration, worker topology or operator setting changes; source manifest v116 changes new source fingerprints but retains 312 entries.
 
 Pipeline training-status extraction keeps the existing local interrupted-task settlement path and its possible training-state write, without adding pipeline locks or retries. No database migration, worker topology or operator setting changes; source manifest v115 affects new task fingerprints only.

@@ -49,6 +49,17 @@ Pipeline recommendation pre-generation now runs and schedules through `pipeline/
 
 # Architecture
 
+## Administrator financial data
+
+The separate `analytics/billing` service owns official payer snapshots, without
+mixing the existing CostLedger's unit-price estimates. Canonical analytics
+assembly supplies narrow PostgreSQL, secret and thread-scope capabilities; HTTP
+registration installs administrator-only routes and startup, with financial
+producer shutdown preceding repository shutdown. Immutable billing publication,
+lease fencing, exact money, source coverage and UI semantics are specified in
+[Administrator usage and costs](billing.md). Ordinary feature permissions grant
+no financial access. No supplier/model mutation is performed.
+
 Pipeline trained-model linking now lives beside the reverse run lookup in `pipeline/training_links.py`, as a separate class with a late-resolved catalog capability. It selects the first visible matching run and mutates the caller-owned task in place. The caller still owns locks, saves and any following Agent or training actions.
 
 Pipeline training-job lookup and status projection now live in `pipeline/training_status.py`, separate from terminal training-to-pipeline synchronization. Late-resolved capabilities preserve the selected loader, root-linked callback and Agent stage updates; the caller retains locks and storage. Local interrupted-job projection may still write training state, so this is not a read-only boundary.

@@ -226,7 +226,8 @@ class ApplicationContracts(unittest.TestCase):
                 expected = json.loads((ROOT / 'tests/backend_contract/application.json').read_text())
                 self.assertEqual(result_values_openapi_checkpoint(a.app.openapi()), expected['openapi'])
                 self.assertEqual(capture_http_errors(a.app), expected['http_errors'])
-                self.assertEqual([hook.__name__ for hook in a.app.router.on_startup], expected['startup'])
+                from billing_source_contract import startup_checkpoint
+                self.assertEqual(startup_checkpoint(a.app.router.on_startup), expected['startup'])
                 self.assertEqual([hook.__name__ for hook in a.app.router.on_shutdown], expected['shutdown'])
                 self.assertEqual([(route.path, sorted(getattr(route, 'methods', ()) or ())) for route in a.app.routes],
                                  [(route.path, sorted(getattr(route, 'methods', ()) or ())) for route in b.app.routes])

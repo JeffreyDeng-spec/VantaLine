@@ -12,6 +12,19 @@ The label task list now uses owner-scoped, parameterized `task_id = ANY(text[])`
 
 # PostgreSQL runtime operations
 
+## Financial snapshots
+
+`2026_10_13_billing.sql` adds five isolated tables: billing_accounts,
+billing_snapshots, billing_entries, billing_sync_state and billing_sync_jobs.
+Snapshots/entries are immutable; a monotonic publication sequence selects the
+latest even for same-second publication. Short SELECT transactions serve GETs;
+per-lane admission and per-payer worker locks coalesce work across processes.
+Lease tokens fence all snapshot publication, which commits metadata, every
+entry and settlement together. Credentials never enter these tables. JSON
+runtime has no filesystem fallback for financial persistence. Apply through the
+normal installer, retain all tables/evidence on whole-release rollback, and use
+the named disposable database for tests. See [billing](billing.md).
+
 Complete backend CI remains an explicitly dispatched verification under the temporary owner-authorized trigger policy. The coverage guard now checks manual verification triggers and the main-push immutable release policy, including an effective superseded-main rejection before packaging or installation. The frozen database concurrency, pagination and performance commands, isolated synthetic data and numeric acceptance thresholds remain unchanged; passing trigger checks alone does not establish database or production acceptance.
 
 Profile-cache extraction retains its existing JSON cache store and adds no database connection,
