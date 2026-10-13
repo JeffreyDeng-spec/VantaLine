@@ -1,7 +1,6 @@
 /* Ordinary inspection workspace only; fullscreen selectors and components are unchanged. */
 .app-shell:has(> .workspace > .detection-single-screen) { height: 100dvh; min-height: 0; overflow: hidden; }
 .app-shell:has(> .workspace > .detection-single-screen) > .workspace { display: flex; flex-direction: column; height: 100dvh; min-height: 0; padding: 10px 18px; overflow: hidden; gap: 8px; }
-.app-shell:has(> .workspace > .detection-single-screen) .top-scope-bar { flex: 0 0 auto; margin: 0; max-width: none; font-size: 12px; }
 .view.active.detection-single-screen { flex: 1; min-height: 0; max-width: none; width: 100%; display: grid !important; grid-template-rows: 38px 34px minmax(0, 1fr) 124px; gap: 8px; overflow: hidden; align-items: stretch; }
 .view.active.detection-single-screen.normal-source-camera { grid-template-rows: 38px 34px minmax(0, 1fr) 124px; }
 .detection-single-screen > .page-head { min-height: 0; margin: 0; padding: 0; align-items: center; gap: 10px; }
@@ -93,15 +92,12 @@
 .normal-detection-metrics th, .normal-detection-metrics td { height: 21px; line-height: 16px; padding-block: 2px; }
 .detection-single-screen > .normal-detection-metrics .metric-grid { margin: 0; }
 
-/* Two compact rows share the existing scope and PLC owners through portals. */
+/* Two compact rows present runtime status and PLC controls. */
 .detection-single-screen > .page-head { display: flex; }
 .detection-single-screen > .page-head > div:first-child { flex: 0 0 auto; }
 .normal-runtime-status { display: flex; align-items: center; gap: 14px; min-width: 0; margin-right: auto; color: var(--text-2); font-size: 11px; }
 .normal-runtime-status > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 180px; }
 .normal-runtime-status .is-ready { color: #087f83; }
-.normal-scope-slot:empty { display: none; }
-.normal-data-scope label { display: flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; color: var(--text-2); }
-.normal-data-scope select { height: 29px; min-height: 29px; width: 177px; font-size: 12px; padding: 3px 7px; }
 .detection-single-screen > .page-head .normal-fullscreen-guide { min-height: 29px; height: 29px; padding: 3px 12px; }
 .detection-single-screen > .page-head .pill, .detection-single-screen > .page-head .result-badge { font-size: 11px; padding: 3px 7px; }
 .normal-task-context { flex: 0 1 240px; gap: 8px; }
@@ -129,8 +125,7 @@
  .normal-plc-row .plc-connection-bar-copy time { display: none; }
 }
 @media (max-width: 1150px) {
- .normal-runtime-status > span:nth-child(3), .normal-data-scope label { font-size: 0; }
- .normal-data-scope select { font-size: 11px; width: 150px; }
+ .normal-runtime-status > span:nth-child(3) { font-size: 0; }
  .normal-task-context { flex-basis: 130px; }
  .detection-single-screen > .detection-toolbar .toolbar-field-label { display: none; }
  .normal-plc-row .plc-connection-bar-copy span, .normal-plc-read > span { display: none; }
@@ -138,12 +133,10 @@
 @media (max-width: 959px) {
  .normal-task-context { display: none; }
  .normal-runtime-status { display: none; }
- .normal-scope-slot { margin-left: auto; }
 }
 @media (max-width: 700px) {
  .detection-single-screen > .page-head, .detection-single-screen > .detection-toolbar { flex-wrap: wrap; }
  .normal-plc-row { flex-basis: 100%; }
- .normal-data-scope select { width: 130px; }
 }
 
 .normal-plc-row .plc-register-status { order:2; color:var(--text-2); font-size:11px; }

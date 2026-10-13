@@ -509,11 +509,11 @@ export function TrainingLibraryPage() {
     notify({ title: "保存任务偏好失败", description: error instanceof Error ? error.message : String(error), tone: "error" });
   });
   const resourcesQuery = useQuery({
-    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryKey: queryKeys.trainingResources(auth.user.id),
     queryFn: () => getTrainingResources(auth)
   });
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth)
   });
 
@@ -629,16 +629,16 @@ export function TrainingLibraryPage() {
   }
 
   function removePipelineTaskFromCache(taskId: string) {
-    queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId), (current) =>
+    queryClient.setQueryData<PipelineResponse>(queryKeys.pipeline(auth.user.id), (current) =>
       current ? { ...current, items: (current.items || []).filter((task) => task.id !== taskId) } : current
     );
   }
 
   function removeAiTaskFromCache(taskId: string) {
-    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId), (current) =>
+    queryClient.setQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.user.id), (current) =>
       current ? { ...current, ai_detection_tasks: (current.ai_detection_tasks || []).filter((task) => task.id !== taskId) } : current
     );
-    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId), (current) =>
+    queryClient.setQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.user.id), (current) =>
       current
         ? {
             ...current,
@@ -681,8 +681,8 @@ export function TrainingLibraryPage() {
   async function quickDeleteAiTask(taskId: string) {
     if (!window.confirm(`删除 AI 检测任务 ${taskId}？`)) return;
     setBusy(`ai:${taskId}`);
-    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.dataUserId));
-    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.dataUserId));
+    const previousResources = queryClient.getQueryData<TrainingResourcesResponse>(queryKeys.trainingResources(auth.user.id));
+    const previousAiTasks = queryClient.getQueryData<AiTasksResponse>(queryKeys.aiTasks(auth.user.id));
     const previousPinned = pinnedTaskIds;
     const previousArchived = archivedTaskIds;
     const storedId = `ai:${taskId}`;
@@ -696,8 +696,8 @@ export function TrainingLibraryPage() {
       notify({ title: "AI 检测任务已删除", tone: "success" });
       await refreshResources();
     } catch (error) {
-      queryClient.setQueryData(queryKeys.trainingResources(auth.dataUserId), previousResources);
-      queryClient.setQueryData(queryKeys.aiTasks(auth.dataUserId), previousAiTasks);
+      queryClient.setQueryData(queryKeys.trainingResources(auth.user.id), previousResources);
+      queryClient.setQueryData(queryKeys.aiTasks(auth.user.id), previousAiTasks);
       persistTaskPreferences((current) => ({
         pinnedTaskIds: previousPinned.includes(storedId)
           ? [...current.pinnedTaskIds.filter((id) => id !== storedId), storedId]
@@ -715,7 +715,7 @@ export function TrainingLibraryPage() {
   async function quickDeletePipelineTask(taskId: string) {
     if (!window.confirm(`删除任务 ${taskId}？`)) return;
     setBusy(`pipeline:${taskId}`);
-    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.dataUserId));
+    const previousPipeline = queryClient.getQueryData<PipelineResponse>(queryKeys.pipeline(auth.user.id));
     const previousPinned = pinnedTaskIds;
     const previousArchived = archivedTaskIds;
     const storedId = `pipeline:${taskId}`;
@@ -729,7 +729,7 @@ export function TrainingLibraryPage() {
       notify({ title: "任务已删除", tone: "success" });
       await Promise.all([refreshResources(), pipelineQuery.refetch()]);
     } catch (error) {
-      queryClient.setQueryData(queryKeys.pipeline(auth.dataUserId), previousPipeline);
+      queryClient.setQueryData(queryKeys.pipeline(auth.user.id), previousPipeline);
       persistTaskPreferences((current) => ({
         pinnedTaskIds: previousPinned.includes(storedId)
           ? [...current.pinnedTaskIds.filter((id) => id !== storedId), storedId]

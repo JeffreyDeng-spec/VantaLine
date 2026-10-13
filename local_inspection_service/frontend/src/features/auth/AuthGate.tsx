@@ -6,7 +6,6 @@ import { getAuthStatus, queryKeys } from "../../api/queries";
 import type { AuthStatusResponse } from "../../api/types";
 import { LoadingState, ErrorState } from "../../components/LoadingState";
 import { useToast } from "../../components/ToastProvider";
-import { useUiStore } from "../../store/uiStore";
 import { AuthContext } from "./auth-context";
 import { AuthForms } from "./AuthForms";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
@@ -25,8 +24,6 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const dataUserId = useUiStore((state) => state.dataUserId);
-  const setDataUserId = useUiStore((state) => state.setDataUserId);
   const authQuery = useQuery({
     queryKey: queryKeys.authStatus,
     queryFn: getAuthStatus,
@@ -47,16 +44,14 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
     const privateQueries = { predicate: (query: { queryKey: readonly unknown[] }) => JSON.stringify(query.queryKey) !== JSON.stringify(queryKeys.authStatus) };
     void queryClient.cancelQueries(privateQueries);
     queryClient.removeQueries(privateQueries);
-    setDataUserId("");
     setCacheIdentity(identity);
-  }, [identity, authQuery.data?.user?.role, queryClient, setDataUserId]);
+  }, [identity, authQuery.data?.user?.role, queryClient]);
 
   const logoutMutation = useMutation({
     mutationFn: () => { diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },
     onSuccess: async () => {
       actionRegistry.reset();
       clearFiles();
-      setDataUserId("");
       await queryClient.cancelQueries();
       queryClient.removeQueries({predicate:query=>JSON.stringify(query.queryKey)!==JSON.stringify(queryKeys.authStatus)});
       // The workspace guard can render before navigation commits. Explicit
@@ -110,8 +105,6 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
         features: auth.features || {},
         defaultUserPermissions: auth.default_user_permissions || [],
         legacyOwnerId: auth.legacy_owner_id,
-        dataUserId,
-        setDataUserId,
         logout: async () => {
           await logoutMutation.mutateAsync();
         }

@@ -357,3 +357,7 @@ unconnected automatic-capture station or unarmed arrival input does not claim
 ready. Image/video results remain unchanged. This UI timer does not reset D/Y,
 disconnect a port, alter leases or input-edge latching, generate another dispatch,
 or replay an uncertain physical write.
+
+## Administrator menu retirement
+
+The detection header no longer provides a global selected-user data-range slot. Administrator resource reads use the existing all-data default. Browser-only serial ownership, workstation binding, lease fencing, camera-only dispatch, ACK sequencing and uncertain-write no-retry remain unchanged.

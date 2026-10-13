@@ -36,7 +36,7 @@ export function AgentToolsProvider() {
       });
     });
     return () => { actionRegistry.reset(); clearFiles(); };
-  }, [enabled, auth.user.id, auth.dataUserId, queryClient]);
+  }, [enabled, auth.user.id, queryClient]);
   useEffect(() => actionRegistry.register([...apiActions(() => authRef.current), ...accessoryActions]), []);
   useEffect(() => {
     if (!enabled || typeof document.modelContext?.registerTool !== "function") return;
@@ -48,10 +48,10 @@ export function AgentToolsProvider() {
       adapterRef.current = adapter;
     }, 0);
     return () => { clearTimeout(start); if(adapterRef.current===adapter)adapterRef.current=null; void adapter?.close(); };
-  }, [enabled, auth.user.id, auth.dataUserId]);
+  }, [enabled, auth.user.id]);
   useEffect(() => { adapterRef.current?.refresh(); }, [location.pathname]);
   useAgentActions([
-    { name: "get_context", domain: "core", description: "Read current workspace and account scope. Use list_capabilities for the tool menu.", readOnly: true, inputSchema: {type:"object",properties:{},additionalProperties:false}, execute: () => ({ route: location.pathname, account_id: auth.user.id, data_scope: auth.dataUserId || auth.user.id, workspace: domain.current, files: listFiles(), action_count: actionRegistry.list().length }) },
+    { name: "get_context", domain: "core", description: "Read current workspace, authenticated account and effective data access. Use list_capabilities for the tool menu.", readOnly: true, inputSchema: {type:"object",properties:{},additionalProperties:false}, execute: () => ({ route: location.pathname, account_id: auth.user.id, data_scope: auth.user.role === "admin" ? "all" : auth.user.id, workspace: domain.current, files: listFiles(), action_count: actionRegistry.list().length }) },
     { name: "list_capabilities", domain: "core", description: "Page the authorized tool menu. Request an action name for its full schema. Workspace actions appear after opening that workspace.", readOnly: true, inputSchema: {type:"object",properties:{domain:{type:"string"},name:{type:"string"},offset:{type:"integer",minimum:0},limit:{type:"integer",minimum:1,maximum:50}},additionalProperties:false}, execute: input => {
       const matches = actionRegistry.list().filter(action => (!input.domain || action.domain === input.domain) && (!input.name || action.name === input.name));
       const offset = Number(input.offset ?? 0), limit = Number(input.limit ?? 25);

@@ -1,7 +1,7 @@
 import { markVersionFilesUploaded } from "../features/version/files";
 import { versionCoordinator } from "../features/version/runtime";
 import { savedEditorsAcknowledgement } from "../features/version/drafts";
-import type { ApiRequestOptions, AuthUser } from "./types";
+import type { ApiRequestOptions } from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -90,12 +90,6 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 
 function jsonBody(value: unknown) {
   return JSON.stringify(value ?? {});
-}
-
-export function withAuthScope(path: string, user: AuthUser | null | undefined, dataUserId: string) {
-  if (user?.role !== "admin" || !dataUserId || !path.startsWith("/api/")) return path;
-  const joiner = path.includes("?") ? "&" : "?";
-  return `${path}${joiner}user_id=${encodeURIComponent(dataUserId)}`;
 }
 
 export const apiClient = {

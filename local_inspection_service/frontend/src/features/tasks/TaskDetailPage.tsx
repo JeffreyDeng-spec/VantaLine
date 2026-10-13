@@ -648,12 +648,12 @@ export function TaskDetailPage() {
   const [activeDrawer, setActiveDrawer] = useState<"collection" | "manual" | "synthetic" | "dataset" | null>(null);
   const autoOptimizeFormRef = useRef<HTMLFormElement>(null);
   const resourcesQuery = useQuery({
-    queryKey: queryKeys.trainingResources(auth.dataUserId),
+    queryKey: queryKeys.trainingResources(auth.user.id),
     queryFn: () => getTrainingResources(auth),
     refetchInterval: 15_000
   });
   const pipelineQuery = useQuery({
-    queryKey: queryKeys.pipeline(auth.dataUserId),
+    queryKey: queryKeys.pipeline(auth.user.id),
     queryFn: () => getPipeline(auth),
     refetchInterval: 15_000
   });
@@ -701,14 +701,14 @@ export function TaskDetailPage() {
     refetchInterval: shouldLoadDataset ? (taskWorkActive ? 10_000 : 30_000) : false
   });
   const autoOptimizeQuery = useQuery({
-    queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId),
+    queryKey: queryKeys.aiAutoOptimize(auth.user.id, autoOptimizeTaskId),
     queryFn: () => getAiTaskAutoOptimize(auth, autoOptimizeTaskId),
     enabled: Boolean(autoOptimizeTaskId) && showLegacyFeedback,
     refetchInterval: autoOptimizeTaskId ? 10_000 : false
   });
   const autoOptimizeActive = Boolean(autoOptimizeQuery.data?.enabled);
   const analysisQuery = useQuery({
-    queryKey: [...queryKeys.dataAnalysisRecords(auth.dataUserId, decodedTaskId), analysisTaskIds.join("|")] as const,
+    queryKey: [...queryKeys.dataAnalysisRecords(auth.user.id, decodedTaskId), analysisTaskIds.join("|")] as const,
     queryFn: async () => {
       const responses = await Promise.all(analysisTaskIds.map((id) => getDataAnalysisRecords(auth, { taskId: id, limit: 80 })));
       const byId = new Map<string, DataAnalysisRecord>();
@@ -722,7 +722,7 @@ export function TaskDetailPage() {
     mutationFn: ({ datasetId, sampleName }: { datasetId: string; sampleName: string }) => deleteTrainingDatasetSample(datasetId, sampleName),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.trainingDatasetDetail(primaryDatasetId) });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
       notify({ title: "样本已删除", tone: "success" });
     },
     onError: (error: Error) => notify({ title: "删除样本失败", description: error.message, tone: "error" })
@@ -735,7 +735,7 @@ export function TaskDetailPage() {
       return updatePipelineTask(task.sourceId, { auto_advance: Boolean(checked) });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
       notify({ title: "任务状态已更新", tone: "success" });
     },
     onError: (error: Error) => notify({ title: "任务操作失败", description: error.message, tone: "error" })
@@ -744,7 +744,7 @@ export function TaskDetailPage() {
     mutationFn: ({ taskId: nextTaskId, payload }: { taskId: string; payload: Partial<ReturnType<typeof readAutoOptimizePayload>> }) =>
       updateAiTaskAutoOptimize(nextTaskId, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.user.id, autoOptimizeTaskId) });
       notify({ title: "自动优化设置已更新", tone: "success" });
     },
     onError: (error: Error) => notify({ title: "自动优化设置失败", description: error.message, tone: "error" })
@@ -752,7 +752,7 @@ export function TaskDetailPage() {
   const deleteAutoOptimizeSampleMutation = useMutation({
     mutationFn: ({ taskId: nextTaskId, sampleId }: { taskId: string; sampleId: string }) => deleteAiTaskAutoOptimizeSample(nextTaskId, sampleId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.user.id, autoOptimizeTaskId) });
       setReviewSample(null);
       notify({ title: "样本已删除", tone: "success" });
     },
@@ -761,8 +761,8 @@ export function TaskDetailPage() {
   const retryAutoOptimizeSampleMutation = useMutation({
     mutationFn: ({ taskId: nextTaskId, sampleId }: { taskId: string; sampleId: string }) => retryAiTaskAutoOptimizeSample(nextTaskId, sampleId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId) });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.dataAnalysisRecords(auth.dataUserId, decodedTaskId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.user.id, autoOptimizeTaskId) });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.dataAnalysisRecords(auth.user.id, decodedTaskId) });
       setReviewSample(null);
       notify({ title: "已重新提交检测与标注", tone: "success" });
     },
@@ -783,10 +783,10 @@ export function TaskDetailPage() {
         tone: "success"
       });
       void Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.dataUserId, autoOptimizeTaskId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dataAnalysisRecords(auth.dataUserId, decodedTaskId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) })
+        queryClient.invalidateQueries({ queryKey: queryKeys.aiAutoOptimize(auth.user.id, autoOptimizeTaskId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dataAnalysisRecords(auth.user.id, decodedTaskId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) })
       ]);
     },
     onError: (error: Error) => notify({ title: "人工通过失败", description: error.message, tone: "error" })
@@ -804,10 +804,10 @@ export function TaskDetailPage() {
 
   useEffect(() => {
     if (!autoOptimizeTaskId || !autoOptimizeQuery.data) return;
-    queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
     if (primaryDatasetId) queryClient.invalidateQueries({ queryKey: queryKeys.trainingDatasetDetail(primaryDatasetId) });
-  }, [auth.dataUserId, autoOptimizeLiveSyncKey, autoOptimizeQuery.data, autoOptimizeTaskId, primaryDatasetId, queryClient]);
+  }, [auth.user.id, autoOptimizeLiveSyncKey, autoOptimizeQuery.data, autoOptimizeTaskId, primaryDatasetId, queryClient]);
 
   function handleAutoOptimizeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1646,8 +1646,8 @@ export function TaskDetailPage() {
           accessoryId={detailAccessoryId}
           onClose={() => setDetailAccessoryId("")}
           onChanged={() => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.dataUserId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.dataUserId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.trainingResources(auth.user.id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.pipeline(auth.user.id) });
           }}
           onTextCrop={() => {
             notify({ title: "文字裁剪请在配件库完成", description: "任务详情里会保持当前页面，不跳转。", tone: "info" });

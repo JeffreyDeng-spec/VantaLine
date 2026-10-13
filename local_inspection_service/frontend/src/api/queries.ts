@@ -1,4 +1,4 @@
-import { apiClient, withAuthScope } from "./client";
+import { apiClient } from "./client";
 import type {
   AgentConfigResponse,
   AiAutoOptimizeStatus,
@@ -63,32 +63,32 @@ import type { AuthContextValue } from "../features/auth/auth-context";
 export const queryKeys = {
   authStatus: ["auth", "status"] as const,
   users: ["auth", "users"] as const,
-  serviceStatus: (scope: string) => ["service", "status", scope] as const,
-  configSummary: (scope: string) => ["config", "summary", scope] as const,
+  serviceStatus: (accountId: string) => ["service", "status", accountId] as const,
+  configSummary: (accountId: string) => ["config", "summary", accountId] as const,
   agentConfig: ["agent", "config"] as const,
   aiConfig: ["ai", "config"] as const,
   plcConfig: ["plc", "config"] as const,
   plcWorkstation: ["plc", "workstation"] as const,
   plcWorkstations: ["plc", "workstations"] as const,
   apiCostLedger: ["admin", "apiCostLedger"] as const,
-  aiTasks: (scope: string) => ["ai", "tasks", scope] as const,
-  aiAutoOptimize: (scope: string, taskId: string) => ["ai", "autoOptimize", scope, taskId] as const,
-  accessories: (scope: string) => ["accessories", scope] as const,
+  aiTasks: (accountId: string) => ["ai", "tasks", accountId] as const,
+  aiAutoOptimize: (accountId: string, taskId: string) => ["ai", "autoOptimize", accountId, taskId] as const,
+  accessories: (accountId: string) => ["accessories", accountId] as const,
   accessoryDetail: (accessoryId: string) => ["accessories", "detail", accessoryId] as const,
   accessoryCandidate: (candidateId: string) => ["accessories", "candidate", candidateId] as const,
-  trainingResources: (scope: string) => ["training", "resources", scope] as const,
+  trainingResources: (accountId: string) => ["training", "resources", accountId] as const,
   trainingDatasetDetail: (datasetId: string) => ["training", "dataset", datasetId] as const,
-  pipeline: (scope: string) => ["pipeline", "tasks", scope] as const,
+  pipeline: (accountId: string) => ["pipeline", "tasks", accountId] as const,
   taskNavigationPreferences: (userId: string) => ["user", "preferences", "tasks", userId] as const,
-  dataAnalysisRecords: (scope: string, taskId: string) => ["dataAnalysis", "records", scope, taskId] as const,
+  dataAnalysisRecords: (accountId: string, taskId: string) => ["dataAnalysis", "records", accountId, taskId] as const,
   dataAnalysisRecord: (recordId: string) => ["dataAnalysis", "record", recordId] as const,
   incomingTextTask: (taskId: string) => ["incomingText", "task", taskId] as const,
   incomingTextInspectors: ["incomingText", "inspectors"] as const,
-  incomingTextInspections: (scope: string, taskId = "") => ["incomingText", "inspections", scope, taskId] as const,
+  incomingTextInspections: (accountId: string, taskId = "") => ["incomingText", "inspections", accountId, taskId] as const,
   locateConfig: ["locate", "config"] as const,
   locateStatus: (endpoint = "") => ["locate", "status", endpoint] as const,
-  locateAccessories: (scope: string) => ["locate", "accessories", scope] as const,
-  labelSheetReferences: (scope: string) => ["labelSheets", "references", scope] as const,
+  locateAccessories: (accountId: string) => ["locate", "accessories", accountId] as const,
+  labelSheetReferences: (accountId: string) => ["labelSheets", "references", accountId] as const,
 };
 
 export function getAuthStatus() {
@@ -108,7 +108,7 @@ export function saveTaskNavigationPreferences(payload: Pick<TaskNavigationPrefer
 }
 
 export function getServiceStatus(auth: AuthContextValue) {
-  return apiClient.get<ServiceStatusResponse>(withAuthScope("/api/status", auth.user, auth.dataUserId));
+  return apiClient.get<ServiceStatusResponse>("/api/status");
 }
 
 export function warmupYoloModel(modelId: string) {
@@ -116,7 +116,7 @@ export function warmupYoloModel(modelId: string) {
 }
 
 export function getConfigSummary(auth: AuthContextValue) {
-  return apiClient.get<ConfigSummaryResponse>(withAuthScope("/api/config/summary", auth.user, auth.dataUserId));
+  return apiClient.get<ConfigSummaryResponse>("/api/config/summary");
 }
 
 export function updateRules(payload: RuleConfigPayload) {
@@ -281,12 +281,12 @@ export function getApiCostLedger() {
 }
 
 export function getAiTasks(auth: AuthContextValue) {
-  return apiClient.get<AiTasksResponse>(withAuthScope("/api/ai/tasks", auth.user, auth.dataUserId));
+  return apiClient.get<AiTasksResponse>("/api/ai/tasks");
 }
 
 export function getAiTaskAutoOptimize(auth: AuthContextValue, taskId: string) {
   return apiClient.get<AiAutoOptimizeStatus>(
-    withAuthScope(`/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize`, auth.user, auth.dataUserId)
+    `/api/ai/tasks/${encodeURIComponent(taskId)}/auto-optimize`
   );
 }
 
@@ -351,17 +351,17 @@ export function deleteActiveAiKey() {
 
 export function getTrainingResources(auth: AuthContextValue) {
   return apiClient.get<TrainingResourcesResponse>(
-    withAuthScope("/api/training/resources", auth.user, auth.dataUserId)
+    "/api/training/resources"
   );
 }
 
 export function getPipeline(auth: AuthContextValue) {
-  return apiClient.get<PipelineResponse>(withAuthScope("/api/pipeline/tasks", auth.user, auth.dataUserId));
+  return apiClient.get<PipelineResponse>("/api/pipeline/tasks");
 }
 
 export function createPipelineTask(payload: PipelineTaskPayload, auth?: AuthContextValue) {
   return apiClient.post<PipelineTask>(
-    auth ? withAuthScope("/api/pipeline/tasks", auth.user, auth.dataUserId) : "/api/pipeline/tasks",
+    "/api/pipeline/tasks",
     payload
   );
 }
@@ -408,7 +408,7 @@ export function getIncomingTextInspections(auth: AuthContextValue, taskId = "") 
   const params = new URLSearchParams();
   if (taskId) params.set("task_id", taskId);
   const path = `/api/incoming-text/inspections${params.size ? `?${params}` : ""}`;
-  return apiClient.get<IncomingTextInspectionsResponse>(withAuthScope(path, auth.user, auth.dataUserId));
+  return apiClient.get<IncomingTextInspectionsResponse>(path);
 }
 
 export function analyzeTextCompareBeta(form: FormData, options?: ApiRequestOptions) {
@@ -487,7 +487,7 @@ export function getAgentRecommendation(payload: { stage: "samples" | "training";
 }
 
 export function getAccessories(auth: AuthContextValue) {
-  return apiClient.get<AccessoriesResponse>(withAuthScope("/api/accessories", auth.user, auth.dataUserId));
+  return apiClient.get<AccessoriesResponse>("/api/accessories");
 }
 
 export function getLocateConfig() {
@@ -509,7 +509,7 @@ export function startLocateRuntime() {
 
 export function getLocateAccessories(auth: AuthContextValue) {
   return apiClient.get<{ items: import("./types").LocateSourceItem[] }>(
-    withAuthScope("/api/locateanything/accessories", auth.user, auth.dataUserId)
+    "/api/locateanything/accessories"
   );
 }
 
@@ -523,7 +523,7 @@ export function locateAnythingPrompt(form: FormData) {
 
 export function getLabelSheetReferences(auth: AuthContextValue) {
   return apiClient.get<LabelSheetReferencesResponse>(
-    withAuthScope("/api/label-sheets/references", auth.user, auth.dataUserId)
+    "/api/label-sheets/references"
   );
 }
 
@@ -606,7 +606,7 @@ export function getDataAnalysisRecords(
   });
   if (params.taskId) query.set("task_id", params.taskId);
   return apiClient.get<DataAnalysisRecordsResponse>(
-    withAuthScope(`/api/data-analysis/records?${query.toString()}`, auth.user, auth.dataUserId)
+    `/api/data-analysis/records?${query.toString()}`
   );
 }
 

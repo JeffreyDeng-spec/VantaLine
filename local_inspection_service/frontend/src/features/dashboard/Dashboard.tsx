@@ -16,17 +16,17 @@ export function Dashboard() {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const statusQuery = useQuery({
-    queryKey: queryKeys.serviceStatus(auth.dataUserId),
+    queryKey: queryKeys.serviceStatus(auth.user.id),
     queryFn: () => getServiceStatus(auth)
   });
   const configQuery = useQuery({
-    queryKey: queryKeys.configSummary(auth.dataUserId),
+    queryKey: queryKeys.configSummary(auth.user.id),
     queryFn: () => getConfigSummary(auth)
   });
 
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.dataUserId) });
-    queryClient.invalidateQueries({ queryKey: queryKeys.configSummary(auth.dataUserId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.user.id) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.configSummary(auth.user.id) });
   };
 
   if (statusQuery.isLoading || configQuery.isLoading) return <LoadingState label="正在加载总览" />;

@@ -1,3 +1,4 @@
+import { useAuth } from "../auth/auth-context";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Camera, CheckCircle2, RotateCcw, ShieldAlert, ThumbsDown, ThumbsUp } from "lucide-react";
@@ -46,6 +47,7 @@ function decisionCopy(result: IncomingTextInspection) {
 
 export function IncomingTextInspectionPage({ task }: { task: PipelineTask }) {
   const queryClient = useQueryClient();
+  const auth = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const qualityCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -66,7 +68,7 @@ export function IncomingTextInspectionPage({ task }: { task: PipelineTask }) {
     onSuccess: (next) => {
       pendingCapture.current = null;
       setResult(next);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.incomingTextInspections("", task.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.incomingTextInspections(auth.user.id, task.id) });
     }
   });
   const reviewMutation = useMutation({

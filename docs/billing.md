@@ -178,3 +178,7 @@ Primary references: [Volcengine billing](https://docs.volcengine.com/docs/Billin
 [Tencent balance](https://cloud.tencent.com/document/api/555/20253),
 [RunPod GraphQL](https://graphql-spec.runpod.io/) and
 [RunPod REST schema](https://github.com/runpod/docs/blob/main/api-reference/openapi.json).
+
+## Global range menu retirement
+
+The workspace no longer has a selected-user data-range menu. Billing continues to show the configured payer accounts to administrators; its heading describes that payer-based view without referring to a removed range selector.

@@ -111,7 +111,7 @@ function appendFormValue(form: FormData, key: string, value: string | number | b
 function useAccessoryRefresh() {
   const auth = useAuth();
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.dataUserId) });
+  return () => queryClient.invalidateQueries({ queryKey: queryKeys.accessories(auth.user.id) });
 }
 
 export function AccessoryDetailModal({
@@ -399,7 +399,7 @@ export function AccessoriesPage() {
   }
 
   const accessoriesQuery = useQuery({
-    queryKey: queryKeys.accessories(auth.dataUserId),
+    queryKey: queryKeys.accessories(auth.user.id),
     queryFn: () => getAccessories(auth)
   });
 
@@ -510,7 +510,7 @@ export function AccessoriesPage() {
       </header>
 
       <section className="metric-grid">
-        <MetricCard label="配件" value={items.length} detail="当前数据范围" />
+        <MetricCard label="配件" value={items.length} detail="全部可访问数据" />
         <MetricCard label="物品类" value={materialCounts.object} detail="多角度/无背景素材" />
         <MetricCard label="文字类" value={materialCounts.text} detail="文档规范化素材" />
       </section>

@@ -2511,9 +2511,9 @@ Session storage records each attempted target identity. If the same target is st
 
 ### Compact ordinary inspection header
 
-**Status: Authoritative.** The ordinary inspection header uses two compact rows: task, camera readiness, detection response/error and latest completed detection time, the existing administrator data-scope selector and fullscreen entry; then accessory/model context and camera-only PLC status, register value, automatic-capture flag and connection/settings/details actions. Administrator scope is portaled from AppShell into this header, retaining the same query, authorization and scope setter; other pages keep the original control. PLC state is portaled from the same mounted local control, without a second serial client. Long status detail remains available in the PLC details dialog and title; narrow layouts reduce secondary metadata. Fullscreen markup, status styling and PLC behavior are unchanged.
+**Status: Authoritative.** The ordinary inspection header uses two compact rows: task, camera readiness, detection response/error and latest completed detection time, fullscreen entry (the administrator data-scope selector is retired); then accessory/model context and camera-only PLC status, register value, automatic-capture flag and connection/settings/details actions. The global administrator scope control is removed from this header and all other pages. PLC state is portaled from the same mounted local control, without a second serial client. Long status detail remains available in the PLC details dialog and title; narrow layouts reduce secondary metadata. Fullscreen markup, status styling and PLC behavior are unchanged.
 
-Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; confirm the two rows, scope change and navigation back to another page, camera/manual capture and PLC details remain accessible without document scrolling. Verify image/video never show PLC actions and compare fullscreen markup against the base revision. Preview fixtures use synthetic media and do not prove physical production I/O.
+Acceptance: use administrator and operator accounts at 1366×768 and 1280×620; confirm the two rows, absence of scope controls on this and other pages, camera/manual capture and PLC details remain accessible without document scrolling. Verify image/video never show PLC actions and compare fullscreen markup against the base revision. Preview fixtures use synthetic media and do not prove physical production I/O.
 
 
 AgentToolsProvider renders only a hidden readiness marker for integration checks. No visible Agent/WebMCP status row appears for unsupported browsers, initialization, successful registration or registration errors. Existing registration, account authorization and tool execution are unchanged.
@@ -2583,3 +2583,7 @@ starts capture nor changes PLC output or any persisted record.
 
 
 The RunPod financial reader accepts the observed network-volume startDate date alongside time, rejects conflicting/missing/out-of-period evidence and deduplicates equivalent normalized daily aggregation keys. It retains supported-resource coverage and does not infer payer totals or remaining days.
+
+## Administrator data visibility
+
+Administrators use the existing server-wide read authorization by default, including all users and legacy records. React and the retained static UI have no global data-range selector or selected-user request state. Data cache keys use the authenticated account ID and identity/role changes still clear private caches. Explicit per-user management detail routes retain their selected-owner behavior; ordinary-user ownership/shared-read checks remain enforced by the server.

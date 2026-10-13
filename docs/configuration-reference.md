@@ -2040,3 +2040,7 @@ The compact normal/fullscreen register display uses only configured addresses an
 
 
 RunPod account references also enable the existing read-only resource billing APIs; network-volume startDate is a supported live date variant. It is not a new credential or IAM capability. Unknown project associations stay unknown, and partial coverage cannot establish account-wide expense.
+
+## Administrator data-range retirement
+
+The browser has no configurable selected-user data range. Administrator workspace requests omit the former global `user_id` filter and use the existing all-user/legacy read default. No persisted setting or migration is needed. Explicit per-user management APIs remain available and ordinary-user isolation is unchanged.

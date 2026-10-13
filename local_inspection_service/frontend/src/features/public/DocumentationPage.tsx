@@ -35,7 +35,7 @@ export function DocumentationPage() {
         <section id="evidence"><h2>结果与证据</h2><p>在结果页和数据分析中查看检测记录。标签对比的 Raw Output 默认折叠，可展开核对模型输出和提取诊断；记录和媒体仍受账户权限限制。</p><p>反馈问题时附上记录编号、发生时间、页面显示的错误和“关于与帮助”里的版本号。不要发送 API Key、密码或未经授权的客户图片。</p></section>
         <section id="help"><h2>常见问题</h2>
           <details><summary>提示没有配置 Key，怎么办？</summary><p>请联系管理员检查对应步骤的模型配置。图像提取和文字对比可能使用不同的服务；不要把 Key 填入图片、备注或反馈内容。</p></details>
-          <details><summary>为什么看不到某个功能或任务？</summary><p>先确认当前账号、权限与数据范围。访问受限不等于数据被删除，请联系工作区管理员核对。</p></details>
+          <details><summary>为什么看不到某个功能或任务？</summary><p>先确认当前账号与权限。访问受限不等于数据被删除，请联系工作区管理员核对。</p></details>
           <details><summary>登录失效或请求失败，是否会自动重复检测？</summary><p>登录失效后重新登录可返回原页面，但不会自动重放检测、模型请求或设备写入。网络错误先查看现有任务和记录，避免重复提交。</p></details>
           <details><summary>如何反馈问题？</summary><p>联系为你开通账号的工作区管理员，提供上述记录编号、版本与错误信息。先脱敏，再分享日志。</p></details>
         </section>

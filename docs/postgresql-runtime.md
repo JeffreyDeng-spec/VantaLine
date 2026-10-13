@@ -985,3 +985,7 @@ snapshots/evidence must never be rewritten or physically replayed.
 
 
 RunPod network-volume date compatibility normalizes daily aggregation identities across time/startDate source variants. New complete snapshots replace the published pointer; previous snapshots and rows remain immutable. No financial migration or historical rewrite accompanies this correction.
+
+## Administrator all-data default
+
+Removing the global browser range selector requires no schema change, migration or record rewrite. Existing role/ownership queries serve all users and historical data to administrator requests without an owner filter. Explicit per-user management detail reads keep their selected-owner semantics.

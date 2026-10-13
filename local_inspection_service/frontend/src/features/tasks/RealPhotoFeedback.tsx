@@ -1,7 +1,7 @@
 import { TaskProcessDrawer } from "./TaskProcessDrawer";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { apiClient, withAuthScope } from "../../api/client";
+import { apiClient } from "../../api/client";
 import { useAuth } from "../auth/auth-context";
 
 type Box = { class_id: string; bbox: number[] };
@@ -34,18 +34,17 @@ export function useRealPhotoFeedback(taskId: string) {
   const auth = useAuth();
   const client = useQueryClient();
   const path = `/api/ai/tasks/${encodeURIComponent(taskId)}/real-photo`;
-  const key = ["real-photo", auth.user.id, auth.dataUserId, taskId];
-  const scoped = (value: string) => withAuthScope(value, auth.user, auth.dataUserId);
-  const query = useQuery({ queryKey: key, queryFn: () => apiClient.get<RealPhotoStatus>(scoped(path)),
+  const key = ["real-photo", auth.user.id, taskId];
+  const query = useQuery({ queryKey: key, queryFn: () => apiClient.get<RealPhotoStatus>(path),
     enabled: Boolean(taskId), refetchInterval: 5000 });
   const mutation = useMutation({ mutationFn: ({url, body, post}: {url: string; body?: unknown; post?: boolean}) =>
-    post ? apiClient.post<RealPhotoStatus>(scoped(url), body) : apiClient.patch<RealPhotoStatus>(scoped(url), body),
+    post ? apiClient.post<RealPhotoStatus>(url, body) : apiClient.patch<RealPhotoStatus>(url, body),
     onSuccess: async value => {
       client.setQueryData(key, value);
       await client.invalidateQueries({queryKey: key});
     }
   });
-  return { query, mutation, path, key, scoped };
+  return { query, mutation, path, key };
 }
 type Feedback = ReturnType<typeof useRealPhotoFeedback>;
 
@@ -78,20 +77,20 @@ function SamplePreview({sample, url}: {sample: Sample; url: string}) {
   </svg>;
 }
 function SampleDetail({sample, feedback, close}: {sample: Sample; feedback: Feedback; close: () => void}) {
-  const {path, key, scoped, mutation} = feedback;
+  const {path, key, mutation} = feedback;
   const versions = useQuery({queryKey:[...key,"versions",sample.sample_id],
-    queryFn:() => apiClient.get<{annotations:unknown[]; reviews:unknown[]; source_groups?:unknown[]; masks:{job_id:string;mapping_status:string}[]}>(scoped(path+`/samples/${encodeURIComponent(sample.sample_id)}/versions`))});
+    queryFn:() => apiClient.get<{annotations:unknown[]; reviews:unknown[]; source_groups?:unknown[]; masks:{job_id:string;mapping_status:string}[]}>(path+`/samples/${encodeURIComponent(sample.sample_id)}/versions`)});
   const samplePath = path+`/samples/${encodeURIComponent(sample.sample_id)}`;
   return <>
     <button className="secondary compact-action" onClick={close}>返回列表</button>
     <h3>{labels[sample.current_status || ""] || "样本详情"} · {sample.sample_id}</h3>
-    <SamplePreview sample={sample} url={scoped(samplePath+"/image")}/>
+    <SamplePreview sample={sample} url={samplePath+"/image"}/>
     <p>{sample.review?.reason || "等待自动流程生成筛选结果"}</p>
     {sample.annotation?.error_code && <p role="status">标注失败阶段：{sample.annotation.error_code}</p>}
     <details><summary>标注与审核版本</summary>
       {versions.isPending ? <p>正在加载历史</p> : versions.isError ? <p role="alert">历史加载失败 <button onClick={() => versions.refetch()}>重试</button></p> : <>
         <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify({annotations:versions.data.annotations,reviews:versions.data.reviews,source_groups:versions.data.source_groups},null,2)}</pre>
-        {versions.data.masks.map(m=><figure key={m.job_id}><img alt="附加 mask，不能改变训练准入" style={{maxWidth:"100%"}} src={scoped(samplePath+`/masks/${encodeURIComponent(m.job_id)}/image`)}/><figcaption>{m.mapping_status} · 不改变框和训练准入</figcaption></figure>)}
+        {versions.data.masks.map(m=><figure key={m.job_id}><img alt="附加 mask，不能改变训练准入" style={{maxWidth:"100%"}} src={samplePath+`/masks/${encodeURIComponent(m.job_id)}/image`}/><figcaption>{m.mapping_status} · 不改变框和训练准入</figcaption></figure>)}
       </>}
     </details>
     <details><summary>高级操作</summary>
@@ -106,7 +105,7 @@ function SampleDetail({sample, feedback, close}: {sample: Sample; feedback: Feed
 }
 
 export function RealPhotoDrawer({feedback, kind, title, close}: {feedback: Feedback; kind: RealPhotoDrawerKind; title: string; close: () => void}) {
-  const {query, mutation, path, key, scoped} = feedback;
+  const {query, mutation, path, key} = feedback;
   const state = query.data!;
   const [decision, setDecision] = useState("");
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
@@ -114,11 +113,11 @@ export function RealPhotoDrawer({feedback, kind, title, close}: {feedback: Feedb
   const category = kind === "manual" ? "agent_filtered" : kind === "dataset" ? "approved" : "all";
   const cursor = cursors[cursors.length-1];
   const list = useQuery({queryKey:[...key,"samples",category,decision,cursor],
-    queryFn:() => apiClient.get<{samples:Sample[]; total:number; next_cursor:string | null}>(scoped(path+"/samples?"+new URLSearchParams({category,limit:"24",...(decision ? {decision}:{}),...(cursor ? {cursor}:{})}))),
+    queryFn:() => apiClient.get<{samples:Sample[]; total:number; next_cursor:string | null}>(path+"/samples?"+new URLSearchParams({category,limit:"24",...(decision ? {decision}:{}),...(cursor ? {cursor}:{})})),
     refetchInterval: detail ? false : 10000});
   // Refresh an open detail from its own filtered-independent page; mutations can move it out of the current category.
   const detailQuery = useQuery({queryKey:[...key,"sample-detail",detail?.sample_id],
-    queryFn:() => apiClient.get<{samples:Sample[]}>(scoped(path+"/samples?category=all&sample_id="+encodeURIComponent(detail!.sample_id))), enabled:Boolean(detail), refetchInterval:10000});
+    queryFn:() => apiClient.get<{samples:Sample[]}>(path+"/samples?category=all&sample_id="+encodeURIComponent(detail!.sample_id)), enabled:Boolean(detail), refetchInterval:10000});
 
   return <TaskProcessDrawer title={title} context="任务过程数据" close={close}>
         {detail && detailQuery.isError && <p role="alert">详情刷新失败 <button onClick={()=>detailQuery.refetch()}>重试</button></p>}
@@ -146,7 +145,7 @@ export function RealPhotoDrawer({feedback, kind, title, close}: {feedback: Feedb
             {!list.data.samples.length && <div className="empty-panel compact-empty">暂无符合条件的样本。</div>}
             <div className="manual-review-grid">{list.data.samples.map(sample=><article className="manual-review-card" key={sample.sample_id}>
               <div className="image-processing-review-head"><strong>{sample.sample_id}</strong><span className="pill neutral">{labels[sample.current_status || ""] || "等待自动处理"}</span></div>
-              <SamplePreview sample={sample} url={scoped(path+`/samples/${encodeURIComponent(sample.sample_id)}/image`)}/>
+              <SamplePreview sample={sample} url={path+`/samples/${encodeURIComponent(sample.sample_id)}/image`}/>
               <p className="record-meta">{sample.review?.reason || (sample.annotation?.error_code ? `标注失败：${sample.annotation.error_code}` : "等待自动流程")}</p>
               <button className="secondary compact-action" onClick={()=>setDetail(sample)}>查看样本详情</button>
             </article>)}</div>
