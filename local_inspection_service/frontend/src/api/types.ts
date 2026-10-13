@@ -1022,17 +1022,28 @@ export interface PlcWebSerialFrame {
   expected_response_hex: string;
 }
 
-export interface PlcWebSerialCaptureReadPlan {
+export interface PlcWebSerialRegisterReadPlan {
   target: string;
-  operation: "read_capture_input";
+  operation: "read_capture_input" | "read_result_register";
   frame_hex: string;
   frame_sha256: string;
-  expected_response_bytes: 8;
+  expected_response_bytes: 7 | 8;
   read_timeout_ms: 500;
-  poll_interval_ms: 200;
-  trigger_value: number;
+  poll_interval_ms: 200 | 1000;
   config_generation: number;
   protocol_version: "plc-web-serial-v4";
+}
+
+export interface PlcWebSerialResultReadPlan extends PlcWebSerialRegisterReadPlan {
+  operation: "read_result_register";
+  poll_interval_ms: 1000;
+}
+
+export interface PlcWebSerialCaptureReadPlan extends PlcWebSerialRegisterReadPlan {
+  operation: "read_capture_input";
+  poll_interval_ms: 200;
+  trigger_value: number;
+  result_read_plan?: PlcWebSerialResultReadPlan;
 }
 
 export interface PlcCaptureInputReadResult {

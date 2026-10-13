@@ -6,6 +6,8 @@ export type PlcConnectionDisplay = {
 
 type Props = PlcConnectionDisplay & {
   disabled: boolean;
+  registerStatus?: string;
+  registerStatusTitle?: string;
   onConnect: () => void;
   onDisconnect: () => void;
   onSettings?: () => void;
@@ -22,6 +24,7 @@ export function PlcConnectionStatusBar(props: Props) {
         断开时间：{new Date(props.disconnectedAt).toLocaleTimeString("zh-CN", { hour12: false })}
       </time>}
     </div>
+    {connected && props.registerStatus && <output className="plc-register-status" title={props.registerStatusTitle} aria-label="PLC 寄存器读回状态">{props.registerStatus}</output>}
     <div className="plc-connection-bar-actions">
       <button type="button" className={connected ? "secondary compact-action" : "primary compact-action"} disabled={props.disabled} onClick={connected ? props.onDisconnect : props.onConnect}>
         {connected ? "断开 PLC" : props.state === "connecting" ? "连接中…" : props.state === "fault" ? "重新连接 PLC" : "连接 PLC"}

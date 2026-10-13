@@ -39,3 +39,6 @@
   .plc-connection-bar-copy time { font-size: 11px; }
   .plc-connection-bar-actions .compact-action { padding: 3px 5px; }
 }
+
+.plc-register-status { flex:0 0 auto; white-space:nowrap; font-size:12px; font-variant-numeric:tabular-nums; }
+@media(max-width:800px) { .plc-connection-bar { flex-wrap:wrap; } .plc-register-status { font-size:11px; } }

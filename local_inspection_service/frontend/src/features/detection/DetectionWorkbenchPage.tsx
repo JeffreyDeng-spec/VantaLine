@@ -650,6 +650,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const [plcConnected, setPlcConnected] = useState(false);
   const [plcDiagnosticBusy, setPlcDiagnosticBusy] = useState(false);
   const [plcDiagnostic, setPlcDiagnostic] = useState<PlcWebSerialDiagnosticResult | null>(null);
+  const [plcOutputRead, setPlcOutputRead] = useState<{value: number | null; readAt: number | null; message: string}>({value: null, readAt: null, message: "尚未读取"});
   const [plcCapturePoll, setPlcCapturePoll] = useState<PlcCapturePollState>({
     status: "disabled",
     value: null,
@@ -1027,6 +1028,31 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       void plcClientRef.current.disconnect(true);
     };
   }, []);
+
+  useEffect(() => {
+    const plan = plcWorkstationQuery.data?.capture_read_plan?.result_read_plan;
+    setPlcOutputRead({value: null, readAt: null, message: plan ? "等待读取" : "当前连接未提供输出读取计划"});
+    if (!plcConnected || source !== "camera" || !plcWorkstationQuery.data?.config?.enabled || !plan) return;
+    let cancelled = false;
+    let timer = 0;
+    const schedule = () => { if (!cancelled) timer = window.setTimeout(() => { void poll(); }, plan.poll_interval_ms); };
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible" || versionCoordinator.snapshot().preparing || plcDiagnosticBusy) { schedule(); return; }
+      try {
+        const read = await plcClientRef.current.readResultRegister(plan, message => { setPlcConnected(false); setPlcConnectionStatus(message); });
+        if (cancelled) return;
+        if (read) setPlcOutputRead({value: read.value, readAt: read.read_at, message: "PLC 实际读回"});
+        schedule();
+      } catch (error) {
+        if (!cancelled) setPlcOutputRead({value: null, readAt: null, message: error instanceof Error ? error.message : String(error)});
+      }
+    };
+    void poll();
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [plcConnected, source, plcDiagnosticBusy, plcWorkstationQuery.data?.config?.enabled,
+    plcWorkstationQuery.data?.capture_read_plan?.result_read_plan?.config_generation,
+    plcWorkstationQuery.data?.capture_read_plan?.result_read_plan?.frame_hex]);
 
   useEffect(() => {
     const workstation = plcWorkstationQuery.data;
@@ -1749,10 +1775,6 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         </label>
         {source === "camera" && <div className="normal-plc-row">
           <div ref={setPlcStatusTarget} className="plc-status-slot" />
-          <span className="normal-plc-read" title={plcCapturePoll.message}>
-            {plcWorkstationQuery.data?.config?.capture_input_register || "—"} = {plcCapturePoll.value ?? "—"}
-            <span> · 自动拍照{plcWorkstationQuery.data?.config?.capture_trigger_enabled ? "开" : "关"}</span>
-          </span>
           <button type="button" className="normal-plc-detail-button" onClick={() => setPlcDetailsOpen(true)}>PLC 详情</button>
         </div>}
       </section>
@@ -1853,6 +1875,8 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
               <LocalPlcControls client={plcClientRef.current} modelId={activeModelId} connected={plcConnected}
                 statusTarget={plcStatusTarget} fullscreenStatusTarget={fullscreenPlcStatusTarget}
                 captureStatus={plcCapturePoll.message}
+                registerStatus={`到位 ${plcWorkstationQuery.data?.config?.capture_input_register || "—"}=${plcWorkstationQuery.data?.config?.capture_trigger_enabled ? plcCapturePoll.value ?? "—" : "未读取"} · 输出 ${plcWorkstationQuery.data?.config?.result_register || "—"} 读回=${plcOutputRead.value ?? "—"}`}
+                registerStatusTitle={`${plcOutputRead.message}；最近读回：${plcOutputRead.readAt ? formatLocalTimestamp(plcOutputRead.readAt) : "—"}；最近写入：${result?.plc_sync?.enabled ? plcSyncLabel(result) : "暂无写入确认"}`}
                 externalStatus={plcConnectionStatus} productionReady={Boolean(stream && activeModelId)} disabled={Boolean(busy) || plcDiagnosticBusy}
                 onConnectionChange={(connected) => {
                   plcBoundModelIdRef.current = connected ? activeModelId : "";
@@ -1881,6 +1905,10 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
                 <div className="plc-diagnostic-labels" aria-live="polite">
                   <label>输入寄存器<output>{plcWorkstationQuery.data?.config?.capture_input_register || "—"}</output></label>
                   <label>当前读取值<output>{plcCapturePoll.value ?? "—"}</output></label>
+                  <label>输出寄存器<output>{plcWorkstationQuery.data?.config?.result_register || "—"}</output></label>
+                  <label>输出实际读回值<output>{plcConnected ? plcOutputRead.value ?? "—" : "—"}</output></label>
+                  <label>输出最近读取时间<output>{plcOutputRead.readAt ? formatLocalTimestamp(plcOutputRead.readAt) : "—"}</output></label>
+                  <label>最近写入状态<output>{result?.plc_sync?.enabled ? plcSyncLabel(result) : "暂无写入确认"}</output></label>
                   <label>状态说明<output>{plcCapturePoll.message}</output></label>
                   <label>最近读取时间<output>{plcCapturePoll.readAt ? formatLocalTimestamp(plcCapturePoll.readAt) : "—"}</output></label>
                   <label>最近触发时间<output>{plcCapturePoll.triggerAt ? formatLocalTimestamp(plcCapturePoll.triggerAt) : "—"}</output></label>
