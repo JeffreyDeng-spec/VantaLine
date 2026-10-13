@@ -1059,6 +1059,8 @@ The label workspace shares Beta's upper-left hierarchical back navigation:
 list to platform, task/import to list, and result to task. It uses explicit router
 destinations rather than browser history, including on refreshed deep links.
 
+Its result dock uses red status/details for differences and errors, green for completed matches without errors or contradictory issues, and yellow for queued/running and review-required records. Status icons and text supplement color. Standard/actual evidence is shown inline in separate labeled values and remains fully available in the details dialog; metadata is subdued and long results scroll locally. Presentation does not change saved decisions, model requests, account isolation or PLC provenance.
+
 `label_inspection/api.py` composes an independent service and durable PostgreSQL
 repository. Each Word import creates one task containing all embedded images,
 including duplicates and invalid-image placeholders. Selection is manual. Standard

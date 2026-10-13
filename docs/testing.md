@@ -1515,6 +1515,8 @@ JSON, truncation, duplicate click and restart without a false pass or duplicate 
 Original A prompt boxes are label-relative without a trustworthy full-image extent;
 verify the UI explicitly omits uncertain issue boxes and shows the selected crop.
 
+The workspace fixture also checks red difference title/count/details and inline standard/actual values, green completed-match title/confirmation, and yellow queued/running states. Review-required, failed, interrupted and contradictory MATCH records must not appear green. Capture the three result-state screenshots and inspect the desktop/narrow/short-screen layouts; evidence rows may grow but the dock must retain local scrolling, readable first-row text, details access and visible persistent controls. `LABEL_TEST_BROWSER=msedge` selects an installed Edge for the workspace and its nested image-reuse fixture. No real model or PLC call is made.
+
 For a live release, separately record results for the existing known missing-model
 line and sixth-icon defects, plus named normal/defective control samples. Preserve
 sample identities and call/token/timing evidence privately. This small controlled

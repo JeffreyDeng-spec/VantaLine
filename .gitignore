@@ -60,6 +60,7 @@ local_inspection_service/*.diff.gz
 .alook_outbox/
 .tmp/
 test-results/
+design-qa.md
 
 # Generated image batches and temporary production folders
 /synthetic_*/

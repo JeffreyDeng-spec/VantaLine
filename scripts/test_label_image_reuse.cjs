@@ -41,6 +41,7 @@ async function main() {
     }
     browser = await chromium.launch({
       headless: true,
+      channel: process.env.LABEL_TEST_BROWSER || undefined,
       args: [
         "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream",

@@ -15,6 +15,9 @@ import {
   Maximize,
   Minimize,
   MoreHorizontal,
+  CircleAlert,
+  CircleCheck,
+  LoaderCircle,
 } from "lucide-react";
 import { workspacePath } from "../../app/paths";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -139,6 +142,21 @@ const labels: Record<string, string> = {
   shape_diff: "外形差异",
 };
 const text = (value: string) => labels[value] || value;
+function resultTone(run: Run) {
+  if (["queued", "running"].includes(run.status)) return "progress";
+  if (run.error || ["failed", "interrupted"].includes(run.status)) return "error";
+  if (run.status !== "completed") return "review";
+  if (run.decision === "DIFFERENCES") return "diff";
+  if (run.decision === "MATCH" && !run.result?.issues.length) return "pass";
+  return "review";
+}
+function resultLabel(run: Run) {
+  if (run.error_code?.startsWith("QUALITY_")) return "照片质量未通过";
+  if (run.status !== "completed") return text(run.status);
+  if (resultTone(run) === "pass") return "无差异";
+  if (run.decision === "MATCH" || run.error) return "待复核";
+  return text(run.decision);
+}
 const when = (stamp: number) => new Date(stamp * 1000).toLocaleString();
 const key = () => crypto.randomUUID();
 const mediaURL = (task: string, sha: string) =>
@@ -515,12 +533,12 @@ function IssueDetails({
       <h2 id="li-issue-title">
         异常 {issue.id} · {text(issue.type)}
       </h2>
-      <p>{issue.description}</p>
+      <p className="li-diff">{issue.description}</p>
       <dl>
         <dt>标准原文</dt>
-        <dd>{issue.standardText || "未提供"}</dd>
+        <dd className={issue.standardText ? "li-diff" : ""}>{issue.standardText || "未提供"}</dd>
         <dt>实物文字</dt>
-        <dd>{issue.actualText || "未提供"}</dd>
+        <dd className={issue.actualText ? "li-diff" : ""}>{issue.actualText || "未提供"}</dd>
         <dt>严重程度</dt>
         <dd>{text(issue.severity) || "未提供"}</dd>
         <dt>模型置信度</dt>
@@ -1623,28 +1641,23 @@ export function LabelWorkspace() {
                     </div>
                   ) : null}
                   {run && (
-                    <header className="li-result-summary">
-                      <h2
-                        className={
-                          run.status === "completed" && run.decision === "MATCH"
-                            ? "li-pass"
-                            : run.decision === "DIFFERENCES"
-                              ? "li-diff"
-                              : ""
-                        }
-                      >
-                        {run.error_code?.startsWith("QUALITY_")
-                          ? "照片质量未通过"
-                          : run.status === "completed"
-                            ? text(run.decision)
-                            : text(run.status)}
+                    <header className={`li-result-summary li-state-${resultTone(run)}`}>
+                      <h2 aria-live="polite" aria-atomic="true">
+                        {["queued", "running"].includes(run.status) ? (
+                          <LoaderCircle className="li-status-spinner" size={22} aria-hidden="true" />
+                        ) : resultTone(run) === "pass" ? (
+                          <CircleCheck size={22} aria-hidden="true" />
+                        ) : (
+                          <CircleAlert size={22} aria-hidden="true" />
+                        )}
+                        {resultLabel(run)}
                       </h2>
-                      <span>
+                      {run.status === "completed" && run.result && !run.error && (
+                        <strong className="li-result-count">{run.result.issues.length} 项差异</strong>
+                      )}
+                      <span className="li-result-time">
                         {when(run.created_at)} ·{" "}
                         {run.elapsed?.toFixed(1) ?? "—"} 秒
-                        {run.result
-                          ? ` · ${run.result.issues.length} 项差异`
-                          : ""}
                       </span>
                       {run.result && (
                         <span className="li-model-score">
@@ -1696,7 +1709,7 @@ export function LabelWorkspace() {
                     {run ? (
                       <section className="li-results">
                         {run.error ? (
-                          <p role="alert">
+                          <p className="li-diff" role="alert">
                             {run.error_code?.startsWith("QUALITY_")
                               ? "尚未完成比对。"
                               : ""}
@@ -1704,11 +1717,17 @@ export function LabelWorkspace() {
                           </p>
                         ) : null}
                         {["queued", "running"].includes(run.status) ? (
-                          <p role="status">
+                          <p className="li-progress-message" role="status">
                             {isPdf && run.phase === "layout" ? "定位页面并检查可读性" : isPdf && run.phase === "compare" ? "对比页面" : text(run.phase || run.status)}…
                             可以关闭页面，结果会自动保存，请勿重复提交。
                           </p>
                         ) : null}
+                        {resultTone(run) === "pass" && (
+                          <p className="li-pass-message">
+                            <CircleCheck size={20} aria-hidden="true" />
+                            本次检测未发现差异
+                          </p>
+                        )}
                         {run.legacy_record_id ? (
                           <LegacyResult
                             id={run.legacy_record_id}
@@ -1728,16 +1747,19 @@ export function LabelWorkspace() {
                                   aria-pressed={issue === i.id}
                                   title={i.description}
                                 >
-                                  <strong className="li-issue-number">
-                                    {i.id}
-                                  </strong>
-                                  <strong className="li-issue-type">
-                                    {text(i.type)}
-                                  </strong>
-                                  <span className="li-issue-description">
-                                    {i.description ||
-                                      `标准：${i.standardText || "未提供"}；实物：${i.actualText || "未提供"}`}
+                                  <span className="li-issue-summary">
+                                    <strong className="li-issue-number">{i.id}</strong>
+                                    <strong className="li-issue-type">{text(i.type)}</strong>
+                                    <span className="li-issue-description">
+                                      {i.description || "请核对标准标签与实物标签"}
+                                    </span>
                                   </span>
+                                  {(i.standardText || i.actualText) && (
+                                    <span className="li-issue-comparison">
+                                      <span><span className="li-issue-label">标准标签：</span><strong className={i.standardText ? "" : "li-issue-unavailable"} title={i.standardText}>{i.standardText || "未提供"}</strong></span>
+                                      <span><span className="li-issue-label">实物标签：</span><strong className={i.actualText ? "" : "li-issue-unavailable"} title={i.actualText}>{i.actualText || "未提供"}</strong></span>
+                                    </span>
+                                  )}
                                 </button>
                                 <button
                                   className="li-issue-details"
@@ -1789,9 +1811,7 @@ export function LabelWorkspace() {
                       >
                         {when(r.created_at)} ·{" "}
                         {r.legacy_record_id ? "旧文字检验" : "Evolving"} ·{" "}
-                        {r.error_code?.startsWith("QUALITY_")
-                          ? "照片质量未通过"
-                          : text(r.decision)}{" "}
+                        <strong className={`li-history-status li-state-${resultTone(r)}`}>{resultLabel(r)}</strong>{" "}
                         · {text(r.status)} · 版本 {r.revision ?? "未留存"}
                       </button>
                     ))}
