@@ -72,6 +72,12 @@ Inspect the same-month official net total, full entry count and reconciliation
 delta; a current-month zero delta is provisional, not a final invoice audit.
 Details, error/staleness semantics and source limits are in [billing](billing.md).
 
+Volcengine commissioning must cover the actual flat or single List-only summary
+shape and reconcile its unique total with every imported detail. A working
+balance API alone does not certify the bill lane. Deploy format repairs only as
+a complete immutable release, retaining private credentials, account mappings
+and all financial snapshots on rollback; never patch production provider files.
+
 Before publishing private payer configuration, query the official balance with
 the existing explicitly authorized signer as the service user, verify its
 principal/currency, and compare fresh console evidence. Preserve the prior payer

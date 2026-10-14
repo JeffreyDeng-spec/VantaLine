@@ -31,6 +31,10 @@ PostgreSQL balance, bill, lease or audit storage. No new migration is added for
 configuration reload; snapshots and account mappings survive whole-release
 rollback, and older code may ignore the optional payer file.
 
+Volcengine summary-envelope compatibility changes only supplier normalization.
+No migration or historical rewrite is needed. Complete bills retain the same
+atomic publication boundary; rejected envelopes preserve the prior snapshot.
+
 Complete backend CI remains an explicitly dispatched verification under the temporary owner-authorized trigger policy. The coverage guard now checks manual verification triggers and the main-push immutable release policy, including an effective superseded-main rejection before packaging or installation. The frozen database concurrency, pagination and performance commands, isolated synthetic data and numeric acceptance thresholds remain unchanged; passing trigger checks alone does not establish database or production acceptance.
 
 Profile-cache extraction retains its existing JSON cache store and adds no database connection,

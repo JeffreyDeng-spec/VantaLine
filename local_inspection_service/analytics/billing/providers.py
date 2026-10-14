@@ -133,6 +133,13 @@ class ProviderReader:
             self.balance(payer)
             summary = client.cloud('ListBillOverviewByCategory',{'BillPeriod':period})
             summary_rows = field(summary,'List')
+            # The official API also returns one exact List-only envelope.
+            # Unwrap that observed shape once; mixed/deeper groups are unknown.
+            if (isinstance(summary_rows,list) and len(summary_rows)==1
+                    and isinstance(summary_rows[0],dict) and set(summary_rows[0])=={'List'}):
+                summary_rows = summary_rows[0]['List']
+            if not isinstance(summary_rows,list) or any(not isinstance(r,dict) or 'List' in r for r in summary_rows):
+                raise BillingError('invalid_provider_record')
             totals = [r for r in summary_rows if r.get('BillCategoryParent') in {'合计','total','Total'}]
             if len(totals) != 1:
                 raise BillingError('official_summary_unavailable')
