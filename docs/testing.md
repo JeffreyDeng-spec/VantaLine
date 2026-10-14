@@ -103,6 +103,16 @@ are not certified through mocks. `scripts/check_billing_connection.py` performs
 explicit read-only commissioning against fresh private console evidence.
 Details are in [billing](billing.md).
 
+Run `scripts/smoke_billing_volc_summary.py` for flat and single-envelope totals,
+refund precision, settlement currency, payer mismatch, malformed/mixed/deeper
+wrappers and absent/duplicate totals. Cover over 80 daily groups sharing the same
+supplier ID marker, exact duplicates and conflicting amounts within one group. Run
+`scripts/smoke_billing_volc_summary_source_contract.py` before the existing
+financial replay checks: the exact provider descendant and configuration guard
+are verified, both earlier fixtures stay immutable, and unknown source, guard
+or fixture mutations fail. Synthetic checks supplement actual official
+console/API reconciliation; they do not replace it.
+
 The backend CI coverage verifier follows the current owner-authorized trigger policy: correctness, performance, dependency preparation and runtime observation are manual-only; immutable releases run on main pushes. It verifies the exact main SHA binding and that the effective superseded-main rejection runs before packaging, deployment and publication. These trigger checks do not reduce the frozen 461 ordinary commands, 11 ordered performance-plan commands, numeric acceptance thresholds or required evidence archives.
 
 `python scripts/smoke_pipeline_trained_model_link.py` replays the v516 root linker when `VANTALINE_MODEL_LINK_BASELINE_SOURCE` points to its `server.py`; otherwise it checks the extracted candidate. Synthetic cases cover first-match identity, fallback fields, catalog rebinding, expression order and error partial effects without real models, PLC or paid calls.

@@ -37,7 +37,16 @@ Volcengine reads `QueryBalanceAcct`, `ListBillOverviewByCategory` and
 `ListBillDetail`. The single total-category row is selected without adding its
 already included categories again; legacy `PayableAmount/Currency` and explicit
 settlement `SettlePayableAmount/CurrencySettlement` pairings are supported without
-cross-currency fallback. Alibaba reads `QueryAccountBalance`, `QueryBillOverview`
+cross-currency fallback. The summary accepts either the original flat list or
+one List-only wrapper containing its category rows, as observed from the official
+API. Mixed, deeper or malformed wrappers are rejected. A missing or duplicate
+total remains unavailable; it is never inferred by summing included categories.
+Volcengine details are requested as daily billing-item aggregates. Their identity
+uses the existing documented day/payer/resource/billing-item dimensions, even
+when BillDetailId is present; that field can be a shared aggregate placeholder
+and is not exposed as a transaction record ID. Exact duplicate groups deduplicate;
+conflicting amounts for the same group reject the complete snapshot.
+Alibaba reads `QueryAccountBalance`, `QueryBillOverview`
 and token-paginated `DescribeInstanceBill`, avoiding the old 50,000-row API limit.
 Monthly Alibaba resources are labelled monthly aggregates, not dated individual
 transactions. Tencent reads `DescribeAccountBalance`,

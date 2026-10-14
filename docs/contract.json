@@ -180,7 +180,8 @@
         "scripts/check_billing_connection.py",
         "scripts/billing_*",
         "tests/backend_contract/billing_extension.json",
-        "tests/backend_contract/billing_configuration_extension.json"
+        "tests/backend_contract/billing_configuration_extension.json",
+        "tests/backend_contract/billing_volc_summary_extension.json"
       ],
       "required_docs": [
         "docs/billing.md",
