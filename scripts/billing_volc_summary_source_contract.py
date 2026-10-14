@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-FIXTURE_SHA256='94cb1129d350c52de71f836d799248f33aa01078c76435a39bd630b516a1bbfe'
+FIXTURE_SHA256='2f3fb65318f646fc1820239fdf846a4ffda8583590b6232d831319622c340e61'
 
 
 def fixture():

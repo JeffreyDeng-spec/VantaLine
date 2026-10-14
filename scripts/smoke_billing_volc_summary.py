@@ -24,7 +24,8 @@ class VolcSummary(unittest.TestCase):
         rows=[{'BillCategoryParent':'合计','Currency':'CNY','PayableAmount':'0.2'},
               {'BillCategoryParent':'消费','Currency':'CNY','PayableAmount':'0.3'},
               {'BillCategoryParent':'退款','Currency':'CNY','PayableAmount':'-0.1'}]
-        detail=[{'PayerID':'123','ExpenseDate':'2026-10-07','Currency':'CNY','PayableAmount':value,'BillDetailId':str(i)}
+        detail=[{'PayerID':'123','ExpenseDate':'2026-10-07','Currency':'CNY','PayableAmount':value,'BillDetailId':str(i),
+                 'BillCategory':'consume-use' if i==0 else 'refund-terminate'}
                 for i,value in enumerate(('0.3','-0.1'))]
         for summary in (rows,[{'List':rows}]):
             with self.subTest(summary=summary):
@@ -51,6 +52,17 @@ class VolcSummary(unittest.TestCase):
                         [{'List':[row]},row],[{'List':[row]},{'List':[row]}]):
             with self.subTest(summary=summary),self.assertRaises(BillingError) as error:self.read(summary)
             self.assertEqual(error.exception.code,'invalid_provider_record')
+
+    def test_daily_aggregates_do_not_treat_shared_markers_as_record_ids(self):
+        rows=[{'PayerID':'123','ExpenseDate':'2026-10-07','Currency':'CNY',
+               'PayableAmount':'0.01','ConfigName':str(i),'BillDetailId':'aggregate-marker'} for i in range(81)]
+        summary=[{'List':[{'BillCategoryParent':'合计','Currency':'CNY','PayableAmount':'0.81'}]}]
+        bills=self.read(summary,rows=[*rows,rows[0]])
+        self.assertEqual(len(bills.entries),81)
+        self.assertEqual(total(r['net'] for r in bills.entries),'0.81')
+        self.assertTrue(all(r['provider_record_id'] is None for r in bills.entries))
+        with self.assertRaises(BillingError) as error:self.read(summary,rows=[rows[0],{**rows[0],'PayableAmount':'0.02'}])
+        self.assertEqual(error.exception.code,'conflicting_provider_record')
 
     def test_missing_and_duplicate_totals_are_not_fabricated(self):
         row={'BillCategoryParent':'合计','Currency':'CNY','PayableAmount':'1'}

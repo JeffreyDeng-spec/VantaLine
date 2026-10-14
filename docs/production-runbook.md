@@ -77,6 +77,8 @@ shape and reconcile its unique total with every imported detail. A working
 balance API alone does not certify the bill lane. Deploy format repairs only as
 a complete immutable release, retaining private credentials, account mappings
 and all financial snapshots on rollback; never patch production provider files.
+Check that shared aggregate ID markers do not collapse distinct billing items;
+compare the complete imported sum with the official unique summary total.
 
 Before publishing private payer configuration, query the official balance with
 the existing explicitly authorized signer as the service user, verify its

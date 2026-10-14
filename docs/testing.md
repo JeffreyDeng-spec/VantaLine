@@ -105,7 +105,8 @@ Details are in [billing](billing.md).
 
 Run `scripts/smoke_billing_volc_summary.py` for flat and single-envelope totals,
 refund precision, settlement currency, payer mismatch, malformed/mixed/deeper
-wrappers and absent/duplicate totals. Run
+wrappers and absent/duplicate totals. Cover over 80 daily groups sharing the same
+supplier ID marker, exact duplicates and conflicting amounts within one group. Run
 `scripts/smoke_billing_volc_summary_source_contract.py` before the existing
 financial replay checks: the exact provider descendant and configuration guard
 are verified, both earlier fixtures stay immutable, and unknown source, guard

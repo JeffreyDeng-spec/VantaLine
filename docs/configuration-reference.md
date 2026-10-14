@@ -69,6 +69,8 @@ The Volcengine List-only summary envelope adds no setting, credential type or
 permission. Its configured AK/SK still require only the three financial query
 actions. Unknown wrappers remain errors; operators must not substitute model API
 keys or broaden permissions to compensate for a response-format mismatch.
+GroupPeriod=1 still requests daily billing-item aggregates. Shared supplier ID
+markers do not change this granularity or require an operator override.
 
 Pipeline trained-model linking keeps existing catalog visibility, fallback model-ID construction and model-path truthiness unchanged. Source manifest v116 retains the same 312 entries because `pipeline/training_links.py` was already listed; new task fingerprints reflect its changed source, while historical snapshots, model bindings and secrets are untouched.
 

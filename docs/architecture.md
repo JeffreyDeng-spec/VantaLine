@@ -64,6 +64,8 @@ Volcengine summary normalization accepts a flat category list or one exact
 List-only envelope. It unwraps once before the existing unique-total and explicit
 currency checks; unsupported groups fail before any bill snapshot publication.
 Financial HTTP, secret resolution, worker admission and training remain separate.
+Daily Volcengine rows use aggregation dimensions as identity, rather than an
+unverified BillDetailId transaction identity. Snapshot conflict fencing is retained.
 
 BillingConfiguration supplies two narrow callables for validated operator payer
 configuration and secret resolution. It reads private account mappings at call
