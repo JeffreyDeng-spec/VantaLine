@@ -119,6 +119,7 @@ async function main() {
       failPreview = false,
       failFull = false,
       holdFull,
+      completeImmediately = false,
       releaseFull,
       owner = "fixture";
     const requestRuns = new Map();
@@ -252,7 +253,7 @@ async function main() {
       }
       if (p.endsWith("/runs") && req.method() === "POST") {
         submits++;
-        task.runs.unshift(makeRun("run-" + submits));
+        task.runs.unshift({ ...makeRun("run-" + submits, completeImmediately ? "completed" : "running"), ...(completeImmediately ? { result, decision: "DIFFERENCES" } : {}) });
         const requestId = /name="request_id"\r\n\r\n([^\r]+)/.exec(
           req.postDataBuffer().toString(),
         )[1];
@@ -370,7 +371,50 @@ async function main() {
     assert.ok(await image().evaluate((img) => img === window.__photoNode));
     await page.getByRole("button", { name: "放大实物图", exact: true }).click();
     await page.getByRole("dialog").waitFor();
-    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => {
+      const img = document.querySelector(".li-zoom-photo img");
+      const frame = document.querySelector(".li-zoom-photo").getBoundingClientRect();
+      const stage = document.querySelector(".li-zoom-images").getBoundingClientRect();
+      return img?.naturalWidth > 0 && Math.abs(frame.width / frame.height / (img.naturalWidth / img.naturalHeight) - 1) < .01 && (Math.abs(frame.height - stage.height) < 2 || Math.abs(frame.width - stage.width) < 2);
+    });
+    const zoomStage = await page.locator(".li-zoom-images").boundingBox();
+    const zoomImage = await page.locator(".li-zoom-photo").boundingBox();
+    assert.ok(Math.abs(zoomImage.height - zoomStage.height) < 2 || Math.abs(zoomImage.width - zoomStage.width) < 2);
+    assert.ok(zoomImage.height > 750); // Native-size photos are enlarged to the screen.
+    const cursor = { x: zoomStage.x + zoomStage.width / 2 + 60, y: zoomStage.y + zoomStage.height / 2 + 40 };
+    const anchor = { x: (cursor.x - zoomImage.x) / zoomImage.width, y: (cursor.y - zoomImage.y) / zoomImage.height };
+    await page.mouse.move(cursor.x, cursor.y);
+    await page.mouse.wheel(0, -400);
+    await page.waitForFunction(() => Number(document.querySelector(".li-zoom-images").dataset.scale) > 2);
+    const enlarged = await page.locator(".li-zoom-photo").boundingBox();
+    assert.ok(Math.abs((cursor.x - enlarged.x) / enlarged.width - anchor.x) < .005);
+    assert.ok(Math.abs((cursor.y - enlarged.y) / enlarged.height - anchor.y) < .005);
+    const transformed = await page.locator(".li-zoom-photo").getAttribute("style");
+    await page.mouse.down(); await page.mouse.move(cursor.x + 100, cursor.y + 70, { steps: 5 }); await page.mouse.up();
+    assert.equal(await page.getByRole("dialog").count(), 1);
+    assert.notEqual(await page.locator(".li-zoom-photo").getAttribute("style"), transformed);
+    await page.mouse.wheel(0, -10000);
+    await page.waitForFunction(() => Number(document.querySelector(".li-zoom-images").dataset.scale) === 8);
+    await page.mouse.down(); await page.mouse.move(cursor.x + 2500, cursor.y + 2500, { steps: 5 }); await page.mouse.up();
+    const bounded = await page.locator(".li-zoom-photo").boundingBox();
+    assert.ok(bounded.x <= zoomStage.x + 1 && bounded.y <= zoomStage.y + 1);
+    assert.ok(bounded.x + bounded.width >= zoomStage.x + zoomStage.width - 1);
+    assert.ok(bounded.y + bounded.height >= zoomStage.y + zoomStage.height - 1);
+    await page.keyboard.press("0");
+    await page.waitForFunction(() => Number(document.querySelector(".li-zoom-images").dataset.scale) === 1);
+    assert.equal(Number(await page.locator(".li-zoom-images").getAttribute("data-scale")), 1);
+    await page.screenshot({ path: path.join(output, "zoom-fitted-landscape.png") });
+    const beforeCloseSubmits = submits;
+    await page.mouse.click(zoomStage.x + zoomStage.width / 2, zoomStage.y + zoomStage.height / 2);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    assert.equal(submits, beforeCloseSubmits);
+    assert.ok(await page.getByRole("button", { name: "放大实物图", exact: true }).evaluate(el => el === document.activeElement));
+    await page.getByRole("button", { name: "放大标准图", exact: true }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.mouse.click(4, 4);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    assert.ok(await page.getByRole("button", { name: "放大标准图", exact: true }).evaluate(el => el === document.activeElement));
     assert.equal(requests.filter((r) => r.sha.startsWith("actual")).length, 0);
     await page.screenshot({ path: path.join(output, "local-result.png") });
     // Leaving the run in the SPA releases its blob and never reuses it for another run.
@@ -426,6 +470,10 @@ async function main() {
     for (let i = 0; i < 100 && !releaseFull; i++)
       await new Promise((r) => setTimeout(r, 20));
     assert.ok(releaseFull);
+    await page.locator(".li-zoom-images").hover();
+    await page.mouse.wheel(0, -400);
+    await page.waitForFunction(() => Number(document.querySelector(".li-zoom-images").dataset.scale) > 2);
+    const retainedScale = await page.locator(".li-zoom-images").getAttribute("data-scale");
     releaseFull();
     holdFull = false;
     await page.getByRole("button", { name: "重试高清图" }).waitFor();
@@ -435,6 +483,8 @@ async function main() {
       .getByRole("dialog")
       .getByAltText("原尺寸图片")
       .waitFor({ state: "visible" });
+    assert.equal(await page.locator(".li-zoom-images").getAttribute("data-scale"), retainedScale);
+    assert.equal(await page.getByRole("dialog").count(), 1);
     await page.keyboard.press("Escape");
     failPreview = true;
     const beforeFallback = requests.filter(
@@ -485,6 +535,7 @@ async function main() {
     await page.getByRole("button", { name: "重新拍照", exact: true }).click();
     await page.waitForFunction(() => document.querySelector(".li-camera video")?.videoWidth > 0);
     const opens = await page.evaluate(() => window.__cameraOpens);
+    await page.locator(".li-live-video").evaluate(video => { window.__video = video; window.__stream = video.srcObject; });
     const captures = await page.evaluate(() => window.__captures);
     // The primary action captures and submits once, even under a double click.
     await page.getByRole("button", { name: "开始检测", exact: true }).dblclick();
@@ -499,7 +550,7 @@ async function main() {
     task.runs[0] = { ...task.runs[0], status: "completed", phase: "completed", result };
     await page.locator(".li-actual-panel .li-box-number").waitFor();
     assert.ok(await image().evaluate((img) => img === window.__cameraNode));
-    assert.equal(await page.locator("video:visible").count(), 0);
+    assert.equal(await page.locator(".li-camera-still").count(), 1);
     await page.screenshot({ path: path.join(output, "continuous-result.png") });
     await page.getByRole("button", { name: "检测下一件", exact: true }).click();
     await page.locator("video:visible").waitFor();
@@ -515,6 +566,43 @@ async function main() {
     task.runs[0] = { ...task.runs[0], status: "completed", phase: "completed", result };
     await page.locator(".li-actual-panel .li-box-number").waitFor();
     await page.getByRole("button", { name: "检测下一件", exact: true }).click();
+    completeImmediately = true;
+    for (let item = 3; item <= 20; item++) {
+      await submit();
+      assert.equal(await page.evaluate(() => window.__captures), captures + item);
+      assert.equal(await page.evaluate(() => window.__cameraOpens), opens);
+      assert.ok(await page.locator(".li-live-video").evaluate(video => video === window.__video && video.srcObject === window.__stream && !video.paused && video.srcObject.getVideoTracks()[0].readyState === "live"));
+      await page.getByRole("button", { name: "检测下一件", exact: true }).click();
+      assert.equal(await page.locator(".li-camera-still").count(), 0);
+    }
+    completeImmediately = false;
+    assert.equal(submits, 22);
+    // Block the query navigation after fresh() clears local evidence. The old
+    // run URL remains visible for 500 ms; the stream must not follow read-only state.
+    await page.getByRole("tab", { name: /^历史记录/ }).click();
+    await page.locator(".li-history button").first().click();
+    await loaded();
+    await page.evaluate(async () => {
+      const { versionCoordinator } = await import("/src/features/version/runtime.ts");
+      const oldBlock = versionCoordinator.shouldBlockNavigation, oldGuard = versionCoordinator.guard;
+      versionCoordinator.shouldBlockNavigation = () => true;
+      versionCoordinator.guard = () => new Promise(resolve => {
+        window.__resumeRoute = () => {
+          versionCoordinator.shouldBlockNavigation = oldBlock;
+          versionCoordinator.guard = oldGuard;
+          resolve(true);
+        };
+      });
+    });
+    await page.getByRole("button", { name: "检测下一件", exact: true }).click();
+    await page.waitForFunction(() => typeof window.__resumeRoute === "function");
+    await page.waitForTimeout(500);
+    assert.ok(new URL(page.url()).searchParams.has("run"));
+    assert.ok(await page.locator(".li-live-video").evaluate(video => video === window.__video && video.srcObject === window.__stream && !video.paused && video.srcObject.getVideoTracks()[0].readyState === "live"));
+    await page.evaluate(() => window.__resumeRoute());
+    await page.waitForURL(url => !url.searchParams.has("run"));
+    assert.equal(await page.evaluate(() => window.__cameraOpens), opens);
+    console.log("continuous camera PASS: 20 fresh captures, one stream, delayed navigation preserved");
     await page.getByRole("button", { name: "关闭摄像头", exact: true }).click();
     assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isDisabled());
     assert.equal(await page.evaluate(() => window.__tracks.filter(t => t.readyState === "live").length), 0);
@@ -536,7 +624,7 @@ async function main() {
     assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isDisabled());
     await upload();
     assert.ok(await page.getByRole("button", { name: "开始检测", exact: true }).isEnabled());
-    assert.equal(await page.evaluate(() => window.__captures), captures + 2);
+    assert.equal(await page.evaluate(() => window.__captures), captures + 20);
     // Invalid local image can still display a server preview after successful upload.
     await go();
     await select();
@@ -616,6 +704,21 @@ async function main() {
       await go();
       await select();
       await upload(jpeg, `orientation-${orientation}.jpg`, "image/jpeg");
+      if (orientation === 6) {
+        await page.getByRole("button", { name: "放大待检实物图", exact: true }).click();
+        await page.waitForFunction(() => {
+          const img = document.querySelector(".li-zoom-photo img");
+          const frame = document.querySelector(".li-zoom-photo").getBoundingClientRect();
+          const stage = document.querySelector(".li-zoom-images").getBoundingClientRect();
+          return img?.naturalWidth === 40 && Math.abs(frame.width / frame.height - .5) < .01 && Math.abs(frame.height - stage.height) < 2;
+        });
+        const portrait = await page.locator(".li-zoom-photo").boundingBox();
+        const viewport = await page.locator(".li-zoom-images").boundingBox();
+        assert.ok(Math.abs(portrait.height - viewport.height) < 2);
+        assert.ok(Math.abs(portrait.width / portrait.height - .5) < .01);
+        await page.screenshot({ path: path.join(output, "zoom-fitted-portrait.png") });
+        await page.getByRole("button", { name: "关闭放大", exact: true }).click();
+      }
       const pixels = await image().evaluate((img) => {
         const c = document.createElement("canvas");
         c.width = img.naturalWidth;

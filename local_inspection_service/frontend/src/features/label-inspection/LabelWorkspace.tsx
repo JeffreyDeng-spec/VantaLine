@@ -30,6 +30,7 @@ import {
   type SavedComparison,
 } from "../text-compare/ComparisonResult";
 import "./label-workspace.css";
+import { ImageZoom, type ZoomImage } from "./ImageZoom";
 import { ManualHistory, type ManualHistoryData } from "./ManualHistory";
 
 const API = "/api/label-inspection";
@@ -307,6 +308,8 @@ function Camera({
   openRequest,
   showLive,
   editable,
+  sessionEnabled,
+  autoOpen,
   readOnly = false,
   disabled = false,
 }: {
@@ -320,6 +323,8 @@ function Camera({
   openRequest: number;
   showLive: boolean;
   editable: boolean;
+  sessionEnabled: boolean;
+  autoOpen: boolean;
   readOnly?: boolean;
   disabled?: boolean;
 }) {
@@ -354,11 +359,11 @@ function Camera({
     };
   }, []);
   useEffect(() => {
-    if (readOnly) stop();
-    else if (!stream.current && !document.hidden) void start();
-  }, [readOnly, openRequest]);
+    if (!sessionEnabled) stop();
+    else if (autoOpen && !stream.current && !document.hidden) void start();
+  }, [sessionEnabled, autoOpen, openRequest]);
   async function start(nextDevice = device) {
-    if (readOnly) return;
+    if (!sessionEnabled || readOnly) return;
     stop();
     const token = generation.current;
     setStarting(true);
@@ -432,9 +437,9 @@ function Camera({
   const live = showLive && (active || starting);
   return (
     <div className="li-camera">
-      <div className="li-visual">
-        <video ref={video} muted playsInline hidden={!live} />
-        {!live ? preview : null}
+      <div className="li-visual li-camera-visual">
+        <video ref={video} className="li-live-video" muted playsInline aria-hidden={!live} />
+        {!live ? <div className="li-camera-still">{preview}</div> : null}
       </div>
       {!readOnly && editable && (
         <div className="li-tools">
@@ -593,76 +598,6 @@ type PhotoLease = {
   requestId?: string;
   runId?: string;
 };
-type ZoomImage = { preview: string; full: string };
-function ImageZoom({
-  image,
-  onClose,
-}: {
-  image: ZoomImage;
-  onClose: () => void;
-}) {
-  const [loaded, setLoaded] = useState(image.preview === image.full);
-  const [failed, setFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  return (
-    <div
-      className="li-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="图片放大"
-      onClick={onClose}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
-      <button autoFocus onClick={onClose}>
-        关闭放大
-      </button>
-      <div className="li-zoom-images" onClick={(e) => e.stopPropagation()}>
-        <img
-          src={image.preview}
-          alt="图片预览"
-          style={{
-            visibility:
-              loaded && image.preview !== image.full ? "hidden" : "visible",
-          }}
-        />
-        {image.preview !== image.full && (
-          <img
-            key={attempt}
-            src={image.full}
-            alt="原尺寸图片"
-            style={{ visibility: loaded ? "visible" : "hidden" }}
-            onLoad={() => {
-              setLoaded(true);
-              setFailed(false);
-            }}
-            onError={() => setFailed(true)}
-          />
-        )}
-      </div>
-      {!loaded && (
-        <div className="li-zoom-status" onClick={(e) => e.stopPropagation()}>
-          {failed ? (
-            <>
-              <span>高清图加载失败，当前显示预览图。</span>
-              <button
-                onClick={() => {
-                  setFailed(false);
-                  setAttempt((v) => v + 1);
-                }}
-              >
-                重试高清图
-              </button>
-            </>
-          ) : (
-            <span role="status">正在加载高清图…</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 export function LabelWorkspace() {
   const { user, logout } = useAuth();
   const cache = useQueryClient();
@@ -1356,6 +1291,87 @@ export function LabelWorkspace() {
                   </button>
                 </div>
                 <div className={`li-columns li-show-${imageTab}`}>
+                  <section className="li-panel li-actual-panel">
+                    <header>
+                      <h2>{isPdf ? "实物页面" : "实物标签"}</h2>
+                      <span>
+                        {run ? "检测照片 · 点击放大" : "拍照或上传一张实物照片"}
+                      </span>
+                    </header>
+                    <Camera
+                      key={user.id + ":" + taskId}
+                      captureRef={cameraCapture}
+                      onReady={setCameraReady}
+                      onPreview={() => {
+                        setActual(null);
+                        setLocalPhoto(null);
+                        setZoom(null);
+                      }}
+                      cameraKey={`label-camera:${user.id}`}
+                      openRequest={cameraOpenRequest}
+                      showLive={!runId && !actual}
+                      editable={!runId}
+                      sessionEnabled={!!value.revision}
+                      autoOpen={!runId}
+                      readOnly={!value.revision || !!runId}
+                      disabled={busy || !!pending || !!running}
+                      onError={fail}
+                      preview={
+                        <>
+                          {actualDisplay ? (
+                            <Evidence
+                              url={actualDisplay}
+                              fallbackUrls={[actualPreview, actualFull]}
+                              title={runId ? "实物图" : "待检实物图"}
+                              onZoom={(display) =>
+                                setZoom({
+                                  preview: display,
+                                  full:
+                                    display === photoLease?.url
+                                      ? display
+                                      : actualFull || display,
+                                })
+                              }
+                              size={run?.actual?.size}
+                              crop={run?.crop}
+                              boxes={run?.result?.issues.flatMap((i) =>
+                                i.actual_box
+                                  ? [{ id: i.id, box: i.actual_box }]
+                                  : [],
+                              )}
+                              selectedIssue={issue}
+                            />
+                          ) : (
+                            <div className="li-placeholder">
+                              {runId ? "原图缺失" : "等待实物照片"}
+                            </div>
+                          )}
+                          {run?.scope && (
+                            <p className={run.crop ? "li-warning" : ""}>
+                              {run.error_code?.startsWith("QUALITY_")
+                                ? "尚未完成比对；框线仅表示布局选中范围。"
+                                : `${run.scope}${run.crop ? (isPdf ? "；框外内容未检测。" : "；框外其他标签没有检测。") : ""}`}
+                            </p>
+                          )}
+                        </>
+                      }
+                      tools={
+                        <FileDropZone
+                          accept="image/*"
+                          disabled={busy || !!running || !!pending}
+                          ariaLabel="上传实物照片"
+                          onFiles={(files) => {
+                            resumeAfterPicker();
+                            if (files[0]) photo(files[0]);
+                          }}
+                        >
+                          {actual
+                            ? `重新上传 · ${actual.name}`
+                            : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
+                        </FileDropZone>
+                      }
+                    />
+                  </section>
                   <section className="li-panel li-standard-panel">
                     <header>
                       <h2>{isPdf ? "标准页面" : "标准标签"}</h2>
@@ -1497,85 +1513,6 @@ export function LabelWorkspace() {
                         </FileDropZone>
                       </div>
                     ) : null}
-                  </section>
-                  <section className="li-panel li-actual-panel">
-                    <header>
-                      <h2>{isPdf ? "实物页面" : "实物标签"}</h2>
-                      <span>
-                        {run ? "检测照片 · 点击放大" : "拍照或上传一张实物照片"}
-                      </span>
-                    </header>
-                    <Camera
-                      key={user.id + ":" + taskId}
-                      captureRef={cameraCapture}
-                      onReady={setCameraReady}
-                      onPreview={() => {
-                        setActual(null);
-                        setLocalPhoto(null);
-                        setZoom(null);
-                      }}
-                      cameraKey={`label-camera:${user.id}`}
-                      openRequest={cameraOpenRequest}
-                      showLive={!runId && !actual}
-                      editable={!runId}
-                      readOnly={!value.revision || (!!runId && !photoLease)}
-                      disabled={busy || !!pending || !!running}
-                      onError={fail}
-                      preview={
-                        <>
-                          {actualDisplay ? (
-                            <Evidence
-                              url={actualDisplay}
-                              fallbackUrls={[actualPreview, actualFull]}
-                              title={runId ? "实物图" : "待检实物图"}
-                              onZoom={(display) =>
-                                setZoom({
-                                  preview: display,
-                                  full:
-                                    display === photoLease?.url
-                                      ? display
-                                      : actualFull || display,
-                                })
-                              }
-                              size={run?.actual?.size}
-                              crop={run?.crop}
-                              boxes={run?.result?.issues.flatMap((i) =>
-                                i.actual_box
-                                  ? [{ id: i.id, box: i.actual_box }]
-                                  : [],
-                              )}
-                              selectedIssue={issue}
-                            />
-                          ) : (
-                            <div className="li-placeholder">
-                              {runId ? "原图缺失" : "等待实物照片"}
-                            </div>
-                          )}
-                          {run?.scope && (
-                            <p className={run.crop ? "li-warning" : ""}>
-                              {run.error_code?.startsWith("QUALITY_")
-                                ? "尚未完成比对；框线仅表示布局选中范围。"
-                                : `${run.scope}${run.crop ? (isPdf ? "；框外内容未检测。" : "；框外其他标签没有检测。") : ""}`}
-                            </p>
-                          )}
-                        </>
-                      }
-                      tools={
-                        <FileDropZone
-                          accept="image/*"
-                          disabled={busy || !!running || !!pending}
-                          ariaLabel="上传实物照片"
-                          onFiles={(files) => {
-                            resumeAfterPicker();
-                            if (files[0]) photo(files[0]);
-                          }}
-                        >
-                          {actual
-                            ? `重新上传 · ${actual.name}`
-                            : "拖入实物图片，或点击上传（≤ 10 MiB / 1600 万像素）"}
-                        </FileDropZone>
-                      }
-                    />
                   </section>
                 </div>
                 <div

@@ -566,7 +566,8 @@
   min-height: 0;
   height: auto;
 }
-.li-visual > p {
+.li-visual > p,
+.li-camera-still > p {
   margin: 4px 0 0;
   font-size: 12px;
   flex-shrink: 0;
@@ -1116,3 +1117,18 @@
 .li-manual-history { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px; }
 .li-manual-history article { border-top: 1px solid #394658; padding: 12px 0; }
 .li-manual-history .li-modal img { max-width: 90vw; max-height: 85dvh; object-fit: contain; }
+
+
+/* Live video keeps playing beneath the immutable evidence layer. */
+.li-camera-visual { position: relative; isolation: isolate; }
+.li-camera-visual .li-live-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.li-camera-still { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; min-height: 0; background: #1a212c; }
+
+.li-modal.li-photo-viewer { padding: 12px; display: flex; flex-direction: column; align-items: stretch; overflow: hidden; }
+.li-zoom-toolbar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; min-height: 44px; padding-bottom: 8px; color: #b6c6dc; }
+.li-zoom-toolbar button { margin-left: auto; flex-shrink: 0; }
+.li-photo-viewer .li-zoom-images { position: relative; flex: 1; min-width: 0; min-height: 0; max-width: none; max-height: none; overflow: hidden; touch-action: none; }
+.li-zoom-photo { position: absolute; top: 50%; left: 50%; transform-origin: center; display: grid; user-select: none; pointer-events: none; }
+.li-photo-viewer .li-zoom-photo img { grid-area: 1 / 1; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; }
+.li-photo-viewer .li-zoom-status { bottom: 16px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); }
+@media (max-width: 600px) { .li-zoom-toolbar { font-size: 12px; gap: 6px; } .li-modal.li-photo-viewer { padding: 8px; } }

@@ -54,6 +54,7 @@ let browser;
  await page.locator('input[type=file]').setInputFiles({name:'test.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:Buffer.from('fixture')});
  await page.getByRole('button',{name:/测试订单.*标准版本/}).waitFor();assert.ok(await page.evaluate(()=>document.fullscreenElement?.classList.contains('label-workspace')));assert.equal(await page.evaluate(()=>window.__fullscreenRequests),2);await page.getByText('图片内容无法解码',{exact:true}).waitFor();assert.ok(await page.getByRole('button',{name:'选择标准 2',exact:true}).isDisabled());
  await page.getByRole('button',{name:'选择标准 1',exact:true}).click();await page.getByRole('button',{name:'返回缩略图'}).waitFor();
+ assert.ok(await page.locator('.li-actual-panel').evaluate(el=>el.getBoundingClientRect().left<document.querySelector('.li-standard-panel').getBoundingClientRect().left));
  await page.getByLabel('上传实物照片').locator('input').setInputFiles({name:'actual.png',mimeType:'image/png',buffer:png});
  await page.getByRole('button',{name:'开始检测',exact:true}).dblclick();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);
  await page.reload();await page.getByText('识别标签布局…',{exact:false}).waitFor();assert.equal(submits,1);assert.equal(diagnostics,0);assert.equal(await page.evaluate(()=>window.__fullscreenRequests),0);
@@ -96,7 +97,7 @@ let browser;
  task.runs[0]=differenceSaved;await page.reload();await page.getByText('缺少 MODEL 行',{exact:true}).waitFor();
  await page.getByText('检测编号：run-1',{exact:true}).waitFor();assert.equal(await page.getByText(/调用诊断/).count(),0);assert.equal(await page.locator('.li-results pre').count(),0);assert.equal(diagnostics,0);
  await page.screenshot({path:path.join(output,'desktop-difference.png'),fullPage:true});
- await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('dialog').count(),0);
+ await page.getByRole('button',{name:'放大实物图',exact:true}).click();await page.getByRole('dialog').waitFor();await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});assert.equal(await page.getByRole('dialog').count(),0);
  await page.getByRole('button',{name:'检测下一件',exact:true}).click();
  await page.waitForFunction(()=>document.querySelector('.li-camera video')?.videoWidth>0&&!document.querySelector('.li-detect button').disabled);
  assert.equal(await page.locator('video:visible').count(),1);
@@ -107,15 +108,16 @@ let browser;
  // Readable evidence rows: six abnormalities, one unlocated item, local overflow.
  task.runs[0].result.issues=Array.from({length:6},(_,i)=>({...task.runs[0].result.issues[0],id:i+1,
   description:`异常 ${i+1}：型号文字与标准不一致，请核对实际印刷内容。`,
-  actual_box:i===0?undefined:[.2,.1+i*.1,.25,.08]}));
+  actual_box:i===0?undefined:[.2,.1+i*.1,.25,.08],reference_box:i===0?undefined:[.15,.1+i*.1,.25,.08]}));
  await page.reload();await page.locator('.li-issue').nth(5).waitFor();
- assert.equal(await page.locator('.li-box-number').count(),5);
- await page.locator('.li-issue-line').nth(2).click();assert.equal(await page.locator('.li-box-number.selected').textContent(),'3');
+ assert.equal(await page.locator('.li-actual-panel .li-box-number').count(),5);assert.equal(await page.locator('.li-standard-panel .li-box-number').count(),5);
+ await page.locator('.li-issue-line').nth(2).click();assert.equal(await page.locator('.li-actual-panel .li-box-number.selected').textContent(),'3');assert.equal(await page.locator('.li-standard-panel .li-box-number.selected').textContent(),'3');
  // Fixed geometry, actual image/overlay fit and local overflow across target sizes.
  const cases=[[1920,1080],[1440,900],[1366,768],[1024,768],[390,844],[683,384]];
  for(const [width,height] of cases){
   await page.setViewportSize({width,height});
   await page.waitForFunction(()=>[...document.querySelectorAll('.li-image img')].filter(i=>i.getBoundingClientRect().width>0).every(i=>{const r=i.getBoundingClientRect();return i.naturalWidth>0&&Math.abs(r.width/r.height/(i.naturalWidth/i.naturalHeight)-1)<.01;}));
+  if(width>720)assert.ok(await page.locator('.li-actual-panel').evaluate(el=>el.getBoundingClientRect().left<document.querySelector('.li-standard-panel').getBoundingClientRect().left));
   const geometry=await page.evaluate(()=>{
    const shell=document.querySelector('.li-fixed'), button=document.querySelector('.li-result-summary button');
    const images=[...document.querySelectorAll('.li-image img')].filter(e=>e.getBoundingClientRect().width>0);
