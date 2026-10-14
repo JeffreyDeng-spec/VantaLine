@@ -1017,3 +1017,27 @@ notice appears only after two seconds without acknowledgement or a recovery-read
 error. Existing read-only polling, request identity, uncertain-outcome recovery
 and explicit same-request resubmission remain; no model call is automatically
 replayed. Results stay visible until the operator switches to the next item.
+
+
+## Label camera lifetime and image viewer
+
+**Status: Authoritative.** The primary `/workspace/label-inspection` bench places
+the complete actual-image/camera/upload panel on the left and the complete
+standard/gallery/maintenance panel on the right. Header, detection/results dock,
+status colors and narrow-screen standard/actual tabs retain their behavior.
+Camera ownership is scoped to the account/task, independent of result read-only
+state or a local-photo lease. Live video stays mounted and playing beneath an
+opaque still-evidence layer; next item removes that layer without reopening a
+live stream, including when query navigation is delayed. Direct history entry
+does not request a camera. Existing explicit close, hidden-page, account/task
+exit, version drain and device-loss cleanup remain in force.
+
+The shared standard/actual viewer fits and may upscale the complete oriented image
+to the available viewport. Wheel zoom is cursor-anchored, 1–8 times the fitted
+size, with bounded left-button panning. Movement beyond six CSS pixels is a drag
+and does not dismiss; a left click on the picture or background dismisses without
+replaying a click underneath. Close and Escape remain, and unmodified `0` restores
+fit. Resize refits the image. Full-resolution loading/fallback/retry preserve the
+view; retry does not dismiss. Closing restores focus to the connected trigger,
+with result selection/scroll/fullscreen preserved. No image, detection, API,
+storage or PLC-dispatch semantics change.

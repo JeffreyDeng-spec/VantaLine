@@ -3470,3 +3470,34 @@ For an installed Chrome use `LABEL_TEST_BROWSER=chrome`;
 `LABEL_TEST_RUNTIME` may point to a shared Playwright package. The workspace
 fixture also invokes image reuse: run it alone, or assign a separate
 `LABEL_IMAGE_PORT` when running the image fixture concurrently.
+
+
+## Label camera lifetime and image viewer
+
+**Status: Authoritative.** The primary `/workspace/label-inspection` bench places
+the complete actual-image/camera/upload panel on the left and the complete
+standard/gallery/maintenance panel on the right. Header, detection/results dock,
+status colors and narrow-screen standard/actual tabs retain their behavior.
+Camera ownership is scoped to the account/task, independent of result read-only
+state or a local-photo lease. Live video stays mounted and playing beneath an
+opaque still-evidence layer; next item removes that layer without reopening a
+live stream, including when query navigation is delayed. Direct history entry
+does not request a camera. Existing explicit close, hidden-page, account/task
+exit, version drain and device-loss cleanup remain in force.
+
+See [text inspection](text-inspection-v2.md#label-camera-lifetime-and-image-viewer)
+for the viewer's fitted-image, 1–8× cursor zoom, bounded drag, click/keyboard close,
+high-resolution retry and focus-restoration contract. No server/PLC configuration
+or API schema changes.
+
+`LABEL_TEST_BROWSER=chrome node scripts/test_label_workspace_ui.cjs` includes the
+image-reuse fixture. Verify 20 fresh captures with one video element/stream and
+no extra camera request, including a deliberately delayed router-blocker
+transition after local evidence is cleared. Check full panel order and marker
+ownership across desktop/fullscreen/narrow layouts. Viewer cases cover landscape
+and EXIF portrait fit, cursor anchoring, 8× cap, pan bounds, drag suppression,
+click/Escape/button close, `0` reset, retry without dismissal/view reset, and no
+underlying submission or evidence replacement. Run frontend typecheck/build,
+media/PLC/frontend/release/docs contracts and diff checks. Synthetic browser
+fixtures perform no physical camera/PLC operations or paid model calls; on-site
+hardware verification remains separate.

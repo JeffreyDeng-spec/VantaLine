@@ -2057,3 +2057,22 @@ notice retains the existing request-ID recovery contract. See
 The selected camera device is remembered in browser session storage per account
 (`label-camera:<user-id>`), not in server or PLC configuration. Browser camera
 permission is still required. Uploaded-image input remains available on denial.
+
+
+## Label camera lifetime and image viewer
+
+**Status: Authoritative.** The primary `/workspace/label-inspection` bench places
+the complete actual-image/camera/upload panel on the left and the complete
+standard/gallery/maintenance panel on the right. Header, detection/results dock,
+status colors and narrow-screen standard/actual tabs retain their behavior.
+Camera ownership is scoped to the account/task, independent of result read-only
+state or a local-photo lease. Live video stays mounted and playing beneath an
+opaque still-evidence layer; next item removes that layer without reopening a
+live stream, including when query navigation is delayed. Direct history entry
+does not request a camera. Existing explicit close, hidden-page, account/task
+exit, version drain and device-loss cleanup remain in force.
+
+See [text inspection](text-inspection-v2.md#label-camera-lifetime-and-image-viewer)
+for the viewer's fitted-image, 1–8× cursor zoom, bounded drag, click/keyboard close,
+high-resolution retry and focus-restoration contract. No server/PLC configuration
+or API schema changes.
