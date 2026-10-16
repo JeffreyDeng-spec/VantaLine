@@ -1,7 +1,7 @@
 import { LegacyManualRedirect } from "../label-inspection/LegacyManualRedirect";
 import { LabelWorkspace } from '../label-inspection/LabelWorkspace';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { advanceSessionScope, apiClient } from "../../api/client";
+import { advanceSessionScope, apiClient, synchronizeSessionScope } from "../../api/client";
 import { getAuthStatus, queryKeys } from "../../api/queries";
 import type { AuthStatusResponse } from "../../api/types";
 import { LoadingState, ErrorState } from "../../components/LoadingState";
@@ -41,7 +41,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   const [cacheIdentity, setCacheIdentity] = useState<string | null>(null);
   const explicitLogout = useRef(false);
   useLayoutEffect(() => {
-    advanceSessionScope();
+    if (authQuery.data) synchronizeSessionScope(scopeIdentity);
     actionRegistry.reset();
     clearFiles();
     clearEditorDrafts();
@@ -52,7 +52,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
     void queryClient.cancelQueries(privateQueries);
     queryClient.removeQueries(privateQueries);
     setCacheIdentity(scopeIdentity);
-  }, [identity, scopeIdentity, queryClient]);
+  }, [identity, scopeIdentity, authQuery.data?.authenticated, queryClient]);
 
   const logoutMutation = useMutation({
     mutationFn: () => { advanceSessionScope(); diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },

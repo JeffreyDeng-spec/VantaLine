@@ -205,8 +205,9 @@ class Privacy(unittest.TestCase):
     def test_static_assets_and_output_files(self):
         for role in (None, "member", "delegated"):
             self.role(role)
-            for asset in ["admin-any.js", "app.js", "index.html", "assets/admin-123.js", "assets/old.js.map"]:
+            for asset in ["admin-any.js", "app.js", "index.html", "assets/admin-123.js", "assets/old.js.map", "assets/admin-123.js/", "assets/admin-123.js/%2e", "app.js/", "assets/old.js.map/%2e", "assets/ADMIN-123.JS/", "assets%5cadmin-123.js"]:
                 self.assertEqual(self.client.get("/static/"+asset).status_code, 404)
+                self.assertEqual(self.client.head("/static/"+asset).status_code, 404)
         self.role()
         self.assertEqual(self.client.get("/outputs/users/member/best.pt").status_code, 403)
         self.assertEqual(self.client.get("/outputs/users/member/model.zip").status_code, 403)
@@ -215,6 +216,7 @@ class Privacy(unittest.TestCase):
         self.role("admin")
         self.assertEqual(self.client.get("/static/assets/admin-123.js").status_code, 200)
         self.assertEqual(self.client.get("/static/assets/admin-123.js").headers["cache-control"], "private, no-store")
+        self.assertEqual(self.client.get("/static/assets/admin-123.js/").headers["cache-control"], "private, no-store")
 
     def test_reference_key_is_stable_across_workers_and_restarts(self):
         directory = Path(self.directory.name)

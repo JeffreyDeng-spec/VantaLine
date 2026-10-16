@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 import re
+import posixpath
 from typing import Any, Protocol
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -41,6 +42,7 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
         original_path = request.url.path
         path = internal_route(original_path)
         auth_user: dict[str, Any] | None = None
+        private_asset = False
         token = None
         public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/version"}
         public_runpod_training_transfer = (
@@ -85,7 +87,7 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
                     decoded_path = presentation.path(path, incoming=True)
                 except ValueError:
                     return PlainTextResponse("Not found", status_code=404)
-                # Ordinary output browsing is evidence-media only. Raw model,
+                # Ordinary output browsing permits business media/documents. Raw model,
                 # config, archive and log files are restricted even with a known URL.
                 if not re.search(r"\.(?:png|jpe?g|webp|gif|bmp|tiff?|mp4|webm|mov|pdf|docx?|xlsx?|csv|tsv)$", decoded_path, re.I):
                     return PlainTextResponse("Admin role required", status_code=403)
@@ -93,7 +95,8 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
             token = dependencies.identity.set(auth_user)
         elif path.startswith(("/static/", "/react-preview/assets/")):
             # Retired files and source maps must not bypass the current build.
-            private_asset = bool(re.search(r"/(?:admin-[^/]+|index\.html|app\.js|.*\.map)$", path))
+            asset_path = posixpath.normpath(path.replace("\\", "/"))
+            private_asset = bool(re.search(r"/(?:admin-[^/]+|index\.html|app\.js|.*\.map)$", asset_path, re.I))
             if private_asset:
                 auth_user, _, _ = dependencies.authenticate(request, indexed=True)
                 if not user_is_admin(auth_user):
@@ -118,7 +121,7 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.method in {"GET", "HEAD"}:
             cacheable_ok = getattr(response, "status_code", 200) < 400
-            if re.search(r"/admin-[^/]+$", path):
+            if private_asset:
                 response.headers["Cache-Control"] = "private, no-store"
                 response.headers["Vary"] = "Cookie"
             elif path.startswith("/static/") and cacheable_ok:

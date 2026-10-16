@@ -4,7 +4,11 @@ import { savedEditorsAcknowledgement } from "../features/version/drafts";
 import type { ApiRequestOptions } from "./types";
 
 let sessionGeneration = 0;
+let sessionScope: string | undefined;
 export function advanceSessionScope() { sessionGeneration += 1; }
+export function synchronizeSessionScope(scope: string) {
+  if (scope !== sessionScope) { sessionScope = scope; advanceSessionScope(); }
+}
 
 export class ApiError extends Error {
   readonly status: number;
