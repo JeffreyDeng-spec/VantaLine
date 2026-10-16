@@ -71,6 +71,9 @@ class FileContracts(unittest.TestCase):
         self.stack.enter_context(accessory_callback(self.server,'fallback_accessory_ai_profile',return_value={'fallback':'synthetic'}))
         self.stack.enter_context(accessory_callback(self.server,'clean_sprite_assets',return_value=[{'fixture':True}]))
 
+    def source_reference(self, path):
+        return self.server._authentication_http.presentation.references.encode(str(path))
+
     def source_path(self, response):
         reference = response.json()['source_path']
         self.assertTrue(reference.startswith('ref1_'))
@@ -139,7 +142,7 @@ class FileContracts(unittest.TestCase):
         self.assertEqual(self.events[:3],[('refresh',True),('cache',{'entries':{}}),'save'])
         second=client.post('/api/accessories/crop/text-crop',json=payload)
         self.assertTrue(self.source_path(second).endswith('_manual_rectified_1.png'))
-        response=client.post('/api/accessories/crop/text-crop',json={**payload,'source_path':str(output)})
+        response=client.post('/api/accessories/crop/text-crop',json={**payload,'source_path':self.source_reference(str(output))})
         self.assertEqual(response.json(),{'detail':'This text image is already manually cropped'})
         with patch('cv2.imwrite',return_value=False):
             response=client.post('/api/accessories/crop/text-crop',json=payload)
@@ -154,7 +157,7 @@ class FileContracts(unittest.TestCase):
         pixels[40:, 50:] = (100, 110, 120)
         self.assertTrue(cv2.imwrite(str(path), pixels))
         response = self.clients['alice'].post('/api/accessories/crop-colour/text-crop', json={
-            'source_path': str(path),
+            'source_path': self.source_reference(str(path)),
             'corners': [{'x': 0, 'y': 0}, {'x': 100, 'y': 0},
                         {'x': 100, 'y': 100}, {'x': 0, 'y': 100}],
         })
@@ -170,17 +173,17 @@ class FileContracts(unittest.TestCase):
         path,item=self.seed('reference')
         client=self.clients['alice']
         endpoint='/api/accessories/reference/ai-reference'
-        self.assertEqual(self.clients['bob'].post(endpoint,json={'source_path':str(path)}).status_code,404)
+        self.assertEqual(self.clients['bob'].post(endpoint,json={'source_path':self.source_reference(str(path))}).status_code,404)
         self.assertEqual(self.events,[])
         self.assertEqual(client.post(endpoint,json={'source_path':' '}).json(),{'detail':'source_path is required'})
-        self.assertEqual(client.post(endpoint,json={'source_path':str(path.with_name('unregistered.png'))}).status_code,404)
+        self.assertEqual(client.post(endpoint,json={'source_path':self.source_reference(str(path.with_name('unregistered.png')))}).status_code,404)
         self.events.clear()
         def failure(*args,**kwargs):
             self.assertEqual(kwargs,{'allow_provider':True})
             self.events.append('generate_failed')
             raise RuntimeError('synthetic provider failure '+('x'*200))
         with accessory_callback(self.server,'generate_accessory_ai_profile',side_effect=failure):
-            response=client.post(endpoint,json={'source_path':' '+str(path)+' '})
+            response=client.post(endpoint,json={'source_path':self.source_reference(' '+str(path)+' ')})
         self.assertEqual(response.status_code,200,response.text)
         saved=self.state['accessories'][0]
         self.assertEqual(saved['ai_profile_reference_files'],[str(path)])
@@ -204,7 +207,7 @@ class FileContracts(unittest.TestCase):
         self.assertEqual(self.state['accessories'][0]['source_files'],[str(path)])
         path,item=self.seed('crop-refresh-fail','text')
         self.events.clear()
-        payload={'source_path':str(path),'corners':[{'x':0,'y':0},{'x':100,'y':0},{'x':100,'y':100},{'x':0,'y':100}]}
+        payload={'source_path':self.source_reference(str(path)),'corners':[{'x':0,'y':0},{'x':100,'y':0},{'x':100,'y':100},{'x':0,'y':100}]}
         with accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
             result=client.post('/api/accessories/crop-refresh-fail/text-crop',json=payload)
         self.assertEqual(result.status_code,500)
@@ -214,7 +217,7 @@ class FileContracts(unittest.TestCase):
         path,item=self.seed('delete-refresh-fail')
         self.events.clear()
         with accessory_callback(self.server,'refresh_accessory_assets_after_source_change',side_effect=failure):
-            result=client.request('DELETE','/api/accessories/delete-refresh-fail/files',json={'source_path':str(path)})
+            result=client.request('DELETE','/api/accessories/delete-refresh-fail/files',json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,500)
         self.assertFalse(path.exists())
         self.assertEqual(self.events,['refresh_failed'])
@@ -223,13 +226,13 @@ class FileContracts(unittest.TestCase):
         endpoint='/api/accessories/reference-outer-fail/ai-reference'
         self.events.clear()
         with accessory_callback(self.server,'fallback_accessory_ai_profile',side_effect=RuntimeError('synthetic fallback failure')):
-            result=client.post(endpoint,json={'source_path':str(path)})
+            result=client.post(endpoint,json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,500)
         self.assertEqual(self.events,['detail'])
         self.assertNotIn('ai_profile_reference_files',self.state['accessories'][0])
         self.events.clear()
         with accessory_callback(self.server,'save_ai_profile_cache',side_effect=RuntimeError('synthetic cache failure')):
-            result=client.post(endpoint,json={'source_path':str(path)})
+            result=client.post(endpoint,json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,500)
         self.assertEqual(self.events,['detail','generate'])
         self.assertNotIn('ai_profile_reference_files',self.state['accessories'][0])
@@ -238,22 +241,22 @@ class FileContracts(unittest.TestCase):
         client=self.clients['alice']
         path,item=self.seed('delete')
         endpoint='/api/accessories/delete/files'
-        self.assertEqual(self.clients['bob'].request('DELETE',endpoint,json={'source_path':str(path)}).status_code,404)
+        self.assertEqual(self.clients['bob'].request('DELETE',endpoint,json={'source_path':self.source_reference(str(path))}).status_code,404)
         self.assertTrue(path.exists())
         self.assertEqual(self.events,[])
-        self.assertEqual(client.request('DELETE',endpoint,json={'source_path':str(path.with_name('unknown.png'))}).status_code,404)
-        result=client.request('DELETE',endpoint,json={'source_path':str(path)})
+        self.assertEqual(client.request('DELETE',endpoint,json={'source_path':self.source_reference(str(path.with_name('unknown.png')))}).status_code,404)
+        result=client.request('DELETE',endpoint,json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertFalse(path.exists())
         self.assertEqual(self.events[:3],[('refresh',True),('cache',{'entries':{}}),'save'])
         outside,item=self.seed('outside-delete',outside=True)
-        result=client.request('DELETE','/api/accessories/outside-delete/files',json={'source_path':str(outside)})
+        result=client.request('DELETE','/api/accessories/outside-delete/files',json={'source_path':self.source_reference(str(outside))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertTrue(outside.exists())
         self.assertEqual(self.state['accessories'][0]['source_files'],[])
         path,item=self.seed('unlink-failure')
         with patch.object(Path,'unlink',side_effect=PermissionError('synthetic unlink failure')):
-            result=client.request('DELETE','/api/accessories/unlink-failure/files',json={'source_path':str(path)})
+            result=client.request('DELETE','/api/accessories/unlink-failure/files',json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertTrue(path.exists())
         path,item=self.seed('pose-delete')
@@ -261,7 +264,7 @@ class FileContracts(unittest.TestCase):
         item.update(codex_image_jobs=[{'output_path':str(pose),'job_id':'first'},{'output_path':'other','job_id':'second'}],
                     normalized_assets=[{'path':'derived','source_pose_collection':str(pose)},{'path':'keep'}])
         self.events.clear()
-        result=client.request('DELETE','/api/accessories/pose-delete/files',json={'source_path':str(pose)})
+        result=client.request('DELETE','/api/accessories/pose-delete/files',json={'source_path':self.source_reference(str(pose))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertFalse(pose.exists())
         saved=self.state['accessories'][0]
@@ -273,14 +276,14 @@ class FileContracts(unittest.TestCase):
         path,item=self.seed('legacy-pose')
         pose=path.with_name('legacy-pose-output.png');pose.write_bytes(self.png)
         item['codex_image_job']={'output_path':str(pose),'job_id':'legacy'}
-        result=client.request('DELETE','/api/accessories/legacy-pose/files',json={'source_path':str(pose)})
+        result=client.request('DELETE','/api/accessories/legacy-pose/files',json={'source_path':self.source_reference(str(pose))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertEqual(self.state['accessories'][0]['codex_image_job']['output_path'],str(pose))
         self.assertFalse(pose.exists())
         path,item=self.seed('source-and-pose')
         item['codex_image_jobs']=[{'output_path':str(path),'job_id':'both'}]
         self.events.clear()
-        result=client.request('DELETE','/api/accessories/source-and-pose/files',json={'source_path':str(path)})
+        result=client.request('DELETE','/api/accessories/source-and-pose/files',json={'source_path':self.source_reference(str(path))})
         self.assertEqual(result.status_code,200,result.text)
         self.assertEqual(self.events[:3],[('refresh',True),('cache',{'entries':{}}),'save'])
         self.assertEqual(self.state['accessories'][0]['codex_image_jobs'],[])

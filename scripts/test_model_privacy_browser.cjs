@@ -42,7 +42,9 @@ async function role(context,value){
   assert.ok(privateFile,'Expected protected administrator module');
   const privateStyle=files.find(name=>/^admin-.*\.css$/.test(name));
   assert.ok(privateStyle,'Expected protected administrator stylesheet');
-  const identities=/yolo|gemini|doubao|豆包|qwen|千问|codex|sam[-_ ]?\d|ultralytics|paddleocr|runpod/i;
+  const privateAssets=files.filter(name=>/^admin-.*\.(?:js|css)$/.test(name));
+  assert.ok(privateAssets.filter(name=>name.endsWith('.js')).length>=2,'Settings and configuration tools must be protected modules');
+  const identities=/yolo|gemini|doubao|豆包|qwen|千问|codex|sam[-_ ]?\d|ultralytics|paddleocr|runpod|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
   for(const name of files.filter(name=>/\.(?:js|css|json|map)$/.test(name)&&!name.startsWith('admin-'))){
     const response=await context.request.get(base+'/static/assets/'+name);
     assert.equal(response.status(),200,name);
@@ -50,6 +52,7 @@ async function role(context,value){
   }
   for(const currentRole of [undefined,'member','delegated']){
     await role(context,currentRole);
+    for(const name of privateAssets)assert.equal((await context.request.get(base+'/static/assets/'+name)).status(),404,name);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile)).status(),404);
     assert.equal((await context.request.get(base+'/static/assets/'+privateStyle)).status(),404);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile+'/')).status(),404);
@@ -95,6 +98,7 @@ async function role(context,value){
   assert.match(await page.locator('#model-pipeline').textContent(), /Gemini production.*gemini-3/);
   assert.equal((await context.request.get(base+'/static/assets/'+privateFile)).status(),200);
   assert.equal((await context.request.get(base+'/static/assets/'+privateStyle)).status(),200);
+  for(const name of privateAssets)assert.equal((await context.request.get(base+'/static/assets/'+name)).status(),200,name);
   let captured;
   const capturedResponse = new Promise(resolve=>captured=resolve);
   const releaseResponse = new Promise(resolve=>releasePending=resolve);

@@ -1,6 +1,7 @@
 """Explicit decision flow service without application imports."""
 from typing import Any
 from .pipeline_decision_ports import AgentDecisionInvocationSettings, AgentDecisionCodec, AgentDecisionFlowCalls
+from ..privacy.identities import PRIVATE_IDENTITIES, identity_terms
 
 
 class AgentDecisionFlow:
@@ -29,8 +30,13 @@ class AgentDecisionFlow:
                 agent_config,
             )
             parsed = self._codec.parse()(content)
-            return self._calls.normalize()(parsed)
+            decision = self._calls.normalize()(parsed)
+            if isinstance(decision, dict) and (terms := identity_terms(agent_config)):
+                decision[PRIVATE_IDENTITIES] = terms
+            return decision
         except Exception as exc:  # noqa: BLE001 - 任意 Agent 失败都回退规则引擎
             fallback = self._calls.rule()(task, user_message, trigger)
             fallback["agent_error"] = str(exc)[:200]
+            if terms := identity_terms(agent_config):
+                fallback[PRIVATE_IDENTITIES] = terms
             return fallback

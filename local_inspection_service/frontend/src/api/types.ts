@@ -79,6 +79,7 @@ export interface TaskRuleConfigPayload {
 }
 
 export interface StatusModel {
+  business_label?: string;
   is_real_photo?: boolean;
   id: string;
   label?: string;
@@ -318,6 +319,7 @@ export interface TrainingDataset {
 }
 
 export interface TrainingModel {
+  business_label?: string;
   id: string;
   run_id?: string;
   task_id?: string;

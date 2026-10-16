@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../auth/auth-context";
 import { apiClient } from "../../api/client";
-import { hasPermission } from "../../app/permissions";
+import { canUseAgentAction } from "./access-policy";
 import { actionRegistry } from "./registry";
 import { apiActions } from "./apiActions.generated";
 import { accessoryActions } from "./accessoryActions";
@@ -27,7 +27,7 @@ export function AgentToolsProvider() {
   const policy = useQuery({ queryKey: ["agent", "capabilities", auth.user.id], queryFn: () => apiClient.get<{ enabled: boolean }>("/api/agent/capabilities"), retry: false, staleTime: 0, refetchInterval: 15000 });
   const enabled = policy.data?.enabled === true;
   useLayoutEffect(() => {
-    actionRegistry.configure(action => enabled && (!action.permissions?.length || action.permissions.some(permission => hasPermission(authRef.current.user, permission))), async action => {
+    actionRegistry.configure(action => canUseAgentAction(authRef.current.user, action, enabled), async action => {
       if (action.invalidates?.length) await queryClient.invalidateQueries({refetchType:"active",predicate:query=>action.invalidates!.includes(String(query.queryKey[0]))});
       // Allow React to commit local state before the Agent reads it again.
       await new Promise<void>(resolve => {
@@ -38,6 +38,15 @@ export function AgentToolsProvider() {
     return () => { actionRegistry.reset(); clearFiles(); };
   }, [enabled, auth.user.id, queryClient]);
   useEffect(() => actionRegistry.register([...apiActions(() => authRef.current), ...accessoryActions]), []);
+  useEffect(() => {
+    if (!enabled || auth.user.role !== "admin") return;
+    let disposed = false;
+    let unregister: (() => void) | undefined;
+    void import("./AdminAgentActions.generated").then(({adminApiActions}) => {
+      if (!disposed && authRef.current.user.role === "admin") unregister = actionRegistry.register(adminApiActions(() => authRef.current));
+    }).catch(() => { if (!disposed) setRegistrationError("管理员工具暂不可用，请刷新后重试"); });
+    return () => { disposed = true; unregister?.(); };
+  }, [enabled, auth.user.id, auth.user.role]);
   useEffect(() => {
     if (!enabled || typeof document.modelContext?.registerTool !== "function") return;
     let adapter: ReturnType<typeof connectWebMCP> | undefined;

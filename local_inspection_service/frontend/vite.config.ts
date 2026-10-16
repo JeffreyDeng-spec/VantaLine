@@ -5,7 +5,7 @@ function publicModelBoundary(): Plugin {
   return {
     name: "public-model-boundary",
     generateBundle(_options, bundle) {
-      const identity = /yolo|ultralytics|gemini|doubao|豆包|qwen|千问|codex|agnes|api\.cursor\.com|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|runpod|generativelanguage/i;
+      const identity = /yolo|ultralytics|gemini|doubao|豆包|qwen|千问|codex|agnes|api\.cursor\.com|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|runpod|generativelanguage|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
       for (const [name, item] of Object.entries(bundle)) {
         if (name.split("/").pop()?.startsWith("admin-")) continue;
         if (!/\.(?:js|html|css|json|map)$/.test(name)) continue;
@@ -28,8 +28,8 @@ export default defineConfig(({ mode }) => ({
     sourcemap: false,
     rollupOptions: {
       output: {
-        assetFileNames: (asset) => asset.names.some(name => name.startsWith("AdminSettings")) ? "assets/admin-[hash][extname]" : "assets/[name]-[hash][extname]",
-        chunkFileNames: (chunk) => chunk.name === "AdminSettings" ? "assets/admin-[hash].js" : "assets/[name]-[hash].js"
+        assetFileNames: (asset) => asset.names.some(name => name.startsWith("Admin")) ? "assets/admin-[hash][extname]" : "assets/[name]-[hash][extname]",
+        chunkFileNames: (chunk) => chunk.name.startsWith("Admin") ? "assets/admin-[hash].js" : "assets/[name]-[hash].js"
       }
     }
   },

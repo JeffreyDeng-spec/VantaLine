@@ -5,14 +5,35 @@ unchanged. Model references are resolved before existing domain authorization,
 fingerprinting, model pinning and PLC lease validation.
 """
 import json
-from urllib.parse import parse_qsl, urlencode
+from pathlib import Path
+from urllib.parse import parse_qsl, quote, urlencode
 from python_multipart.multipart import MultipartParser, parse_options_header
+from starlette.exceptions import HTTPException
 from .presentation import Presentation, internal_route
+
+PUBLIC_ERRORS = frozenset(json.loads(Path(__file__).with_name("public_errors.json").read_text()))
+
+
+def safe_error(data, status, *, plc=False):
+    if status >= 500:
+        return {"detail": "服务暂时不可用，请稍后检查或联系管理员。", "code": "service_unavailable"}
+    if status < 400 or plc:
+        return data
+    detail = data.get("detail") if isinstance(data, dict) else None
+    if isinstance(detail, str) and detail in PUBLIC_ERRORS:
+        return data
+    if status == 422 and isinstance(detail, list):
+        # Decoded model/file identities and raw validator contexts must not be
+        # reflected back through Pydantic's input/ctx fields.
+        return {"detail": [{"loc": item.get("loc", []), "msg": "输入内容不符合要求", "type": "value_error"}
+                           for item in detail if isinstance(item, dict)], "code": "validation_error"}
+    return {"detail": "请求未完成，请检查输入或联系管理员。", "code": "request_rejected"}
 
 
 class FormStream:
-    def __init__(self, boundary: bytes, presentation: Presentation):
+    def __init__(self, boundary: bytes, presentation: Presentation, *, strict=False):
         self.boundary, self.presentation = boundary, presentation
+        self.strict = strict
         self.pending = []
         self.done = False
         self.parser = MultipartParser(boundary, {
@@ -60,7 +81,10 @@ class FormStream:
 
     def end(self):
         if not self.file:
-            text = self.presentation.incoming(self.buffer.decode("utf-8"), self.name)
+            try:
+                text = self.presentation.incoming(self.buffer.decode("utf-8"), self.name, strict=self.strict)
+            except (ValueError, UnicodeError):
+                raise HTTPException(422, "Invalid request") from None
             self.pending.append(text.encode("utf-8"))
         self.pending.append(b"\r\n")
 
@@ -90,10 +114,10 @@ class ModelPrivacyMiddleware:
         presentation = self.presentation
         try:
             scope = dict(scope)
-            scope["path"] = presentation.path(original_path, incoming=True)
-            scope["raw_path"] = scope["path"].encode("utf-8")
+            scope["path"] = presentation.decode_path(original_path, strict=not admin)
+            scope["raw_path"] = quote(scope["path"], safe="/-_.~:@").encode("utf-8")
             query = parse_qsl(scope.get("query_string", b"").decode(), keep_blank_values=True)
-            scope["query_string"] = urlencode([(key, presentation.incoming(value, key)) for key, value in query]).encode()
+            scope["query_string"] = urlencode([(key, presentation.incoming(value, key, strict=not admin)) for key, value in query]).encode()
         except ValueError:
             return await self.error(send)
         headers = dict(scope["headers"])
@@ -111,7 +135,7 @@ class ModelPrivacyMiddleware:
                 if not message.get("more_body"):
                     break
             try:
-                encoded = json.dumps(presentation.incoming(json.loads(body or b"{}")), ensure_ascii=False).encode()
+                encoded = json.dumps(presentation.incoming(json.loads(body or b"{}"), strict=not admin), ensure_ascii=False).encode()
             except (ValueError, UnicodeError):
                 return await self.error(send)
             delivered = False
@@ -123,7 +147,7 @@ class ModelPrivacyMiddleware:
                 return {"type": "http.request", "body": encoded, "more_body": False}
             receive = json_receive
         elif content_type == b"multipart/form-data" and b"boundary" in options:
-            form = FormStream(options[b"boundary"], presentation)
+            form = FormStream(options[b"boundary"], presentation, strict=not admin)
             async def form_receive():
                 while not form.pending and not form.done:
                     message = await upstream()
@@ -181,8 +205,8 @@ class ModelPrivacyMiddleware:
                 data = json.loads(b"".join(pieces))
                 plc = scope["path"].startswith("/api/plc/")
                 response_admin = admin or (auth_route and isinstance(data, dict) and (data.get("user") or {}).get("role") == "admin")
-                if not response_admin and start["status"] >= 500:
-                    data = {"detail": "服务暂时不可用，请稍后检查或联系管理员。", "code": "service_unavailable"}
+                if not response_admin:
+                    data = safe_error(data, start["status"], plc=plc)
                 data = presentation.outgoing(data, admin=response_admin, plc=plc)
                 encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode()
                 start["headers"] = [(k, v) for k, v in start["headers"] if k.lower() not in {b"content-length", b"etag", b"cache-control"}]

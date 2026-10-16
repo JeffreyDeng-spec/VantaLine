@@ -1,5 +1,6 @@
 """Original/candidate workstation row and persistence contracts; synthetic state only."""
 import ast
+from functools import lru_cache
 from collections.abc import Callable
 import copy
 import inspect
@@ -25,7 +26,8 @@ class ConfigError(Exception):
     pass
 
 
-def load_target():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
     raw = read_checked_application_source(source, encoding='utf-8-sig')
@@ -37,10 +39,14 @@ def load_target():
         elif not BASELINE and isinstance(n, ast.ImportFrom) and n.module in {"plc.workstation_repository", "plc.workstation_repository_ports"}: nodes.append(n)
         elif not BASELINE and isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_plc_workstation_repository" for t in n.targets): nodes.append(n)
     assert {n.name for n in nodes if isinstance(n, ast.FunctionDef)} == NAMES
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec")
+
+
+def load_target():
     target = types.ModuleType("local_inspection_service._workstation_repository_contract")
     target.__package__ = "local_inspection_service"
     target.__dict__.update(Any=object, Callable=Callable, copy=copy, json=json, os=os, time=time)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 
@@ -151,6 +157,7 @@ class RepositoryContracts(unittest.TestCase):
 
     @unittest.skipIf(BASELINE, "candidate assembly only")
     def test_eleven_lazy_ports_and_nine_forwarders(self):
+        self.assertIsNot(self.api._plc_workstation_repository, load_target()._plc_workstation_repository)
         service = self.api._plc_workstation_repository; count = 0
         for group in (service.files, service.policy, service.storage):
             for name in group.__dataclass_fields__:

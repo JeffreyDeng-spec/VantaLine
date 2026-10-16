@@ -30,7 +30,7 @@ for protocol in ('fx','rtu'):
     reads=[dict(target=x['target'],response_hex=frame(bytes.fromhex('0103020000')).hex() if protocol=='rtu' else '0230303030034333') for x in lease['connection_check']['frames']]
     check(c.post('/api/plc/workstation/connect/activate',json={**identity,'connection_check_id':lease['connection_check']['id'],'connection_reads':reads}),200,'activate')
     check(c.post('/api/plc/workstation/self-config',json={**config,'result_pass_value':42}),409,'active local config rejected')
-    check(c.post('/api/plc/workstation/lease/rebind-model',json={**identity,'model_id':'model-a'}),200,'model')
+    check(c.post('/api/plc/workstation/lease/rebind-model',json={**identity,'model_id':server._authentication_http.presentation.references.encode('model-a')}),200,'model')
     original=server._detection_analysis.analyze_bgr
     plans=[]
     try:
@@ -38,7 +38,7 @@ for protocol in ('fx','rtu'):
             server._detection_analysis.analyze_bgr=lambda _image,request_id,_model_id=None,**kw:dict(request_id=request_id,passed=passed,rule={'passed':passed},detections=[])
             ordinary=c.post('/api/analyze/image',files={'file':('image.png',f.TINY_PNG,'image/png')})
             check(ordinary,200,'ordinary upload');assert 'plc_sync' not in ordinary.json()
-            response=c.post('/api/analyze/camera',data={'model_id':'model-a','plc_session_id':identity['session_id'],'camera_request_id':f'values_{protocol}_{passed}'},files={'file':('camera.png',f.TINY_PNG,'image/png')})
+            response=c.post('/api/analyze/camera',data={'model_id':server._authentication_http.presentation.references.encode('model-a'),'plc_session_id':identity['session_id'],'camera_request_id':f'values_{protocol}_{passed}'},files={'file':('camera.png',f.TINY_PNG,'image/png')})
             check(response,200,'camera');plan=response.json()['plc_sync'];plans.append(plan)
             expected=write_word(206,value) if protocol=='rtu' else build_d_register_write_frame(logical_device_address('D206'),value,'include_etx')
             assert plan['status']=='planned'

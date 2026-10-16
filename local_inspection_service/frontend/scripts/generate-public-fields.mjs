@@ -10,7 +10,7 @@ function scan(dir) {
   for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
     const file = path.join(dir,entry.name);
     if(entry.isDirectory()) { if(!['billing'].includes(entry.name))scan(file); continue; }
-    if(!/\.tsx?$/.test(file)||file.endsWith('/AdminSettings.tsx')||file.endsWith('.test.ts'))continue;
+    if(!/\.tsx?$/.test(file)||entry.name.startsWith('Admin')||file.endsWith('.test.ts'))continue;
     const source=ts.createSourceFile(file,fs.readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true);
     function visit(node) {
       if(ts.isPropertyAccessExpression(node))fields.add(node.name.text);

@@ -16,6 +16,7 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.testclient import TestClient
 from starlette.middleware.gzip import GZipMiddleware
+from pydantic import BaseModel
 from local_inspection_service.auth.middleware import SecurityDependencies, register_security_middleware
 from local_inspection_service.runtime.identity import RequestIdentity
 from local_inspection_service.privacy.presentation import Presentation, SENSITIVE
@@ -58,6 +59,18 @@ def fixture(presentation, dist=None):
     @app.get("/api/provider-failure")
     def provider_failure():
         return JSONResponse({"detail":"unlisted-private-engine failed at internal endpoint", "debug":{"internal":"provider response"}}, status_code=502)
+
+    @app.get("/api/provider-rejected")
+    def provider_rejected():
+        return JSONResponse({"detail":"unknown-private-engine /private/weights/best.pt failed"}, status_code=400)
+
+    class TypedModel(BaseModel):
+        model_id: int
+
+    @app.post("/api/typed-model")
+    def typed_model(payload: TypedModel):
+        touched.append(payload)
+        return {}
 
     @app.post("/api/analyze/camera")
     async def camera(file: UploadFile = File(...), model_id: str = Form(...), plc_session_id: str = Form(...)):
@@ -102,6 +115,7 @@ def fixture(presentation, dist=None):
 
     @app.get("/api/{path:path}")
     def browser_support(path: str):
+        if path == "agent/capabilities": return {"enabled": True}
         if path == "user/preferences/tasks": return {"exists": True, "pinned_task_ids": [], "archived_task_ids": []}
         if path == "version": return {"release": "development", "git_commit": "unknown", "consistent": True}
         if path == "training/resources": return {"ai_detection_tasks": [], "models": [], "datasets": [], "tasks": []}
@@ -380,8 +394,21 @@ class Privacy(unittest.TestCase):
         self.assertEqual(response.json()["code"], "service_unavailable")
         self.assertNotIn("unlisted-private-engine", response.text)
         self.assertNotIn("internal endpoint", response.text)
+        response = self.client.get("/api/provider-rejected")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "request_rejected")
+        self.assertNotIn("unknown-private-engine", response.text)
+        self.assertNotIn("/private/", response.text)
+        reference = self.presentation.references.encode("unknown-private-engine")
+        invalid = self.client.post("/api/typed-model", json={"model_id": reference})
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(invalid.json()["code"], "validation_error")
+        self.assertNotIn("unknown-private-engine", invalid.text)
+        self.assertNotIn("input", invalid.text)
+        self.assertEqual(self.touched, [])
         self.role("admin")
         self.assertIn("unlisted-private-engine", self.client.get("/api/provider-failure").text)
+        self.assertIn("unknown-private-engine", self.client.get("/api/provider-rejected").text)
 
     def test_agent_history_preserves_user_input_and_neutralizes_platform_reply(self):
         conversation = {"conversation": [
@@ -408,6 +435,87 @@ class Privacy(unittest.TestCase):
         self.assertEqual(self.touched[-1], {"source_path": paths[2]})
         self.assertEqual(response.json()["source_path"], reference)
         self.assertEqual(self.presentation.outgoing(raw, admin=True), raw)
+
+    def test_non_admin_cannot_probe_legacy_identifiers_or_modes(self):
+        for role in ("member", "delegated"):
+            self.role(role)
+            for payload in ({"model_id": MODEL}, {"model_id": "unknown-private-engine"},
+                            {"method": "yolo"}, {"method": " YOLO "},
+                            {"source_path": "/private/engine/image.png"}):
+                before = list(self.touched)
+                self.assertEqual(self.client.post("/api/pipeline/tasks", json=payload).status_code, 422)
+                self.assertEqual(self.touched, before)
+            self.assertEqual(self.client.get("/api/status?model_id=unknown-private-engine").status_code, 422)
+            self.assertEqual(self.client.get("/outputs/users/member/yolo_result.jpg").status_code, 404)
+            for segment, suffix in (("admin", "/model-profiles"), ("ai", "/config"), ("text-compare-codex", "/tasks/one")):
+                alias = self.presentation.references.encode(segment)
+                before = list(self.touched)
+                self.assertEqual(self.client.get("/api/"+alias+suffix).status_code, 403)
+                self.assertEqual(self.touched, before)
+            escaped = self.presentation.references.encode("../other/photo.jpg")
+            self.assertEqual(self.client.get("/outputs/users/member/"+escaped).status_code, 404)
+            before = list(self.touched)
+            response = self.client.post("/api/analyze/camera", data={"model_id": MODEL, "plc_session_id": "lease"}, files={"file": ("a.png", b"image", "image/png")})
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(self.touched, before)
+        self.role("admin")
+        self.assertEqual(self.client.post("/api/pipeline/tasks", json={"model_id": MODEL, "method": "yolo"}).status_code, 200)
+        self.assertEqual(self.touched[-1], {"model_id": MODEL, "method": "yolo"})
+
+    def test_configured_agent_identity_is_private_without_rewriting_raw_history(self):
+        from local_inspection_service.agent.decision_flow import AgentDecisionFlow
+        from local_inspection_service.agent.pipeline_turns import AgentPipelineTurns
+        from local_inspection_service.agent.pipeline_decision_ports import AgentDecisionInvocationSettings, AgentDecisionCodec, AgentDecisionFlowCalls
+        from local_inspection_service.agent.pipeline_action_ports import AgentTurnCalls
+        from local_inspection_service.privacy.identities import PRIVATE_IDENTITIES
+        settings = {"model": "AcmePrivate-v7", "provider": "PrivateVendor", "api_key": "never-copy-this-key"}
+        parsed = {"message_to_user": "已使用 AcmePrivate-v7 完成检查", "reason": "AcmePrivate-v7 已完成", "source": "PrivateVendor"}
+        flow = AgentDecisionFlow(
+            AgentDecisionInvocationSettings(lambda: lambda: settings, lambda: lambda value: True, lambda: "business prompt"),
+            AgentDecisionCodec(lambda: json.dumps, lambda: json.loads),
+            AgentDecisionFlowCalls(lambda: lambda *args: {}, lambda: lambda *args: json.dumps(parsed), lambda: lambda value: dict(value), lambda: lambda *args: {}),
+        )
+        decision = flow.agent_pipeline_decide({}, {})
+        def append(task, role, message, **metadata):
+            entry = {"role": role, "message": message, **metadata}
+            task.setdefault("conversation", []).append(entry)
+            return entry
+        turns = AgentPipelineTurns(AgentTurnCalls(lambda: append, lambda: lambda *args, **kwargs: None))
+        task = {}
+        turns.commit_pipeline_agent_turn(task, {}, {"role": "user"}, "客户标签写着 AcmePrivate-v7", decision, "chat")
+        public = self.presentation.outgoing(task)
+        self.assertEqual(public["conversation"][0]["message"], "客户标签写着 AcmePrivate-v7")
+        self.assertEqual(public["conversation"][1]["message"], "已使用 AI 检测 完成检查")
+        self.assertNotIn(PRIVATE_IDENTITIES, public["conversation"][1])
+        self.assertEqual(public["conversation"][1]["source"], "AI 检测")
+        self.assertEqual(task["conversation"][1]["message"], parsed["message_to_user"])
+        self.assertNotIn("never-copy-this-key", json.dumps(task))
+        self.assertEqual(self.presentation.outgoing(task, admin=True), task)
+
+    def test_business_model_names_and_document_versions_survive(self):
+        record = {"models": [{"id": MODEL, "variant": "yolo", "label": "YOLO v8", "business_label": "Gemini 客户业务线"}], "version_label": "Gemini 客户验收 V1"}
+        public = self.presentation.outgoing(record)
+        self.assertEqual(public["models"][0]["label"], "Gemini 客户业务线")
+        self.assertEqual(public["models"][0]["variant"], "vision")
+        self.assertEqual(public["version_label"], record["version_label"])
+        self.assertTrue(public["models"][0]["id"].startswith("ref1_"))
+        path = "/outputs/users/member/photo #? name.png"
+        self.assertEqual(self.presentation.decode_path(path, strict=True), path)
+        self.role()
+        response = self.client.get("/outputs/users/member/photo%20%23%3F%20name.png")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.text.endswith("photo #? name.png"))
+        reserved = "/outputs/users/member/ref1_filename.png"
+        public_path = self.presentation.path(reserved)
+        self.assertEqual(self.presentation.decode_path(public_path, strict=True), reserved)
+        self.assertEqual(self.client.get(public_path).status_code, 200)
+
+    def test_public_mode_words_in_user_text_are_not_rewritten(self):
+        self.role()
+        payload = {"user_message": "vision", "message": "vision_text", "prompt": "image_service", "content": "text_evidence", "note": "Gemini YOLO", "accessory_labels": {"mode": "vision"}}
+        response = self.client.post("/api/pipeline/tasks", json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.touched[-1], payload)
 
 
 if __name__ == "__main__":

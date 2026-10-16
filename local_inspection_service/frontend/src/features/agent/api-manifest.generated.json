@@ -224,7 +224,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "save_agent_config",
@@ -480,7 +481,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "test_agent_config",
@@ -493,7 +495,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "get_ai_config",
@@ -506,7 +509,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "get_plc_config",
@@ -1056,7 +1060,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "get_ai_tasks",
@@ -1857,7 +1862,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "delete_active_ai_key",
@@ -1870,7 +1876,8 @@
       "additionalProperties": false
     },
     "status": "api-adapter",
-    "ui": "src/api/queries.ts"
+    "ui": "src/api/queries.ts",
+    "requiresAdmin": true
   },
   {
     "name": "get_training_resources",

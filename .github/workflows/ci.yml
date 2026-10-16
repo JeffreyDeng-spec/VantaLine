@@ -381,7 +381,7 @@ jobs:
         cache: npm
         cache-dependency-path: local_inspection_service/frontend/package-lock.json
     - run: pip install -c requirements-production.lock fastapi httpx python-multipart pycryptodome uvicorn 'psycopg[binary]'
-    - run: python scripts/smoke_model_privacy.py && python scripts/smoke_auth_api.py
+    - run: python scripts/generate_public_error_contract.py --check && python scripts/smoke_model_privacy.py && python scripts/smoke_auth_api.py
     - working-directory: local_inspection_service/frontend
       run: npm ci && node scripts/generate-public-fields.mjs --check && npm run build:production-cutover && npx --no-install playwright install --with-deps chromium
     - name: Verify public assets and four-role browser isolation

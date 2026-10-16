@@ -11,7 +11,7 @@ from .policy import user_is_admin, user_has_permission
 from .route_permissions import route_allowed_permissions
 from starlette.middleware import Middleware
 from ..privacy.http import ModelPrivacyMiddleware
-from ..privacy.presentation import Presentation, internal_route
+from ..privacy.presentation import Presentation, internal_route, PUBLIC_ROUTE, INTERNAL_ROUTE
 
 
 class Authenticate(Protocol):
@@ -28,6 +28,12 @@ class SecurityDependencies:
     cors_origin_allowed: Callable[[str], bool]
 
 
+def model_admin_route(path: str) -> bool:
+    return path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/", "/api/windows-worker", "/api/locateanything")) or path == "/api/config" or (
+        not path.startswith("/api/plc/") and (path.endswith("/diagnostics") or "/media/audit-" in path)
+    )
+
+
 def register_security_middleware(app: FastAPI, dependencies: SecurityDependencies, *, presentation: Presentation | None = None):
     if presentation is not None:
         # Inside GZip/UploadAdmission, so JSON is projected before compression.
@@ -39,7 +45,7 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
             host = request.headers.get("host", "")
             if origin and not dependencies.same_origin(origin, host) and not dependencies.cors_origin_allowed(origin):
                 return PlainTextResponse("Untrusted cross-origin write request", status_code=403)
-        original_path = request.url.path
+        original_path = request.scope["path"]
         path = internal_route(original_path)
         auth_user: dict[str, Any] | None = None
         private_asset = False
@@ -58,12 +64,16 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
                 return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
             if not auth_user:
                 return JSONResponse({"detail": "Authentication required"}, status_code=401)
-            private_model_route = path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/", "/api/windows-worker", "/api/locateanything"))
-            private_model_route = private_model_route or path == "/api/config"
-            private_model_route = private_model_route or (
-                not path.startswith("/api/plc/") and (path.endswith("/diagnostics") or "/media/audit-" in path)
-            )
-            legacy_model_route = original_path.startswith("/api/text-compare-codex")
+            if not user_is_admin(auth_user) and (model_admin_route(path) or original_path.startswith(INTERNAL_ROUTE)):
+                return JSONResponse({"detail": "Admin role required"}, status_code=403)
+            if presentation is not None:
+                try:
+                    decoded = presentation.decode_path(original_path, strict=not user_is_admin(auth_user))
+                    path = posixpath.normpath(decoded.replace("\\", "/"))
+                except ValueError:
+                    return JSONResponse({"detail": "Invalid request"}, status_code=422)
+            private_model_route = model_admin_route(path)
+            legacy_model_route = path.startswith(INTERNAL_ROUTE) and not original_path.startswith(PUBLIC_ROUTE)
             if (private_model_route or legacy_model_route) and not user_is_admin(auth_user):
                 return JSONResponse({"detail": "Admin role required"}, status_code=403)
             required_permissions = route_allowed_permissions(path, request.method.upper())
@@ -80,13 +90,16 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
                 return PlainTextResponse("First admin setup required", status_code=503)
             if not auth_user:
                 return PlainTextResponse("Authentication required", status_code=401)
-            if not dependencies.output_visible(path, auth_user):
-                return PlainTextResponse("Not found", status_code=404)
-            if presentation is not None and not user_is_admin(auth_user):
+            decoded_path = path
+            if presentation is not None:
                 try:
-                    decoded_path = presentation.path(path, incoming=True)
+                    decoded_path = presentation.decode_path(path, strict=not user_is_admin(auth_user))
                 except ValueError:
                     return PlainTextResponse("Not found", status_code=404)
+            decoded_path = posixpath.normpath(decoded_path.replace("\\", "/"))
+            if not dependencies.output_visible(decoded_path, auth_user):
+                return PlainTextResponse("Not found", status_code=404)
+            if presentation is not None and not user_is_admin(auth_user):
                 # Ordinary output browsing permits business media/documents. Raw model,
                 # config, archive and log files are restricted even with a known URL.
                 if not re.search(r"\.(?:png|jpe?g|webp|gif|bmp|tiff?|mp4|webm|mov|pdf|docx?|xlsx?|csv|tsv)$", decoded_path, re.I):

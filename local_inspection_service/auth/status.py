@@ -22,6 +22,8 @@ class PublicStatusProjection:
 
     def public_status_model_for_user(self, model: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
         public = {key: model.get(key) for key in self._policy.model_fields() if key in model}
+        if isinstance(model.get('business_label'), str) and model['business_label'].strip():
+            public['business_label'] = model['business_label']
         if model.get('is_ai_detection') and self._policy.admin()(user) and ('provider_status' in model):
             public['provider_status'] = model.get('provider_status')
         return public
