@@ -10,7 +10,7 @@ import { listTextInspectionStandards } from '../../api/queries';
 import { workspacePath } from '../../app/paths';
 import { useAuth } from '../auth/auth-context';
 import { FileDropZone } from '../../components/FileDropZone';
-import { Capture, Detail } from './CodexComparePage';
+import { Capture, Detail } from './SmartComparePage';
 import { LabelReport, ReferenceRegion } from './LabelReport';
 import { ROOT, capabilities, labels, mediaURL, terminal, type Box, type Evidence, type Task, type Decision } from './api';
 import './batch-workspace.css';
@@ -76,7 +76,7 @@ function LabelDetail({batch, lid, onBack, onRerun}: {batch: Batch; lid: string; 
   return <section className="bw-label-detail"><button onClick={onBack}><ArrowLeft size={16}/> 返回批次</button>
     {result.error && <p role="alert">{errorText(result.error)}</p>}
     {!entry ? <p>正在读取标签报告…</p> : <>
-      <header><div><span className={`bw-badge ${entry.outcome}`}>{stateName(entry.outcome)}</span><h1>{entry.name}</h1><p>{entry.match.reason || '等待 Codex 发布匹配结果'}</p></div>
+      <header><div><span className={`bw-badge ${entry.outcome}`}>{stateName(entry.outcome)}</span><h1>{entry.name}</h1><p>{entry.match.reason || '等待 Smart 发布匹配结果'}</p></div>
         {terminal(batch.status)&&<button disabled={busy} onClick={()=>void onRerun([lid])}><RefreshCw size={16}/> 重新检查此标签</button>}</header>
       {batch.status!=='completed'&&<p className="cc-notice">{terminal(batch.status)?'本批次未完整结束；已保留发现及未检项目。':'初步结果 · 检查过程中会持续更新'}</p>}
       {entry.summary&&<div className="bw-conclusion"><h2>{labels[entry.summary.decision]}</h2><p>{entry.summary.message}</p><p>已检：{entry.summary.checked_scope}</p><p>未确认：{entry.summary.unchecked_scope||'无'}</p></div>}
@@ -100,7 +100,7 @@ export function BatchWorkspace() {
   const owner = user.id;
   const [params,setParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const cap = useQuery({queryKey:['codex-capabilities',owner],queryFn:capabilities,retry:false});
+  const cap = useQuery({queryKey:['smart-capabilities',owner],queryFn:capabilities,retry:false});
   const bid = params.get('batch') || '';
   const lid = params.get('label') || '';
   const legacy = params.get('task') === 'history' ? '' : params.get('task');

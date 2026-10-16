@@ -15,14 +15,14 @@ class PublicStatusProjection:
         return public
 
     def public_ai_detection_status_for_user(self, user: dict[str, Any] | None) -> dict[str, Any]:
-        if self._policy.permission()(user, 'ai_config'):
+        if self._policy.admin()(user):
             return self._calls.ai()()
         settings = self._sources.ai()()
-        return {'enabled': bool(settings.get('enabled')), 'configured': bool(settings.get('configured')), 'status': str(settings.get('status') or ''), 'message': str(settings.get('message') or ''), 'provider_label': str(settings.get('provider_label') or '')}
+        return {'enabled': bool(settings.get('enabled')), 'configured': bool(settings.get('configured')), 'status': str(settings.get('status') or ''), 'message': 'AI 检测已就绪' if settings.get('configured') else 'AI 检测暂不可用，请联系管理员'}
 
     def public_status_model_for_user(self, model: dict[str, Any], user: dict[str, Any] | None) -> dict[str, Any]:
         public = {key: model.get(key) for key in self._policy.model_fields() if key in model}
-        if model.get('is_ai_detection') and self._policy.permission()(user, 'ai_config') and ('provider_status' in model):
+        if model.get('is_ai_detection') and self._policy.admin()(user) and ('provider_status' in model):
             public['provider_status'] = model.get('provider_status')
         return public
 

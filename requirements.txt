@@ -11,4 +11,5 @@ paddlex[ocr-core]==3.7.1
 paddlepaddle==3.2.2
 PyMuPDF==1.28.0
 requests
+pycryptodome==3.23.0
 cos-python-sdk-v5==1.9.44

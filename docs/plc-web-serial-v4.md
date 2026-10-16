@@ -361,3 +361,7 @@ or replay an uncertain physical write.
 ## Administrator menu retirement
 
 The detection header no longer provides a global selected-user data-range slot. Administrator resource reads use the existing all-data default. Browser-only serial ownership, workstation binding, lease fencing, camera-only dispatch, ACK sequencing and uncertain-write no-retry remain unchanged.
+
+## Neutral public model references
+
+**Status: Authoritative.** Operator HTTP requests and results use neutral model references and business mode names. The privacy adapter resolves references before existing camera fingerprints, model permissions, workstation leases, dispatch planning and receipt validation. Stored identities and immutable evidence remain internal originals. Session/lease identifiers, frames, digests, deadlines, D/Y values and at-most-once semantics are unchanged. Camera JSON and event projections retain protocol capabilities. File bytes and upload provenance remain exact; ordinary image/video uploads cannot create a PLC dispatch. This is a presentation/auth change, not a physical protocol or configuration-schema change.

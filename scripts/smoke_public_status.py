@@ -24,7 +24,7 @@ class PublicStatusContracts(unittest.TestCase):
         self.stack=ExitStack();self.addCleanup(self.stack.close)
         for target in ('requests.sessions.Session.request','urllib.request.urlopen','subprocess.Popen','os.kill'):
             self.stack.enter_context(patch(target,side_effect=AssertionError('external operation forbidden')))
-        self.settings={'enabled':True,'configured':True,'status':'ready','message':'synthetic','provider_label':'synthetic provider','model':'synthetic-model','api_key':'synthetic-key','api_key_candidates':[{'key':'synthetic-key'}],'proxy_url_raw':'synthetic-proxy','api_keys':[{'masked_key':'***'}],'extra_public':7}
+        self.settings={'enabled':True,'configured':True,'status':'ready','message':'AI 检测已就绪','model':'synthetic-model','api_key':'synthetic-key','api_key_candidates':[{'key':'synthetic-key'}],'proxy_url_raw':'synthetic-proxy','api_keys':[{'masked_key':'***'}],'extra_public':7}
         self.image={'configured':True,'model':'synthetic-image','api_key':'synthetic-image-key','proxy_url_raw':'synthetic-image-proxy','extra_public':8}
         self.ai=self.stack.enter_context(patch.object(self.api,'ai_detection_settings',return_value=self.settings))
         self.images=self.stack.enter_context(patch.object(self.api,'image_generation_settings',return_value=self.image))
@@ -40,22 +40,22 @@ class PublicStatusContracts(unittest.TestCase):
         self.assertEqual(result,{'configured':True,'model':'synthetic-image','extra_public':8})
         self.assertEqual(self.image,before);self.assertIsNot(result,self.image);self.ai.assert_not_called()
     def test_permission_status_shortcut_returns_existing_projection_identity(self):
-        user={'permissions':['ai_config']};expected={'public':'synthetic'}
+        user={'admin':True};expected={'public':'synthetic'}
         with patch.object(self.api,'public_ai_detection_status',return_value=expected) as delegated:
             self.assertIs(self.api.public_ai_detection_status_for_user(user),expected)
-        delegated.assert_called_once_with();self.permission.assert_called_once_with(user,'ai_config');self.ai.assert_not_called();self.images.assert_not_called()
+        delegated.assert_called_once_with();self.admin.assert_called_once_with(user);self.ai.assert_not_called();self.images.assert_not_called()
     def test_restricted_ai_status_defaults_and_exact_shape(self):
-        for user in (None,{'permissions':[]},{'permissions':['other']}):
+        for user in (None,{'permissions':[]},{'permissions':['other']},{'permissions':['ai_config','system_settings']}):
             with self.subTest(user=user):
                 result=self.api.public_ai_detection_status_for_user(user)
-                self.assertEqual(result,{'enabled':True,'configured':True,'status':'ready','message':'synthetic','provider_label':'synthetic provider'})
+                self.assertEqual(result,{'enabled':True,'configured':True,'status':'ready','message':'AI 检测已就绪'})
         self.images.assert_not_called()
-        self.ai.return_value={};self.assertEqual(self.api.public_ai_detection_status_for_user(None),{'enabled':False,'configured':False,'status':'','message':'','provider_label':''})
+        self.ai.return_value={};self.assertEqual(self.api.public_ai_detection_status_for_user(None),{'enabled':False,'configured':False,'status':'','message':'AI 检测暂不可用，请联系管理员'})
     def test_model_allowlist_and_provider_status_permission(self):
         model={'id':'one','label':'synthetic','owner_user_id':'owner','is_ai_detection':True,'provider_status':{'api_key_present':True},'internal_path':'synthetic-private','unknown':'hidden'}
         before=copy.deepcopy(model)
         for allowed in (False,True):
-            user={'permissions':['ai_config'] if allowed else []};result=self.api.public_status_model_for_user(model,user)
+            user={'admin':allowed,'permissions':['ai_config']};result=self.api.public_status_model_for_user(model,user)
             self.assertEqual(result,{k:v for k,v in model.items() if k in self.api.STATUS_MODEL_PUBLIC_KEYS or (k=='provider_status' and allowed)})
             self.assertNotIn('internal_path',result);self.assertNotIn('unknown',result)
             if allowed:self.assertIs(result['provider_status'],model['provider_status'])
@@ -73,7 +73,7 @@ class PublicStatusContracts(unittest.TestCase):
         user={'admin':False};tasks=[{'task':'one'}];classes=['part'];rule={'required':1}
         payload={'service':'synthetic','model_exists':True,'active_model_id':'one','available_models':[{'id':'one','unknown':'hidden'},None,'skip',{'id':'two'}],'specialized_models':[7,{'id':'three'}],'specialized_model_tasks':tasks,'ai_detection_tasks':tasks,'classes':classes,'rule':rule,'ocr':{'private':1},'training_execution':{'private':1},'cursor_image2':{'private':1},'internal_path':'hidden'}
         before=copy.deepcopy(payload);result=self.api.public_service_status_for_user(user,payload)
-        self.assertEqual(result,{'service':'synthetic','model_exists':True,'active_model_id':'one','available_models':[{'id':'one'},{'id':'two'}],'specialized_models':[{'id':'three'}],'specialized_model_tasks':tasks,'ai_detection_tasks':tasks,'ai_detection':{'enabled':True,'configured':True,'status':'ready','message':'synthetic','provider_label':'synthetic provider'},'training_execution':{'status':'restricted','executor':''},'cursor_image2':{'status':'restricted','configured':False},'classes':classes,'rule':rule,'ocr':{}})
+        self.assertEqual(result,{'service':'synthetic','model_exists':True,'active_model_id':'one','available_models':[{'id':'one'},{'id':'two'}],'specialized_models':[{'id':'three'}],'specialized_model_tasks':tasks,'ai_detection_tasks':tasks,'ai_detection':{'enabled':True,'configured':True,'status':'ready','message':'AI 检测已就绪'},'training_execution':{'status':'restricted','executor':''},'cursor_image2':{'status':'restricted','configured':False},'classes':classes,'rule':rule,'ocr':{}})
         self.assertIs(result['classes'],classes);self.assertIs(result['rule'],rule);self.assertIs(result['ai_detection_tasks'],tasks);self.assertEqual(payload,before)
     def test_restricted_service_status_empty_defaults(self):
         result=self.api.public_service_status_for_user(None,{})
@@ -127,9 +127,10 @@ class PublicStatusContracts(unittest.TestCase):
         first=self.api.public_service_status_for_user(user,payload)
         self.admin.return_value=True
         self.assertIs(self.api.public_service_status_for_user(user,payload),payload);self.assertNotIn('private',first)
-        self.permission.side_effect=None;self.permission.return_value=False
+        self.admin.return_value=False
+        self.permission.side_effect=None;self.permission.return_value=True
         self.assertNotIn('model',self.api.public_ai_detection_status_for_user(user))
-        self.permission.return_value=True
+        self.admin.return_value=True
         refreshed=self.api.public_ai_detection_status_for_user(user)
         self.assertIn('model',refreshed)
         self.assertEqual(refreshed['model'],'synthetic-model')

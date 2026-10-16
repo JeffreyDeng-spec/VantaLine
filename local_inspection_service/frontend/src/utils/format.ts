@@ -3,7 +3,7 @@ const STATUS_LABELS: Record<string, string> = {
   idle: "空闲",
   pending: "等待中",
   queued: "排队中",
-  queued_for_codex_image_worker: "排队中",
+  queued_for_image_worker: "排队中",
   failed: "失败",
   stopped: "已停止",
   completed: "已完成",
@@ -52,8 +52,8 @@ export function recordAuditText(
 export function modelVariantLabel(model: { variant?: string; uses_ocr?: boolean } | null | undefined) {
   const variant = String(model?.variant || "").toLowerCase();
   if (variant === "ai_detection") return "AI 检测";
-  if (variant === "yolo_ocr" || model?.uses_ocr) return "YOLO + OCR";
-  if (variant === "yolo") return "YOLO";
+  if (variant === "vision_text" || model?.uses_ocr) return "视觉模型＋文字识别";
+  if (variant === "vision") return "视觉模型";
   return variant || "模型";
 }
 

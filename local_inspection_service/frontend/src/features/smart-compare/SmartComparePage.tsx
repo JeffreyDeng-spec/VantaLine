@@ -10,7 +10,7 @@ import { getTextInspectionStandard, listTextInspectionStandards } from '../../ap
 import { FileDropZone } from '../../components/FileDropZone';
 import { workspacePath } from '../../app/paths';
 import { capabilities, getTask, labels, listTasks, mediaURL, post, ROOT, terminal, type Box, type Decision, type Task } from './api';
-import './codex-compare.css';
+import './smart-compare.css';
 import { LabelReport, ReferenceRegion } from './LabelReport';
 
 const date = (value: number) => new Date(value * 1000).toLocaleString();
@@ -81,6 +81,7 @@ function LocatedImage({ task, side, box }: { task: Task; side: 'reference'|'actu
 }
 
 export function Detail({ id, owner }: { id: string; owner: string }) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
@@ -90,8 +91,8 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
   const [, setParams] = useSearchParams();
   const reviewKey = useRef(crypto.randomUUID());
   const retryKey = useRef(crypto.randomUUID());
-  const task = useQuery({ queryKey: ['codex-compare', owner, id], queryFn: () => getTask(id), refetchInterval: q => (q.state.error && 'status' in q.state.error && [401,403,404].includes(Number(q.state.error.status))) || terminal(q.state.data?.status || '') ? false : 2000, retry: false });
-  const events = useQuery({ queryKey: ['codex-events', owner, id, task.data?.sequence], queryFn: () => apiClient.get<{items: {sequence: number; kind: string; created_at: number; payload: {value?: {message?: string}}}[]}>(`${ROOT}/tasks/${id}/events?after=${Math.max(0,(task.data?.sequence || 0)-50)}`), enabled: !!task.data, retry: false });
+  const task = useQuery({ queryKey: ['smart-compare', owner, id], queryFn: () => getTask(id), refetchInterval: q => (q.state.error && 'status' in q.state.error && [401,403,404].includes(Number(q.state.error.status))) || terminal(q.state.data?.status || '') ? false : 2000, retry: false });
+  const events = useQuery({ queryKey: ['smart-events', owner, id, task.data?.sequence], queryFn: () => apiClient.get<{items: {sequence: number; kind: string; created_at: number; payload: {value?: {message?: string}}}[]}>(`${ROOT}/tasks/${id}/events?after=${Math.max(0,(task.data?.sequence || 0)-50)}`), enabled: !!task.data, retry: false });
   const inaccessible = task.error && 'status' in task.error && [401,403,404].includes(Number(task.error.status));
   const value = inaccessible ? undefined : task.data;
   const selectedItem = value?.items?.find(x => x.id === selected);
@@ -102,7 +103,7 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
       setBusy(true); setError('');
       try {
         const result = await post<Task>(id, name, body);
-        await queryClient.invalidateQueries({ queryKey: ['codex-compare', owner] });
+        await queryClient.invalidateQueries({ queryKey: ['smart-compare', owner] });
         if (name === 'retry') setParams({task: result.id});
         if (name === 'review') reviewKey.current = crypto.randomUUID();
       } catch (e) { setError(message(e)); } finally { setBusy(false); }
@@ -110,7 +111,7 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
     } finally { finishVersionOperation(); }
   }
   return <section className="cc-detail">
-    <Link to={workspacePath('/text-compare-codex')}>← 返回任务列表</Link>
+    <Link to={workspacePath('/label-check')}>← 返回任务列表</Link>
     {task.error && <p role="alert">{message(task.error)} <button onClick={() => void task.refetch()}>重新读取</button></p>}
     {!value ? <p>正在读取报告…</p> : <>
       <header><div><h2>{value.inputs.standard_name}</h2><p>{date(value.created_at)} · 标准版本 {value.inputs.standard_revision_number} · {labels[value.status]}</p></div>
@@ -126,7 +127,7 @@ export function Detail({ id, owner }: { id: string; owner: string }) {
         {(!entry.reference_box || !entry.actual_box) && <small>部分位置无法可靠定位</small>}
         <div className="cc-crops">{entry.artifact_ids.map(aid => { const a = value.artifacts?.find(x => x.id === aid); return a ? <a key={aid} href={mediaURL(id,a.image)} target="_blank" rel="noreferrer"><img src={mediaURL(id,a.preview)} alt={`${a.source === 'reference' ? '标准' : '实拍'}局部证据`} /><span>{a.source === 'reference' ? '标准' : '实拍'}</span></a> : null; })}</div>
       </article>)}</div></>}
-      <details><summary>核对进展与运行信息</summary><p>模型：{value.model || '排队等待分配'} · 会话：{value.session_id || '尚未启动'}</p><ol>{events.data?.items.map(e => <li key={e.sequence}>{date(e.created_at)} · {e.kind === 'progress' ? e.payload.value?.message : labels[e.kind] || e.kind}</li>)}</ol></details>
+      <details><summary>核对进展</summary>{user.role === 'admin' && <p>模型：{value.model || '排队等待分配'} · 会话：{value.session_id || '尚未启动'}</p>}<ol>{events.data?.items.map(e => <li key={e.sequence}>{date(e.created_at)} · {e.kind === 'progress' ? e.payload.value?.message : labels[e.kind] || e.kind}</li>)}</ol></details>
       <section><h3>人工复核</h3>{value.reviews?.map(review => <p key={review.key}>{date(review.created_at)} · {labels[review.value.decision]} · {review.value.note}</p>)}
         <select aria-label="人工结论" value={decision} disabled={!terminal(value.status) || busy} onChange={e => {setDecision(e.target.value as Decision);reviewKey.current = crypto.randomUUID();}}>{(['REVIEW_REQUIRED','MATCH','DIFFERENCES'] as const).map(x => <option key={x} value={x}>{labels[x]}</option>)}</select>
         <textarea aria-label="复核备注" placeholder="复核备注" maxLength={4000} value={note} onChange={e => {setNote(e.target.value);reviewKey.current = crypto.randomUUID();}} />
@@ -149,10 +150,10 @@ function Workspace({ owner }: { owner: string }) {
   const [cursor, setCursor] = useState('');
   const requestId = useRef(crypto.randomUUID());
   const queryClient = useQueryClient();
-  const cap = useQuery({queryKey: ['codex-capabilities', owner], queryFn: capabilities, retry: false});
-  const tasks = useQuery({queryKey: ['codex-compare',owner,'list',cursor], queryFn: () => listTasks(cursor), refetchInterval: 3000, retry: false});
-  const standards = useQuery({queryKey: ['codex-standards',owner], queryFn: listTextInspectionStandards, enabled: cap.data?.enabled});
-  const standard = useQuery({queryKey: ['codex-standard',owner,standardId], queryFn: () => getTextInspectionStandard(standardId), enabled: !!standardId && cap.data?.enabled});
+  const cap = useQuery({queryKey: ['smart-capabilities', owner], queryFn: capabilities, retry: false});
+  const tasks = useQuery({queryKey: ['smart-compare',owner,'list',cursor], queryFn: () => listTasks(cursor), refetchInterval: 3000, retry: false});
+  const standards = useQuery({queryKey: ['smart-standards',owner], queryFn: listTextInspectionStandards, enabled: cap.data?.enabled});
+  const standard = useQuery({queryKey: ['smart-standard',owner,standardId], queryFn: () => getTextInspectionStandard(standardId), enabled: !!standardId && cap.data?.enabled});
   useEffect(() => { if (!file) { setUrl(''); return; } const u = URL.createObjectURL(file); setUrl(u); return () => URL.revokeObjectURL(u); }, [file]);
   useVersionParticipant({ busy: () => busy, dirty: () => Boolean(file && hasUnuploadedVersionFiles([file])) });
   function selectFile(value: File) { if (busy) return; if (!value.size || value.size > 10*1024*1024) {setError('图片必须小于 10MB');return;} setFile(value);requestId.current = crypto.randomUUID();setError(''); }
@@ -163,7 +164,7 @@ function Workspace({ owner }: { owner: string }) {
       if (!file || !assetId || !standard.data?.current_revision_id || busy) return;
       setBusy(true);setError('');
       const form = new FormData();form.set('reference_region',JSON.stringify(region));form.set('captured_file',file);form.set('standard_asset_id',assetId);form.set('request_id',requestId.current);form.set('expected_revision',standard.data.current_revision_id);
-      try { const result = await apiClient.upload<Task>(`${ROOT}/tasks`,form); await queryClient.invalidateQueries({queryKey:['codex-compare',owner]}); setParams({task:result.id}); }
+      try { const result = await apiClient.upload<Task>(`${ROOT}/tasks`,form); await queryClient.invalidateQueries({queryKey:['smart-compare',owner]}); setParams({task:result.id}); }
       catch(e) {setError(message(e));} finally {setBusy(false);}
 
     } finally { finishVersionOperation(); }
@@ -188,4 +189,4 @@ function Workspace({ owner }: { owner: string }) {
     <div className="cc-pagination">{cursor && <button onClick={()=>setCursor('')}>最新任务</button>}{tasks.data?.next_cursor && <button onClick={()=>setCursor(tasks.data!.next_cursor!)}>更早任务</button>}</div>
   </>;
 }
-export function CodexComparePage() { const auth=useAuth();return <main className="cc-page"><Workspace key={auth.user.id} owner={auth.user.id}/></main>; }
+export function SmartComparePage() { const auth=useAuth();return <main className="cc-page"><Workspace key={auth.user.id} owner={auth.user.id}/></main>; }

@@ -79,6 +79,7 @@ export interface TaskRuleConfigPayload {
 }
 
 export interface StatusModel {
+  is_real_photo?: boolean;
   id: string;
   label?: string;
   description?: string;
@@ -120,9 +121,9 @@ export interface ServiceStatusResponse {
   specialized_model_tasks?: SpecializedModelTask[];
   ai_detection_tasks?: AiDetectionLibraryTask[];
   ai_detection?: Record<string, unknown>;
-  yolo_warmup?: YoloWarmupStatus;
+  vision_warmup?: VisionWarmupStatus;
   training_execution?: Record<string, unknown>;
-  cursor_image2?: Record<string, unknown>;
+  image_service?: Record<string, unknown>;
   classes?: Array<{ class_id: number; name: string; label: string }>;
   rule?: {
     confidence_threshold?: number;
@@ -132,7 +133,7 @@ export interface ServiceStatusResponse {
   ocr?: Record<string, unknown>;
 }
 
-export interface YoloWarmupStatus {
+export interface VisionWarmupStatus {
   enabled?: boolean;
   status?: string;
   reason?: string;
@@ -477,7 +478,7 @@ export interface AiAutoOptimizeSample {
   synthetic_error?: string;
 }
 
-export type PipelineDetectionMethod = "yolo_ocr" | "yolo" | "ai" | string;
+export type PipelineDetectionMethod = "vision_text" | "vision" | "ai" | string;
 export type PipelineStage = "draft" | "samples" | "training" | "library" | string;
 
 export interface PipelineTaskAccessory {
@@ -501,7 +502,7 @@ export interface PipelineTask {
   accessory_names?: string[];
   accessories?: PipelineTaskAccessory[];
   detection_method?: PipelineDetectionMethod;
-  optimization_route?: "yolo" | "yolo_ocr" | string;
+  optimization_route?: "vision" | "vision_text" | string;
   uses_training_flow?: boolean;
   stage?: PipelineStage;
   status?: string;
@@ -719,6 +720,7 @@ export interface TextInspectionDiagnostics {
 }
 
 export interface TextCompareBetaResult {
+  progress_phase?: string;
   id?: string;
   status?: string;
   preparation_compare?: boolean;
@@ -1377,8 +1379,8 @@ export interface AccessoryCandidate {
   training_role?: string;
   status?: string;
   source_files?: string[];
-  codex_image_job?: AccessoryImageJob;
-  codex_image_jobs?: AccessoryImageJob[];
+  image_job?: AccessoryImageJob;
+  image_jobs?: AccessoryImageJob[];
   confirmed_accessory_id?: string;
   confirmed_at?: number;
   created_at?: number;

@@ -17,6 +17,8 @@ def fixture():
 
 
 def checkpoint_bytes(path, actual):
+    from model_privacy_source_contract import checkpoint_bytes as privacy_checkpoint
+    actual=privacy_checkpoint(path, actual)
     actual=records_checkpoint(path, actual)
     if path == "local_inspection_service/model_profiles/prompt_sources.json":
         from plc_global_protocol_source_contract import global_parent_bytes

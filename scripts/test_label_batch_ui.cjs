@@ -13,13 +13,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const earlier={...oldTask,id:'earlier-task',inputs:{...oldTask.inputs,standard_name:'更早检查任务'}};
   function makeLabel(i){return {id:'L'+i,name:'实拍标签 '+i,actual:evidence,outcome:'pending',finalized:false,match:{status:'pending',reason:'',reference_id:null,candidate_ids:[]},summary:null,progress:{total:0,settled:0,elements:0},inputs:{reference:null,actual:evidence,standard_name:'电源标签订单',standard_revision_number:1,standard_revision_id:'v1'},elements:[],checks:[],issues:[],artifacts:[],reviews:[]};}
   await page.route('**/api/**',async r=>{
-   const url=new URL(r.request().url()).pathname,method=r.request().method();const root='/api/text-compare-codex/batches';
+   const url=new URL(r.request().url()).pathname,method=r.request().method();const root='/api/label-check/batches';
    if(!url.startsWith('/api/'))return r.continue();
    if(url.endsWith('/capabilities'))return r.fulfill({json:{enabled:!forbidden,model:'fixture'}});
    if(forbidden)return r.fulfill({status:404,json:{detail:'批次不存在'}});
    if(url.includes('/media/'))return r.fulfill({contentType:'image/svg+xml',body:svg});
    if(url==='/api/text-inspection/standards')return r.fulfill({json:{items:[{id:'std',name:'电源标签订单',standard_type:'label',status:'draft'}]}});
-   if(url==='/api/text-compare-codex/tasks')return r.fulfill({json:new URL(r.request().url()).searchParams.get('before')?{items:[earlier],next_cursor:null}:{items:[...(task?[task]:[]),oldTask],next_cursor:'older'}});
+   if(url==='/api/label-check/tasks')return r.fulfill({json:new URL(r.request().url()).searchParams.get('before')?{items:[earlier],next_cursor:null}:{items:[...(task?[task]:[]),oldTask],next_cursor:'older'}});
    if(url.endsWith('/old-task')||url.endsWith('/earlier-task'))return r.fulfill({json:url.endsWith('/old-task')?oldTask:earlier});
    if(url===root){if(method==='POST'){created++;task={report_version:'label-batch-v3',id:'batch-1',status:'draft',created_at:1789360000,sequence:1,summary:null,inputs:{references:{}},references:[],labels:[],counts:{pending:0,difference:0,uncertain:0,match:0}};return r.fulfill({json:task});}return r.fulfill({json:{items:task?[task]:[],next_cursor:null}});}
    if(url.endsWith('/document')||url.endsWith('/order')){task.inputs={standard_id:'std',standard_name:'电源标签订单',references:{R:{id:'R',name:'标准图 1',media:evidence,sources:[{id:'R'}]}}};task.import_state='ready';return r.fulfill({json:task});}

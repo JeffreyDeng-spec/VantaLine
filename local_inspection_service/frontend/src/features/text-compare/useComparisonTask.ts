@@ -58,7 +58,7 @@ export function useComparisonTask(owner: string) {
     if (value.comparison_id !== requestId || !value.id) throw new Error("比较记录标识不一致，已拒绝显示。");
     save({ ...current.current, recordId: value.id });
     setResult(value); setNotice(""); setBlocked(false);
-    setPhase(phases[String(value.diagnostics?.phase)] || "等待结果");
+    setPhase(phases[String(value.progress_phase || value.diagnostics?.phase)] || "等待结果");
   }
   useEffect(() => {
     if (!task || task.rejected) return;

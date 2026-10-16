@@ -91,4 +91,4 @@ class PublicNetworkPolicy:
 
     def include_internal_runtime_details(self, user: dict[str, Any] | None) -> bool:
         viewer = user or {}
-        return self.access.user_is_admin()(viewer) or self.access.user_has_permission()(viewer, "system_settings")
+        return self.access.user_is_admin()(viewer)

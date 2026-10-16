@@ -1825,3 +1825,9 @@ The manual CI immutable-package fixture supplies `VITE_RELEASE_ID=v2026.10.0`
 and `VITE_GIT_COMMIT=github.sha` to its frontend build, matching its packaging
 arguments. It retains the bundle identity rejection gate and the original
 synthetic release/archive checks; this is not a published production tag.
+
+## Model identity privacy release acceptance
+
+**Status: Authoritative.** The manual CI workflow includes a model-privacy job covering backend role/projection/reference contracts, the production public-asset guard and four-role browser acceptance with synthetic records. This addition does not restore automatic CI triggers or alter immutable deployment/rollback gates. Record the exact manual run and any separately reproduced main-branch source-contract failure; do not claim failed or disabled CI passed.
+
+Preserve the shared runtime `model-reference.key` when installing, rolling back or restoring the complete release. Internal model records and PLC protocol/schema remain unchanged. Validate public assets, direct denied administrator chunks and ordinary/admin projections on the exact installed frontend/backend version. Roll back the entire immutable release; keep the additional runtime key rather than modifying individual application files or rewriting evidence.

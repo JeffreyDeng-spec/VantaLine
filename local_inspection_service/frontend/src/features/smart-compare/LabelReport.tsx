@@ -29,7 +29,7 @@ export function LabelReport({task}: {task:Task}) {
         {visibleElements.map(e=>e[side]&&<Geometry height={1000*task.inputs[side].size[1]/task.inputs[side].size[0]} key={e.id} region={e[side]!} text={e.id} selected={linked.includes(e.id)} onSelect={()=>setSelected(e.id)}/>)}
         {active.filter(i=>!dimension||checks.find(c=>c.id===i.check_id)?.dimension===dimension).map(i=>i[side]&&<g key={i.id} className="cc-issue-mark"><Geometry height={1000*task.inputs[side].size[1]/task.inputs[side].size[0]} bottom region={i[side]!} text={i.id} selected={selected===i.id||selected===i.check_id} onSelect={()=>setSelected(i.id)}/></g>)}
       </svg></div><figcaption>{side==='reference'?'标准':'实拍'} · <a href={mediaURL(task.id,task.inputs[side].image)} target="_blank" rel="noreferrer">放大原图</a></figcaption></figure>)}</div>
-    {!elements.length&&<p>等待 Codex 发布元素拆解…</p>}
+    {!elements.length&&<p>等待 Smart 发布元素拆解…</p>}
     <div className="cc-elements">{visibleElements.map(e=><button key={e.id} aria-pressed={linked.includes(e.id)} onClick={()=>setSelected(e.id)}><strong>{e.id} · {e.name}</strong><span>{categories[e.category]||e.category} · {e.description}</span>{(!e.reference||!e.actual)&&<small>部分位置缺失或无法可靠定位</small>}</button>)}</div>
     <div className="cc-items">{visibleChecks.filter(c=>!selected||!elements.some(e=>e.id===selected)||c.element_ids.includes(selected)).map(c=><article key={c.id} className={`cc-item ${c.status} ${selectedCheck?.id===c.id?'selected':''}`}>
       <button aria-pressed={selectedCheck?.id===c.id} onClick={()=>setSelected(c.id)}>{labels[c.status]||c.status} · {dimensions[c.dimension]} · {c.element_ids.join('、')||'标签整体'}</button>

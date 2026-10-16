@@ -32,7 +32,7 @@ let browser,page;
    if(r.method()==='POST'){const b=r.postDataJSON();profiles.push({...make('new',b.name,b.model,b.provider,'****N123'),base_url:b.base_url});revision++;return reply({id:'new',version:1});}
    return reply(registry());
   }
-  if(p.endsWith('/model-profiles/engines'))return reply({items:[{name:'标签检查 Beta',engine:'Codex',status:'已配置',path:'/text-compare-codex'}]});
+  if(p.endsWith('/model-profiles/engines'))return reply({items:[{name:'标签检查 Beta',engine:'Codex',status:'已配置',path:'/label-check'}]});
   if(p.endsWith('/model-profiles/bindings')){const b=r.postDataJSON();assert.equal(b.revision,revision);writes++;bindings=b.bindings;revision++;return reply(registry());}
   if(p.endsWith('/model-profiles/usage'))return reply({items:[{profile_id:'one',version:1,purpose:'label',model:'doubao-seed-evolving',elapsed_ms:500,ok:false,usage:{},priced:false,cost:null,at:1}]});
   return reply({items:[],enabled:false,configured:false});

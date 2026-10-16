@@ -53,12 +53,12 @@ function detectionAccessModes(task: TaskEntry | undefined, autoOptimize?: AiAuto
   if (!task) return [];
   const method = String(task.detectionMethod || task.optimizationRoute || "").toLowerCase();
   const aiDriven = isAiDrivenTask(task);
-  const promotedYolo = isAutoOptimizePromoted(autoOptimize);
-  const hasYoloModel = aiDriven ? promotedYolo : Boolean(task.modelExists || task.modelRunId);
+  const promotedVision = isAutoOptimizePromoted(autoOptimize);
+  const hasVisionModel = aiDriven ? promotedVision : Boolean(task.modelExists || task.modelRunId);
   return unique([
-    task.aiTaskId || task.aiBaselineTaskId || task.aiBaselineModelId || task.autoOptimizeTaskId ? "AI baseline" : "",
-    hasYoloModel ? "YOLO" : "",
-    hasYoloModel && method.includes("ocr") ? "YOLO + OCR" : ""
+    task.aiTaskId || task.aiBaselineTaskId || task.aiBaselineModelId || task.autoOptimizeTaskId ? "AI 检测" : "",
+    hasVisionModel ? "视觉模型" : "",
+    hasVisionModel && method.includes("ocr") ? "视觉模型＋文字识别" : ""
   ]);
 }
 
@@ -67,15 +67,15 @@ function progressValue(task: TaskEntry | undefined, recordsCount = 0, sampleCoun
   const aiDriven = isAiDrivenTask(task);
   if (aiDriven) {
     const hasTrainingStarted = Boolean(task.trainingTaskId || task.currentEpoch || task.totalEpochs);
-    const hasYoloCandidate = Boolean(task.modelRunId || task.modelLabel);
-    if (task.stage === "library" && hasYoloCandidate && task.status === "已上线") return 100;
+    const hasVisionCandidate = Boolean(task.modelRunId || task.modelLabel);
+    if (task.stage === "library" && hasVisionCandidate && task.status === "已上线") return 100;
     if (task.stage === "training") {
       const current = Number(task.currentEpoch || 0);
       const total = Number(task.totalEpochs || 0);
       if (current > 0 && total > 0) return Math.min(75, Math.max(45, Math.round((current / total) * 70)));
       return 52;
     }
-    if (hasYoloCandidate) return 82;
+    if (hasVisionCandidate) return 82;
     if (hasTrainingStarted) return 42;
     const sampleSignal = Math.min(12, recordsCount * 2 + Math.floor(sampleCount / 6));
     const penalty = Math.min(8, rejectedCount * 3);
@@ -172,7 +172,7 @@ function autoOptimizePhaseText(status?: AiAutoOptimizeStatus) {
 }
 
 function autoOptimizeDetailText(status?: AiAutoOptimizeStatus) {
-  if (!status) return "开启后后台采集 AI 检测图，自动生成弱标注并训练 YOLO 候选。";
+  if (!status) return "开启后后台采集 AI 检测图，自动生成弱标注并训练 视觉模型 候选。";
   if (status.phase === "promoted" || (!status.enabled && status.active_model_id)) {
     return `模型 ${status.active_model_id || "-"} 已上线，自动优化采集已停止，后续检测不会继续保存新的训练图片。`;
   }
@@ -215,7 +215,7 @@ function autoOptimizeCandidateProgress(status?: AiAutoOptimizeStatus) {
 }
 
 function isAutoOptimizePromoted(status?: AiAutoOptimizeStatus) {
-  return Boolean(status?.active_model_id && (status.phase === "promoted" || status.serving_mode === "promoted_yolo"));
+  return Boolean(status?.active_model_id && (status.phase === "promoted" || status.serving_mode === "promoted_vision"));
 }
 
 function isAutoOptimizeTraining(status?: AiAutoOptimizeStatus) {
@@ -863,7 +863,7 @@ export function TaskDetailPage() {
       0
   );
   const supportsAutoOptimize = Boolean(autoOptimizeTaskId);
-  const autoOptimizeLocked = Boolean(autoOptimizeTaskId && (autoOptimize?.phase === "promoted" || autoOptimize?.serving_mode === "promoted_yolo"));
+  const autoOptimizeLocked = Boolean(autoOptimizeTaskId && (autoOptimize?.phase === "promoted" || autoOptimize?.serving_mode === "promoted_vision"));
   const reviewSamples = autoOptimizeReviewSamples(autoOptimizeQuery.data);
   const manualSamples = autoOptimizeManualSamples(autoOptimizeQuery.data);
   const syntheticSamples = syntheticTrainingSamples(autoOptimizeQuery.data);
@@ -904,7 +904,7 @@ export function TaskDetailPage() {
   const progress = autoOptimizeDisplayProgress(task, autoOptimize, baseProgress);
   const displayStatus = realPhotoSelected ? (realState?.pause_reason ? "已阻塞" : realState?.enabled ? "运行中" : "已暂停") : autoOptimizeDisplayStatus(task, autoOptimize);
   const displayStage = realPhotoSelected ? (realState?.jobs?.some(j=>j.kind==="train" && ["queued","running"].includes(j.status)) ? "实拍训练" : "自动采集与 Agent 筛选") : autoOptimizeDisplayStage(task, autoOptimize);
-  const progressLabel = isAiDrivenTask(task) ? "YOLO 可接管成熟度" : "任务推进进度";
+  const progressLabel = isAiDrivenTask(task) ? "视觉模型 可接管成熟度" : "任务推进进度";
   const showPipelineAutoAdvance = task.kind === "pipeline" && !isAiDrivenTask(task);
   const rows = accessoryRows(task);
   const spritePool = (autoOptimize?.sprite_pool || []).filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>;
@@ -975,7 +975,7 @@ export function TaskDetailPage() {
           <div className="native-progress" aria-hidden="true">
             <span style={{ width: `${progress}%` }} />
           </div>
-          <p>{isAiDrivenTask(task) ? "AI 任务的进度表示 YOLO 从无到可生产接管的成熟度；只有候选模型质量达标并上线后才会跑满。" : "进度表示当前任务在样本、训练和模型上线流程中的推进状态。"}</p>
+          <p>{isAiDrivenTask(task) ? "AI 任务的进度表示 视觉模型 从无到可生产接管的成熟度；只有候选模型质量达标并上线后才会跑满。" : "进度表示当前任务在样本、训练和模型上线流程中的推进状态。"}</p>
         </div>
 
         : null}
@@ -1119,7 +1119,7 @@ export function TaskDetailPage() {
             <ChevronRight size={14} aria-hidden="true" />
             <span>{realPhotoSelected ? "自动出框 / Agent 筛选" : "自动标注"}</span>
             <ChevronRight size={14} aria-hidden="true" />
-            <span>YOLO 训练</span>
+            <span>视觉模型 训练</span>
             <ChevronRight size={14} aria-hidden="true" />
             <span>{realPhotoSelected ? "候选模型 / 手动切换" : "影子对比 / 自动切换"}</span>
           </div>

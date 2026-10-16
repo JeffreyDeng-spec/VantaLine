@@ -760,7 +760,7 @@ transport and usage recording remain explicit, late-bound capabilities.
 History extraction adds no configuration. The existing text-inspection permission,
 account isolation, cursor validation and page bounds remain. Historical media uses
 the bound revision/hash, private no-store caching and nosniff response headers;
-diagnostics retain the same inspection permission rather than an added admin gate.
+model diagnostics additionally require the administrator role while retaining inspection permission and owner checks.
 
 Codex dependency extraction adds no setting. Account admission and the configured
 model continue to be read dynamically; capability queries do not require PostgreSQL.
@@ -2083,3 +2083,9 @@ See [text inspection](text-inspection-v2.md#label-camera-lifetime-and-image-view
 for the viewer's fitted-image, 1–8× cursor zoom, bounded drag, click/keyboard close,
 high-resolution retry and focus-restoration contract. No server/PLC configuration
 or API schema changes.
+
+## Model privacy role and public reference key
+
+**Status: Authoritative.** Concrete model configuration and diagnostics require `role=admin`, independently of `ai_config`, `agent_config`, `system_settings` or worker permissions. Ordinary settings retain personal/device functions without provider, model, API, key or connection-test controls. Model selection and training business modes remain available under existing permissions.
+
+The HTTP presentation owner lazily creates `model-reference.key` in the shared runtime data directory. It is a 64-byte server-only AES-SIV key, atomically published with mode 0600 and shared by all Web workers. Preserve it across immutable releases, restarts, backup/restore and whole-release rollback; different Web hosts serving the same installation must share this key. Missing files are initialized without exposing key contents; invalid/unreadable keys fail closed rather than silently rotating. References are stable display/transport aliases, never authorization grants. No database migration or provider/model reconfiguration is introduced. No key value belongs in source, logs or responses.

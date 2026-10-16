@@ -7,7 +7,7 @@ import { queryKeys } from "../api/queries";
 import { AppToastProvider } from "../components/ToastProvider";
 
 function recheckSession(error: Error) {
-  if (error instanceof ApiError && error.status === 401 && !error.path.startsWith("/api/auth/")) {
+  if (error instanceof ApiError && [401, 403].includes(error.status) && !error.path.startsWith("/api/auth/")) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.authStatus });
   }
 }

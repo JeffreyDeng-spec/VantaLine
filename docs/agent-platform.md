@@ -470,3 +470,7 @@ permission and adds no physical serial or detection dispatch capability.
 ## Administrator data context
 
 `get_context` reports `account_id` as the authenticated identity and `data_scope` as `all` for administrators, or that identity for ordinary users. The global selected-user range is retired; tool requests follow the server role/ownership policy. Identity and role changes still reset private data and tool state.
+
+## Model identity visibility
+
+**Status: Authoritative.** Ordinary browser tools use neutral model references/modes and the same recursively projected HTTP responses as manual UI operations. Tool discovery or delegated configuration permissions never authorize reading/editing model-provider configuration, raw diagnostics or administrator assets. Model/Provider names and internal invocation evidence must not appear in ordinary tool results. Account/role changes reset registrations and reject delayed API results before publishing them to caches or tools. No inference execution, prompt, paid-call or physical-I/O permission is added.

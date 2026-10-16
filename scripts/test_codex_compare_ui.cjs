@@ -22,7 +22,7 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
    if(url==='/api/text-inspection/standards')return r.fulfill({json:{items:[{id:'std',name:'电源铭牌',status:'confirmed',standard_type:'label'}]}});
    if(url==='/api/text-inspection/standards/std')return r.fulfill({json:{id:'std',name:'电源铭牌',status:'confirmed',current_revision_id:'rev1',assets:[{id:'asset',ordinal:1,status:'candidate',content_url:'/fixture/source',original_url:'/fixture/source'}]}});
    if(url.endsWith('/capabilities'))return r.fulfill({json:{enabled:!forbidden,model:'fixed-fixture'}});
-   if(url==='/api/text-compare-codex/tasks'){
+   if(url==='/api/label-check/tasks'){
     if(req.method()==='POST'){
      submitted++;keys.push(req.postData().match(/name="request_id"\r\n\r\n([^\r]+)/)[1]);task ||= fixture();
      if(lost){lost=false;return r.abort('failed');}

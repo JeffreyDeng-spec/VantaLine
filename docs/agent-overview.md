@@ -210,3 +210,7 @@ the selected value into immutable camera plans. See plc-web-serial-v4.md for the
 current behavior and production-runbook.md for pre-feature rollback preparation.
 Historical factory/OpenAPI comparisons verify the exact additive fields before
 projecting to the unchanged baseline; product OpenAPI caches remain intact.
+
+## Model privacy work routing
+
+For model identity visibility, read architecture, configuration-reference and testing. `privacy/` owns neutral HTTP references, JSON/event projections and streaming form translation; `auth/middleware.py` owns pre-handler administrator checks for private APIs/assets. Public frontend model modes are business vocabulary; original internal IDs and model execution stay server-side. Follow the global privacy browser/backend acceptance and existing PLC gates. Preserve the server-only shared runtime reference key across releases.

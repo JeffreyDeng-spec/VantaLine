@@ -94,8 +94,8 @@
     "ui": "src/api/queries.ts"
   },
   {
-    "name": "warmup_yolo_model",
-    "source": "warmupYoloModel",
+    "name": "warmup_vision_model",
+    "source": "warmupVisionModel",
     "domain": "detection",
     "inputSchema": {
       "type": "object",

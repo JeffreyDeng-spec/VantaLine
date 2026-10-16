@@ -1,7 +1,7 @@
 import { LegacyManualRedirect } from "../label-inspection/LegacyManualRedirect";
 import { LabelWorkspace } from '../label-inspection/LabelWorkspace';
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "../../api/client";
+import { advanceSessionScope, apiClient } from "../../api/client";
 import { getAuthStatus, queryKeys } from "../../api/queries";
 import type { AuthStatusResponse } from "../../api/types";
 import { LoadingState, ErrorState } from "../../components/LoadingState";
@@ -14,8 +14,9 @@ import { AgentToolsProvider } from "../agent/AgentToolsProvider";
 import { actionRegistry } from "../agent/registry";
 import { clearFiles } from "../agent/files";
 import { diagnosticTransport } from "../plc/diagnosticLog";
+import { clearEditorDrafts } from "../version/drafts";
 
-import { BatchWorkspace } from '../codex-compare/BatchWorkspace';
+import { BatchWorkspace } from '../smart-compare/BatchWorkspace';
 import { AppShell } from "../../components/AppShell";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -36,22 +37,30 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
   // Data query keys predate account-scoped routing. Clear them before mounting
   // another identity, but never remove the workstation cookie or task preferences.
   const identity = authQuery.data?.authenticated ? authQuery.data.user?.id || "" : "";
+  const scopeIdentity = `${identity}:${authQuery.data?.user?.role || ""}`;
   const [cacheIdentity, setCacheIdentity] = useState<string | null>(null);
   const explicitLogout = useRef(false);
   useLayoutEffect(() => {
+    advanceSessionScope();
+    actionRegistry.reset();
+    clearFiles();
+    clearEditorDrafts();
+    queryClient.getMutationCache().clear();
     diagnosticTransport.setIdentity(identity);
     if (identity) explicitLogout.current = false;
     const privateQueries = { predicate: (query: { queryKey: readonly unknown[] }) => JSON.stringify(query.queryKey) !== JSON.stringify(queryKeys.authStatus) };
     void queryClient.cancelQueries(privateQueries);
     queryClient.removeQueries(privateQueries);
-    setCacheIdentity(identity);
-  }, [identity, authQuery.data?.user?.role, queryClient]);
+    setCacheIdentity(scopeIdentity);
+  }, [identity, scopeIdentity, queryClient]);
 
   const logoutMutation = useMutation({
-    mutationFn: () => { diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },
+    mutationFn: () => { advanceSessionScope(); diagnosticTransport.setIdentity(""); return apiClient.post<{ status: string }>("/api/auth/logout"); },
     onSuccess: async () => {
       actionRegistry.reset();
       clearFiles();
+      clearEditorDrafts();
+      queryClient.getMutationCache().clear();
       await queryClient.cancelQueries();
       queryClient.removeQueries({predicate:query=>JSON.stringify(query.queryKey)!==JSON.stringify(queryKeys.authStatus)});
       // The workspace guard can render before navigation commits. Explicit
@@ -96,7 +105,7 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
     return <AuthForms mode="login" />;
   }
   if (loginPage) return <Navigate to={destination} replace />;
-  if (cacheIdentity !== identity) return <LoadingState label="正在切换工作台" />;
+  if (cacheIdentity !== scopeIdentity) return <LoadingState label="正在切换工作台" />;
 
   return (
     <AuthContext.Provider
@@ -110,8 +119,8 @@ export function AuthGate({ loginPage = false }: { loginPage?: boolean }) {
         }
       }}
     >
-      <AgentToolsProvider key={`agent:${identity}`} />
-      {location.pathname.replace(/\/$/, '') === '/workspace/label-inspection' ? <LabelWorkspace key={`label:${identity}`} /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-beta' ? <LegacyManualRedirect /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-codex' ? <BatchWorkspace key={`batch:${identity}`} /> : <AppShell key={`workspace:${identity}`} />}
+      <AgentToolsProvider key={`agent:${scopeIdentity}`} />
+      {location.pathname.replace(/\/$/, '') === '/workspace/label-inspection' ? <LabelWorkspace key={`label:${scopeIdentity}`} /> : location.pathname.replace(/\/$/, '') === '/workspace/text-compare-beta' ? <LegacyManualRedirect /> : location.pathname.replace(/\/$/, '') === '/workspace/label-check' ? <BatchWorkspace key={`batch:${scopeIdentity}`} /> : <AppShell key={`workspace:${scopeIdentity}`} />}
     </AuthContext.Provider>
   );
 }

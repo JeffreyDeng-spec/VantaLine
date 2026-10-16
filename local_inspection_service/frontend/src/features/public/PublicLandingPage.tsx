@@ -7,7 +7,7 @@ const workflowSteps = [
   ["02", "Run inspection", "Detect objects and evaluate the frame."],
   ["03", "Review evidence", "Confirm results with annotated context."],
   ["04", "Grow dataset", "Keep useful accepted and rejected samples."],
-  ["05", "Train remotely", "Launch a YOLO run on remote GPU capacity."],
+  ["05", "Train remotely", "Train a vision model using managed computing capacity."],
   ["06", "Deploy & monitor", "Activate a model and follow its results."]
 ];
 
@@ -258,7 +258,7 @@ export function PublicLandingPage() {
                 <p className="eyebrow">02 / IMPROVEMENT</p>
                 <h2>Improve from real production data</h2>
                 <p>
-                  Turn reviewed samples into a stronger dataset. Track readiness, launch remote YOLO training on RunPod,
+                  Turn reviewed samples into a stronger dataset. Track readiness, launch managed vision training,
                   and manage each model from training run to active deployment.
                 </p>
                 <ul>
@@ -269,7 +269,7 @@ export function PublicLandingPage() {
               </div>
               <div className="scene scene-training" aria-label="Remote model training progress interface">
                 <div className="scene-bar">
-                  <span>TRAINING RUN / YOLO-184</span>
+                  <span>TRAINING RUN / VISION-184</span>
                   <span className="chip-green">
                     <i /> Running
                   </span>
@@ -285,7 +285,7 @@ export function PublicLandingPage() {
                   </div>
                   <div>
                     <small>REMOTE GPU</small>
-                    <strong>RunPod</strong>
+                    <strong>远程训练</strong>
                   </div>
                 </div>
                 <div className="progress-wrap">
