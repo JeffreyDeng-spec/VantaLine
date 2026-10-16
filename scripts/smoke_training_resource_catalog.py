@@ -90,6 +90,16 @@ class ResourceCatalogContracts(unittest.TestCase):
                 'path': str(self.root / 'training_runs' / run / 'weights/best.pt'),
                 'label': 'Synthetic', 'owner_user_id': 'alice', **values}
 
+    def test_business_model_alias_and_customer_note_survive_resource_payload(self):
+        from local_inspection_service.privacy.notes import customer_note_fields, public_note
+        note = "Imported from RunPod YOLO training worker."
+        (self.root/'training_runs'/'run').mkdir(parents=True)
+        self.specs = [self.model(business_label="Gemini 客户业务线", note=note, **customer_note_fields(note))]
+        model = self.api.training_resources_payload(user=self.user)["models"][0]
+        self.assertEqual(model["business_label"], "Gemini 客户业务线")
+        self.assertEqual(public_note(model["note"], model, "models"), note)
+        self.assertIn("_customer_note_sha256", model)
+
     def test_resource_ids_and_late_unsorted_owner_roots(self):
         for raw, expected in [(None, ''), (0, ''), (' ..._ ', ''), (' ../A 中 /B.. ', 'A_B'), ('A.b-1', 'A.b-1')]:
             self.assertEqual(self.api.clean_training_resource_id(raw), expected)

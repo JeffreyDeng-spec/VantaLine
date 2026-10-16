@@ -111,8 +111,8 @@ export function getServiceStatus(auth: AuthContextValue) {
   return apiClient.get<ServiceStatusResponse>("/api/status");
 }
 
-export function warmupYoloModel(modelId: string) {
-  return apiClient.post<ServiceStatusResponse["yolo_warmup"]>("/api/models/warmup", { model_id: modelId });
+export function warmupVisionModel(modelId: string) {
+  return apiClient.post<ServiceStatusResponse["vision_warmup"]>("/api/models/warmup", { model_id: modelId });
 }
 
 export function getConfigSummary(auth: AuthContextValue) {

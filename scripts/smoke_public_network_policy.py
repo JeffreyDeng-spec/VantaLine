@@ -54,7 +54,7 @@ class Contracts(unittest.TestCase):
   for raw in (None,'','/private/root','C:/private/root','d:\\private\\file'):self.assertEqual(self.s.sanitize_path_for_public_user(raw),'')
   for raw in ('relative/path','../parent','https://example.com','\\\\server\\share'):self.assertEqual(self.s.sanitize_path_for_public_user(raw),raw)
  def test_runtime_detail_access_short_circuit_and_identity(self):
-  self.b['user_has_permission']=Mock(side_effect=AssertionError('admin bypass'));self.assertTrue(self.s.include_internal_runtime_details({'admin':True}));self.b['user_has_permission']=lambda u,p:p in u.get('permissions',[]);self.assertTrue(self.s.include_internal_runtime_details({'permissions':['system_settings']}));self.assertFalse(self.s.include_internal_runtime_details(None))
+  self.b['user_has_permission']=Mock(side_effect=AssertionError('admin bypass'));self.assertTrue(self.s.include_internal_runtime_details({'admin':True}));self.b['user_has_permission']=lambda u,p:p in u.get('permissions',[]);self.assertEqual(self.s.include_internal_runtime_details({'permissions':['system_settings']}),bool(BASELINE));self.assertFalse(self.s.include_internal_runtime_details(None))
  @unittest.skipIf(bool(BASELINE),'candidate assembly only')
  def test_actual_wiring(self):
   from application_integration_source_contract import restore_account_visibility_root

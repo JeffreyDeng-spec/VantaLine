@@ -75,7 +75,7 @@ import { recordAuditText, statusLabel, toneForStatus } from "../../utils/format"
 import { AccessoryTextCropModal } from "../accessories/AccessoryTextCropModal";
 import { useAuth } from "../auth/auth-context";
 
-type PipelineMethod = "yolo_ocr" | "yolo" | "ai";
+type PipelineMethod = "vision_text" | "vision" | "ai";
 type LaneStage = "draft" | "samples" | "training";
 type DropKind = "lane" | "task" | "library" | "remove-accessory";
 type DragKind = "accessory" | "task";
@@ -191,8 +191,8 @@ interface ParamsTarget {
 }
 
 const PIPELINE_METHODS: Array<{ value: PipelineMethod; label: string; usesTraining: boolean }> = [
-  { value: "yolo_ocr", label: "YOLO + OCR", usesTraining: true },
-  { value: "yolo", label: "YOLO", usesTraining: true },
+  { value: "vision_text", label: "视觉模型＋文字识别", usesTraining: true },
+  { value: "vision", label: "视觉模型", usesTraining: true },
   { value: "ai", label: "AI 检测", usesTraining: false }
 ];
 
@@ -257,8 +257,8 @@ function validateTextAccessoryFiles(files: File[], notify: ReturnType<typeof use
 
 function normalizePipelineMethod(value: PipelineDetectionMethod | undefined): PipelineMethod {
   const method = String(value || "").trim().toLowerCase();
-  if (["ai_detection", "ai_inspect", "gemini", "ai"].includes(method)) return "ai";
-  return method === "yolo" ? "yolo" : "yolo_ocr";
+  if (["ai_detection", "ai_inspect", "ai", "ai"].includes(method)) return "ai";
+  return method === "vision" ? "vision" : "vision_text";
 }
 
 function methodMeta(value: PipelineDetectionMethod | undefined) {
@@ -280,8 +280,8 @@ function pipelineTaskUsesTraining(task: PipelineTask | null | undefined) {
 
 function pipelineTaskRecommendedRoute(task: PipelineTask | null | undefined) {
   const route = String(task?.optimization_route || task?.params?.recommended_train_mode || task?.params?.train_mode || "").trim();
-  if (route === "yolo") return "纯 YOLO";
-  if (route === "yolo_ocr") return "YOLO + OCR";
+  if (route === "vision") return "纯 视觉模型";
+  if (route === "vision_text") return "视觉模型＋文字识别";
   return pipelineTaskMethod(task) === "ai" ? "自动判断" : methodMeta(pipelineTaskMethod(task)).label;
 }
 
@@ -896,7 +896,7 @@ function buildAgentMcpPreview(task: PipelineTask, rows: PipelineTaskAccessory[])
       {
         tool: "start_model_training",
         status: trainDone ? "completed" : trainRunning ? "running" : "pending",
-        detail: "样本质量门通过后启动 YOLO / YOLO+OCR。"
+        detail: "样本质量门通过后启动 视觉模型 / 视觉模型＋文字识别。"
       }
     ],
     pauseReason: String(pause.reason || ""),
@@ -935,7 +935,7 @@ function paramsSummary(task: PipelineTask) {
   if (params.sample_count) parts.push(`${params.sample_count} 样本`);
   if (params.epochs) parts.push(`${params.epochs} epoch`);
   if (params.image_size) parts.push(`${params.image_size}px`);
-  if (params.train_mode) parts.push(params.train_mode === "yolo_ocr" ? "YOLO+OCR" : "YOLO");
+  if (params.train_mode) parts.push(params.train_mode === "vision_text" ? "视觉模型＋文字识别" : "视觉模型");
   return parts.length ? parts.join(" · ") : "待推荐参数";
 }
 
@@ -1274,7 +1274,7 @@ function PipelineTaskCard({
       </p>
       <p className="pipeline-card-meta">
         推荐训练路线：{pipelineTaskRecommendedRoute(task)}
-        {method === "ai" ? " · VLM 优先采集，后台逐步训练 YOLO" : ""}
+        {method === "ai" ? " · AI 检测采集，后台逐步训练 视觉模型" : ""}
       </p>
       <p className="pipeline-card-meta">{recordAuditText(task, { includeUpdated: true })}</p>
       {showProgress ? (
@@ -1348,7 +1348,7 @@ function CreateTaskModal({
   onCreate: (payload: PipelineTaskPayload) => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [method, setMethod] = useState<PipelineMethod>("yolo_ocr");
+  const [method, setMethod] = useState<PipelineMethod>("vision_text");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1652,7 +1652,7 @@ function ParamsModal({
   const [sampleCount, setSampleCount] = useState("400");
   const [epochs, setEpochs] = useState("40");
   const [imageSize, setImageSize] = useState("640");
-  const [trainMode, setTrainMode] = useState<PipelineMethod>("yolo_ocr");
+  const [trainMode, setTrainMode] = useState<PipelineMethod>("vision_text");
   const [reason, setReason] = useState("正在获取推荐参数...");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1794,8 +1794,8 @@ function ParamsModal({
             <label className="field">
               训练方式
               <select value={trainMode} onChange={(event) => setTrainMode(event.currentTarget.value as PipelineMethod)}>
-                <option value="yolo">YOLO</option>
-                <option value="yolo_ocr">YOLO + OCR</option>
+                <option value="vision">视觉模型</option>
+                <option value="vision_text">视觉模型＋文字识别</option>
               </select>
             </label>
           </div>

@@ -1,5 +1,6 @@
 """Retained coordination contracts; synthetic heartbeats and isolated PostgreSQL only."""
 import ast
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import os
@@ -20,7 +21,8 @@ NAMES = {'mutate_plc_runtime_coordination', 'plc_completed_capture_receipt',
          '_mutate_plc_runtime_rows', 'plc_claim_or_renew_io_owner', 'plc_current_process_owns_io'}
 
 
-def build():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
     text = read_checked_application_source(source, encoding='utf-8-sig')
@@ -36,10 +38,14 @@ def build():
             isinstance(t, ast.Name) and t.id in NAMES | {'_legacy_plc_coordination'} for t in node.targets
         ):
             nodes.append(node)
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec')
+
+
+def build():
     target = ModuleType('local_inspection_service._coordination_contract')
     target.__package__ = 'local_inspection_service'
     target.__dict__.update(Any=Any, Callable=Callable, copy=copy)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec'), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 
@@ -191,6 +197,7 @@ class CoordinationContract(unittest.TestCase):
         first = self.api
         self.setUp()
         second = self.api
+        self.assertIsNot(first._legacy_plc_coordination, second._legacy_plc_coordination)
         second._plc_process_owner_id = 'process-b'
         for api in (first, second):
             api.runtime_postgres_repository_or_none = lambda: factory.selection().repository

@@ -40,7 +40,7 @@ import { TaskDetailRoute, TaskInspectionRoute } from "../features/incoming-text/
 import { useTaskNavigationPreferences } from "../features/tasks/useTaskNavigationPreferences";
 import { TrainingLibraryPage } from "../features/training/TrainingLibraryPage";
 import { UsersPage } from "../features/users/UsersPage";
-import { CodexComparePage } from "../features/codex-compare/CodexComparePage";
+import { SmartComparePage } from "../features/smart-compare/SmartComparePage";
 import {
   taskEntriesFromTrainingResources,
   taskStatusTone,
@@ -491,7 +491,7 @@ export function AppShell() {
       : hasPermission(auth.user, item.permission)
   );
   const visibleTrainingChildren = assetsExpanded ? visibleTrainingAssetItems : [];
-  const textRoutes = ["/text-compare-beta", "/text-compare-codex", "/label-inspection"];
+  const textRoutes = ["/text-compare-beta", "/label-check", "/label-inspection"];
   const routeTaskId = location.pathname.match(/\/tasks\/([^/]+)(?:\/inspect)?$/)?.[1];
   let decodedTaskId = "";
   try { decodedTaskId = routeTaskId ? decodeURIComponent(routeTaskId).replace(/^pipeline:/, "") : ""; } catch { /* Invalid routes use their existing not-found handling. */ }
@@ -636,7 +636,7 @@ export function AppShell() {
 
       <main className="workspace">
         <Routes>
-          <Route path="text-compare-codex" element={<PermissionRoute permission="inspection"><CodexComparePage /></PermissionRoute>} />
+          <Route path="label-check" element={<PermissionRoute permission="inspection"><SmartComparePage /></PermissionRoute>} />
           <Route index element={<Dashboard />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="status" element={<Navigate to={`${workspacePath()}${location.search}${location.hash}`} replace />} />

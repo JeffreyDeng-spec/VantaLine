@@ -90,9 +90,9 @@ class RoutingContracts(unittest.TestCase):
             anonymous.close()
         self.assertEqual(self.post('invalid',client='blocked').status_code,403)
         invalid=self.post(' INVALID ')
-        self.assertEqual((invalid.status_code,invalid.json()),(400,{'detail':'未知的检测路线:INVALID'}))
+        self.assertEqual((invalid.status_code,invalid.json()['code']),(400,'request_rejected'))
         retired=self.post(' locate ')
-        self.assertEqual((retired.status_code,retired.json()),(410,{'detail':'LocateAnything accessory route has been removed from the Phase 1 core product.'}))
+        self.assertEqual((retired.status_code,retired.json()['code']),(410,'request_rejected'))
         self.assertEqual(self.post('invalid',client='bob').status_code,400)
         self.assertEqual(self.post('locate',identifier='missing').status_code,410)
         self.assertEqual(self.events,[])
@@ -113,10 +113,11 @@ class RoutingContracts(unittest.TestCase):
     def test_non_applied_ai_and_non_ai_routes_save_without_model(self):
         for route,apply in [(' ai ',False),('yolo',True),('archive_only',True)]:
             self.events.clear()
-            response=self.post(route,apply)
+            public_route='vision' if route=='yolo' else route
+            response=self.post(public_route,apply)
             self.assertEqual(response.status_code,200,response.text)
-            self.assertEqual(response.json(),{'accessory_id':'part','route':route.strip(),
-                'accessory':{'id':'part','route':route.strip(),'task_marker':None}})
+            self.assertEqual(response.json(),{'accessory_id':'part','route':public_route.strip(),
+                'accessory':{'id':'part','route':public_route.strip()}})
             self.assertEqual(self.events,['load','save','serialize'])
             self.assertEqual(self.state['accessories'][0]['detection_route'],route.strip())
 
@@ -126,7 +127,8 @@ class RoutingContracts(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(self.events,['load','profile','save','upsert','serialize'])
         self.assertEqual(response.json(),{'accessory_id':'part','route':'ai','profile_status':'ready',
-            'ai_task':{'id':'synthetic-ai-task'},'accessory':{'id':'part','route':'ai','task_marker':'after-save'}})
+            'ai_task':{'id':'synthetic-ai-task'},'accessory':{'id':'part','route':'ai'}})
+        self.assertEqual(self.loaded['accessories'][0]['task_marker'],'after-save')
         self.assertEqual(self.state['accessories'][0]['ai_profile'],{'fixture':True})
         self.assertNotIn('task_marker',self.state['accessories'][0])
         self.assertNotIn('detection_route',self.state['accessories'][1])
@@ -141,7 +143,7 @@ class RoutingContracts(unittest.TestCase):
             response=self.post()
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json()['profile_status'],'failed')
-        self.assertEqual(response.json()['profile_error'],str(error)[:200])
+        self.assertNotIn('profile_error',response.json())
         self.assertEqual(self.state['accessories'][0]['partial_profile'],'preserved')
         self.assertEqual(self.events,['load','profile','save','upsert','serialize'])
         self.events.clear()

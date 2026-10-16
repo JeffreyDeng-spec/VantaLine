@@ -995,3 +995,12 @@ RunPod network-volume date compatibility normalizes daily aggregation identities
 ## Administrator all-data default
 
 Removing the global browser range selector requires no schema change, migration or record rewrite. Existing role/ownership queries serve all users and historical data to administrator requests without an owner filter. Explicit per-user management detail reads keep their selected-owner semantics.
+
+
+## Model identity presentation
+
+**Status: Authoritative.** Global model privacy is a role-aware HTTP projection; persisted real identifiers, profile snapshots and historical evidence stay original. The trained-model catalog carries an optional `business_label` derived from the existing explicit customer display-name metadata. This additive in-memory field distinguishes customer naming from generated architecture labels without a database migration or historical rewrite. Ordinary model/file references resolve before the existing ownership and PLC-binding checks; they never grant access. Shared runtime reference-key preservation is documented in configuration-reference.md.
+
+Platform training/image progress notes use checked business templates on read, including historical provider/worker names and failed-task diagnostics. Original records and administrator notes stay unchanged. Customer note text and same-name words remain original; when an explicit customer edit exactly matches a reserved platform template, a private SHA-256 provenance marker accompanies that existing JSON note through task state and dataset/model catalog projections. This additive marker has no schema migration, does not grant access and is hidden from non-admin responses. Known platform-note literals/templates in training, accessory, pipeline and Agent code are scanned by the privacy regression so new concrete identities cannot silently enter this progress channel.
+
+A later platform note update clears customer provenance even when its text is identical; task-state synchronization clears the corresponding stale marker. Older Agent replies also derive private identity terms from their retained profile snapshots before those snapshots are removed from the public projection. Only model/provider names are copied into this private presentation metadata; user messages, raw history and credential references remain untouched.

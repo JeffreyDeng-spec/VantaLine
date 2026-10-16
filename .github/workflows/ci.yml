@@ -366,6 +366,35 @@ jobs:
       if: ${{ needs.ci-mode.result != 'success' || (needs.ci-mode.outputs.mode != 'full' && needs.ci-mode.outputs.mode !=
         'reuse') }}
       run: exit 1
+  model-privacy:
+    if: ${{ !cancelled() && needs.ci-mode.outputs.mode == 'full' }}
+    needs: [ci-mode]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: local_inspection_service/frontend/package-lock.json
+    - run: pip install -c requirements-production.lock fastapi httpx python-multipart pycryptodome uvicorn 'psycopg[binary]'
+    - run: python scripts/generate_public_error_contract.py --check && python scripts/smoke_model_privacy.py && python scripts/smoke_auth_api.py
+    - working-directory: local_inspection_service/frontend
+      run: npm ci && node scripts/generate-public-fields.mjs --check && npm run build:production-cutover && npx --no-install playwright install --with-deps chromium
+    - name: Verify public assets and four-role browser isolation
+      env:
+        MODEL_PRIVACY_PYTHON: python
+        MODEL_PRIVACY_BROWSER: chromium
+      run: node scripts/test_model_privacy_browser.cjs
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: model-privacy-browser-failure
+        path: /tmp/vantaline-model-privacy-failure.png
+        if-no-files-found: ignore
   backend-shards:
     name: backend-shard-${{ matrix.shard }}
     runs-on: ubuntu-latest

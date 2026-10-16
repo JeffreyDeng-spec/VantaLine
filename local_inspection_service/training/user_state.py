@@ -128,10 +128,13 @@ class TrainingUserState:
         owner_key = self.normalize_training_owner_key(owner_user_id)
         existing = store.get(owner_key) if isinstance(store.get(owner_key), dict) else {}
         state = {**self.default_training_state(), **dict(existing)}
+        if "note" in task and "_customer_note_sha256" not in task:
+            state.pop("_customer_note_sha256", None)
         for key in (
             "status",
             "progress",
             "note",
+            "_customer_note_sha256",
             "error",
             "current_epoch",
             "total_epochs",

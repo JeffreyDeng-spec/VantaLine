@@ -1,5 +1,6 @@
 """Original/owned active browser lease checks with synthetic state and identity."""
 import ast
+from functools import lru_cache
 import copy
 import os
 from pathlib import Path
@@ -17,7 +18,8 @@ class ConfigError(Exception):
     pass
 
 
-def load_target():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
     raw = read_checked_application_source(source, encoding='utf-8-sig')
@@ -33,10 +35,14 @@ def load_target():
             isinstance(t, ast.Name) and t.id in {"_plc_station_service", NAME} for t in node.targets
         ):
             nodes.append(node)
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec")
+
+
+def load_target():
     target = types.ModuleType("local_inspection_service._active_lease_contract")
     target.__package__ = "local_inspection_service"
     target.Any = object
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 

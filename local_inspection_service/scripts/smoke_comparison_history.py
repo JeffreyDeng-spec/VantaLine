@@ -46,7 +46,7 @@ def main():
     rid = "ins_history_23"
     for suffix in ("", "/diagnostics", "/media/preview", "/media/thumbnail", "/media/source", "/media/reference"):
         assert_status(admin.get(base+"/"+rid+suffix), 200, suffix)
-        assert_status(other.get(base+"/"+rid+suffix), 404, "cross owner"+suffix)
+        assert_status(other.get(base+"/"+rid+suffix), 403 if suffix == "/diagnostics" else 404, "cross owner"+suffix)
         assert anon.get(base+"/"+rid+suffix).status_code == 401
     detail = admin.get(base+"/"+rid).json()
     assert admin.get(base+"/"+rid+"/media/source").content == image

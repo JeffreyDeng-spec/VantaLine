@@ -14,6 +14,45 @@ class IntegrationContracts(unittest.TestCase):
         from canonical_application_source_contract import restore_canonical_root
         self.source = restore_canonical_root((contract.ROOT / "local_inspection_service/server.py").read_text())
 
+    def test_shared_validation_is_scoped_and_warm_mutations_still_fail(self):
+        from importlib import import_module
+        from source_verification_session import verification_entry
+
+        @verification_entry
+        def prove(module, attribute):
+            first = getattr(module, attribute)()
+            self.assertIs(getattr(module, attribute)(), first)
+            return first
+
+        targets = (
+            ('admin_user_data_source_contract', 'fixture', 'admin_user_data_delta.json'),
+            ('plc_modbus_source_contract', 'checked_fixture', 'modbus_auto_delta.json'),
+            ('plc_global_protocol_source_contract', 'checked_global_fixture', 'plc_global_protocol_delta.json'),
+            ('billing_source_contract', 'fixture', 'billing_extension.json'),
+            ('billing_configuration_source_contract', 'fixture', 'billing_configuration_extension.json'),
+            ('billing_volc_summary_source_contract', 'fixture', 'billing_volc_summary_extension.json'),
+        )
+        original = Path.read_bytes
+        for name, attribute, filename in targets:
+            module = import_module(name)
+            expected = prove(module, attribute)
+            target = contract.ROOT / 'tests/backend_contract' / filename
+            def read(path):
+                value = original(path)
+                return value + b'\n' if path == target else value
+            with self.subTest(guard=name), patch.object(Path, 'read_bytes', read), self.assertRaises(AssertionError):
+                prove(module, attribute)
+            self.assertEqual(prove(module, attribute), expected)
+
+        leaf = import_module('billing_volc_summary_source_contract')
+        expected = prove(leaf, 'fixture')
+        target = contract.ROOT / expected['provider_path']
+        with patch.object(Path, 'read_bytes', read), self.assertRaises(AssertionError):
+            prove(leaf, 'fixture')
+        self.assertEqual(prove(leaf, 'fixture'), expected)
+        # Outside a proof, direct validators continue executing on every call.
+        self.assertIsNot(leaf.fixture(), leaf.fixture())
+
     def test_warm_replay_rechecks_current_owner_and_changed_root(self):
         expected = contract.restore_plc_domain_root(self.source)
         relative = 'local_inspection_service/plc/workstation_composition.py'

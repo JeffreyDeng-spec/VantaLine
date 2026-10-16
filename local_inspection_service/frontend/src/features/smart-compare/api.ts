@@ -1,5 +1,5 @@
 import { apiClient } from '../../api/client';
-export const ROOT = '/api/text-compare-codex';
+export const ROOT = '/api/label-check';
 export type Box = [number, number, number, number];
 export type Decision = 'MATCH' | 'DIFFERENCES' | 'REVIEW_REQUIRED';
 export interface Evidence { original: string; image: string; preview: string; size: [number, number] }

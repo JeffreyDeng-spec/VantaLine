@@ -10,6 +10,7 @@ from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
+from source_verification_session import verification_entry
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_PHOTO_WORKFLOWS = json.loads((ROOT / "tests/backend_contract/real_photo_workflows_delta.json").read_text())
@@ -84,6 +85,7 @@ def _restore_delta_cached(source, fixture_json):
     return ast.unparse(tree)
 
 
+@verification_entry
 def reviewed_business_bytes(path):
     """Reverse only the reviewed quota-removal delta for historical source oracles."""
     from plc_modbus_source_contract import restore_modbus_business
@@ -105,6 +107,7 @@ def reviewed_business_bytes(path):
     return restored
 
 
+@verification_entry
 def verify_actual_compositions():
     assert MAIN283_PLC["schema"] == 1, "Unknown PLC integration schema"
     assert MAIN283_PLC["upstream_sha"] == "8195c96970c1e41582d4796fe2b23508ea9f837a", "Unreviewed PLC upstream"
@@ -148,22 +151,49 @@ def verify_actual_compositions():
         actual = reviewed_business_bytes(path)
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
-        assert source_digest((ROOT / path).read_text(encoding="utf-8")) == expected, \
+        from model_privacy_source_contract import checkpoint_bytes as privacy_checkpoint
+        assert source_digest(privacy_checkpoint(path, (ROOT / path).read_text(encoding="utf-8").encode()).decode()) == expected, \
             "Actual composition capability changed: " + path
 
 
+@verification_entry
 def restore_integrated_root(source):
     from application_configuration_source_contract import restore_application_configuration_root
     return restore_delta(restore_delta(restore_application_configuration_root(restore_plc_domain_root(source)), MAIN_FEEDBACK), FIXTURE)
 
 
+@verification_entry
 def restore_business_root(source):
     from application_configuration_source_contract import restore_application_configuration_root
     return restore_delta(restore_delta(restore_delta(restore_application_configuration_root(restore_plc_domain_root(source)), MAIN_FEEDBACK), FIXTURE), BUSINESS)
 
 
+@verification_entry
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
+    # Reject known forbidden rebindings before the expensive historical replay.
+    # Valid inputs still execute every original owner/source/digest assertion;
+    # no replay result or current-file validation is cached here.
+    tree = ast.parse(source)
+    assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+                   for target in node.targets if isinstance(target, ast.Name)}
+    aliases = {
+        '_pipeline_queries': {'_pipeline_candidate_flow': '_pipeline_queries.candidates'},
+        '_plc_lease_diagnostic_workflows': {'_plc_lease_acquisition': '_plc_lease_diagnostic_workflows.acquisition'},
+        '_agent_pipeline_workflows': {'_agent_decision_flow': '_agent_pipeline_workflows.decision'},
+    }
+    for owner, bindings in aliases.items():
+        if owner in assignments and not any(isinstance(part, ast.Name) and part.id == '_default_application'
+                                             for part in ast.walk(assignments[owner])):
+            for name, expected in bindings.items():
+                # Earlier accepted replay checkpoints still contain the original
+                # constructor. Its exact Call is verified by the existing delta.
+                if name in assignments and not isinstance(assignments[name], ast.Call):
+                    assert ast.unparse(assignments[name]) == expected, 'Rebound domain owner: ' + name
+    if '_pipeline_queries' in assignments:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.keyword) and node.arg == 'model_resolver':
+                assert isinstance(node.value, ast.Name) and node.value.id == 'resolve_model_profiles', 'Rebound model resolver'
     verify_actual_compositions()
     source = restore_path_configuration_root(source)
     fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE, CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,
@@ -182,6 +212,7 @@ def restore_plc_domain_root(source):
     return source
 
 
+@verification_entry
 def restore_pose_domain_root(source):
     """Check real Pose owners and fold only the three immutable outer deltas."""
     verify_actual_compositions()
@@ -281,6 +312,7 @@ def verify_main289_real_photo_sources():
         assert hashlib.sha256(actual).hexdigest() == COMPLETED_REVIEW_RECOVERY_SOURCE_SHA256.get(path, MAIN302_REAL_PHOTO_SOURCE_SHA256.get(path, accepted["actual_sha256"])), "Confirmed-source business changed: " + path
 
 
+@verification_entry
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
     from canonical_application_source_contract import restore_canonical_root
@@ -313,6 +345,7 @@ def restore_real_photo_workflows_root(source):
     return source
 
 
+@verification_entry
 def restore_provider_transports_root(source):
     """Check actual app-owned provider types before folding their fixed delta."""
     source = restore_real_photo_workflows_root(source)
@@ -326,6 +359,7 @@ def restore_provider_transports_root(source):
     return source
 
 
+@verification_entry
 def restore_account_visibility_root(source):
     """Verify the real visibility graph before replaying its fixed entry delta."""
     source = restore_provider_transports_root(source)
@@ -339,6 +373,7 @@ def restore_account_visibility_root(source):
     return source
 
 
+@verification_entry
 def restore_training_persistence_graph_root(source):
     """Verify actual completion owners before folding this fixed entry delta."""
     source = restore_account_visibility_root(source)
@@ -352,6 +387,7 @@ def restore_training_persistence_graph_root(source):
     return source
 
 
+@verification_entry
 def restore_infrastructure_root(source):
     """Validate real infrastructure edges, then fold only a fixed entry delta."""
     source = restore_training_persistence_graph_root(source)
@@ -372,6 +408,7 @@ def restore_infrastructure_root(source):
     return source
 
 
+@verification_entry
 def restore_path_configuration_root(source):
     """Validate the actual closed graph before preserving older strict oracles."""
     source = restore_infrastructure_root(source)

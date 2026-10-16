@@ -1,6 +1,7 @@
 """Explicit pipeline turns service without application imports."""
 from typing import Any
 from .pipeline_action_ports import AgentTurnCalls
+from ..privacy.identities import PRIVATE_IDENTITIES
 
 
 class AgentPipelineTurns:
@@ -26,7 +27,7 @@ class AgentPipelineTurns:
         if user_message:
             self._turn.append()(task, "user", user_message)
         self._turn.apply()(task, config, decision, user, trigger=trigger, pending_advances=pending_advances)
-        self._turn.append()(
+        entry = self._turn.append()(
             task,
             "agent",
             decision.get("message_to_user") or decision.get("reason") or "已处理。",
@@ -37,4 +38,6 @@ class AgentPipelineTurns:
             needs_user=bool(decision.get("needs_user")),
             agent_error=str(decision.get("agent_error") or ""),
         )
+        if isinstance(entry, dict) and isinstance(decision.get(PRIVATE_IDENTITIES), list):
+            entry[PRIVATE_IDENTITIES] = list(decision[PRIVATE_IDENTITIES])
         return decision

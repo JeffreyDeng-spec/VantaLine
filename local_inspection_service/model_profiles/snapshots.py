@@ -2,6 +2,7 @@
 import copy
 import functools
 import inspect
+from ..privacy.identities import PRIVATE_IDENTITIES, snapshot_identity_terms
 
 from .dependencies import RecordLoader, ResolverProvider, require_resolver
 
@@ -61,10 +62,23 @@ def pinned(service_provider: ResolverProvider, loader: RecordLoader | None = Non
 
 
 def public_record(value):
+    return _public_record(value, ())
+
+
+def _public_record(value, inherited):
     if isinstance(value, dict):
-        return {k: public_record(v) for k,v in value.items() if k not in {'model_profiles','profile_snapshot','secret_ref','proxy_ref'}}
+        terms = inherited
+        if value.get('model_profiles') or value.get('profile_snapshot'):
+            terms = tuple(sorted(set(inherited) | set(snapshot_identity_terms(value.get('model_profiles'))) |
+                                 set(snapshot_identity_terms(value.get('profile_snapshot'))), key=lambda term: (-len(term), term)))
+        result = {k: _public_record(v, terms) for k,v in value.items() if k not in {'model_profiles','profile_snapshot','secret_ref','proxy_ref'}}
+        if (value.get('role') in {'agent','assistant'} or ('action' in value and 'message_to_user' in value and value.get('role')!='user')) and terms:
+            existing = value.get(PRIVATE_IDENTITIES)
+            existing_terms = {item for item in existing if isinstance(item,str)} if isinstance(existing,list) else set()
+            result[PRIVATE_IDENTITIES] = sorted(set(terms) | existing_terms)
+        return result
     if isinstance(value, list):
-        return [public_record(v) for v in value]
+        return [_public_record(v, inherited) for v in value]
     return value
 
 

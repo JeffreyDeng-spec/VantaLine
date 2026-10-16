@@ -95,7 +95,7 @@ def assert_react_detection_routes() -> None:
 
 
 def post_bad_image(client: TestClient, model_id: str | None = None):
-    data = {"model_id": model_id} if model_id is not None else {}
+    data = {"model_id": server._authentication_http.presentation.references.encode(model_id)} if model_id is not None else {}
     return client.post(
         "/api/analyze/image",
         data=data,

@@ -228,7 +228,7 @@ their decision/history. Normal-orientation original JPEG/PNG downloads no longer
 re-encode the source as PNG. No shared/public image cache is introduced.
 
 Qwen correspondence uses JSON Object output with thinking off and strict local
-evidence validation. Default-folded Raw Output links to private per-call request,
+evidence validation. Default-folded administrator-only Raw Output links to private per-call request,
 input-image, raw response and parsing/failure evidence. Polling excludes raw bodies
 and filesystem paths. Keys and authorization headers are excluded; known-key
 echoes and inline Base64 media are redacted. Requests remain at-most-once; response
@@ -240,7 +240,7 @@ Old responses that were never recorded cannot be reconstructed by this feature.
 An independent actual-image reread allowlist adds polled phases
 `rereading_regions` and `transcribing_regions` after text mapping. At most eight
 candidate regions are reread per round, under the existing total 120s deadline.
-Raw Output includes authenticated input thumbnails, per-call usage/state/timing,
+administrator-only Raw Output includes authenticated input thumbnails, per-call usage/state/timing,
 source transforms and evidence. Text-only rereads display crop-region bounds,
 not invented word boxes. Comparisons remain review-only. Standard preparation
 and its saved templates are not rerun. No characters are joined across views.
@@ -266,7 +266,7 @@ unprepared/excluded images remain read-only. Original-image normalized boxes are
 clickable and keyboard operable: uncertain -> keep -> exclude -> keep. Both color
 and check/cross/question marks identify states. Keep/uncertain source pixels are
 never erased by the browser. The saved cleaned-image preview is explicitly separate
-from unsaved edits. Text/box adjustments and bounded Raw Output stay available.
+from unsaved edits. Text/box adjustments and bounded administrator-only Raw Output stay available.
 Unknown elements block saving; changed draft/source identities require reopening,
 and dirty modal closure requires confirmation. All saves use existing authenticated,
 optimistically versioned endpoints; no extra model call or changed matching rule.
@@ -317,7 +317,7 @@ no OCR elements. This is an ambiguity guard, not a rule for deleting text: legit
 borderless white layouts may also require human confirmation. It prevents the
 known separated-size-note failure from being automatically accepted.
 GET `.../preparation/{asset}/recovery/{region}/{region|ocr}` serves owned local
-input/overlay evidence; progress and Raw Output include these images. The shared
+input/overlay evidence; progress and administrator-only Raw Output include these images. The shared
 60-second supplementation budget includes local OCR queueing; no full-page rerun
 or second VLM call is performed. Human adjustments remain model-free.
 The template keeps excluded elements and raw observations for audit. Scope is text
@@ -424,7 +424,7 @@ The formal **文字检验** entry is account scoped and independent from product
 - PDF metadata is validated synchronously; the unified importer renders all split pages in a durable background job before publishing revision 1. Historical manual pages retain their original lazy read compatibility.
 - The external VLM receives only one confirmed standard image and one capture. The service writes an `attempting` record before the call, uses one provider attempt, and never re-calls an uncertain comparison ID. Provider/schema/prompt failures become `REVIEW_REQUIRED`.
 - Every label comparison persists a bounded diagnostic envelope in the same account-scoped record. It includes prepared image dimensions, byte counts, formats and hashes; provider/model/endpoint host and timeout; stage-by-stage timestamps; provider latency, HTTP/timeout/retry and usage metadata when returned; the parsed model response; the exact validation or post-processing failure stage and message; and a bounded raw model-text preview when JSON parsing fails. Embedded image data, authorization headers, cookies, tokens, API keys and secrets are redacted. A compact structured event is also written to the service log without model text or media. Diagnostics never authorize an automatic retry of an uncertain charged request.
-- The comparison result exposes the already-sanitized provider output in a native, default-closed `Raw Output` disclosure. Successful responses show the parsed model JSON rather than an unbounded byte-for-byte body; invalid JSON may show the bounded raw-text preview. The provider-adapted value is shown separately so operators can distinguish model output from the value entering domain validation. The UI applies an additional display limit and never renders secrets, request headers or embedded media.
+- The comparison result exposes the already-sanitized provider output in a native, default-closed `administrator-only Raw Output` disclosure. Successful responses show the parsed model JSON rather than an unbounded byte-for-byte body; invalid JSON may show the bounded raw-text preview. The provider-adapted value is shown separately so operators can distinguish model output from the value entering domain validation. The UI applies an additional display limit and never renders secrets, request headers or embedded media.
 
 ## API
 
@@ -437,7 +437,7 @@ and an opaque next cursor; supported result filters are MATCH, DIFFERENCES and
 REVIEW_REQUIRED. Execution state (processing/completed/failed/timeout/review)
 is separate from the comparison decision. Limit is capped at 100.
 `GET /history/{id}` returns the saved result and element evidence;
-`GET /history/{id}/diagnostics` loads sanitized logs only on disclosure.
+`GET /history/{id}/diagnostics` requires admin before loading sanitized logs on disclosure.
 `GET /history/{id}/media/{thumbnail|preview|source|reference|annotated-preview}`
 rechecks ownership and hashes. Missing historical media is not replaced with a
 current standard. New records snapshot order/material/version/ordinal metadata;
@@ -462,7 +462,7 @@ Accounts listed in `VANTALINE_LABEL_EXTRACTION_ACCOUNTS` use a guide/extract/pre
 
 Image-generation settings are independent of Qwen text-comparison settings. The provider receives a 10%-expanded ROI explicitly padded to a square (never stretched); all padding/scaling transforms are recorded. A label-specific parser rejects multiple candidates, off-center targets, aspect changes, non-binary images and guide/image-edge crossings. Weak original-edge support requires manual adjustment. The crop is made from orientation-normalized original pixels, with white background and a two-pixel outward safety margin; no generated pixels, erosion, text repair or perspective resampling enter comparison. Geometry checks do not prove semantic completeness: operator confirmation remains mandatory and ordinary comparison quality gates remain in force.
 
-Extraction diagnostics and authenticated source/mask/crop previews are available in a default-collapsed disclosure. Used extraction evidence is retained with comparison history. Unconfirmed, unreferenced drafts older than seven days are expired lazily on account capability checks; an atomic expiration revision competes with confirmation, and confirmed roots are conservatively retained. Retention never runs from the release installer. Old request IDs remain tombstoned so expiration cannot cause automatic paid replays.
+Extraction diagnostics require admin; authenticated business source/mask/crop previews retain their existing owner-scoped access. Used extraction evidence is retained with comparison history. Unconfirmed, unreferenced drafts older than seven days are expired lazily on account capability checks; an atomic expiration revision competes with confirmation, and confirmed roots are conservatively retained. Retention never runs from the release installer. Old request IDs remain tombstoned so expiration cannot cause automatic paid replays.
 
 The `/api/text-inspection` namespace requires `inspection`. Standards, assets, records, sessions and pages are limited to the current authenticated account. Main routes are standards import/list/detail/asset add/asset classification/confirm, label compare, read-only manual history, and label inspection review. Old manual session create/page/complete return HTTP 410. Confirmed asset mutations append their revision snapshots internally in the same transaction.
 
@@ -1041,3 +1041,7 @@ fit. Resize refits the image. Full-resolution loading/fallback/retry preserve th
 view; retry does not dismiss. Closing restores focus to the connected trigger,
 with result selection/scroll/fullscreen preserved. No image, detection, API,
 storage or PLC-dispatch semantics change.
+
+## Model privacy for results and history
+
+**Status: Authoritative.** Ordinary text-inspection results, extraction records and history retain business decisions, differences, media, confidence and record identifiers. Provider/model identity, raw/normalized model outputs, provider sessions and diagnostic/audit download links are administrator-only, enforced before handler work. The raw-output disclosure is rendered only for admin. Model-independent visual evidence remains available through the `match_evidence` business projection; customer document and recognized text remain exact. The global privacy adapter projects nested legacy records at read/export time without mutating stored evidence or triggering another comparison.

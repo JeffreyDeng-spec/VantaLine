@@ -1,4 +1,5 @@
 """Training task edit/delete orchestration preserving mutation and persistence order."""
+from ..privacy.notes import customer_note_fields
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -35,6 +36,7 @@ class TrainingTaskMutations:
             task["candidate_name"] = task["label"]
         if request.note is not None:
             task["note"] = request.note.strip()
+            task.update(customer_note_fields(task["note"]))
         task["updated_at"] = int(self.clock())
         self.records.save(task)
         return self.records.public(task)

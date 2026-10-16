@@ -26,6 +26,38 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 const deliverResult=()=>new Promise(resolve=>setTimeout(resolve,0));
 
+test('configuration tools are private resources and delegated permissions cannot authorize them',async()=>{
+  const {canUseAgentAction}=load('access-policy');
+  const calls=[];
+  const queries=new Proxy({}, {get:(_target,name)=>name==='__esModule'?true:()=>{calls.push(name);return {model:'private-actual-model'};}});
+  function factory(name, exported){
+    const file=path.join(root,name);
+    const source=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+    const module={exports:{}};
+    const require=name=>name==='../../api/queries'?queries:name==='./files'?{buildForm:value=>value}:assert.fail('Unexpected adapter dependency '+name);
+    vm.runInThisContext(`(function(exports,require,module){${source}\n})`,{filename:file})(module.exports,require,module);
+    return module.exports[exported];
+  }
+  const apiActions=factory('apiActions.generated.ts','apiActions');
+  const adminActions=factory('AdminAgentActions.generated.ts','adminApiActions');
+  const delegated={id:'member',role:'user',permissions:['ai_config','agent_config','system_settings']};
+  const privateTools=adminActions(()=>({user:delegated}));
+  assert.ok(privateTools.length>=7);assert.ok(privateTools.every(item=>item.requiresAdmin));
+  for(const user of [null,{id:'member',role:'user',permissions:[]},delegated]){
+    const registry=new ActionRegistry();registry.configure(action=>canUseAgentAction(user,action,true),async()=>{});
+    const actions=apiActions(()=>({user}));assert.ok(actions.every(item=>!item.requiresAdmin));registry.register(actions);
+    for(const action of privateTools){assert.equal(registry.list().some(item=>item.name===action.name),false);assert.equal((await registry.execute(action.name,{})).error.code,'NOT_AVAILABLE');}
+    assert.equal(calls.length,0);
+  }
+  let user={id:'admin',role:'admin',permissions:[]};
+  const registry=new ActionRegistry();registry.configure(action=>canUseAgentAction(user,action,true),async()=>{});
+  registry.register([...apiActions(()=>({user})),...privateTools]);
+  assert.equal((await registry.execute('get_ai_config',{})).data.model,'private-actual-model');
+  assert.equal(calls.length,1);
+  user=delegated;
+  assert.equal((await registry.execute('get_ai_config',{})).error.code,'FORBIDDEN');assert.equal(calls.length,1);
+});
+
 test('strict inputs reject unknown fields and unsafe prototypes before side effects',async()=>{
   let count=0;const registry=new ActionRegistry();registry.register([action('edit',()=>count++)]);
   assert.equal((await registry.execute('edit',{})).error.code,'FORBIDDEN');

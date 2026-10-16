@@ -218,7 +218,8 @@ class WebShutdownTests(unittest.TestCase):
         server = self.server
         owner = server.app.state.web_shutdown
         self.assertEqual([hook.__name__ for hook in owner.hooks], ['stop_real_photo_training_dispatcher', 'set', 'stop'])
-        bindings = [('real-photo-dispatch', server._real_photo_dispatch_runtime.close),
+        bindings = [('billing-sync', server._default_application.analytics._billing.close),
+            ('real-photo-dispatch', server._real_photo_dispatch_runtime.close),
             ('pdf-import', server.app.state.label_pdf_import.close),
             ('pipeline-auto-agent', server._pipeline_auto_agent_runtime.close),
             ('pipeline-advance', server._pipeline_advance_runtime.close),

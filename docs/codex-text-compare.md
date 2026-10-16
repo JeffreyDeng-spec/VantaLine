@@ -21,7 +21,7 @@ requirements remain authoritative. No unknown call is retried or requeued.
 
 ## User contract
 
-`/workspace/text-compare-codex` is an independent owner-scoped workspace. Each
+`/workspace/label-check` is an independent owner-scoped workspace. Each
 submission freezes a confirmed label asset's original bytes, standard revision,
 EXIF-oriented input and private preview. It does not require or call the prepared
 OCR/Qwen pipeline. One actual photograph contains one label. DOC/PDF import and
@@ -86,7 +86,7 @@ matching (including administrators). New submissions additionally require the
 explicit commissioning allowlist and configured model. GET capabilities does
 not query new tables, so default-off rollback remains safe.
 
-- POST `/api/text-compare-codex/tasks`: multipart `captured_file`,
+- POST `/api/label-check/tasks`: multipart `captured_file`,
   `standard_asset_id`, `expected_revision` (immutable revision ID), `request_id`,
   optional `reference_region` (JSON normalized XYWH, defaults to whole image).
 - GET `/tasks`: 30-item pages, opaque `before` cursor. GET `/tasks/{id}`: report.
@@ -252,7 +252,7 @@ A draft allows at most 50 actuals (usual usage 1–10), each 10 MiB/16MP, and 50
 reference image/region entries. Repeated actual bytes require explicit acceptance
 as another sample. A single task remains queued/running regardless of photo count.
 
-New APIs under /api/text-compare-codex:
+Public APIs under /api/label-check (the internal registrar keeps its legacy prefix):
 - POST /batches with request_id creates a durable draft; GET /batches pages by before.
 - GET /batches/{id} returns the overview; GET /batches/{id}/labels/{label} gives detail.
 - POST /batches/{id}/document: file and request_id; import state is pollable.
@@ -315,3 +315,7 @@ Canonical text graph wiring preserves Codex task/event projections, credentials,
 ## Shared browser release updates
 
 The global version coordinator guards new batch order selection, document/photo uploads, single-image submissions and explicit new comparison retries. Review, cancellation and saving do not initiate updates. Whole browser workflows remain busy until their callback completes; the shared camera cleanup stops tracks before reload. Unuploaded selections require discard confirmation. Persisted Codex jobs remain recoverable and are never automatically resubmitted by version updates. This does not enable the default-disabled beta or establish real-model commissioning.
+
+## Public presentation boundary
+
+**Status: Authoritative.** The customer-facing page is `/workspace/label-check` and the customer API prefix is `/api/label-check`. The presentation adapter maps this prefix to the existing internal comparison routes before execution; jobs, queue behavior, worker contracts and internal evidence are unchanged. The legacy concrete-engine API prefix is admin-only. Ordinary responses omit the engine/model identity, provider session, prompt/skill metadata and raw diagnostic envelopes while retaining results, differences, evidence media and business history. Administrator model settings and diagnostics retain concrete identities behind role checks. Customer source/recognized text is not rewritten even when it contains a vendor name.

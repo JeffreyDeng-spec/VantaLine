@@ -1,4 +1,5 @@
 """Dataset manifest projection and ordered, permission-aware filesystem lookup."""
+from ..privacy.notes import preserved_note_fields
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +91,7 @@ class DatasetCatalog:
             "kind": "dataset",
             "display_name": manifest.get("display_name") or dataset_dir.name,
             "note": manifest.get("note") or "",
+            **preserved_note_fields(manifest),
             "path": str(dataset_dir),
             "manifest_path": str(manifest_path),
             "sample_count": sample_count or manifest.get("sample_count") or 0,
@@ -138,6 +140,7 @@ class DatasetCatalog:
             "kind": "dataset",
             "display_name": manifest.get("display_name") or dataset_dir.name,
             "note": manifest.get("note") or "",
+            **preserved_note_fields(manifest),
             "path": str(dataset_dir),
             "manifest_path": str(manifest_path),
             "sample_count": sample_count or manifest.get("sample_count") or 0,

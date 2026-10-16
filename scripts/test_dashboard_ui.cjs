@@ -67,7 +67,7 @@ let browser;
   assert.ok(await primary.locator('img').evaluateAll(images=>images.every(i=>i.complete&&i.naturalWidth>0)));
   await page.screenshot({path:path.join(output,'overview-desktop.png'),fullPage:true});
   await overview.getByRole('button',{name:'更多工具',exact:true}).click();
-  const expectedTools=[['标签检查 Beta','/workspace/text-compare-codex'],['AI 检测','/workspace/ai-inspect'],['数据分析','/workspace/data-analysis'],['任务流水线','/workspace/pipeline'],['设置','/workspace/rules'],['用户管理','/workspace/users'],['关于与帮助','/workspace/about']];
+  const expectedTools=[['标签检查 Beta','/workspace/label-check'],['AI 检测','/workspace/ai-inspect'],['数据分析','/workspace/data-analysis'],['任务流水线','/workspace/pipeline'],['设置','/workspace/rules'],['用户管理','/workspace/users'],['关于与帮助','/workspace/about']];
   assert.equal(await tools.getByRole('link').count(),7);
   for(const [name,href] of expectedTools)assert.equal(await tools.getByRole('link',{name,exact:true}).getAttribute('href'),href);
   await page.keyboard.press('End');assert.equal(await page.evaluate(()=>document.activeElement.textContent),'关于与帮助');

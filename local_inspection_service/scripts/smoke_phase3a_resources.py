@@ -233,14 +233,15 @@ def main() -> None:
     response = client.get("/api/accessories/acc_a/detail")
     assert_status(response, 200, "operator_a accessory detail")
     detail = response.json()
-    gallery_paths = {item.get("source_path") for item in detail["gallery"]}
+    references = server._authentication_http.presentation.references
+    gallery_paths = {references.decode(item.get("source_path", "")) for item in detail["gallery"]}
     if source_a not in gallery_paths:
         raise AssertionError("operator_a detail gallery did not include seeded source image")
 
     response = client.get("/api/accessories/acc_b/detail")
     assert_status(response, 404, "operator_a cannot read operator_b accessory detail")
 
-    response = client.post("/api/accessories/acc_a/ai-reference", json={"source_path": source_a})
+    response = client.post("/api/accessories/acc_a/ai-reference", json={"source_path": references.encode(source_a)})
     assert_status(response, 200, "operator_a set accessory AI reference")
 
     response = client.post("/api/accessories/acc_a/route", json={"route": "locate", "apply": False})

@@ -9,6 +9,8 @@ from .composition import AuthenticationServices
 from .docs_api import DocumentationAccess, register_documentation_api
 from .middleware import SecurityDependencies, register_security_middleware
 from .policy import user_is_admin
+from ..privacy.presentation import Presentation
+from ..privacy.references import References, runtime_key
 
 Record = dict[str, Any]
 
@@ -35,9 +37,12 @@ class AuthenticationHttp:
         self.documentation = DocumentationAccess(
             self.security.authenticate, self.security.users_exist, user_is_admin,
         )
+        self.presentation = Presentation(References(
+            lambda: runtime_key(services.repository.dependencies.data_directory()),
+        ))
 
     def register_security(self, app: FastAPI):
-        return register_security_middleware(app, self.security)
+        return register_security_middleware(app, self.security, presentation=self.presentation)
 
     def register_auth(self, app: FastAPI):
         return register_auth_api(app, self.services.flows, self.services.sessions, self.services.users)

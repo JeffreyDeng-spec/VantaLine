@@ -25,7 +25,7 @@ import {
   queryKeys,
   updateRules,
   updateTaskRules,
-  warmupYoloModel
+  warmupVisionModel
 } from "../../api/queries";
 import type {
   AiDetectionLibraryTask,
@@ -76,9 +76,9 @@ function isAiModel(model: StatusModel | Record<string, unknown> | null | undefin
   return Boolean(model?.is_ai_detection || model?.variant === "ai_detection" || String(model?.id || "").startsWith(AI_TASK_MODEL_PREFIX));
 }
 
-function isWarmableYoloModel(model: StatusModel | null | undefined) {
+function isWarmableVisionModel(model: StatusModel | null | undefined) {
   if (!model || isAiModel(model)) return false;
-  return Boolean(model.id && (model.exists || model.variant === "yolo" || model.variant === "yolo_ocr" || model.uses_ocr));
+  return Boolean(model.id && (model.exists || model.variant === "vision" || model.variant === "vision_text" || model.uses_ocr));
 }
 
 function warmupFailedForModel(failed: unknown, modelId: string) {
@@ -86,7 +86,7 @@ function warmupFailedForModel(failed: unknown, modelId: string) {
   return failed.some((item) => (typeof item === "string" ? item === modelId : String((item as { model_id?: string }).model_id || "") === modelId));
 }
 
-function warmupReadyForModel(warmup: ServiceStatusResponse["yolo_warmup"] | undefined, modelId: string) {
+function warmupReadyForModel(warmup: ServiceStatusResponse["vision_warmup"] | undefined, modelId: string) {
   if (!modelId) return false;
   const loaded = warmup?.loaded_model_ids || [];
   const completed = warmup?.completed_model_ids || [];
@@ -124,7 +124,7 @@ function formatAiStatus(value: unknown) {
 }
 
 function modelOptionLabel(model: StatusModel) {
-  return modelVariantLabel(model) || model.label || model.id;
+  return [model.task_label || model.label, modelVariantLabel(model)].filter((value, index, all) => value && all.indexOf(value) === index).join(" · ") || "视觉模型";
 }
 
 function modelOptionMeta(model: StatusModel) {
@@ -758,7 +758,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     onError: (nextError: Error) => notify({ title: "任务规则保存失败", description: nextError.message, tone: "error" })
   });
   const modelWarmupMutation = useMutation({
-    mutationFn: (modelId: string) => warmupYoloModel(modelId),
+    mutationFn: (modelId: string) => warmupVisionModel(modelId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.serviceStatus(auth.user.id) });
     },
@@ -827,7 +827,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
     const aiBaseline = aiModelId
       ? [{
           id: aiModelId,
-          label: "AI / VLM baseline",
+          label: "AI 检测",
           description: "生产初始检测与样本采集",
           exists: true,
           variant: "ai_detection",
@@ -844,7 +844,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const legacyAiModelOptions: StatusModel[] = !routeTask && isAi && selectedAiModelId
     ? [{
         id: selectedAiModelId,
-        label: "AI / VLM baseline",
+        label: "AI 检测",
         description: "生产初始检测与样本采集",
         exists: true,
         variant: "ai_detection",
@@ -859,22 +859,22 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   const modelOptions = routeTask ? routeTaskModelOptions : isAi ? legacyAiModelOptions : currentTask?.models || [];
   const selectedModel = modelOptions.find((model) => model.id === selectedModelId) || null;
   const activeModelId = selectedModelId || (isAi ? selectedAiModelId : "");
-  const realPhotoMode=realPhotoSelected || /^trained_train_real_[0-9a-f]{32}__yolo$/.test(activeModelId);
+  const realPhotoMode=realPhotoSelected || selectedModel?.is_real_photo === true;
   const activeModelIsAi = selectedModel ? isAiModel(selectedModel) : isAi;
   const activeDetectionLabel = modelDetectionLabel(selectedModel, activeModelIsAi);
   const activeResultLabel = modelResultLabel(selectedModel, activeModelIsAi);
-  const warmupStatus = status?.yolo_warmup;
+  const warmupStatus = status?.vision_warmup;
   const loadedModelIds = warmupStatus?.loaded_model_ids || [];
   const completedWarmupIds = warmupStatus?.completed_model_ids || [];
   const pendingModel = pendingModelId ? modelOptions.find((model) => model.id === pendingModelId) || null : null;
   const displayedModelId = pendingModelId || selectedModelId;
   const warmupDisplayModel = pendingModel || selectedModel;
   const warmupDisplayModelId = warmupDisplayModel?.id || "";
-  const selectedModelWarmable = isWarmableYoloModel(selectedModel);
+  const selectedModelWarmable = isWarmableVisionModel(selectedModel);
   const selectedModelWarmupFailed = selectedModelWarmable && warmupFailedForModel(warmupStatus?.failed_model_ids, selectedModelId);
   const selectedModelReady = !selectedModelWarmable || warmupReadyForModel(warmupStatus, selectedModelId);
   const selectedModelWarming = selectedModelWarmable && !selectedModelReady && !selectedModelWarmupFailed;
-  const displayedModelWarmable = isWarmableYoloModel(warmupDisplayModel);
+  const displayedModelWarmable = isWarmableVisionModel(warmupDisplayModel);
   const displayedModelWarmupFailed = displayedModelWarmable && warmupFailedForModel(warmupStatus?.failed_model_ids, warmupDisplayModelId);
   const displayedModelReady = !displayedModelWarmable || warmupReadyForModel(warmupStatus, warmupDisplayModelId);
   const displayedModelWarming = displayedModelWarmable && !displayedModelReady && !displayedModelWarmupFailed;
@@ -961,7 +961,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
   }
 
   function modelIsReady(model: StatusModel | null | undefined) {
-    if (!model || !isWarmableYoloModel(model)) return true;
+    if (!model || !isWarmableVisionModel(model)) return true;
     return warmupReadyForModel(warmupStatus, model.id);
   }
 
@@ -979,7 +979,7 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
       setSelectedModelId(nextModelId);
       return;
     }
-    if (isWarmableYoloModel(nextModel) && !modelIsReady(nextModel)) {
+    if (isWarmableVisionModel(nextModel) && !modelIsReady(nextModel)) {
       setPendingModelId(nextModel.id);
       requestModelWarmup(nextModel.id);
       statusQuery.refetch();
@@ -1313,12 +1313,12 @@ export function DetectionWorkbenchPage({ mode }: { mode: WorkbenchMode }) {
         const nextStatus = await getServiceStatus(auth);
         queryClient.setQueryData(queryKeys.serviceStatus(auth.user.id), nextStatus);
         if (cancelled) return;
-        if (warmupFailedForModel(nextStatus.yolo_warmup?.failed_model_ids, pendingModelId)) {
+        if (warmupFailedForModel(nextStatus.vision_warmup?.failed_model_ids, pendingModelId)) {
           setPendingModelId("");
           notify({ title: "模型预热失败", description: "已继续保持当前检测模型。", tone: "error" });
           return;
         }
-        if (warmupReadyForModel(nextStatus.yolo_warmup, pendingModelId)) {
+        if (warmupReadyForModel(nextStatus.vision_warmup, pendingModelId)) {
           const nextModel = modelOptions.find((model) => model.id === pendingModelId) || null;
           if (nextModel) {
             setSelectedModelId(nextModel.id);

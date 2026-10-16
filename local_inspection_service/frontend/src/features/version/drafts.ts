@@ -1,8 +1,9 @@
 // Browser-local draft evidence. Values never enter storage or diagnostics.
 type Editor = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 const drafts = new Map<Editor, string>();
-const baselines = new WeakMap<Editor, string>();
+let baselines = new WeakMap<Editor, string>();
 let saveScope: Element | null = null;
+export function clearEditorDrafts() { drafts.clear(); baselines = new WeakMap<Editor, string>(); saveScope = null; }
 function value(node: Editor) { return node instanceof HTMLInputElement && ["checkbox", "radio"].includes(node.type) ? String(node.checked) : node.value; }
 function editor(target: EventTarget | null): Editor | null {
   if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return null;

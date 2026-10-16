@@ -18,7 +18,7 @@ const primaryEntries = [
 ];
 const resourceViews = ["taskLibrary", "accessories", "trainingDatasets", "trainingLibrary"];
 const toolGroups = [
-  { label: "辅助检测", views: ["codexCompare", "aiInspect"] },
+  { label: "辅助检测", views: ["smartCompare", "aiInspect"] },
   { label: "分析与训练", views: ["dataAnalysis", "pipeline"] },
   { label: "系统", views: ["rules", "userManagement", "about"] }
 ];

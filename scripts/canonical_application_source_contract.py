@@ -11,6 +11,7 @@ from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
+from source_verification_session import verification_entry
 from application_integration_source_contract import digest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,7 @@ def source_digest(source):
     return digest(ast.parse(source))
 
 
+@verification_entry
 def verify_actual_sources():
     assert FIXTURE['parent_sha'] == 'f5c9daf5b431edb1793bba5f42d2860765919322'
     assert set(FIXTURE['actual_source_ast_sha256']) == EXPECTED_PATHS, 'Incomplete canonical source inventory'

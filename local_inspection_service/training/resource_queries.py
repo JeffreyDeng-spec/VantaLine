@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from .dataset_catalog import DatasetItem
+from ..privacy.notes import preserved_note_fields
 from .file_ports import TrainingResourceFiles
 
 Record = dict[str, Any]
@@ -130,7 +131,9 @@ class TrainingResources:
                     "variant": spec["variant"],
                     "kind": "model",
                     "label": spec["label"],
+                    **({"business_label": spec["business_label"]} if isinstance(spec.get("business_label"), str) and spec["business_label"].strip() else {}),
                     "note": spec.get("note") or "",
+                    **preserved_note_fields(spec),
                     "path": str(model_path),
                     "exists": model_path.exists(),
                     "uses_ocr": bool(spec.get("uses_ocr", False)),
@@ -238,7 +241,9 @@ class TrainingResources:
                     "variant": spec["variant"],
                     "kind": "model",
                     "label": spec["label"],
+                    **({"business_label": spec["business_label"]} if isinstance(spec.get("business_label"), str) and spec["business_label"].strip() else {}),
                     "note": spec.get("note") or "",
+                    **preserved_note_fields(spec),
                     "path": str(model_path),
                     "exists": self.files.is_file(model_path),
                     "uses_ocr": bool(spec.get("uses_ocr", False)),

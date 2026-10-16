@@ -1,4 +1,5 @@
 """Resource file mutations and existing partial-completion semantics."""
+from ..privacy.notes import customer_note_fields
 from .file_ports import TrainingMutationFiles
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -115,6 +116,7 @@ class TrainingResourceMutations:
             manifest["display_name"] = next_display_name
         if request.note is not None:
             manifest["note"] = request.note.strip()
+            manifest.update(customer_note_fields(manifest["note"]))
         manifest["updated_at"] = int(time.time())
         self.files.write_json(manifest_path, manifest, indent=2)
         return {"status": "updated", "dataset_id": dataset_id, **self.catalog.payload(user=user)}
@@ -188,6 +190,7 @@ class TrainingResourceMutations:
             meta["display_name"] = next_display_name
         if request.note is not None:
             meta["note"] = request.note.strip()
+            meta.update(customer_note_fields(meta["note"]))
         meta["updated_at"] = int(time.time())
         self.files.write_json(meta_path, meta, indent=2)
         return {"status": "updated", "run_id": run_id, **self.catalog.payload(user=user)}

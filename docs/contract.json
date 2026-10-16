@@ -191,6 +191,7 @@
         "docs/postgresql-runtime.md",
         "docs/production-runbook.md"
       ]
-    }
+    },
+    {"name": "Global model identity privacy", "paths": ["local_inspection_service/privacy/**", "local_inspection_service/frontend/src/features/rules/AdminSettings.tsx", "local_inspection_service/frontend/scripts/generate-public-fields.mjs", "local_inspection_service/frontend/vite.config.ts", "scripts/smoke_model_privacy.py", "scripts/test_model_privacy_browser.cjs"], "required_docs": ["docs/architecture.md", "docs/configuration-reference.md", "docs/testing.md", "docs/agent-overview.md"]}
   ]
 }

@@ -38,7 +38,7 @@ import { useAuth } from "../auth/auth-context";
 import { useTaskNavigationPreferences } from "../tasks/useTaskNavigationPreferences";
 
 type LibraryTab = "tasks" | "datasets" | "models";
-type ModelFilter = "all" | "trained" | "yolo_ocr" | "yolo" | "ai_detection" | "other";
+type ModelFilter = "all" | "trained" | "vision_text" | "vision" | "ai_detection" | "other";
 type SortMode = "time_desc" | "time_asc" | "name_asc" | "name_desc";
 type ResourceDetailTarget = { kind: "dataset" | "modelRun" | "aiTask"; id: string };
 
@@ -71,8 +71,8 @@ interface ModelGroup {
 const MODEL_FILTER_OPTIONS: Array<{ value: ModelFilter; label: string; meta: string }> = [
   { value: "all", label: "全部类型", meta: "模型与任务" },
   { value: "trained", label: "训练模型", meta: "所有训练产物" },
-  { value: "yolo_ocr", label: "YOLO + OCR", meta: "说明书分类" },
-  { value: "yolo", label: "YOLO", meta: "目标检测" },
+  { value: "vision_text", label: "视觉模型＋文字识别", meta: "说明书分类" },
+  { value: "vision", label: "视觉模型", meta: "目标检测" },
   { value: "ai_detection", label: "AI 检测任务", meta: "无训练模型" },
   { value: "other", label: "其他类型", meta: "历史模型" }
 ];
@@ -132,8 +132,8 @@ function modelGroupAuditRecord(group: ModelGroup | null | undefined) {
 
 function modelLibraryTypeForGroup(group: ModelGroup): ModelFilter {
   const variants = new Set(group.models.map((model) => String(model.variant || "").toLowerCase()).filter(Boolean));
-  if (variants.has("yolo_ocr")) return "yolo_ocr";
-  if (variants.has("yolo")) return "yolo";
+  if (variants.has("vision_text")) return "vision_text";
+  if (variants.has("vision")) return "vision";
   return "other";
 }
 
@@ -203,6 +203,7 @@ function TrainingResourceModal({
   onChanged: () => Promise<unknown>;
 }) {
   const { notify } = useToast();
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
@@ -437,12 +438,12 @@ function TrainingResourceModal({
                 <p><strong>Run ID</strong><span>{modelGroup?.id || detail.id}</span></p>
                 <p><strong>Task ID</strong><span>{task?.job_id || models[0]?.task_id || "-"}</span></p>
                 <p><strong>配件</strong><span>{modelGroup ? modelRunAccessoryText(modelGroup) : "-"}</span></p>
-                <p><strong>Manifest</strong><span>{task?.manifest_path || "-"}</span></p>
-                <p><strong>训练日志</strong><span>{task?.training_log_path || "-"}</span></p>
+                {user.role === "admin" && <><p><strong>Manifest</strong><span>{task?.manifest_path || "-"}</span></p>
+                <p><strong>训练日志</strong><span>{task?.training_log_path || "-"}</span></p></>}
                 {models.map((model) => (
                   <p key={model.id}>
                     <strong>{modelVariantLabel(model)}{model.exists ? "" : "（文件缺失）"}</strong>
-                    <span>{model.path || ""}</span>
+                    {user.role === "admin" && <span>{model.path || ""}</span>}
                   </p>
                 ))}
               </section>

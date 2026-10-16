@@ -194,7 +194,7 @@ def run():
         audit_file = record['diagnostics']['model_audits'][0]['files']['response']
         assert 'path' not in audit_file
         assert_status(admin.get(audit_file['url']),200,'private model response')
-        assert_status(other.get(audit_file['url']),404,'cross owner model response')
+        assert_status(other.get(audit_file['url']),403,'raw model response requires admin before media lookup')
         # Isolated stored-media fixture: production routes must authorize before
         # resolving reread files and omit internal paths from public diagnostics.
         evidence = server._text_v2_owned('records', record['id'], owner)

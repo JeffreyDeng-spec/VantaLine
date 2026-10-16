@@ -19,6 +19,7 @@ export interface ActionDefinition {
   inputSchema: Schema;
   readOnly: boolean;
   permissions?: string[];
+  requiresAdmin?: boolean;
   invalidates?: string[];
   workspaceLocal?: boolean;
   endsSession?: boolean;

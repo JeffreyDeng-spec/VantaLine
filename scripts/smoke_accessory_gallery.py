@@ -69,6 +69,11 @@ class GalleryContracts(unittest.TestCase):
     def detail(self, identifier, client='alice'):
         return self.clients[client].get('/api/accessories/'+identifier+'/detail')
 
+    def source_path(self, entry):
+        reference = entry['source_path']
+        self.assertTrue(reference.startswith('ref1_'))
+        return self.server._authentication_http.presentation.references.decode(reference)
+
     def test_preview_alpha_grayscale_dimensions_and_unchecked_write_result(self):
         pixels = np.zeros((6,8,4),dtype=np.uint8)
         pixels[:,:,:3] = (20,40,60)
@@ -113,7 +118,7 @@ class GalleryContracts(unittest.TestCase):
         gallery = result['gallery']
         self.assertEqual([entry['kind'] for entry in gallery],['source','pose_collection','clean_object_sprite','derived'])
         self.assertEqual([entry['ai_reference'] for entry in gallery],[True,False,False,False])
-        self.assertEqual([entry['source_path'] for entry in gallery],[str(source),str(pose),str(sprite),str(derived)])
+        self.assertEqual([self.source_path(entry) for entry in gallery],[str(source),str(pose),str(sprite),str(derived)])
         self.assertEqual(gallery[2]['label'],'无背景 sprite 2')
         for field,value in asset.items():
             if field!='path': self.assertEqual(gallery[2][field],value)
@@ -131,7 +136,7 @@ class GalleryContracts(unittest.TestCase):
         item['shared_with_user_ids'] = [self.users['bob']['id']]
         allowed = self.detail('gallery-access','bob')
         self.assertEqual(allowed.status_code,200,allowed.text)
-        self.assertEqual(allowed.json()['gallery'][0]['source_path'],str(source))
+        self.assertEqual(self.source_path(allowed.json()['gallery'][0]),str(source))
         self.assertEqual(allowed.json()['item']['source_files'],[])
         self.assertEqual(allowed.json()['item']['original_source_files'],[])
         self.assertEqual(allowed.json()['item']['preprocess'],'本地生成 生成任务 多角度视图')
@@ -140,6 +145,7 @@ class GalleryContracts(unittest.TestCase):
         admin = self.admin.get('/api/accessories/gallery-access/detail')
         self.assertEqual(admin.status_code,200,admin.text)
         self.assertEqual(admin.json()['item']['source_files'],[source.as_posix()])
+        self.assertEqual(admin.json()['gallery'][0]['source_path'], str(source))
         self.assertEqual(admin.json()['item']['original_source_files'],[source.as_posix()])
         self.assertEqual(item['source_files'],[str(source)])
         self.assertEqual(item['original_source_files'],[str(source)])
@@ -167,15 +173,15 @@ class GalleryContracts(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.text)
         clean = [entry for entry in response.json()['gallery'] if entry['kind']=='clean_object_sprite']
         self.assertEqual(len(clean),18)
-        self.assertEqual(clean[-1]['source_path'],assets[17]['path'])
+        self.assertEqual(self.source_path(clean[-1]),assets[17]['path'])
         assets[0] = {'path':str(cap_source)}
         with accessory_callback(self.server,'clean_sprite_assets',return_value=assets), \
              accessory_callback(self.server,'accessory_image_paths',return_value=[]):
             response = self.detail('gallery-cap')
         clean = [entry for entry in response.json()['gallery'] if entry['kind']=='clean_object_sprite']
         self.assertEqual(len(clean),17)
-        self.assertEqual(clean[-1]['source_path'],assets[17]['path'])
-        self.assertNotIn(assets[18]['path'],[entry['source_path'] for entry in clean])
+        self.assertEqual(self.source_path(clean[-1]),assets[17]['path'])
+        self.assertNotIn(assets[18]['path'],[self.source_path(entry) for entry in clean])
 
     def test_preview_exception_keeps_earlier_generated_file(self):
         source,item = self.seed('gallery-failure')

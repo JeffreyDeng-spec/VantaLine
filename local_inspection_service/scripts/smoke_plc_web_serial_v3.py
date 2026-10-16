@@ -259,16 +259,18 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
                                    for f in lease_payload["connection_check"]["frames"]]},
     )
     assert_status(active, 200, "activate lease")
+    model_reference = server._authentication_http.presentation.references.encode("model-a")
     rebound_model = client.post(
         "/api/plc/workstation/lease/rebind-model",
         json={
             "session_id": lease_payload["session_id"],
             "lease_epoch": lease_payload["lease_epoch"],
-            "model_id": "model-a",
+            "model_id": model_reference,
         },
     )
     assert_status(rebound_model, 200, "rebind active lease model")
-    assert rebound_model.json()["model_id"] == "model-a"
+    assert rebound_model.json()["model_id"] == model_reference
+    assert server._authentication_http.presentation.references.decode(model_reference) == "model-a"
     assert_status(
         client.post(
             "/api/plc/workstation/diagnostic-plan",
@@ -294,7 +296,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
         ordinary = client.post("/api/analyze/image", files={"file": ("ordinary.png", TINY_PNG, "image/png")})
         camera = client.post(
             "/api/analyze/camera",
-            data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
+            data={"model_id": model_reference, "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
             files={"file": ("camera.png", TINY_PNG, "image/png")},
         )
     finally:
@@ -306,7 +308,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     assert plan["status"] == "planned"
     duplicate = client.post(
         "/api/analyze/camera",
-        data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
+        data={"model_id": model_reference, "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0001"},
         files={"file": ("camera.png", TINY_PNG, "image/png")},
     )
     assert_status(duplicate, 200, "duplicate camera request")
@@ -317,7 +319,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
             json={
                 "session_id": lease_payload["session_id"],
                 "lease_epoch": lease_payload["lease_epoch"],
-                "model_id": "model-b",
+                "model_id": server._authentication_http.presentation.references.encode("model-b"),
             },
         ),
         409,
@@ -328,7 +330,7 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
     try:
         second_camera = client.post(
             "/api/analyze/camera",
-            data={"model_id": "model-a", "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0002"},
+            data={"model_id": model_reference, "plc_session_id": lease_payload["session_id"], "camera_request_id": "camera_request_0002"},
             files={"file": ("camera-2.png", TINY_PNG, "image/png")},
         )
     finally:

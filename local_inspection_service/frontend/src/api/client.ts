@@ -3,6 +3,13 @@ import { versionCoordinator } from "../features/version/runtime";
 import { savedEditorsAcknowledgement } from "../features/version/drafts";
 import type { ApiRequestOptions } from "./types";
 
+let sessionGeneration = 0;
+let sessionScope: string | undefined;
+export function advanceSessionScope() { sessionGeneration += 1; }
+export function synchronizeSessionScope(scope: string) {
+  if (scope !== sessionScope) { sessionScope = scope; advanceSessionScope(); }
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly path: string;
@@ -61,6 +68,7 @@ function apiErrorMessage(response: Response, body = "", path = "") {
 }
 
 async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const generation = sessionGeneration;
   const headers = new Headers(options.headers);
   const body = options.body;
   if (body && !(body instanceof FormData) && !headers.has("Content-Type")) {
@@ -77,6 +85,7 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   });
   const parseAs = options.parseAs ?? "json";
   const raw = parseAs === "void" ? "" : await response.text();
+  if (generation !== sessionGeneration) throw new ApiError("账户访问状态已变化，请重新读取。", 409, path);
   if (!response.ok) {
     throw new ApiError(apiErrorMessage(response, raw, path), response.status, path, raw);
   }

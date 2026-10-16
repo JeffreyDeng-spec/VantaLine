@@ -1,4 +1,5 @@
 """Training model specifications assembled from run artifacts and explicit record ports."""
+from ..privacy.notes import preserved_note_fields
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -172,8 +173,10 @@ class TrainedModelCatalog:
                         "pipeline_task_name": pipeline_task_name,
                         "variant": spec_variant,
                         "label": meta.get("display_name") or f"{run_dir.name} · {spec_variant.upper()}",
+                        **({"business_label": meta["display_name"]} if isinstance(meta.get("display_name"), str) and meta["display_name"].strip() else {}),
                         "description": "由训练库生成的任务模型。",
                         "note": meta.get("note") or "",
+                        **preserved_note_fields(meta),
                         "path": weights,
                         "artifact_path": str(weights),
                         "metadata_path": str(manifest_path),
@@ -325,8 +328,10 @@ class TrainedModelCatalog:
                         "pipeline_task_name": pipeline_task_name,
                         "variant": spec_variant,
                         "label": meta.get("display_name") or f"{run_dir.name} · {spec_variant.upper()}",
+                        **({"business_label": meta["display_name"]} if isinstance(meta.get("display_name"), str) and meta["display_name"].strip() else {}),
                         "description": "由训练库生成的任务模型。",
                         "note": meta.get("note") or "",
+                        **preserved_note_fields(meta),
                         "path": weights,
                         "artifact_path": str(weights),
                         "metadata_path": str(manifest_path),

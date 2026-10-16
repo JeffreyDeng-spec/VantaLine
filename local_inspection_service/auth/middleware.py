@@ -2,12 +2,16 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 import re
+import posixpath
 from typing import Any, Protocol
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from ..runtime.identity import RequestIdentity
 from .policy import user_is_admin, user_has_permission
 from .route_permissions import route_allowed_permissions
+from starlette.middleware import Middleware
+from ..privacy.http import ModelPrivacyMiddleware
+from ..privacy.presentation import Presentation, internal_route, PUBLIC_ROUTE, INTERNAL_ROUTE
 
 
 class Authenticate(Protocol):
@@ -24,7 +28,16 @@ class SecurityDependencies:
     cors_origin_allowed: Callable[[str], bool]
 
 
-def register_security_middleware(app: FastAPI, dependencies: SecurityDependencies):
+def model_admin_route(path: str) -> bool:
+    return path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/", "/api/windows-worker", "/api/locateanything")) or path == "/api/config" or (
+        not path.startswith("/api/plc/") and (path.endswith("/diagnostics") or "/media/audit-" in path)
+    )
+
+
+def register_security_middleware(app: FastAPI, dependencies: SecurityDependencies, *, presentation: Presentation | None = None):
+    if presentation is not None:
+        # Inside GZip/UploadAdmission, so JSON is projected before compression.
+        app.user_middleware.append(Middleware(ModelPrivacyMiddleware, presentation=presentation))
     @app.middleware("http")
     async def reject_untrusted_cross_origin_writes(request: Request, call_next):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -32,8 +45,10 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
             host = request.headers.get("host", "")
             if origin and not dependencies.same_origin(origin, host) and not dependencies.cors_origin_allowed(origin):
                 return PlainTextResponse("Untrusted cross-origin write request", status_code=403)
-        path = request.url.path
+        original_path = request.scope["path"]
+        path = internal_route(original_path)
         auth_user: dict[str, Any] | None = None
+        private_asset = False
         token = None
         public_auth_paths = {"/api/auth/status", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/version"}
         public_runpod_training_transfer = (
@@ -49,7 +64,17 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
                 return JSONResponse({"detail": "First admin setup required", "setup_required": True}, status_code=503)
             if not auth_user:
                 return JSONResponse({"detail": "Authentication required"}, status_code=401)
-            if (path.startswith(("/api/ai/config", "/api/agent/config", "/api/admin/model-profiles"))) and not user_is_admin(auth_user):
+            if not user_is_admin(auth_user) and (model_admin_route(path) or original_path.startswith(INTERNAL_ROUTE)):
+                return JSONResponse({"detail": "Admin role required"}, status_code=403)
+            if presentation is not None:
+                try:
+                    decoded = presentation.decode_path(original_path, strict=not user_is_admin(auth_user))
+                    path = posixpath.normpath(decoded.replace("\\", "/"))
+                except ValueError:
+                    return JSONResponse({"detail": "Invalid request"}, status_code=422)
+            private_model_route = model_admin_route(path)
+            legacy_model_route = path.startswith(INTERNAL_ROUTE) and not original_path.startswith(PUBLIC_ROUTE)
+            if (private_model_route or legacy_model_route) and not user_is_admin(auth_user):
                 return JSONResponse({"detail": "Admin role required"}, status_code=403)
             required_permissions = route_allowed_permissions(path, request.method.upper())
             if required_permissions and not any(user_has_permission(auth_user, permission) for permission in required_permissions):
@@ -65,10 +90,31 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
                 return PlainTextResponse("First admin setup required", status_code=503)
             if not auth_user:
                 return PlainTextResponse("Authentication required", status_code=401)
-            if not dependencies.output_visible(path, auth_user):
+            decoded_path = path
+            if presentation is not None:
+                try:
+                    decoded_path = presentation.decode_path(path, strict=not user_is_admin(auth_user))
+                except ValueError:
+                    return PlainTextResponse("Not found", status_code=404)
+            decoded_path = posixpath.normpath(decoded_path.replace("\\", "/"))
+            if not dependencies.output_visible(decoded_path, auth_user):
                 return PlainTextResponse("Not found", status_code=404)
+            if presentation is not None and not user_is_admin(auth_user):
+                # Ordinary output browsing permits business media/documents. Raw model,
+                # config, archive and log files are restricted even with a known URL.
+                if not re.search(r"\.(?:png|jpe?g|webp|gif|bmp|tiff?|mp4|webm|mov|pdf|docx?|xlsx?|csv|tsv)$", decoded_path, re.I):
+                    return PlainTextResponse("Admin role required", status_code=403)
             request.state.user = auth_user
             token = dependencies.identity.set(auth_user)
+        elif path.startswith(("/static/", "/react-preview/assets/")):
+            # Retired files and source maps must not bypass the current build.
+            asset_path = posixpath.normpath(path.replace("\\", "/"))
+            private_asset = bool(re.search(r"/(?:admin-[^/]+|index\.html|app\.js|styles\.css|.*\.map)$", asset_path, re.I))
+            if private_asset:
+                auth_user, _, _ = dependencies.authenticate(request, indexed=True)
+                if not user_is_admin(auth_user):
+                    return PlainTextResponse("Not found", status_code=404, headers={"Cache-Control": "no-store"})
+                request.state.user = auth_user
         try:
             response = await call_next(request)
         finally:
@@ -88,7 +134,10 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.method in {"GET", "HEAD"}:
             cacheable_ok = getattr(response, "status_code", 200) < 400
-            if path.startswith("/static/") and cacheable_ok:
+            if private_asset:
+                response.headers["Cache-Control"] = "private, no-store"
+                response.headers["Vary"] = "Cookie"
+            elif path.startswith("/static/") and cacheable_ok:
                 response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")
             elif path.startswith("/react-preview/assets/") and cacheable_ok:
                 response.headers.setdefault("Cache-Control", "public, max-age=604800, immutable")

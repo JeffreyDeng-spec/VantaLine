@@ -166,6 +166,14 @@ class TrainedCatalogContracts(unittest.TestCase):
             self.assertEqual(events,['get','fetch','decode','decode','identifier','match'])
             f.put.assert_called_once(); repo.fetch_all.assert_called_once(); match.assert_called_once_with(first,'',{'raw_json':first})
 
+    def test_customer_note_sha256_provenance_survives_model_catalog(self):
+        from local_inspection_service.privacy.notes import customer_note_fields, public_note
+        note = "Imported from RunPod YOLO training worker."
+        self.f.run(meta={"display_name":"Customer model", "note":note, **customer_note_fields(note)})
+        for model in self.api.list_trained_model_specs({}):
+            self.assertEqual(public_note(model["note"], model, "models"), note)
+            self.assertEqual(model["_customer_note_sha256"], __import__("hashlib").sha256(note.encode()).hexdigest())
+
     def test_catalog_complete_payload_precedence_aliases_and_missing_weights(self):
         api = self.api; f = self.f
         f.config['accessories'].append({'id': 'a', 'name': 'Last A'})
@@ -176,7 +184,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         values = api.list_trained_model_specs({}); f.config_load.assert_called_once_with()
         self.assertEqual([v['variant'] for v in values], ['yolo', 'yolo_ocr'])
         expected = {'id':'trained_run__yolo', 'run_id':'run', 'run_dir':str(run), 'task_id':'task-run',
-            'pipeline_task_id':'task-pipe','pipeline_task_name':'task-name','variant':'yolo','label':'Shown',
+            'pipeline_task_id':'task-pipe','pipeline_task_name':'task-name','variant':'yolo','label':'Shown','business_label':'Shown',
             'description':'由训练库生成的任务模型。','note':'note','path':run/'weights/best.pt',
             'artifact_path':str(run/'weights/best.pt'),'metadata_path':str(f.output/'training_datasets/run/manifest.json'),
             'uses_ocr':False,'is_specialized':True,'selected_accessory_ids':['a'],'required_accessory_counts':{'a':140,'b':0},

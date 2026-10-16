@@ -35,7 +35,7 @@ type MaterialFilter = "all" | "object" | "text";
 type StatusFilter = "all" | "active" | "pending" | "failed";
 
 const ROUTE_OPTIONS = [
-  { value: "yolo", label: "YOLO" },
+  { value: "vision", label: "视觉模型" },
   { value: "ai", label: "AI 检测" },
   { value: "archive_only", label: "仅归档" }
 ];
@@ -55,7 +55,7 @@ function materialLabel(value: string | undefined) {
 }
 
 function routeLabel(value: string | undefined) {
-  return ROUTE_OPTIONS.find((item) => item.value === value)?.label || value || "YOLO";
+  return ROUTE_OPTIONS.find((item) => item.value === value)?.label || value || "视觉模型";
 }
 
 function formatPhysicalSize(item: AccessorySummary) {
@@ -127,7 +127,7 @@ export function AccessoryDetailModal({
 }) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const [route, setRoute] = useState("yolo");
+  const [route, setRoute] = useState("vision");
   const [applyRoute, setApplyRoute] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState("");
