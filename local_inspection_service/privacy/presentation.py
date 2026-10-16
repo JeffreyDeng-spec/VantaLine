@@ -124,6 +124,8 @@ class Presentation:
                         continue
                 public_key = key if mapping else WIRE.get(key, key)
                 item_field = "accessory_labels" if field in LABEL_MAPS else key
+                if key == "message" and value.get("role") in {"user", "agent", "assistant"}:
+                    item_field = "text" if value["role"] == "user" else "message_to_user"
                 result[public_key] = self.outgoing(item, admin=admin, plc=plc or key == "plc_sync", field=item_field, mapping=key in MAPS)
                 if not admin and model_record and key == "id" and isinstance(item, str) and item:
                     result[public_key] = self.references.encode(item)

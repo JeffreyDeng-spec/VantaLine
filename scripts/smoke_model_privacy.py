@@ -228,7 +228,7 @@ class Privacy(unittest.TestCase):
     def test_static_assets_and_output_files(self):
         for role in (None, "member", "delegated"):
             self.role(role)
-            for asset in ["admin-any.js", "app.js", "index.html", "assets/admin-123.js", "assets/old.js.map", "assets/admin-123.js/", "assets/admin-123.js/%2e", "app.js/", "assets/old.js.map/%2e", "assets/ADMIN-123.JS/", "assets%5cadmin-123.js"]:
+            for asset in ["admin-any.js", "app.js", "styles.css", "styles.css/", "index.html", "assets/admin-123.js", "assets/old.js.map", "assets/admin-123.js/", "assets/admin-123.js/%2e", "app.js/", "assets/old.js.map/%2e", "assets/ADMIN-123.JS/", "assets%5cadmin-123.js"]:
                 self.assertEqual(self.client.get("/static/"+asset).status_code, 404)
                 self.assertEqual(self.client.head("/static/"+asset).status_code, 404)
         self.role()
@@ -358,6 +358,16 @@ class Privacy(unittest.TestCase):
         self.assertNotIn("internal endpoint", response.text)
         self.role("admin")
         self.assertIn("unlisted-private-engine", self.client.get("/api/provider-failure").text)
+
+    def test_agent_history_preserves_user_input_and_neutralizes_platform_reply(self):
+        conversation = {"conversation": [
+            {"role": "user", "message": "请检查写着 Gemini YOLO 的客户标签"},
+            {"role": "agent", "message": "已使用 YOLO 完成检测"},
+        ]}
+        public = self.presentation.outgoing(conversation)
+        self.assertEqual(public["conversation"][0], conversation["conversation"][0])
+        self.assertEqual(public["conversation"][1]["message"], "已使用 AI 检测 完成检测")
+        self.assertEqual(self.presentation.outgoing(conversation, admin=True), conversation)
 
 
 if __name__ == "__main__":

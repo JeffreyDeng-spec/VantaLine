@@ -52,6 +52,7 @@ async function role(context,value){
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile+'/')).status(),404);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile+'/%2e')).status(),404);
     assert.equal((await context.request.get(base+'/static/app.js')).status(),404);
+    assert.equal((await context.request.get(base+'/static/styles.css')).status(),404);
     assert.equal((await context.request.get(base+'/static/index.html')).status(),404);
     assert.equal((await context.request.get(base+'/api/admin/model-profiles')).status(),currentRole?403:401);
   }

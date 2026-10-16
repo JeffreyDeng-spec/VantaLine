@@ -96,7 +96,7 @@ def register_security_middleware(app: FastAPI, dependencies: SecurityDependencie
         elif path.startswith(("/static/", "/react-preview/assets/")):
             # Retired files and source maps must not bypass the current build.
             asset_path = posixpath.normpath(path.replace("\\", "/"))
-            private_asset = bool(re.search(r"/(?:admin-[^/]+|index\.html|app\.js|.*\.map)$", asset_path, re.I))
+            private_asset = bool(re.search(r"/(?:admin-[^/]+|index\.html|app\.js|styles\.css|.*\.map)$", asset_path, re.I))
             if private_asset:
                 auth_user, _, _ = dependencies.authenticate(request, indexed=True)
                 if not user_is_admin(auth_user):
