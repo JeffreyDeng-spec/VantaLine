@@ -204,6 +204,7 @@ class Privacy(unittest.TestCase):
         self.assertEqual(self.client.get("/api/admin/model-profiles").json()["model"], "gemini-3")
 
     def test_admin_details_and_public_wire_modes(self):
+        self.assertEqual(self.presentation.outgoing("SAM", field="message_to_user"), "AI 检测")
         self.role("admin")
         public = self.client.get("/api/status").json()
         self.assertEqual(public["active_model_id"], MODEL)

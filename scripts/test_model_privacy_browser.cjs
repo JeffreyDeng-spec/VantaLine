@@ -44,7 +44,7 @@ async function role(context,value){
   assert.ok(privateStyle,'Expected protected administrator stylesheet');
   const privateAssets=files.filter(name=>/^admin-.*\.(?:js|css)$/.test(name));
   assert.ok(privateAssets.filter(name=>name.endsWith('.js')).length>=2,'Settings and configuration tools must be protected modules');
-  const identities=/yolo|gemini|doubao|豆包|qwen|千问|codex|sam[-_ ]?\d|ultralytics|paddleocr|runpod|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
+  const identities=/yolo|gemini|doubao|豆包|qwen|千问|codex|sam(?:[-_ ]?\d|\b)|ultralytics|paddleocr|runpod|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
   for(const name of files.filter(name=>/\.(?:js|css|json|map)$/.test(name)&&!name.startsWith('admin-'))){
     const response=await context.request.get(base+'/static/assets/'+name);
     assert.equal(response.status(),200,name);

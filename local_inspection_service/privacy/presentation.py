@@ -11,8 +11,8 @@ from .references import References
 from .identities import PRIVATE_IDENTITIES, neutralize_identities
 
 PUBLIC_FIELDS = frozenset(json.loads(Path(__file__).with_name("public_fields.json").read_text()))
-SENSITIVE = re.compile(r"yolo|ultralytics|gemini|doubao|豆包|qwen|千问|通义|codex|agnes|cursor(?:[-_]|\b)|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|runpod|generativelanguage|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)", re.I)
-WORDS = re.compile(r"[a-z0-9_.+-]*(?:yolo|ultralytics|gemini|doubao|qwen|codex|agnes|cursor(?:[-_]|\b)|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|runpod|generativelanguage|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b))[a-z0-9_.+-]*|豆包|千问|通义", re.I)
+SENSITIVE = re.compile(r"yolo|ultralytics|gemini|doubao|豆包|qwen|千问|通义|codex|agnes|cursor(?:[-_]|\b)|sam(?:[-_ ]?\d|\b)|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|runpod|generativelanguage|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)", re.I)
+WORDS = re.compile(r"[a-z0-9_.+-]*(?:yolo|ultralytics|gemini|doubao|qwen|codex|agnes|cursor(?:[-_]|\b)|sam(?:[-_ ]?\d|\b)|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|runpod|generativelanguage|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b))[a-z0-9_.+-]*|豆包|千问|通义", re.I)
 WIRE = {
     "yolo_ocr": "vision_text", "yolo": "vision", "qwen_ocr": "text_evidence",
     "yolo_warmup": "vision_warmup", "cursor_image2": "image_service",

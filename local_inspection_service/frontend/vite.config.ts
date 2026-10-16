@@ -5,7 +5,7 @@ function publicModelBoundary(): Plugin {
   return {
     name: "public-model-boundary",
     generateBundle(_options, bundle) {
-      const identity = /yolo|ultralytics|gemini|doubao|豆包|qwen|千问|codex|agnes|api\.cursor\.com|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|runpod|generativelanguage|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
+      const identity = /yolo|ultralytics|gemini|doubao|豆包|qwen|千问|codex|agnes|api\.cursor\.com|sam(?:[-_ ]?\d|\b)|paddleocr|paddlepaddle|dashscope|volcengine|runpod|generativelanguage|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)/i;
       for (const [name, item] of Object.entries(bundle)) {
         if (name.split("/").pop()?.startsWith("admin-")) continue;
         if (!/\.(?:js|html|css|json|map)$/.test(name)) continue;
