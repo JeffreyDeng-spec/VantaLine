@@ -218,6 +218,15 @@ class Privacy(unittest.TestCase):
         self.assertEqual(public["plc_sync"]["session_id"], "lease-original")
         self.assertEqual(public["plc_sync"]["write_frame_hex"], "0244303303")
 
+    def test_plc_protocol_profile_is_preserved_while_model_profiles_stay_private(self):
+        config = {"config": {"profile_id": "modbus_rtu", "result_register": "D110"},
+                  "session_id": "lease-1", "model_id": MODEL}
+        public = self.presentation.outgoing(config, plc=True)
+        self.assertEqual(public["config"], config["config"])
+        self.assertEqual(public["session_id"], config["session_id"])
+        self.assertEqual(self.presentation.references.decode(public["model_id"]), MODEL)
+        self.assertNotIn("profile_id", self.presentation.outgoing({"profile_id": "gemini-profile"}))
+
     def test_neutral_and_legacy_routes(self):
         self.role()
         self.assertEqual(self.client.get("/api/label-check/tasks/one").json()["id"], "one")

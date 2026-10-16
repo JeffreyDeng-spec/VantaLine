@@ -39,7 +39,7 @@ HIDDEN = frozenset({
 })
 # PLC session identity is a protocol capability, not a provider diagnostic.
 # It must remain byte-for-byte intact at the existing station/dispatch endpoints.
-PLC_FIELDS = frozenset({"session_id", "station_id", "workstation_id", "client_instance_id", "lease_id", "dispatch_id", "request_id", "operation_id", "binding_token", "nonce", "signature", "fingerprint", "camera_request_id"})
+PLC_FIELDS = frozenset({"profile_id", "session_id", "station_id", "workstation_id", "client_instance_id", "lease_id", "dispatch_id", "request_id", "operation_id", "binding_token", "nonce", "signature", "fingerprint", "camera_request_id"})
 OPAQUE = frozenset({"cursor", "next_cursor", "refresh_cursor", "snapshot_cursor", "before", "after"})
 TEXT = frozenset({"reference_text", "actual_text", "expected", "observed", "note", "username", "display_name", "standard_name", "material_code", "original_filename", "filename", "file_name", "name", "label", "description", "task_label", "accessory_names", "accessory_labels", "text", "extracted_text", "ocr_text"})
 MAPS = frozenset({"features", "min_counts", "required_accessory_counts", "accessory_counts", "required_counts", "ai_counts", "count_mismatches", "accessory_labels", "accessory_class_map", "class_accessory_map", "accessory_names_by_id", "class_counts", "expected_counts", "actual_counts", "counts", "classes_by_id", "class_map", "task_rules", "by_status", "metrics", "doc_filter_stats", "summary", "bindings", "params", "parameters", "stages", "stage_states", "rule_overrides"})
