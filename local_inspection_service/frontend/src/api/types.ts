@@ -1439,6 +1439,7 @@ export interface AccessoryMutationResponse extends AccessoriesResponse {
   source_path?: string;
   route?: string;
   profile_status?: string;
+  ai_task?: AiDetectionLibraryTask;
   candidate?: AccessoryCandidate;
   pipeline?: PipelineAccessoryMutationResponse;
 }

@@ -125,6 +125,7 @@
   "ai_result",
   "ai_roi_mask",
   "ai_summary",
+  "ai_task",
   "ai_task_id",
   "alert",
   "alignItems",
