@@ -10,6 +10,7 @@ from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
+from source_verification_session import verification_entry
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_PHOTO_WORKFLOWS = json.loads((ROOT / "tests/backend_contract/real_photo_workflows_delta.json").read_text())
@@ -84,6 +85,7 @@ def _restore_delta_cached(source, fixture_json):
     return ast.unparse(tree)
 
 
+@verification_entry
 def reviewed_business_bytes(path):
     """Reverse only the reviewed quota-removal delta for historical source oracles."""
     from plc_modbus_source_contract import restore_modbus_business
@@ -105,6 +107,7 @@ def reviewed_business_bytes(path):
     return restored
 
 
+@verification_entry
 def verify_actual_compositions():
     assert MAIN283_PLC["schema"] == 1, "Unknown PLC integration schema"
     assert MAIN283_PLC["upstream_sha"] == "8195c96970c1e41582d4796fe2b23508ea9f837a", "Unreviewed PLC upstream"
@@ -153,16 +156,19 @@ def verify_actual_compositions():
             "Actual composition capability changed: " + path
 
 
+@verification_entry
 def restore_integrated_root(source):
     from application_configuration_source_contract import restore_application_configuration_root
     return restore_delta(restore_delta(restore_application_configuration_root(restore_plc_domain_root(source)), MAIN_FEEDBACK), FIXTURE)
 
 
+@verification_entry
 def restore_business_root(source):
     from application_configuration_source_contract import restore_application_configuration_root
     return restore_delta(restore_delta(restore_delta(restore_application_configuration_root(restore_plc_domain_root(source)), MAIN_FEEDBACK), FIXTURE), BUSINESS)
 
 
+@verification_entry
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
     # Reject known forbidden rebindings before the expensive historical replay.
@@ -206,6 +212,7 @@ def restore_plc_domain_root(source):
     return source
 
 
+@verification_entry
 def restore_pose_domain_root(source):
     """Check real Pose owners and fold only the three immutable outer deltas."""
     verify_actual_compositions()
@@ -305,6 +312,7 @@ def verify_main289_real_photo_sources():
         assert hashlib.sha256(actual).hexdigest() == COMPLETED_REVIEW_RECOVERY_SOURCE_SHA256.get(path, MAIN302_REAL_PHOTO_SOURCE_SHA256.get(path, accepted["actual_sha256"])), "Confirmed-source business changed: " + path
 
 
+@verification_entry
 def restore_real_photo_workflows_root(source):
     """Validate the actual feedback bridge and replay only its reviewed delta."""
     from canonical_application_source_contract import restore_canonical_root
@@ -337,6 +345,7 @@ def restore_real_photo_workflows_root(source):
     return source
 
 
+@verification_entry
 def restore_provider_transports_root(source):
     """Check actual app-owned provider types before folding their fixed delta."""
     source = restore_real_photo_workflows_root(source)
@@ -350,6 +359,7 @@ def restore_provider_transports_root(source):
     return source
 
 
+@verification_entry
 def restore_account_visibility_root(source):
     """Verify the real visibility graph before replaying its fixed entry delta."""
     source = restore_provider_transports_root(source)
@@ -363,6 +373,7 @@ def restore_account_visibility_root(source):
     return source
 
 
+@verification_entry
 def restore_training_persistence_graph_root(source):
     """Verify actual completion owners before folding this fixed entry delta."""
     source = restore_account_visibility_root(source)
@@ -376,6 +387,7 @@ def restore_training_persistence_graph_root(source):
     return source
 
 
+@verification_entry
 def restore_infrastructure_root(source):
     """Validate real infrastructure edges, then fold only a fixed entry delta."""
     source = restore_training_persistence_graph_root(source)
@@ -396,6 +408,7 @@ def restore_infrastructure_root(source):
     return source
 
 
+@verification_entry
 def restore_path_configuration_root(source):
     """Validate the actual closed graph before preserving older strict oracles."""
     source = restore_infrastructure_root(source)
