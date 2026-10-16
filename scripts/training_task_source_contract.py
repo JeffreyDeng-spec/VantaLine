@@ -99,7 +99,9 @@ def restore_training_task_root(source):
 def verify_training_task_sources():
     restore_training_task_root((ROOT / 'local_inspection_service/server.py').read_text())
     for name, digest in FIXTURE['business_sha256'].items():
-        data = (ROOT / 'local_inspection_service/training' / name).read_bytes().replace(b'\r\n', b'\n')
+        from model_privacy_source_contract import checkpoint_bytes
+        path = 'local_inspection_service/training/' + name
+        data = checkpoint_bytes(path, (ROOT/path).read_bytes()).replace(b'\r\n', b'\n')
         assert hashlib.sha256(data).hexdigest() == digest, name
     for name, digest in FIXTURE['composition_ast_sha256'].items():
         assert ast_sha256(ast.parse((ROOT / 'local_inspection_service/training' / name).read_text())) == digest, name

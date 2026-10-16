@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
 from .references import References
 from .identities import PRIVATE_IDENTITIES, neutralize_identities
+from .notes import public_note
 
 PUBLIC_FIELDS = frozenset(json.loads(Path(__file__).with_name("public_fields.json").read_text()))
 SENSITIVE = re.compile(r"yolo|ultralytics|gemini|doubao|豆包|qwen|千问|通义|codex|agnes|cursor(?:[-_]|\b)|sam(?:[-_ ]?\d|\b)|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?(?:\d|image)|runpod|generativelanguage|seedream|seededit|seedance|dall[-_ ]?e|imagen(?:[-_ ]?\d|\b)", re.I)
@@ -24,7 +25,7 @@ REVERSE = {value: key for key, value in WIRE.items()}
 PUBLIC_ROUTE = "/api/label-check"
 INTERNAL_ROUTE = "/api/text-compare-codex"
 HIDDEN = frozenset({
-    PRIVATE_IDENTITIES,
+    PRIVATE_IDENTITIES, "_customer_note_sha256",
     "provider", "provider_label", "provider_status", "provider_result", "provider_response",
     "model", "model_name", "base_model", "model_path", "weights", "weight_path",
     "architecture", "backbone", "model_family", "model_type", "model_size", "model_version", "engine",
@@ -52,6 +53,7 @@ WIRE_KEYS = frozenset({"yolo_warmup", "cursor_image2", "codex_image_job", "codex
 CUSTOMER_MAPS = MAPS - {"params", "parameters", "stages", "stage_states", "rule_overrides", "bindings", "metrics", "doc_filter_stats", "summary"}
 LABEL_MAPS = frozenset({"accessory_labels", "accessory_names_by_id"})
 FILE_REFERENCES = frozenset({"source_path"})
+
 
 
 def gallery_stem(value):
@@ -167,6 +169,8 @@ class Presentation:
                         continue
                 public_key = key if mapping else WIRE.get(key, key)
                 item_field = "accessory_labels" if field in LABEL_MAPS else key
+                if not admin and key == "note" and not (mapping and field in CUSTOMER_MAPS):
+                    item = public_note(item, value, field)
                 if not admin and value.get("role") in {"agent", "assistant"} and key in {"message", "reason", "source"}:
                     item = neutralize_identities(item, value.get(PRIVATE_IDENTITIES))
                 if key == "message" and value.get("role") in {"user", "agent", "assistant"}:

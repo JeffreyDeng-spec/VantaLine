@@ -132,6 +132,7 @@ class TrainingUserState:
             "status",
             "progress",
             "note",
+            "_customer_note_sha256",
             "error",
             "current_epoch",
             "total_epochs",

@@ -28,7 +28,7 @@ RAW = {
     "active_model_id": MODEL,
     "yolo_warmup": {"loaded_model_ids": [MODEL], "selected_model_id": MODEL, "selected_model_ready": True},
     "ai_detection": {"provider_label": "豆包", "model": "doubao-vision-1", "configured": True, "status": "ready"},
-    "items": [{"id": "history-1", "diagnostics": {"provider": "gemini", "model": "gemini-2.5"}, "profile_snapshot": {"model": "new-unknown-provider"}, "internal_model_detail": "private", "reference_text": "客户正文 Gemini YOLO", "actual_text": "客户正文 Gemini YOLO", "model_id": MODEL}],
+    "items": [{"id": "history-1", "status": "running", "progress": 3, "note": "YOLO 训练已启动：Epoch 0/10。", "diagnostics": {"provider": "gemini", "model": "gemini-2.5"}, "profile_snapshot": {"model": "new-unknown-provider"}, "internal_model_detail": "private", "reference_text": "客户正文 Gemini YOLO", "actual_text": "客户正文 Gemini YOLO", "model_id": MODEL}],
     "required_accessory_counts": {"part-123": 2},
     "annotated_url": "/outputs/users/member/yolo_result.jpg",
     "rule": {"passed": True, "missing": []}, "passed": True,
@@ -305,6 +305,55 @@ class Privacy(unittest.TestCase):
         value = {"name": "Gemini 客户任务", "accessory_labels": {"part-yolo": "Gemini 支架"}, "note": "ref1_customer-input"}
         self.assertEqual(self.presentation.outgoing(value), value)
         self.assertEqual(self.presentation.incoming(value), value)
+
+    def test_platform_progress_catalog_preserves_customer_notes(self):
+        import ast
+        import copy
+        from local_inspection_service.privacy.notes import PLATFORM_NOTES, customer_note_fields
+        root = Path(__file__).resolve().parents[1] / "local_inspection_service"
+        cases = list(PLATFORM_NOTES) + ["YOLO 训练中：Epoch 3/10。", "RunPod YOLO worker 状态：RUNNING。", "上传到 Windows Worker 失败（第 2 次），正在重试：Gemini /private/file", "任务失败：AcmePrivate /private/file"]
+        for note in cases:
+            record = {"job_id": "progress", "status": "failed", "note": note}
+            before = copy.deepcopy(record)
+            public = self.presentation.outgoing(record)
+            self.assertFalse(SENSITIVE.search(public["note"]), note)
+            self.assertNotIn("/private/", public["note"])
+            self.assertEqual(self.presentation.outgoing(record, admin=True), record)
+            customer = {**record, **customer_note_fields(note)}
+            self.assertEqual(self.presentation.outgoing(customer)["note"], note)
+            self.assertNotIn("_customer_note_sha256", self.presentation.outgoing(customer))
+            self.assertEqual(record, before)
+            self.assertEqual(self.presentation.outgoing({"note": note})["note"], note)
+        for folder in ("training", "accessories", "pipeline", "agent"):
+            for path in (root/folder).glob("*.py"):
+                for node in ast.walk(ast.parse(path.read_text())):
+                    values = []
+                    if isinstance(node, ast.keyword) and node.arg == "note": values.append(node.value)
+                    if isinstance(node, ast.Dict): values.extend(value for key, value in zip(node.keys, node.values) if isinstance(key, ast.Constant) and key.value == "note")
+                    for value in values:
+                        note = value.value if isinstance(value, ast.Constant) and isinstance(value.value, str) else "".join(part.value if isinstance(part, ast.Constant) else "1" for part in value.values) if isinstance(value, ast.JoinedStr) else ""
+                        if SENSITIVE.search(note):
+                            self.assertFalse(SENSITIVE.search(self.presentation.outgoing({"job_id":"progress", "note":note})["note"]), str(path)+": "+note)
+
+    def test_customer_progress_template_note_is_marked_by_real_task_editor(self):
+        from local_inspection_service.training.task_mutations import TrainingTaskMutations, TaskMutationRecords
+        from local_inspection_service.schemas.training import TrainingTaskUpdateRequest
+        task = {"job_id": "owned", "status": "failed", "note": "prior"}
+        saved = []
+        service = TrainingTaskMutations(lambda:{"id":"member"}, lambda *args,**kwargs:None,
+            TaskMutationRecords(lambda key:task, lambda value:saved.append(dict(value)), lambda value:dict(value), lambda *args:None, lambda *args,**kwargs:[]), lambda:1)
+        note = "Imported from RunPod YOLO training worker."
+        result = service.update_training_task_endpoint("owned", TrainingTaskUpdateRequest(note=note))
+        self.assertEqual(saved[0]["note"], note)
+        self.assertEqual(saved[0]["_customer_note_sha256"], __import__("hashlib").sha256(note.encode()).hexdigest())
+        self.assertEqual(self.presentation.outgoing(result)["note"], note)
+        from local_inspection_service.training.user_state import TrainingUserState, TrainingStateAccess, TrainingStateStorage
+        config = {}
+        state = TrainingUserState(lambda:{}, lambda:"member",
+            TrainingStateAccess(lambda value:"member", lambda *args:True, lambda user:False, lambda:{"owner_user_id":"member"}),
+            TrainingStateStorage(lambda key:task, lambda:config, lambda value:None), lambda value:None)
+        state.sync_training_state_from_task("owned")
+        self.assertEqual(self.presentation.outgoing(config["training_by_user_id"]["member"])["note"], note)
 
     def test_business_overlay_survives_private_diagnostic_removal(self):
         evidence = {"elements": [{"element_id": "e1", "expected": "Gemini customer text", "standard_box": [0,0,1,1], "state": "matched", "evidence": [{"evidence_id":"o1","start":0,"end":3}]}], "observations": [{"id":"o1","text":"Gemini customer text","type":"text","box":[0,0,1,1]}]}
