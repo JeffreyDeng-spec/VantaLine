@@ -1000,7 +1000,7 @@ def main() -> None:
     assert_created_and_owned(pipeline_payload["items"], created_users["operator_a"], "operator_a pipeline tasks")
     assert_created_and_owned(pipeline_payload["pending_candidates"], created_users["operator_a"], "operator_a pipeline candidates")
 
-    response = client.request("DELETE", f"/api/accessories/{accessory_id}/files", json={"source_path": "/etc/passwd"})
+    response = client.request("DELETE", f"/api/accessories/{accessory_id}/files", json={"source_path": server._authentication_http.presentation.references.encode("/etc/passwd")})
     assert_status(response, 404, "path traversal/unregistered file delete denied")
 
     logout(client, "operator_a logout")

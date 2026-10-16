@@ -44,7 +44,7 @@
     }
   },
   "new_sources": {
-    "local_inspection_service/privacy/public_fields.json": "4911e79d63540da9febf131e06743c66ebcbf268143230e4bdbc9f68efe25285",
+    "local_inspection_service/privacy/public_fields.json": "fcf104c9ccfde5312d2929a7196e5b511fce5c53164dc6dd8e2d846b6b8f6b35",
     "local_inspection_service/privacy/references.py": "0aa2a9fe543f29fb683d3248b5b24c1d603c2b7fec3992604fc565589adea58a",
     "local_inspection_service/privacy/__init__.py": "39ee47915a3dcfd1ab0399268f162851bad02932170ef8febd5a71c83a573707",
     "local_inspection_service/privacy/presentation.py": "d8fc9217a688aa0e8d003a8212fdb4fbbf7f04e77270879e9e9afd82b9f56d6f",

@@ -5,7 +5,8 @@ import path from 'node:path';
 import ts from 'typescript';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const fields = new Set(['is_real_photo', 'elements', 'checks', 'issues', 'preview', 'original', 'image', 'box', 'polygon', 'source', 'sequence', 'finalized', 'inputs', 'summary', 'items', 'artifacts', 'reviews', 'progress', 'settled', 'total', 'deadline_at']);
+// Retained business links on the legacy training-status API are independent of current UI usage.
+const fields = new Set(['active_training_task_id', 'last_preview_id', 'approved_preview_id', 'preview_urls', 'previews', 'is_real_photo', 'elements', 'checks', 'issues', 'preview', 'original', 'image', 'box', 'polygon', 'source', 'sequence', 'finalized', 'inputs', 'summary', 'items', 'artifacts', 'reviews', 'progress', 'settled', 'total', 'deadline_at']);
 function scan(dir) {
   for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
     const file = path.join(dir,entry.name);
