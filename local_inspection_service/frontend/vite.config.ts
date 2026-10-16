@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => ({
     sourcemap: false,
     rollupOptions: {
       output: {
+        assetFileNames: (asset) => asset.names.some(name => name.startsWith("AdminSettings")) ? "assets/admin-[hash][extname]" : "assets/[name]-[hash][extname]",
         chunkFileNames: (chunk) => chunk.name === "AdminSettings" ? "assets/admin-[hash].js" : "assets/[name]-[hash].js"
       }
     }

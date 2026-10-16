@@ -44,7 +44,10 @@ def fixture(presentation, dist=None):
         role = request.cookies.get("role")
         if not role:
             return None, {"users": [1]}, False
-        user = {"id": "admin" if role in {"admin", "downgraded"} else "member", "username": "privacy-test", "display_name": "Privacy test", "role": "admin" if role == "admin" else "user", "permissions": ["inspection", "training_pipeline", "model_library", "ai_config", "agent_config", "system_settings", "worker_settings"]}
+        permissions = ["inspection", "training_pipeline", "model_library"]
+        if role in {"admin", "delegated", "downgraded"}:
+            permissions += ["ai_config", "agent_config", "system_settings", "worker_settings"]
+        user = {"id": "admin" if role in {"admin", "downgraded"} else "member", "username": "privacy-test", "display_name": "Privacy test", "role": "admin" if role == "admin" else "user", "permissions": permissions}
         return user, {"users": [1]}, False
     security = SecurityDependencies(authenticate, lambda s: bool(s["users"]), identity, lambda path, user: "/users/member/" in path, lambda a,b: True, lambda origin: True)
     register_security_middleware(app, security, presentation=presentation)

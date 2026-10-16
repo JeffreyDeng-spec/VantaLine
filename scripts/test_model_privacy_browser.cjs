@@ -40,6 +40,8 @@ async function role(context,value){
   const files=fs.readdirSync(path.join(dist,'assets'));
   const privateFile=files.find(name=>/^admin-.*\.js$/.test(name));
   assert.ok(privateFile,'Expected protected administrator module');
+  const privateStyle=files.find(name=>/^admin-.*\.css$/.test(name));
+  assert.ok(privateStyle,'Expected protected administrator stylesheet');
   const identities=/yolo|gemini|doubao|豆包|qwen|千问|codex|sam[-_ ]?\d|ultralytics|paddleocr|runpod/i;
   for(const name of files.filter(name=>/\.(?:js|css|json|map)$/.test(name)&&!name.startsWith('admin-'))){
     const response=await context.request.get(base+'/static/assets/'+name);
@@ -49,6 +51,7 @@ async function role(context,value){
   for(const currentRole of [undefined,'member','delegated']){
     await role(context,currentRole);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile)).status(),404);
+    assert.equal((await context.request.get(base+'/static/assets/'+privateStyle)).status(),404);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile+'/')).status(),404);
     assert.equal((await context.request.get(base+'/static/assets/'+privateFile+'/%2e')).status(),404);
     assert.equal((await context.request.get(base+'/static/app.js')).status(),404);
@@ -66,6 +69,7 @@ async function role(context,value){
   assert.equal(await page.getByText('模型与 API',{exact:true}).count(),0);
   assert.equal(requests.some(value=>value.startsWith('/api/admin/')),false);
   assert.equal(requests.some(value=>value.includes('/admin-')),false);
+  assert.equal(await page.getByRole('heading',{name:'本机 PLC 结果同步',exact:true}).count(),0);
   // The workbench consumes opaque references and neutral mode values.
   await page.goto(base+'/workspace/tasks/pipeline%3Apipeline-one/inspect');
   await page.getByRole('heading',{name:'Privacy sample',exact:true}).waitFor();
@@ -77,11 +81,20 @@ async function role(context,value){
   const pipeline=await (await context.request.get(base+'/api/pipeline/tasks')).json();
   assert.deepEqual(pipeline.items[0].accessory_counts,{'part-A':2});
   assert.equal(identities.test(await page.locator('body').innerText()),false);
+  await role(context,'delegated');
+  requests.length=0;
+  await page.goto(base+'/workspace/rules');
+  await page.getByRole('heading',{name:'本机 PLC 结果同步',exact:true}).waitFor();
+  assert.equal(await page.getByText('模型与 API',{exact:true}).count(),0);
+  assert.equal(requests.some(value=>value.startsWith('/api/admin/')),false);
+  assert.equal(requests.some(value=>value.includes('/admin-')),false);
+  assert.equal(identities.test(await page.locator('body').innerText()),false);
   await role(context,'admin');
   await page.goto(base+'/workspace/rules');
   await page.locator('#model-pipeline').waitFor();
   assert.match(await page.locator('#model-pipeline').textContent(), /Gemini production.*gemini-3/);
   assert.equal((await context.request.get(base+'/static/assets/'+privateFile)).status(),200);
+  assert.equal((await context.request.get(base+'/static/assets/'+privateStyle)).status(),200);
   let captured;
   const capturedResponse = new Promise(resolve=>captured=resolve);
   const releaseResponse = new Promise(resolve=>releasePending=resolve);
