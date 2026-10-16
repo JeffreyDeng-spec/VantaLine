@@ -995,3 +995,8 @@ RunPod network-volume date compatibility normalizes daily aggregation identities
 ## Administrator all-data default
 
 Removing the global browser range selector requires no schema change, migration or record rewrite. Existing role/ownership queries serve all users and historical data to administrator requests without an owner filter. Explicit per-user management detail reads keep their selected-owner semantics.
+
+
+## Model identity presentation
+
+**Status: Authoritative.** Global model privacy is a role-aware HTTP projection; persisted real identifiers, profile snapshots and historical evidence stay original. The trained-model catalog carries an optional `business_label` derived from the existing explicit customer display-name metadata. This additive in-memory field distinguishes customer naming from generated architecture labels without a database migration or historical rewrite. Ordinary model/file references resolve before the existing ownership and PLC-binding checks; they never grant access. Shared runtime reference-key preservation is documented in configuration-reference.md.
