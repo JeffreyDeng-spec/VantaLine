@@ -1788,6 +1788,17 @@ do not constitute a physical camera/PLC commissioning run.
 | Text inspection v2 | `python local_inspection_service/scripts/smoke_text_compare_beta.py`; `python scripts/smoke_text_inspection_v2.py`; pass `--customer-docx` for the fixed image1–image18 acceptance file; run `smoke_text_inspection_v2_endpoints.py` in fail-closed, external-only and enabled modes; run `smoke_text_inspection_v2_postgres_contract.py`; frontend typecheck/build. Endpoint coverage must distinguish provider failure from response-schema validation failure, retain bounded provider evidence and stage timing, prove the 2048-pixel provider-copy bound and 30-second label-comparison timeout floor, exercise Qwen 0–1000 boxes, percentage confidence, `text_mismatch` mapping and exact-equal artifact removal without manufacturing `MATCH`, and prove credentials plus embedded media are redacted. The frontend smoke contract keeps camera and uploaded-actual inputs, broad image chooser/drop acceptance without browser-MIME blocking, backend content decoding and uncommon-format normalization (including a disguised-extension fixture), a two-column order-gallery/actual-image workbench, compact desktop top strip, viewport-height image allocation plus medium/narrow/short-screen adaptations, selected-thumbnail highlight, selection-independent full-size preview, accordion/import-modal navigation, inline order add/select/soft-disable/re-enable actions, gallery-only reference selection with no local-reference upload, selected-standard preservation when the actual changes, confirmed-only comparison, editable logical standards backed by immutable revisions, a default-closed, escaped and display-bounded raw/normalized diagnostic disclosure, absence of the legacy creation entry, and absence of the retired persistent scope-warning badge. |
 | Release/install | release contract, dependency verification, shell syntax, docs contract |
 
+For overview changes, also run `npm --prefix local_inspection_service/frontend run
+test:dashboard` after the production build (`DASHBOARD_TEST_BROWSER=msedge` selects
+an installed browser when bundled Chromium is absent). This executes the real
+production bundle with isolated in-memory authentication/status/configuration
+fixtures. Cover admin, single-entry and no-inspection permissions; exact protected
+navigation targets; grouped-tool keyboard/outside dismissal; both summary refreshes;
+loading/error isolation, stale healthy-state suppression, threshold fallback and
+zero values; absent fields and long model names; and 1600/1440/1024/768/390px
+layout/menu bounds. Assert no mutation, inference or physical-device requests.
+These fixtures do not establish authenticated production or field-device acceptance.
+
 Canonical commands:
 
 ```bash
