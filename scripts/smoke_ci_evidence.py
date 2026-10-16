@@ -16,6 +16,15 @@ import ci_evidence as ci
 
 
 class EvidenceContract(unittest.TestCase):
+    def test_receipt_inventory_and_dependencies_match_actual_workflow(self):
+        import yaml
+        jobs=yaml.safe_load((ci.ROOT/'.github/workflows/ci.yml').read_text())['jobs']
+        actual={job.get('name',name) for name,job in jobs.items() if name!='backend-shards'}
+        actual.update(f'backend-shard-{n}' for n in jobs['backend-shards']['strategy']['matrix']['shard'])
+        self.assertEqual(set(ci.FULL_JOBS),actual)
+        self.assertEqual(set(jobs['backend-plc']['needs']),{'ci-mode','backend-shards',*ci.OTHER_JOBS})
+        self.assertIn('model-privacy',ci.OTHER_JOBS)
+
     def setUp(self):
         self.now=datetime(2026,10,11,tzinfo=timezone.utc)
         self.manifest=ci.load_manifest()
