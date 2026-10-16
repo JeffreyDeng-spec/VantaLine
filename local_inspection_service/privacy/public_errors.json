@@ -5,6 +5,7 @@
   "Accessory candidate not found",
   "Accessory not found",
   "Account not found",
+  "Admin role required",
   "Admin role required for user filtering",
   "Agent API is not configured",
   "Agent API returned an empty response",

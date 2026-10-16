@@ -176,7 +176,7 @@ class TrainedCatalogContracts(unittest.TestCase):
         values = api.list_trained_model_specs({}); f.config_load.assert_called_once_with()
         self.assertEqual([v['variant'] for v in values], ['yolo', 'yolo_ocr'])
         expected = {'id':'trained_run__yolo', 'run_id':'run', 'run_dir':str(run), 'task_id':'task-run',
-            'pipeline_task_id':'task-pipe','pipeline_task_name':'task-name','variant':'yolo','label':'Shown',
+            'pipeline_task_id':'task-pipe','pipeline_task_name':'task-name','variant':'yolo','label':'Shown','business_label':'Shown',
             'description':'由训练库生成的任务模型。','note':'note','path':run/'weights/best.pt',
             'artifact_path':str(run/'weights/best.pt'),'metadata_path':str(f.output/'training_datasets/run/manifest.json'),
             'uses_ocr':False,'is_specialized':True,'selected_accessory_ids':['a'],'required_accessory_counts':{'a':140,'b':0},

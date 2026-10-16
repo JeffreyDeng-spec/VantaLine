@@ -15,8 +15,8 @@ INTERNAL_DETAIL = re.compile(r"api[_ -]?key|base[_ -]?url|proxy|provider|backbon
 
 
 def expected():
-    # Reviewed fixed business text emitted by the bounded text-image limit.
-    values = {"文字类配件最多上传 2 张图片", "文字类配件只能上传图片，不能上传视频或其它文件"}
+    # Reviewed literals supplied through access-control defaults / business helpers.
+    values = {"Admin role required", "Permission denied", "文字类配件最多上传 2 张图片", "文字类配件只能上传图片，不能上传视频或其它文件"}
     for source in (ROOT / "local_inspection_service").rglob("*.py"):
         if "scripts" in source.relative_to(ROOT / "local_inspection_service").parts:
             continue
