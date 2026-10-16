@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test:agent": "node scripts/generate-agent-tools.mjs --check && node --test scripts/test-agent.mjs ../../scripts/test_agent_browser_wait.cjs",
     "test:plc-capture": "node --test src/features/plc/captureTriggerState.test.mjs",
+    "test:dashboard": "node ../../scripts/test_dashboard_ui.cjs",
     "test:navigation": "node ../../scripts/test_navigation_paths.cjs && node ../../scripts/test_navigation_ui.cjs",
     "build:preview": "npm run typecheck && VITE_ROUTER_BASENAME=/react-preview vite build",
     "build:production-cutover": "npm run typecheck && VITE_ROUTER_BASENAME=/ vite build --base /static/ --outDir dist-production --emptyOutDir",

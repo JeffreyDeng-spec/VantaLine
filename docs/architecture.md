@@ -1266,6 +1266,22 @@ Conflicts, empty results, crop-edge text or incomplete coverage require review.
 
 ### Public site and workspace routing
 
+The protected overview gives detection and text inspection equal primary launch
+areas, followed by a compact live service/configuration strip and resource links.
+All launch areas, resources and grouped additional tools derive destinations and
+permissions from the existing navigation catalog; the full page does not repeat
+an unfiltered feature grid. Illustrations are bundled, non-customer examples and
+never constitute inspection evidence. Links enter the existing workspaces directly.
+Status/configuration queries retain account-scoped cache keys. Loading or failure
+is confined to the status area: authorized launch links remain available, failed
+refreshes do not display cached healthy service status, absent values display a
+dash, and a valid zero model count or confidence threshold is retained. Configuration
+threshold takes precedence over the status-rule fallback. Model existence is not
+reported as model-loaded or device readiness. Refresh re-queries both summaries;
+the overview performs no model warmup, camera capture or PLC operation. Styles are
+scoped and respond to content width, including the existing sidebar; other
+workspaces keep their existing layout.
+
 `/` always serves the product introduction and `/docs` the curated public user
 guide, irrespective of login state. Neither mounts the authentication gate or
 workspace data queries. `/workspace` is the protected dashboard; all functional
