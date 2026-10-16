@@ -148,7 +148,8 @@ def verify_actual_compositions():
         actual = reviewed_business_bytes(path)
         assert hashlib.sha256(actual).hexdigest() == expected, "PLC business changed with assembly: " + path
     for path, expected in COMPOSITIONS["canonical_ast_sha256"].items():
-        assert source_digest((ROOT / path).read_text(encoding="utf-8")) == expected, \
+        from model_privacy_source_contract import checkpoint_bytes as privacy_checkpoint
+        assert source_digest(privacy_checkpoint(path, (ROOT / path).read_bytes()).decode()) == expected, \
             "Actual composition capability changed: " + path
 
 

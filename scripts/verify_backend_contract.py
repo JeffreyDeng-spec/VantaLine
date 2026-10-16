@@ -357,7 +357,8 @@ def capture():
                 {"class": entry.cls.__name__, "options": {
                     key: value.__name__ if callable(value) else value
                     for key, value in entry.kwargs.items()
-                }} for entry in server.app.user_middleware
+                }} for entry in __import__('model_privacy_source_contract').middleware_checkpoint(
+                    server.app.user_middleware, server._authentication_http.presentation)
             ],
             "startup": __import__('billing_source_contract').startup_checkpoint(server.app.router.on_startup),
             "shutdown": [fn.__name__ for fn in server.app.router.on_shutdown],

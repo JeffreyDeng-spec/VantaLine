@@ -259,16 +259,18 @@ def test_workstation_api_rbac_persistence_and_dispatch() -> None:
                                    for f in lease_payload["connection_check"]["frames"]]},
     )
     assert_status(active, 200, "activate lease")
+    model_reference = server._authentication_http.presentation.references.encode("model-a")
     rebound_model = client.post(
         "/api/plc/workstation/lease/rebind-model",
         json={
             "session_id": lease_payload["session_id"],
             "lease_epoch": lease_payload["lease_epoch"],
-            "model_id": "model-a",
+            "model_id": model_reference,
         },
     )
     assert_status(rebound_model, 200, "rebind active lease model")
-    assert rebound_model.json()["model_id"] == "model-a"
+    assert rebound_model.json()["model_id"] == model_reference
+    assert server._authentication_http.presentation.references.decode(model_reference) == "model-a"
     assert_status(
         client.post(
             "/api/plc/workstation/diagnostic-plan",

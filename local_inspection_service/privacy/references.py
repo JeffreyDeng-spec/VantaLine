@@ -7,7 +7,6 @@ import base64
 import os
 from pathlib import Path
 from collections.abc import Callable
-from Crypto.Cipher import AES
 
 
 def runtime_key(directory: Path) -> bytes:
@@ -48,6 +47,7 @@ class References:
         return self._material
 
     def encode(self, value: str) -> str:
+        from Crypto.Cipher import AES
         cipher = AES.new(self.material(), AES.MODE_SIV)
         cipher.update(b"vantaline-public-reference-v1")
         encrypted, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
@@ -59,6 +59,7 @@ class References:
         if len(value) > 8192:
             raise ValueError("Invalid public reference")
         try:
+            from Crypto.Cipher import AES
             raw = base64.b64decode(value[len(self.PREFIX):] + "=" * (-len(value[len(self.PREFIX):]) % 4), altchars=b"-_", validate=True)
             cipher = AES.new(self.material(), AES.MODE_SIV)
             cipher.update(b"vantaline-public-reference-v1")

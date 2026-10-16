@@ -151,6 +151,7 @@ def require_detection_upload_boundary(server: str, implementations: dict[str, st
 
 def main() -> None:
     rules = (FRONTEND / "features" / "rules" / "RulesPage.tsx").read_text(encoding="utf-8")
+    rules += (FRONTEND / "features" / "rules" / "AdminSettings.tsx").read_text(encoding="utf-8")
     rules += (FRONTEND / "features" / "rules" / "DeviceSettings.tsx").read_text(encoding="utf-8")
     detection = (FRONTEND / "features" / "detection" / "DetectionWorkbenchPage.tsx").read_text(encoding="utf-8")
     queries = (FRONTEND / "api" / "queries.ts").read_text(encoding="utf-8")

@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_SHA256 = "f81a36aa53e581fca4c21d7cc7c0053bce0367f3450cd00697119dcc4edb0f6b"
+FIXTURE_SHA256 = "e7aaa292604eb7065bd8f435f4a8dff863077d47114d5267b90d85678778226f"
 
 
 def checkpoint_bytes(path, actual):
@@ -23,3 +23,14 @@ def checkpoint_bytes(path, actual):
     parent = change["parent_source"].encode()
     assert hashlib.sha256(parent).hexdigest() == change["parent_sha256"], "Privacy parent changed"
     return parent
+
+
+def middleware_checkpoint(entries, presentation):
+    """Validate the added owner and position before comparing the frozen parent."""
+    from local_inspection_service.privacy.http import ModelPrivacyMiddleware
+    from local_inspection_service.privacy.presentation import Presentation
+    assert type(presentation) is Presentation
+    selected = [entry for entry in entries if entry.cls is ModelPrivacyMiddleware]
+    assert len(selected) == 1 and entries[-1] is selected[0], "Privacy middleware must run inside transport wrappers"
+    assert selected[0].kwargs == {"presentation": presentation}, "Privacy middleware owner changed"
+    return entries[:-1]

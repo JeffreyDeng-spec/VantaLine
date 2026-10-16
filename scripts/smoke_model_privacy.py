@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -131,6 +132,24 @@ class Privacy(unittest.TestCase):
     def role(self, role="member"):
         self.client.cookies.clear()
         if role: self.client.cookies.set("role", role)
+
+    def test_import_is_inert_and_middleware_checkpoint_rejects_mutants(self):
+        # A fresh import must not invoke the crypto library's platform subprocess
+        # or initialize runtime resources during isolated application composition.
+        subprocess.run([sys.executable, "-c", "from unittest.mock import patch; "
+            "guard=patch('subprocess.Popen', side_effect=AssertionError('external operation')); "
+            "guard.start(); from local_inspection_service.privacy.presentation import Presentation; "
+            "from local_inspection_service.privacy.references import References; "
+            "Presentation(References(lambda: (_ for _ in ()).throw(AssertionError('key read'))))"], check=True)
+        from model_privacy_source_contract import middleware_checkpoint
+        from starlette.middleware import Middleware
+        from local_inspection_service.privacy.http import ModelPrivacyMiddleware
+        entry = Middleware(ModelPrivacyMiddleware, presentation=self.presentation)
+        other = Middleware(GZipMiddleware)
+        self.assertEqual(middleware_checkpoint([other, entry], self.presentation), [other])
+        for entries in ([entry, other], [entry, entry], [other],
+                        [Middleware(ModelPrivacyMiddleware, presentation=object())]):
+            with self.assertRaises(AssertionError): middleware_checkpoint(entries, self.presentation)
 
     def test_closed_projection_history_and_customer_text(self):
         self.role()
