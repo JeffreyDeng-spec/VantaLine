@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from functools import lru_cache
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_SHA256 = "e8eb14315b4e1a81abd5decdd512d28703497954f458279f3643e83ce8db39ae"
+FIXTURE_SHA256 = "61fc66d3023bbc28c25ec66b912ea73562418f9fc9d2f96a0e479c75862e0af9"
 
 
 @lru_cache(maxsize=4)

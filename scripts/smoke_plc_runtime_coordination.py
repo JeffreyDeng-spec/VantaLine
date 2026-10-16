@@ -245,7 +245,6 @@ class CoordinationContract(unittest.TestCase):
 
     @unittest.skipIf(BASELINE, 'candidate owner binding')
     def test_root_binding_no_constructor_io_and_dormant_startup(self):
-        self.assertIsNot(build()._legacy_plc_coordination, self.api._legacy_plc_coordination)
         for name in NAMES:
             self.assertIs(getattr(self.api, name).__self__, self.api._legacy_plc_coordination)
         self.assertIsNot(build()._legacy_plc_coordination, self.api._legacy_plc_coordination)

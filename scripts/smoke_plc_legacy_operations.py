@@ -1,5 +1,6 @@
 """Single legacy PLC iterations with synthetic I/O; no workers or serial devices."""
 import ast
+from functools import lru_cache
 import os
 from pathlib import Path
 import sys
@@ -17,7 +18,8 @@ BASELINE = os.environ.get('VANTALINE_PLC_LEGACY_OPERATIONS_BASELINE_SOURCE')
 NAMES = {'plc_reconcile_pending_dispatches_once', 'plc_capture_poll_once'}
 
 
-def build():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else ROOT / 'local_inspection_service/server.py'
     nodes = []
     for node in ast.parse(read_checked_application_source(source, encoding='utf-8-sig')).body:
@@ -29,10 +31,14 @@ def build():
             isinstance(t, ast.Name) and t.id in NAMES | {'_legacy_plc_operations'} for t in node.targets
         ):
             nodes.append(node)
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec')
+
+
+def build():
     target = ModuleType('local_inspection_service._legacy_operations_contract')
     target.__package__ = 'local_inspection_service'
     target.__dict__.update(Any=Any, PlcConfigError=PlcConfigError, PlcDispatchStateConflict=PlcDispatchStateConflict)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec'), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 

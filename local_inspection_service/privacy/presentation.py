@@ -171,7 +171,7 @@ class Presentation:
                 item_field = "accessory_labels" if field in LABEL_MAPS else key
                 if not admin and key == "note" and not (mapping and field in CUSTOMER_MAPS):
                     item = public_note(item, value, field)
-                if not admin and value.get("role") in {"agent", "assistant"} and key in {"message", "reason", "source"}:
+                if not admin and value.get("role") != "user" and (PRIVATE_IDENTITIES in value or value.get("role") in {"agent", "assistant"}) and key in {"message", "message_to_user", "reason", "source", "content", "text"}:
                     item = neutralize_identities(item, value.get(PRIVATE_IDENTITIES))
                 if key == "message" and value.get("role") in {"user", "agent", "assistant"}:
                     item_field = "text" if value["role"] == "user" else "message_to_user"

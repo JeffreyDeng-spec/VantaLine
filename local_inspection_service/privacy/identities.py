@@ -11,6 +11,16 @@ def identity_terms(config):
                    if isinstance(value := config.get(key), str) and len(value.strip()) >= 3}, key=lambda value: (-len(value), value))
 
 
+def snapshot_identity_terms(value):
+    """Read model/provider names only from an already-private profile snapshot."""
+    terms = identity_terms(value)
+    children = value.values() if isinstance(value, dict) else value if isinstance(value, list) else ()
+    for child in children:
+        if isinstance(child, (dict, list)):
+            terms.extend(snapshot_identity_terms(child))
+    return sorted(set(terms), key=lambda term: (-len(term), term))
+
+
 def neutralize_identities(value, terms):
     if not isinstance(value, str):
         return value

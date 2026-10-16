@@ -94,6 +94,8 @@ class TrainingTaskLifecycle:
                 existing = self.records.load(path)
                 return dict(existing or tombstone)
             task = self.records.load(path) or {"job_id": job_id, "created_at": int(time.time())}
+            if "note" in updates:
+                task.pop("_customer_note_sha256", None)
             task.update(updates)
             self.records.save(task)
             return task

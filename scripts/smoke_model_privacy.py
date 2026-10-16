@@ -354,6 +354,17 @@ class Privacy(unittest.TestCase):
             TrainingStateStorage(lambda key:task, lambda:config, lambda value:None), lambda value:None)
         state.sync_training_state_from_task("owned")
         self.assertEqual(self.presentation.outgoing(config["training_by_user_id"]["member"])["note"], note)
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        from local_inspection_service.training.task_lifecycle import TrainingTaskLifecycle, TrainingTaskRecords
+        lifecycle = TrainingTaskLifecycle(SimpleNamespace(guard=lambda:nullcontext(), tombstones=lambda:{}),
+            TrainingTaskRecords(lambda key:Path(key), lambda path:task, lambda value:None, lambda key:task), None, lambda *args,**kwargs:None)
+        lifecycle.update_training_task("owned", note=note)
+        self.assertEqual(task["note"], note)
+        self.assertNotIn("_customer_note_sha256", task)
+        state.sync_training_state_from_task("owned")
+        public_state = self.presentation.outgoing(config["training_by_user_id"]["member"])
+        self.assertEqual(public_state["note"], "已导入训练成果。")
 
     def test_business_overlay_survives_private_diagnostic_removal(self):
         evidence = {"elements": [{"element_id": "e1", "expected": "Gemini customer text", "standard_box": [0,0,1,1], "state": "matched", "evidence": [{"evidence_id":"o1","start":0,"end":3}]}], "observations": [{"id":"o1","text":"Gemini customer text","type":"text","box":[0,0,1,1]}]}
@@ -361,6 +372,26 @@ class Privacy(unittest.TestCase):
         public = self.presentation.outgoing(value)
         self.assertNotIn("diagnostics", public)
         self.assertEqual(public["match_evidence"], evidence)
+
+    def test_historical_agent_reply_uses_private_snapshot_without_rewriting_raw_record(self):
+        import copy
+        from local_inspection_service.model_profiles.snapshots import public_record
+        raw = {"model_profiles":{"training_assistant":{"model":"AcmeHistorical-v7", "provider":"PrivateVendor", "secret_ref":"never-copy-secret"}},
+               "conversation":[{"role":"user", "message":"客户输入 AcmeHistorical-v7"}, {"role":"agent", "message":"AcmeHistorical-v7 已完成", "source":"PrivateVendor"}],
+               "decision":{"action":"reply", "message_to_user":"AcmeHistorical-v7 已完成", "reason":"AcmeHistorical-v7 已完成", "source":"PrivateVendor"}}
+        before = copy.deepcopy(raw)
+        record = public_record(raw)
+        ordinary = self.presentation.outgoing(record)
+        self.assertEqual(ordinary["conversation"][0]["message"], raw["conversation"][0]["message"])
+        self.assertNotIn("AcmeHistorical-v7", ordinary["conversation"][1]["message"])
+        self.assertNotIn("PrivateVendor", ordinary["conversation"][1]["source"])
+        decision = self.presentation.outgoing(record["decision"])
+        self.assertNotIn("message_to_user", decision)
+        self.assertNotIn("AcmeHistorical-v7", decision["reason"])
+        self.assertNotIn("PrivateVendor", decision["source"])
+        self.assertNotIn("never-copy-secret", json.dumps(record))
+        self.assertEqual(self.presentation.outgoing(record, admin=True)["conversation"][1]["message"], raw["conversation"][1]["message"])
+        self.assertEqual(raw, before)
 
     def test_all_model_references_are_opaque_even_for_new_provider_names(self):
         value = {"available_models": [{"id":"unlisted-family-2030","variant":"unlisted-family","label":"Unlisted provider 2030","display_name":"Unlisted model family","description":"Unlisted model architecture","run_dir":"/private/model-artifacts"}], "active_model_id":"unlisted-family-2030", "loaded_model_ids":["unlisted-family-2030"]}
@@ -526,6 +557,11 @@ class Privacy(unittest.TestCase):
             AgentDecisionFlowCalls(lambda: lambda *args: {}, lambda: lambda *args: json.dumps(parsed), lambda: lambda value: dict(value), lambda: lambda *args: {}),
         )
         decision = flow.agent_pipeline_decide({}, {})
+        direct = self.presentation.outgoing(decision)
+        self.assertNotIn("message_to_user", direct)
+        self.assertEqual(direct["reason"], "AI 检测 已完成")
+        self.assertNotIn("AcmePrivate-v7", json.dumps(direct))
+        self.assertNotIn("PrivateVendor", json.dumps(direct))
         def append(task, role, message, **metadata):
             entry = {"role": role, "message": message, **metadata}
             task.setdefault("conversation", []).append(entry)

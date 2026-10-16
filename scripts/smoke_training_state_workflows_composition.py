@@ -95,7 +95,9 @@ class TrainingStateCompositionContracts(unittest.TestCase):
         source=(ROOT/'local_inspection_service/training/state_composition.py').read_text()
         verify_composition(source)
         for name,digest in FIXTURE['business_sha256'].items():
-            data=(ROOT/'local_inspection_service/training'/name).read_bytes().replace(b'\r\n',b'\n')
+            from model_privacy_source_contract import checkpoint_bytes
+            path='local_inspection_service/training/'+name
+            data=checkpoint_bytes(path,(ROOT/path).read_bytes()).replace(b'\r\n',b'\n')
             self.assertEqual(hashlib.sha256(data).hexdigest(),digest)
 
     def test_actual_constructor_and_owner_guard_counterexamples(self):
