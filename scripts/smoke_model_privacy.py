@@ -262,7 +262,7 @@ class Privacy(unittest.TestCase):
         self.assertEqual(public["match_evidence"], evidence)
 
     def test_all_model_references_are_opaque_even_for_new_provider_names(self):
-        value = {"available_models": [{"id":"unlisted-family-2030","variant":"unlisted-family","label":"Unlisted provider 2030","description":"Unlisted model architecture"}], "active_model_id":"unlisted-family-2030", "loaded_model_ids":["unlisted-family-2030"]}
+        value = {"available_models": [{"id":"unlisted-family-2030","variant":"unlisted-family","label":"Unlisted provider 2030","display_name":"Unlisted model family","description":"Unlisted model architecture","run_dir":"/private/model-artifacts"}], "active_model_id":"unlisted-family-2030", "loaded_model_ids":["unlisted-family-2030"]}
         public = self.presentation.outgoing(value)
         self.assertTrue(public["active_model_id"].startswith("ref1_"))
         self.assertEqual(public["available_models"][0]["id"], public["active_model_id"])
@@ -270,6 +270,11 @@ class Privacy(unittest.TestCase):
         self.assertEqual(public["available_models"][0]["variant"], "vision")
         self.assertTrue(public["available_models"][0]["label"].startswith("视觉模型 · "))
         self.assertNotIn("Unlisted", json.dumps(public))
+        self.assertNotIn("run_dir", public["available_models"][0])
+        for source in ("agent_cursor_empty_surface", "agent_agnes_empty_surface"):
+            public_source = self.presentation.outgoing({"source": source})["source"]
+            self.assertNotIn("cursor", public_source.lower())
+            self.assertNotIn("agnes", public_source.lower())
 
     def test_exact_source_delta_rejects_unknown_edits(self):
         from model_privacy_source_contract import checkpoint_bytes
@@ -281,10 +286,11 @@ class Privacy(unittest.TestCase):
             checkpoint_bytes(path, actual+b"\n# unreviewed mutation\n")
 
     def test_binary_urls_cursors_and_plc_tokens_are_not_text_replacements(self):
-        value = {"annotated_image_data_url":"data:image/png;base64,abcdYOLOefgh", "next_cursor":"opaqueGeminiCursor", "plc_sync":{"session_id":"lease-YOLO", "binding_token":"tokenGemini", "dispatch_id":"dispatch-YOLO", "model_id":"internal-detector"}}
+        value = {"annotated_image_data_url":"data:image/png;base64,abcdYOLOefgh", "next_cursor":"opaqueGeminiCursor", "cursor":"opaqueAgnesCursor", "plc_sync":{"session_id":"lease-YOLO", "binding_token":"tokenGemini", "dispatch_id":"dispatch-YOLO", "model_id":"internal-detector"}}
         public = self.presentation.outgoing(value)
         self.assertEqual(public["annotated_image_data_url"], value["annotated_image_data_url"])
         self.assertEqual(public["next_cursor"], value["next_cursor"])
+        self.assertEqual(public["cursor"], value["cursor"])
         for key in ("session_id", "binding_token", "dispatch_id"):
             self.assertEqual(public["plc_sync"][key], value["plc_sync"][key])
         self.assertTrue(public["plc_sync"]["model_id"].startswith("ref1_"))

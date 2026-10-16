@@ -10,8 +10,8 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsp
 from .references import References
 
 PUBLIC_FIELDS = frozenset(json.loads(Path(__file__).with_name("public_fields.json").read_text()))
-SENSITIVE = re.compile(r"yolo|ultralytics|gemini|doubao|豆包|qwen|千问|通义|codex|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?\d|runpod|generativelanguage", re.I)
-WORDS = re.compile(r"[a-z0-9_.+-]*(?:yolo|ultralytics|gemini|doubao|qwen|codex|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?\d|runpod|generativelanguage)[a-z0-9_.+-]*|豆包|千问|通义", re.I)
+SENSITIVE = re.compile(r"yolo|ultralytics|gemini|doubao|豆包|qwen|千问|通义|codex|agnes|cursor(?:[-_]|\b)|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?\d|runpod|generativelanguage", re.I)
+WORDS = re.compile(r"[a-z0-9_.+-]*(?:yolo|ultralytics|gemini|doubao|qwen|codex|agnes|cursor(?:[-_]|\b)|sam[-_ ]?\d|paddleocr|paddlepaddle|dashscope|volcengine|openai|anthropic|claude|gpt[-_ ]?\d|runpod|generativelanguage)[a-z0-9_.+-]*|豆包|千问|通义", re.I)
 WIRE = {
     "yolo_ocr": "vision_text", "yolo": "vision", "qwen_ocr": "text_evidence",
     "yolo_warmup": "vision_warmup", "cursor_image2": "image_service",
@@ -113,20 +113,20 @@ class Presentation:
             capability = "AI 检测" if value.get("is_ai_detection") else "视觉模型＋文字识别" if value.get("uses_ocr") or value.get("variant") == "yolo_ocr" else "视觉模型"
             for key, item in value.items():
                 if not admin:
-                    if field not in CUSTOMER_MAPS and key.endswith("_path"):
+                    if field not in CUSTOMER_MAPS and key.endswith(("_path", "_dir", "_directory")):
                         continue
                     if field not in CUSTOMER_MAPS and key in HIDDEN and not (plc and key in PLC_FIELDS) and not (key == "model" and isinstance(item, dict)):
                         continue
                     if not mapping and key not in PUBLIC_FIELDS and key not in WIRE and not (plc and key in PLC_FIELDS):
                         continue
-                    if not mapping and SENSITIVE.search(key) and key not in WIRE:
+                    if not mapping and SENSITIVE.search(key) and key not in WIRE and key not in OPAQUE:
                         continue
                 public_key = key if mapping else WIRE.get(key, key)
                 item_field = field if field in CUSTOMER_MAPS else key
                 result[public_key] = self.outgoing(item, admin=admin, plc=plc or key == "plc_sync", field=item_field, mapping=key in MAPS)
                 if not admin and model_record and key == "id" and isinstance(item, str) and item:
                     result[public_key] = self.references.encode(item)
-                if not admin and model_record and key in {"label", "description", "name"} and isinstance(item, str):
+                if not admin and model_record and key in {"label", "description", "name", "display_name"} and isinstance(item, str):
                     suffix = self.references.encode(str(value["id"]))[5:13] if value.get("id") else ""
                     result[public_key] = capability + (" · " + suffix if suffix and key != "description" else "")
             if model_record and "id" in value:
