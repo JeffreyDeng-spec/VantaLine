@@ -181,6 +181,8 @@ class ModelPrivacyMiddleware:
                 data = json.loads(b"".join(pieces))
                 plc = scope["path"].startswith("/api/plc/")
                 response_admin = admin or (auth_route and isinstance(data, dict) and (data.get("user") or {}).get("role") == "admin")
+                if not response_admin and start["status"] >= 500:
+                    data = {"detail": "服务暂时不可用，请稍后检查或联系管理员。", "code": "service_unavailable"}
                 data = presentation.outgoing(data, admin=response_admin, plc=plc)
                 encoded = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode()
                 start["headers"] = [(k, v) for k, v in start["headers"] if k.lower() not in {b"content-length", b"etag", b"cache-control"}]

@@ -51,6 +51,10 @@ def fixture(presentation, dist=None):
     @app.get("/api/status")
     def status(): return RAW
 
+    @app.get("/api/provider-failure")
+    def provider_failure():
+        return JSONResponse({"detail":"unlisted-private-engine failed at internal endpoint", "debug":{"internal":"provider response"}}, status_code=502)
+
     @app.post("/api/analyze/camera")
     async def camera(file: UploadFile = File(...), model_id: str = Form(...), plc_session_id: str = Form(...)):
         touched.append((model_id, plc_session_id, await file.read()))
@@ -325,6 +329,16 @@ class Privacy(unittest.TestCase):
             self.assertEqual(public[key], value[key])
         self.assertEqual(public["metrics"], {"mAP50":0.9})
         self.assertEqual(public["summary"], {"digit_regions":4})
+
+    def test_unknown_provider_server_errors_are_not_forwarded(self):
+        self.role()
+        response = self.client.get("/api/provider-failure")
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["code"], "service_unavailable")
+        self.assertNotIn("unlisted-private-engine", response.text)
+        self.assertNotIn("internal endpoint", response.text)
+        self.role("admin")
+        self.assertIn("unlisted-private-engine", self.client.get("/api/provider-failure").text)
 
 
 if __name__ == "__main__":

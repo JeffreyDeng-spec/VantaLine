@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_SHA256 = "4c3c5b9d74a7402c258760f3a1c8a08ac3057238252c3bf193a63c4706db9c3f"
+FIXTURE_SHA256 = "f81a36aa53e581fca4c21d7cc7c0053bce0367f3450cd00697119dcc4edb0f6b"
 
 
 def checkpoint_bytes(path, actual):
