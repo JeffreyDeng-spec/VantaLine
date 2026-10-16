@@ -48,6 +48,16 @@ IDENTIFIERS = frozenset({"id", "task", "before", "after"})
 WIRE_KEYS = frozenset({"yolo_warmup", "cursor_image2", "codex_image_job", "codex_image_jobs", "codex_comparison_tasks"})
 CUSTOMER_MAPS = MAPS - {"params", "parameters", "stages", "stage_states", "rule_overrides", "bindings", "metrics", "doc_filter_stats", "summary"}
 LABEL_MAPS = frozenset({"accessory_labels", "accessory_names_by_id"})
+FILE_REFERENCES = frozenset({"source_path"})
+
+
+def gallery_stem(value):
+    name = re.split(r"[\\/]", re.split(r"[?#]", str(value or ""), maxsplit=1)[0])[-1]
+    return re.sub(r"\.[^.]+$", "", name).lower()
+
+
+def rectified_stem(stem):
+    return stem.endswith("_rectified") or "_rectified_" in stem or "_manual_rectified" in stem
 
 
 def internal_route(path: str) -> str:
@@ -86,14 +96,24 @@ class Presentation:
         if isinstance(value, list):
             return [self.incoming(item, field) for item in value]
         if isinstance(value, str) and field not in TEXT:
-            if value.startswith(References.PREFIX) and (field in IDENTIFIERS or field.endswith(("_id", "_ids"))):
+            if value.startswith(References.PREFIX) and (field in IDENTIFIERS or field in FILE_REFERENCES or field.endswith(("_id", "_ids"))):
                 return self.references.decode(value)
             if not (field in IDENTIFIERS or field.endswith(("_id", "_ids"))):
                 return REVERSE.get(value, value)
         return value
 
     def outgoing(self, value, *, admin=False, plc=False, field="", mapping=False):
+        if admin and field in {"diagnostics", "debug", "raw", "raw_json", "raw_response", "parsed_response", "normalized_response", "profile_snapshot", "model_audits", "provider_response", "provider_result", "provider_status"}:
+            return value
         if isinstance(value, list):
+            if not admin and field == "gallery":
+                stems = [gallery_stem(item.get("source_path")) for item in value if isinstance(item, dict)]
+                rectified = [stem for stem in stems if rectified_stem(stem)]
+                value = [dict(item, crop_source_eligible=bool(item.get("source_path")) and
+                    not rectified_stem(gallery_stem(item.get("source_path"))) and not any(
+                        stem == gallery_stem(item.get("source_path")) + "_manual_rectified" or
+                        stem.startswith(gallery_stem(item.get("source_path")) + "_manual_rectified_")
+                        for stem in rectified)) if isinstance(item, dict) else item for item in value]
             return [self.outgoing(item, admin=admin, plc=plc, field=field) for item in value]
         if isinstance(value, dict):
             result = {}
@@ -114,7 +134,7 @@ class Presentation:
             capability = "AI 检测" if value.get("is_ai_detection") else "视觉模型＋文字识别" if value.get("uses_ocr") or value.get("variant") == "yolo_ocr" else "视觉模型"
             for key, item in value.items():
                 if not admin:
-                    if not (mapping and field in CUSTOMER_MAPS) and key.endswith(("_path", "_dir", "_directory")):
+                    if not (mapping and field in CUSTOMER_MAPS) and key not in FILE_REFERENCES and key.endswith(("_path", "_dir", "_directory")):
                         continue
                     if not (mapping and field in CUSTOMER_MAPS) and key in HIDDEN and not (plc and key in PLC_FIELDS) and not (key == "model" and isinstance(item, dict)):
                         continue
@@ -137,10 +157,14 @@ class Presentation:
             return result
         if not isinstance(value, str):
             return value
+        if admin and field in HIDDEN:
+            return value
         if field in OPAQUE or value.startswith(("data:image/", "data:video/")):
             return value
         if plc and field in PLC_FIELDS:
             return value
+        if not admin and field in FILE_REFERENCES and value:
+            return self.references.encode(value)
         if not admin and value and (field == "model_id" or field.endswith(("_model_id", "model_ids"))):
             return self.references.encode(value)
         if not admin and field in {"model_label", "active_model_label", "candidate_model_label"}:

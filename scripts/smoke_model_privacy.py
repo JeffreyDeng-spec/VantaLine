@@ -196,6 +196,8 @@ class Privacy(unittest.TestCase):
         self.assertEqual(public["ai_detection"]["model"], "doubao-vision-1")
         self.assertEqual(public["available_models"][0]["variant"], "vision")
         self.assertIn("diagnostics", public["items"][0])
+        internal = {"diagnostics": {"provider": "qwen_ocr", "model": "yolo", "nested": {"codex_image_jobs": []}}, "provider": "qwen_ocr"}
+        self.assertEqual(self.presentation.outgoing(internal, admin=True), internal)
 
     def test_json_modes_and_references_round_trip_without_changing_text(self):
         self.role()
@@ -312,13 +314,23 @@ class Privacy(unittest.TestCase):
             self.assertNotIn("agnes", public_source.lower())
 
     def test_exact_source_delta_rejects_unknown_edits(self):
-        from model_privacy_source_contract import checkpoint_bytes
+        from model_privacy_source_contract import checkpoint_bytes, checked_fixture
         path = "local_inspection_service/auth/middleware.py"
         actual = (Path(__file__).resolve().parents[1]/path).read_bytes()
         parent = checkpoint_bytes(path, actual)
         self.assertNotEqual(parent, actual)
         with self.assertRaises(AssertionError):
             checkpoint_bytes(path, actual+b"\n# unreviewed mutation\n")
+        fixture_bytes = (Path(__file__).resolve().parents[1]/"tests/backend_contract/model_privacy_delta.json").read_bytes()
+        checked_fixture(fixture_bytes)
+        with self.assertRaises(AssertionError): checked_fixture(fixture_bytes+b" ")
+        from unittest.mock import patch
+        added_source = Path(__file__).resolve().parents[1]/"local_inspection_service/privacy/references.py"
+        read_bytes = Path.read_bytes
+        def mutated(source):
+            return read_bytes(source) + (b"\n# unknown added source\n" if source == added_source else b"")
+        with patch.object(Path, "read_bytes", mutated), self.assertRaisesRegex(AssertionError, "Privacy source changed"):
+            checkpoint_bytes(path, actual)
 
     def test_binary_urls_cursors_and_plc_tokens_are_not_text_replacements(self):
         value = {"annotated_image_data_url":"data:image/png;base64,abcdYOLOefgh", "next_cursor":"opaqueGeminiCursor", "cursor":"opaqueAgnesCursor", "plc_sync":{"session_id":"lease-YOLO", "binding_token":"tokenGemini", "dispatch_id":"dispatch-YOLO", "model_id":"internal-detector"}}
@@ -380,6 +392,22 @@ class Privacy(unittest.TestCase):
         self.assertEqual(public["conversation"][0], conversation["conversation"][0])
         self.assertEqual(public["conversation"][1]["message"], "已使用 AI 检测 完成检测")
         self.assertEqual(self.presentation.outgoing(conversation, admin=True), conversation)
+
+    def test_gallery_file_references_keep_crop_and_edit_capabilities(self):
+        paths = ["/private/YOLO/page.png", "/private/YOLO/page_manual_rectified.png", "/private/YOLO/next.png"]
+        raw = {"gallery": [{"source_path": path, "kind": "source"} for path in paths]}
+        public = self.presentation.outgoing(raw)
+        self.assertEqual([item["crop_source_eligible"] for item in public["gallery"]], [False, False, True])
+        self.assertEqual([self.presentation.references.decode(item["source_path"]) for item in public["gallery"]], paths)
+        self.assertNotIn("/private/", json.dumps(public))
+        self.assertNotIn("YOLO", json.dumps(public))
+        self.role()
+        reference = public["gallery"][2]["source_path"]
+        response = self.client.post("/api/pipeline/tasks", json={"source_path": reference})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.touched[-1], {"source_path": paths[2]})
+        self.assertEqual(response.json()["source_path"], reference)
+        self.assertEqual(self.presentation.outgoing(raw, admin=True), raw)
 
 
 if __name__ == "__main__":

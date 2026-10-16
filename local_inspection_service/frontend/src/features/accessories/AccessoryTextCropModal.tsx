@@ -86,6 +86,7 @@ function cropSourceAssets(gallery: AccessoryGalleryAsset[] | undefined): SourceA
   const candidates = sourceAssets.length ? sourceAssets : (gallery || []).filter((asset) => asset.url && asset.source_path);
   return candidates
     .filter((asset) => {
+      if (typeof asset.crop_source_eligible === "boolean") return asset.crop_source_eligible;
       const sourcePath = String(asset.source_path || "");
       return sourcePath && !isRectifiedSourcePath(sourcePath) && !hasRectifiedAssetForSource(sourcePath, gallery);
     })

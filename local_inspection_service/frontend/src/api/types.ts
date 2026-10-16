@@ -1336,6 +1336,39 @@ export interface AccessoryGalleryAsset {
   kind?: string;
   url?: string;
   source_path?: string;
+  crop_source_eligible?: boolean;
+  pose_family?: string;
+  pose_position?: string;
+  source_position?: string;
+  source_object_bbox_xyxy?: number[];
+  source_object_center_xy?: number[];
+  source_object_size_px?: number[];
+  source_long_side_px?: number;
+  source_short_side_px?: number;
+  source_long_edge_axis?: string;
+  source_short_edge_axis?: string;
+  source_long_short_ratio?: number;
+  source_length_width_rule?: string;
+  source_pose_collection_job_id?: string;
+  rotation_degrees_applied?: number;
+  rotation_degrees_applied_to_upright?: number;
+  original_orientation_angle?: number;
+  original_orientation_angle_degrees?: number;
+  source_restore_rotation_degrees?: number;
+  normalized_asset_size_px?: number[];
+  normalized_asset_dimensions_px?: number[];
+  normalized_bbox_xyxy?: number[];
+  edge_alpha_max?: number;
+  edge_alpha_pass?: boolean;
+  pre_rotation_safety_margin_px?: number;
+  post_rotation_safety_margin_px?: number;
+  physical_size_mm?: number[];
+  render_scale_basis?: string;
+  render_footprint_mm?: number[];
+  render_footprint_px?: number[];
+  render_footprint_mm_unoriented_long_short?: number[];
+  render_footprint_px_unoriented_long_short?: number[];
+  render_source_aspect_preserved?: boolean;
   deletable?: boolean;
   ai_reference?: boolean;
   width?: number;
@@ -1370,6 +1403,8 @@ export interface AccessoryImageJob {
 }
 
 export interface AccessoryCandidate {
+  ai_generation_required?: boolean;
+  normalization_deferred?: boolean;
   id: string;
   name?: string;
   class_id?: number;

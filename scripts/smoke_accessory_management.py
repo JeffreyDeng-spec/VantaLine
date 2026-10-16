@@ -109,7 +109,7 @@ class ManagementContracts(unittest.TestCase):
             'remove_pipeline_accessory_id': lambda identifier: self.events.append(('pipeline_remove', identifier, self.depth)),
             'add_pipeline_pending_candidate_id': lambda identifier: self.events.append(('pending_add', identifier, self.depth)),
             'remove_pipeline_pending_candidate_id': lambda identifier: self.events.append(('pending_remove', identifier, self.depth)),
-            'pipeline_accessories_payload': lambda config, user=None: {'fixture_owner':user['id'] if user else None},
+            'pipeline_accessories_payload': lambda config, user=None: {'owner_user_id':user['id'] if user else None},
         }
         for name, value in callbacks.items(): self.stack.enter_context(accessory_callback(self.server, name, value))
 
@@ -141,7 +141,7 @@ class ManagementContracts(unittest.TestCase):
         self.assertEqual(item['material_alpha_policy'], 'opaque')
         self.assertTrue(item['normalization_deferred'])
         self.assertEqual([event[0] for event in self.events], ['defer','reference','profile','save_item','worker','pipeline_add'])
-        self.assertEqual(response.json()['pipeline']['fixture_owner'], self.users['alice']['id'])
+        self.assertEqual(response.json()['pipeline']['owner_user_id'], self.users['alice']['id'])
         self.events.clear()
         response = client.post('/api/accessories', data={'name':'Object','material_alpha_policy':'opaque'})
         self.assertEqual(response.status_code, 409)
@@ -162,7 +162,16 @@ class ManagementContracts(unittest.TestCase):
         candidate = response.json()['candidate']
         self.assertEqual(candidate['pipeline_context'], 'pipeline')
         self.assertEqual(candidate['owner_user_id'], self.users['alice']['id'])
-        self.assertEqual(self.candidates[candidate['id']], candidate)
+        stored = self.candidates[candidate['id']]
+        expected = copy.deepcopy(stored)
+        for private in ('pose_collection_prompt', 'pose_collection_prompts', 'video_reference_frames'):
+            expected.pop(private)
+        expected['ai_profile'] = {}  # Synthetic unknown field is outside the public schema.
+        expected['image_job'] = expected.pop('codex_image_job')
+        expected['image_jobs'] = expected.pop('codex_image_jobs')
+        self.assertEqual(candidate, expected)
+        self.assertEqual(stored['ai_profile'], {'fixture':True})
+        self.assertIn('pose_collection_prompt', stored)
         self.assertEqual([event[0] for event in self.events], ['defer','reference','profile','save_candidate','save_candidate','pending_add','worker'])
         self.assertEqual(self.state['accessories'], [])
 

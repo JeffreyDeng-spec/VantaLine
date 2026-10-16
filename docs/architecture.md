@@ -2647,4 +2647,6 @@ or API schema changes.
 
 Public bundles contain no concrete model vocabulary. Administrator settings are a separate `admin-*` module protected by server role checks, including direct downloads and preview assets; lazy loading alone is insufficient. Legacy frontend entry files and source maps are unavailable to non-admins. Original weights, configuration archives and logs under outputs require admin; ordinary evidence media and customer business documents retain owner checks. Public schema documentation remains admin-only.
 
+Gallery `source_path` values are authenticated opaque file references for non-admins; crop/reference/delete requests resolve them before unchanged accessory ownership and file-membership checks. `crop_source_eligible` carries the existing filename-derived crop state without exposing local paths. Administrators retain raw source paths. Delegated `system_settings` access retains PLC device configuration while model configuration remains admin-only.
+
 The client fences asynchronous API results with an account/role generation. Logout, account change and role downgrade clear private queries and remount the relevant workspace. Previously downloaded copies cannot be recalled.

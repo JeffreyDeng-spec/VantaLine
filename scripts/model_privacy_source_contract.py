@@ -2,26 +2,38 @@
 import hashlib
 import json
 from pathlib import Path
+from functools import lru_cache
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE_SHA256 = "02ba7bf921fd18baef391c4e1e8e70afa194a2da50c41a6ea8ff445c74e5d77f"
+FIXTURE_SHA256 = "1c3a4fa2959e65042c888311902475f9144c3f63c2a60ee77807160f6b34579f"
+
+
+@lru_cache(maxsize=4)
+def checked_fixture(raw):
+    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "Unreviewed model privacy fixture"
+    fixture = json.loads(raw)
+    assert fixture["schema"] == 1
+    return fixture
+
+
+@lru_cache(maxsize=64)
+def exact_digest(raw):
+    return hashlib.sha256(raw).hexdigest()
 
 
 def checkpoint_bytes(path, actual):
     raw = (ROOT / "tests/backend_contract/model_privacy_delta.json").read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == FIXTURE_SHA256, "Unreviewed model privacy fixture"
-    fixture = json.loads(raw)
-    assert fixture["schema"] == 1
-    for name, expected in fixture["new_sources"].items():
-        assert hashlib.sha256((ROOT/name).read_bytes()).hexdigest() == expected, "Privacy source changed: " + name
+    fixture = checked_fixture(raw)
     change = fixture["files"].get(path)
     if change is None:
         return actual
-    digest = hashlib.sha256(actual).hexdigest()
+    for name, expected in fixture["new_sources"].items():
+        assert exact_digest((ROOT/name).read_bytes()) == expected, "Privacy source changed: " + name
+    digest = exact_digest(actual)
     if digest == change["parent_sha256"]:
         return actual
     assert digest == change["current_sha256"], "Unknown model privacy source: " + path
     parent = change["parent_source"].encode()
-    assert hashlib.sha256(parent).hexdigest() == change["parent_sha256"], "Privacy parent changed"
+    assert exact_digest(parent) == change["parent_sha256"], "Privacy parent changed"
     return parent
 
 

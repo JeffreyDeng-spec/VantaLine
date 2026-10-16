@@ -155,7 +155,7 @@ class PublicStatusContracts(unittest.TestCase):
         from concurrent.futures import ThreadPoolExecutor
         def make(label):
             state={'reads':0}
-            def settings():state['reads']+=1;return {'enabled':True,'model':label,'api_key':'synthetic-key'}
+            def settings():state['reads']+=1;return {'enabled':label=='a','configured':label=='b','model':label,'api_key':'synthetic-key'}
             service=None
             policy=StatusPolicy(lambda:lambda u:bool(u and u.get('admin')),lambda:lambda u,p:bool(u and p in u.get('permissions',[])),lambda:{'id'},lambda:lambda v:{'sanitized':label})
             sources=StatusSources(lambda:settings,lambda:lambda:{'model':label+'-image','api_key':'synthetic-key'})
@@ -168,10 +168,12 @@ class PublicStatusContracts(unittest.TestCase):
             self.stack.enter_context(patch.object(self.api,name,side_effect=AssertionError('independent service used root')))
         with ThreadPoolExecutor(max_workers=2) as pool:
             ra,rb=list(pool.map(lambda service:service.public_ai_detection_status_for_user({'permissions':['ai_config']}),(a,b)))
-        self.assertEqual(ra,{'enabled':True,'model':'a','image_generation':{'model':'a-image'}})
-        self.assertEqual(rb,{'enabled':True,'model':'b','image_generation':{'model':'b-image'}})
+        self.assertEqual(ra,{'enabled':True,'configured':False,'status':'','message':'AI 检测暂不可用，请联系管理员'})
+        self.assertEqual(rb,{'enabled':False,'configured':True,'status':'','message':'AI 检测已就绪'})
         self.assertEqual(sa['reads'],1);self.assertEqual(sb['reads'],1)
         self.assertNotIn('model',a.public_ai_detection_status_for_user(None));self.assertEqual(sb['reads'],1)
+        self.assertEqual(a.public_ai_detection_status_for_user({'admin':True})['model'],'a')
+        self.assertEqual(b.public_ai_detection_status_for_user({'admin':True})['model'],'b')
     def test_constructor_never_reads_capabilities_and_keeps_only_dependencies(self):
         from local_inspection_service.auth.status import PublicStatusProjection
         from local_inspection_service.auth.status_ports import StatusPolicy, StatusSources, StatusProjectionCalls

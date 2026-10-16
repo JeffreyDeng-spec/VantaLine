@@ -1,5 +1,6 @@
 """Replay camera plan, at-most-once declaration and browser receipt contracts."""
 import ast
+from functools import lru_cache
 import copy
 import hashlib
 import hmac
@@ -27,7 +28,8 @@ NAMES = {"plc_web_serial_begin_camera_detection", "plc_web_serial_finish_camera_
 BASELINE = os.environ.get("VANTALINE_PLC_BROWSER_DISPATCH_BASELINE_SOURCE")
 
 
-def load_target():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     nodes = []
     raw = read_checked_application_source(source, encoding='utf-8-sig')
@@ -42,11 +44,15 @@ def load_target():
         elif not BASELINE and isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_plc_browser_dispatch" for t in n.targets):
             nodes.append(n)
     assert {n.name for n in nodes if isinstance(n, ast.FunctionDef)} == NAMES
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec")
+
+
+def load_target():
     target = types.ModuleType("local_inspection_service._browser_dispatch_contract")
     target.__package__ = "local_inspection_service"
     target.__dict__.update(Any=object, PlcWebSerialAttemptRequest=object, PlcWebSerialReceiptRequest=object,
                           copy=copy, hashlib=hashlib, hmac=hmac, json=json, math=math, re=re, secrets=secrets, time=time)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 
@@ -215,6 +221,7 @@ class BrowserDispatchContracts(unittest.TestCase):
                 count += 1
         self.assertEqual(count, 21)
         api = load_target(); calls = []; result = object()
+        self.assertIsNot(api._plc_browser_dispatch, service)
         class Fake:
             def __getattr__(self, name):
                 return lambda *args, **kwargs: calls.append((name, args, kwargs)) or result

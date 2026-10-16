@@ -1,5 +1,6 @@
 """Original/candidate workstation transaction and projection behavior without I/O."""
 import ast
+from functools import lru_cache
 import copy
 from contextlib import nullcontext
 import hashlib
@@ -32,7 +33,8 @@ class HttpError(Exception):
         self.status_code, self.detail = status_code, detail
 
 
-def load_target():
+@lru_cache(maxsize=1)
+def checked_code():
     source = Path(BASELINE) if BASELINE else Path(__file__).resolve().parents[1] / "local_inspection_service/server.py"
     raw = read_checked_application_source(source, encoding='utf-8-sig')
     if not BASELINE:
@@ -48,12 +50,16 @@ def load_target():
         elif not BASELINE and isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_plc_station_service" for t in node.targets):
             nodes.append(node)
     assert {n.name for n in nodes if isinstance(n, ast.FunctionDef)} == NAMES
+    return compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec")
+
+
+def load_target():
     target = types.ModuleType("local_inspection_service._station_contract")
     target.__package__ = "local_inspection_service"
     import hmac, secrets, time, uuid
     target.__dict__.update(Any=object, Request=object, Response=object, hashlib=hashlib,
                           hmac=hmac, secrets=secrets, time=time, uuid=uuid)
-    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), target.__dict__)
+    exec(checked_code(), target.__dict__)
     return target
 
 
@@ -229,6 +235,7 @@ class StationContracts(unittest.TestCase):
         self.assertEqual(sum(len(group.__dataclass_fields__) for group in
                              (service.storage, service.identity, service.policy, service.projection)), 33)
         api = load_target()
+        self.assertIsNot(api._plc_station_service, service)
         calls = []
         class Fake:
             def __getattr__(self, name):

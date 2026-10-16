@@ -71,6 +71,11 @@ class FileContracts(unittest.TestCase):
         self.stack.enter_context(accessory_callback(self.server,'fallback_accessory_ai_profile',return_value={'fallback':'synthetic'}))
         self.stack.enter_context(accessory_callback(self.server,'clean_sprite_assets',return_value=[{'fixture':True}]))
 
+    def source_path(self, response):
+        reference = response.json()['source_path']
+        self.assertTrue(reference.startswith('ref1_'))
+        return self.server._authentication_http.presentation.references.decode(reference)
+
     def seed(self, name, kind='object', *, outside=False):
         base=self.root/'outside' if outside else self.server.UPLOAD_DIR/'accessories'/name
         base.mkdir(parents=True,exist_ok=True)
@@ -116,7 +121,7 @@ class FileContracts(unittest.TestCase):
         client=self.clients['alice']
         path,item=self.seed('crop','text')
         corners=[{'x':-10,'y':-10},{'x':110,'y':0},{'x':100,'y':100},{'x':0,'y':110}]
-        payload={'source_path':str(path),'corners':corners}
+        payload={'source_path':self.server._authentication_http.presentation.references.encode(str(path)),'corners':corners}
         self.assertEqual(self.clients['bob'].post('/api/accessories/crop/text-crop',json=payload).status_code,404)
         self.assertEqual(self.events,[])
         self.assertEqual(client.post('/api/accessories/crop/text-crop',json={**payload,'corners':corners[:3]}).json(),{'detail':'corners must contain tl,tr,br,bl'})
@@ -124,7 +129,7 @@ class FileContracts(unittest.TestCase):
         self.assertEqual(client.post('/api/accessories/crop/text-crop',json={**payload,'corners':tiny}).json(),{'detail':'Crop area is too small'})
         result=client.post('/api/accessories/crop/text-crop',json=payload)
         self.assertEqual(result.status_code,200,result.text)
-        output=Path(result.json()['source_path'])
+        output=Path(self.source_path(result))
         self.assertEqual(output.name,'crop_manual_rectified.png')
         self.assertEqual(cv2.imread(str(output)).shape,(80,100,3))
         cropped=cv2.imread(str(output))
@@ -133,12 +138,12 @@ class FileContracts(unittest.TestCase):
         self.assertTrue(np.all(cropped[:,-1]==0))
         self.assertEqual(self.events[:3],[('refresh',True),('cache',{'entries':{}}),'save'])
         second=client.post('/api/accessories/crop/text-crop',json=payload)
-        self.assertTrue(second.json()['source_path'].endswith('_manual_rectified_1.png'))
+        self.assertTrue(self.source_path(second).endswith('_manual_rectified_1.png'))
         response=client.post('/api/accessories/crop/text-crop',json={**payload,'source_path':str(output)})
         self.assertEqual(response.json(),{'detail':'This text image is already manually cropped'})
         with patch('cv2.imwrite',return_value=False):
             response=client.post('/api/accessories/crop/text-crop',json=payload)
-        self.assertEqual((response.status_code,response.json()),(500,{'detail':'Failed to save cropped image'}))
+        self.assertEqual((response.status_code,response.json()),(500,{'detail':'服务暂时不可用，请稍后检查或联系管理员。', 'code':'service_unavailable'}))
 
     def test_crop_preserves_asymmetric_corner_orientation(self):
         path, item = self.seed('crop-colour', 'text')
@@ -154,7 +159,7 @@ class FileContracts(unittest.TestCase):
                         {'x': 100, 'y': 100}, {'x': 0, 'y': 100}],
         })
         self.assertEqual(response.status_code, 200, response.text)
-        cropped = cv2.imread(response.json()['source_path'])
+        cropped = cv2.imread(self.source_path(response))
         self.assertEqual(cropped.shape, (80, 100, 3))
         self.assertEqual(cropped[10, 10].tolist(), [10, 20, 30])
         self.assertEqual(cropped[10, 80].tolist(), [40, 50, 60])
