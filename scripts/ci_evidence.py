@@ -27,7 +27,7 @@ import ci_performance_evidence as performance_evidence
 
 OTHER_JOBS = ['artifact-storage', 'doc-image-runtime', 'source-safety',
               'release-package', 'documentation', 'frontend', 'codex-comparison', 'frontend-build',
-              'backend-performance', 'manual-history-performance']
+              'backend-performance', 'manual-history-performance', 'model-privacy']
 FULL_JOBS = ['ci-mode', *OTHER_JOBS, *[f'backend-shard-{i}' for i in range(12)], 'backend-plc']
 POLICY_FILES = ['requirements-production.lock', 'scripts/ci_evidence.py',
     'scripts/ci_environment.py', 'scripts/backend_ci.py', 'scripts/backend_ci_manifest.json',

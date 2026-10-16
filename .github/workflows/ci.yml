@@ -521,6 +521,7 @@ jobs:
     - frontend-build
     - backend-performance
     - manual-history-performance
+    - model-privacy
     runs-on: ubuntu-latest
     permissions:
       contents: read
