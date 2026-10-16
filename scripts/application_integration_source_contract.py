@@ -165,6 +165,29 @@ def restore_business_root(source):
 
 def restore_plc_domain_root(source):
     """Validate actual builders before the frozen unchanged business oracles."""
+    # Reject known forbidden rebindings before the expensive historical replay.
+    # Valid inputs still execute every original owner/source/digest assertion;
+    # no replay result or current-file validation is cached here.
+    tree = ast.parse(source)
+    assignments = {target.id: node.value for node in tree.body if isinstance(node, ast.Assign)
+                   for target in node.targets if isinstance(target, ast.Name)}
+    aliases = {
+        '_pipeline_queries': {'_pipeline_candidate_flow': '_pipeline_queries.candidates'},
+        '_plc_lease_diagnostic_workflows': {'_plc_lease_acquisition': '_plc_lease_diagnostic_workflows.acquisition'},
+        '_agent_pipeline_workflows': {'_agent_decision_flow': '_agent_pipeline_workflows.decision'},
+    }
+    for owner, bindings in aliases.items():
+        if owner in assignments and not any(isinstance(part, ast.Name) and part.id == '_default_application'
+                                             for part in ast.walk(assignments[owner])):
+            for name, expected in bindings.items():
+                # Earlier accepted replay checkpoints still contain the original
+                # constructor. Its exact Call is verified by the existing delta.
+                if name in assignments and not isinstance(assignments[name], ast.Call):
+                    assert ast.unparse(assignments[name]) == expected, 'Rebound domain owner: ' + name
+    if '_pipeline_queries' in assignments:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.keyword) and node.arg == 'model_resolver':
+                assert isinstance(node.value, ast.Name) and node.value.id == 'resolve_model_profiles', 'Rebound model resolver'
     verify_actual_compositions()
     source = restore_path_configuration_root(source)
     fixtures = (POSE_EXECUTION, POSE_PLANNING, AGENT_STATE, CODEX_ENVIRONMENT, PIPELINE_RUNTIME, PIPELINE_TASKS, PIPELINE_STAGES,

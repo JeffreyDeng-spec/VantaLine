@@ -36,12 +36,23 @@ def verify_composition(source):
     assert hashlib.sha256(json.dumps(canonical_ast(ast.parse(source)),ensure_ascii=False).encode()).hexdigest()==FIXTURE['composition_ast_sha256']
 
 def verify_root(source):
-    from training_task_source_contract import restore_training_task_root
-    source=restore_training_task_root(source)
-    tree=ast.parse(source)
     protected={'TrainingStateWorkflows','TrainingRecordAccess','TrainingTaskWrites','TrainingViewAccess',
                'TrainingRows','_training_task_runtime','_training_state_workflows',
                '_training_records','_training_lifecycle','_training_views'}
+    # Unknown imports can be rejected before replaying unrelated historical
+    # domains. The complete original replay and parent checks still run below.
+    allowed={(node.module,node.level,alias.name,alias.asname)
+             for text in FIXTURE['protected_imports'] for node in ast.parse(text).body
+             for alias in node.names if (alias.asname or alias.name) in protected}
+    for node in ast.parse(source).body:
+        if isinstance(node,(ast.Import,ast.ImportFrom)) and any((a.asname or a.name) in protected for a in node.names):
+            assert isinstance(node,ast.ImportFrom)
+            for alias in node.names:
+                if (alias.asname or alias.name) in protected:
+                    assert (node.module,node.level,alias.name,alias.asname) in allowed
+    from training_task_source_contract import restore_training_task_root
+    source=restore_training_task_root(source)
+    tree=ast.parse(source)
     imports=[ast.unparse(n) for n in tree.body if isinstance(n,(ast.Import,ast.ImportFrom)) and any((a.asname or a.name) in protected for a in n.names)]
     assert not any(isinstance(n,ast.ImportFrom) and any(a.name=='*' for a in n.names) for n in tree.body)
     assert imports==FIXTURE['protected_imports']
