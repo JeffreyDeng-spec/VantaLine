@@ -42,11 +42,12 @@ HIDDEN = frozenset({
 PLC_FIELDS = frozenset({"session_id", "station_id", "workstation_id", "client_instance_id", "lease_id", "dispatch_id", "request_id", "operation_id", "binding_token", "nonce", "signature", "fingerprint", "camera_request_id"})
 OPAQUE = frozenset({"cursor", "next_cursor", "refresh_cursor", "snapshot_cursor", "before", "after"})
 TEXT = frozenset({"reference_text", "actual_text", "expected", "observed", "note", "username", "display_name", "standard_name", "material_code", "original_filename", "filename", "file_name", "name", "label", "description", "task_label", "accessory_names", "accessory_labels", "text", "extracted_text", "ocr_text"})
-MAPS = frozenset({"features", "min_counts", "required_accessory_counts", "accessory_labels", "accessory_class_map", "accessory_names_by_id", "class_counts", "expected_counts", "actual_counts", "counts", "classes_by_id", "class_map", "bindings", "params", "parameters", "stages", "stage_states", "rule_overrides"})
+MAPS = frozenset({"features", "min_counts", "required_accessory_counts", "accessory_counts", "required_counts", "ai_counts", "count_mismatches", "accessory_labels", "accessory_class_map", "class_accessory_map", "accessory_names_by_id", "class_counts", "expected_counts", "actual_counts", "counts", "classes_by_id", "class_map", "task_rules", "by_status", "metrics", "doc_filter_stats", "summary", "bindings", "params", "parameters", "stages", "stage_states", "rule_overrides"})
 MODES = frozenset({"variant", "variants", "model_variant", "method", "train_mode", "train_modes", "recommended_train_mode", "optimization_route", "route", "detection_method", "pipeline_method", "mode"})
 IDENTIFIERS = frozenset({"id", "task", "before", "after"})
 WIRE_KEYS = frozenset({"yolo_warmup", "cursor_image2", "codex_image_job", "codex_image_jobs", "codex_comparison_tasks"})
-CUSTOMER_MAPS = MAPS - {"params", "parameters", "stages", "stage_states", "rule_overrides", "bindings"}
+CUSTOMER_MAPS = MAPS - {"params", "parameters", "stages", "stage_states", "rule_overrides", "bindings", "metrics", "doc_filter_stats", "summary"}
+LABEL_MAPS = frozenset({"accessory_labels", "accessory_names_by_id"})
 
 
 def internal_route(path: str) -> str:
@@ -81,7 +82,7 @@ class Presentation:
     def incoming(self, value, field=""):
         if isinstance(value, dict):
             return {(REVERSE.get(key, key) if REVERSE.get(key) in WIRE_KEYS and field not in CUSTOMER_MAPS else key):
-                    self.incoming(item, field if field in CUSTOMER_MAPS else key) for key, item in value.items()}
+                    self.incoming(item, "accessory_labels" if field in LABEL_MAPS else key) for key, item in value.items()}
         if isinstance(value, list):
             return [self.incoming(item, field) for item in value]
         if isinstance(value, str) and field not in TEXT:
@@ -113,16 +114,16 @@ class Presentation:
             capability = "AI 检测" if value.get("is_ai_detection") else "视觉模型＋文字识别" if value.get("uses_ocr") or value.get("variant") == "yolo_ocr" else "视觉模型"
             for key, item in value.items():
                 if not admin:
-                    if field not in CUSTOMER_MAPS and key.endswith(("_path", "_dir", "_directory")):
+                    if not (mapping and field in CUSTOMER_MAPS) and key.endswith(("_path", "_dir", "_directory")):
                         continue
-                    if field not in CUSTOMER_MAPS and key in HIDDEN and not (plc and key in PLC_FIELDS) and not (key == "model" and isinstance(item, dict)):
+                    if not (mapping and field in CUSTOMER_MAPS) and key in HIDDEN and not (plc and key in PLC_FIELDS) and not (key == "model" and isinstance(item, dict)):
                         continue
                     if not mapping and key not in PUBLIC_FIELDS and key not in WIRE and not (plc and key in PLC_FIELDS):
                         continue
-                    if not mapping and SENSITIVE.search(key) and key not in WIRE and key not in OPAQUE:
+                    if not (mapping and field in CUSTOMER_MAPS) and SENSITIVE.search(key) and key not in WIRE and key not in OPAQUE:
                         continue
                 public_key = key if mapping else WIRE.get(key, key)
-                item_field = field if field in CUSTOMER_MAPS else key
+                item_field = "accessory_labels" if field in LABEL_MAPS else key
                 result[public_key] = self.outgoing(item, admin=admin, plc=plc or key == "plc_sync", field=item_field, mapping=key in MAPS)
                 if not admin and model_record and key == "id" and isinstance(item, str) and item:
                     result[public_key] = self.references.encode(item)

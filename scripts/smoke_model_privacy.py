@@ -97,7 +97,7 @@ def fixture(presentation, dist=None):
         if path == "user/preferences/tasks": return {"exists": True, "pinned_task_ids": [], "archived_task_ids": []}
         if path == "version": return {"release": "development", "git_commit": "unknown", "consistent": True}
         if path == "training/resources": return {"ai_detection_tasks": [], "models": [], "datasets": [], "tasks": []}
-        if path == "pipeline/tasks": return {"items": [{"id": "pipeline-one", "name": "Privacy sample", "stage": "library", "status": "completed", "detection_method": "yolo", "model_exists": True, "accessory_ids": [], "accessory_counts": {}}]}
+        if path == "pipeline/tasks": return {"items": [{"id": "pipeline-one", "name": "Privacy sample", "stage": "library", "status": "completed", "detection_method": "yolo", "model_exists": True, "accessory_ids": ["part-A"], "accessory_names": ["Test part"], "accessory_counts": {"part-A":2}}]}
         if path.startswith("admin/model-profiles/"): return {"items": []}
         return {"items": [], "tasks": [], "enabled": False, "configured": False}
 
@@ -317,6 +317,14 @@ class Privacy(unittest.TestCase):
         )
         self.assertFalse(policy.include_internal_runtime_details(member))
         self.assertTrue(policy.include_internal_runtime_details({"role":"admin"}))
+
+    def test_business_count_maps_rules_and_scores_retain_dynamic_keys(self):
+        value = {"accessory_counts":{"part-A":2}, "required_counts":{"part-A":2}, "ai_counts":{"part-A":1}, "count_mismatches":{"part-A":{"expected":2,"actual":1}}, "task_rules":{"task-A":{"min_counts":{"part-A":2},"confidence_threshold":0.7}}, "metrics":{"mAP50":0.9,"provider":"gemini"}, "summary":{"digit_regions":4,"provider":"gemini"}}
+        public = self.presentation.outgoing(value)
+        for key in ("accessory_counts", "required_counts", "ai_counts", "count_mismatches", "task_rules"):
+            self.assertEqual(public[key], value[key])
+        self.assertEqual(public["metrics"], {"mAP50":0.9})
+        self.assertEqual(public["summary"], {"digit_regions":4})
 
 
 if __name__ == "__main__":

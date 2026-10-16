@@ -73,6 +73,8 @@ async function role(context,value){
   const data=await members.json();
   assert.ok(data.active_model_id.startsWith('ref1_'));
   assert.equal(data.available_models[0].variant,'vision');
+  const pipeline=await (await context.request.get(base+'/api/pipeline/tasks')).json();
+  assert.deepEqual(pipeline.items[0].accessory_counts,{'part-A':2});
   assert.equal(identities.test(await page.locator('body').innerText()),false);
   await role(context,'admin');
   await page.goto(base+'/workspace/rules');

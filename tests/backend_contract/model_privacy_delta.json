@@ -32,7 +32,7 @@
     "local_inspection_service/privacy/public_fields.json": "0cb49bec17cd708cb0fc8c8071da21bb8383c74c204178221cf2734d4bbd9db6",
     "local_inspection_service/privacy/references.py": "966790984b89e8db9673049da62ed36a63c6be6e6cc9dc7dcb5782700a214d1e",
     "local_inspection_service/privacy/__init__.py": "39ee47915a3dcfd1ab0399268f162851bad02932170ef8febd5a71c83a573707",
-    "local_inspection_service/privacy/presentation.py": "b996aa05759b2a9f8659242817a5dd1c6ce9be7b88a3f4ef45bfdedaa8480211",
+    "local_inspection_service/privacy/presentation.py": "44fe13bf743b4189008ffe1d291234d39e9e2509e377ee43832f3c17cb3c03bd",
     "local_inspection_service/privacy/http.py": "74963f839818d4b695322f898814964caa452fb762801f3f4657d2ba93455371"
   }
 }
